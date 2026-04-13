@@ -1,5 +1,15 @@
-"""Module scaffold: run_session."""
-
 from __future__ import annotations
 
-# TODO: implement run_session with explicit boundaries and typed payloads.
+from dataclasses import dataclass
+
+from hephaestus.runtime.event_stream import RuntimeEventStream
+
+
+@dataclass(slots=True)
+class RuntimeSession:
+    run_id: str
+    event_stream: RuntimeEventStream
+    active: bool = True
+
+    def close(self) -> None:
+        self.active = False

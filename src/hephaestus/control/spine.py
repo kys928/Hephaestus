@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol, TypeAlias
+from typing import Protocol
 
 
 class SpinePhase(str, Enum):
@@ -29,22 +29,14 @@ SPINE_ORDER: tuple[SpinePhase, ...] = (
     SpinePhase.JUDGE_EXIT,
 )
 
-# Placeholder typed boundaries for Stage 1 scaffold hardening.
-# TODO: replace per-phase aliases with concrete schema models as wiring matures.
-PhaseInput: TypeAlias = dict[str, Any]
-PhaseOutput: TypeAlias = dict[str, Any]
-
 
 @dataclass(slots=True)
 class PhaseResult:
     phase: SpinePhase
     status: str
     artifact_refs: list[str]
-    output: PhaseOutput | None = None
+    output: dict[str, object] | None = None
 
 
 class SpineCoordinator(Protocol):
-    """Small interface for explicit phase-by-phase coordination."""
-
-    def run_phase(self, phase: SpinePhase, run_id: str) -> PhaseResult:
-        """Run one phase with bounded responsibilities."""
+    def run_phase(self, phase: SpinePhase, run_id: str) -> PhaseResult: ...

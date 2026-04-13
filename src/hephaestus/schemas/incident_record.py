@@ -1,5 +1,3 @@
-"""Schema: IncidentRecord."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,4 +10,6 @@ class IncidentRecord(JsonSchema):
     incident_id: str
     run_id: str
     severity: str
+    category: str
     summary: str
+    event_ref: str | None = None

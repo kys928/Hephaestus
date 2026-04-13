@@ -1,5 +1,3 @@
-"""Policy module: RuntimePolicy."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,8 +5,11 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class RuntimePolicy:
-    """Policy stub with explicit, reviewable decisions."""
-
-    def decide(self, context: dict[str, object]) -> dict[str, object]:
-        # TODO: replace with deterministic policy evaluation.
-        return {"policy": "RuntimePolicy", "decision": "todo", "context": context}
+    def classify(self, incident_count: int, deterministic_failures: int) -> str:
+        if deterministic_failures > 0:
+            return "hard_abort"
+        if incident_count >= 3:
+            return "waste_stop"
+        if incident_count > 0:
+            return "soft_suspicion"
+        return "healthy"

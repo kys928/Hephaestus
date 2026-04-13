@@ -1,8 +1,6 @@
-"""Schema: DatasetProfile."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ._base import JsonSchema
 
@@ -10,5 +8,7 @@ from ._base import JsonSchema
 @dataclass(slots=True)
 class DatasetProfile(JsonSchema):
     dataset_id: str
+    source_identity: str
     license: str
-    source: str
+    quality_score: float
+    risks: list[str] = field(default_factory=list)

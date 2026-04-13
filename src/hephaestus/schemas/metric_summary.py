@@ -1,5 +1,3 @@
-"""Schema: MetricSummary."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,4 +9,5 @@ from ._base import JsonSchema
 class MetricSummary(JsonSchema):
     metric_name: str
     value: float
-    threshold: float
+    baseline: float
+    passed: bool

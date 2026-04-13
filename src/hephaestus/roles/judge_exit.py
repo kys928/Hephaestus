@@ -1,21 +1,31 @@
-"""Role stub: JudgeExitRole."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from hephaestus.policy.judge_policy import JudgePolicy
+from hephaestus.schemas.eval_report import EvalReport
+from hephaestus.schemas.judge_exit import JudgeExit
 
 
 @dataclass(slots=True)
 class JudgeExitRole:
-    """Bounded role stub with explicit input/output contract.
+    judge_policy: JudgePolicy
+    name: str = "judge_exit"
 
-    TODO: Replace `dict[str, Any]` with concrete schema types once role wiring is finalized.
-    """
-
-    name: str = "JudgeExitRole"
-
-    def run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Execute role-specific logic without mutating global state directly."""
-        # TODO: implement role logic with strict schema-based inputs and outputs.
-        return {"role": self.name, "status": "todo", "payload": payload}
+    def run(self, run_id: str, lineage_id: str, eval_report: EvalReport, monitor_outcome: str) -> JudgeExit:
+        regression = eval_report.regression_summary
+        deterministic_passed = bool(regression["deterministic_passed"])
+        action = self.judge_policy.decide_exit_action(
+            deterministic_passed=deterministic_passed,
+            confidence=eval_report.confidence,
+            monitor_outcome=monitor_outcome,
+        )
+        verdict = "approved" if action.value in {"promote_checkpoint", "continue_from_checkpoint", "continue_lineage_best"} else "blocked"
+        return JudgeExit(
+            run_id=run_id,
+            lineage_id=lineage_id,
+            verdict=verdict,
+            next_action=action,
+            confidence=eval_report.confidence,
+            reasons=[f"monitor={monitor_outcome}", f"deterministic_passed={deterministic_passed}"],
+        )
