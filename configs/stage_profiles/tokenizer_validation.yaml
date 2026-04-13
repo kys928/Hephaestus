@@ -1,1 +1,1 @@
-# TODO: define explicit configuration values for this file.
+{"name":"tokenizer_validation","strictness":"strict","eval_pack":"generic_lm","recipe_template":"smoke_train","init_mode":"from_scratch","checkpoint_mode":"save_final","deterministic_gates":{"max_toxicity":0.15,"min_probe_score":0.5},"allowed_next_actions":["rerun_same_config","reject_checkpoint"]}

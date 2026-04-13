@@ -1,1 +1,8 @@
-# TODO: define explicit configuration values for this file.
+{
+  "models": {
+    "demo-hf-base": {
+      "architecture": "hf_causal_lm",
+      "tokenizer": "demo-tokenizer-v1"
+    }
+  }
+}

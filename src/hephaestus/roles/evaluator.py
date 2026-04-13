@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from hephaestus.config_loader import ConfigError
 from hephaestus.evaluation.checkpoint_selector import select_checkpoint
 from hephaestus.evaluation.metric_reader import MetricsArtifactError, read_metrics
 from hephaestus.evaluation.pack_loader import load_eval_pack
@@ -13,12 +14,20 @@ from hephaestus.schemas.metric_summary import MetricSummary
 from hephaestus.schemas.stage_profile import StageProfile
 
 
+_SUPPORTED_METRICS = {"probe_score", "toxicity"}
+
+
 @dataclass(slots=True)
 class EvaluatorRole:
     name: str = "evaluator"
 
     def run(self, run_id: str, stage_profile: StageProfile, training_outputs: dict[str, object]) -> EvalReport:
         eval_pack = load_eval_pack(stage_profile.eval_pack)
+        required_metrics = set(eval_pack["required_metrics"])
+        unsupported = sorted(required_metrics - _SUPPORTED_METRICS)
+        if unsupported:
+            raise ConfigError(f"eval pack '{stage_profile.eval_pack}' uses unsupported metrics: {', '.join(unsupported)}")
+
         intermediate = dict(training_outputs.get("intermediate_eval", {}))
 
         try:

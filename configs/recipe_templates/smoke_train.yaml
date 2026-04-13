@@ -1,1 +1,13 @@
-# TODO: define explicit configuration values for this file.
+{
+  "template_name": "smoke_train",
+  "max_steps": 50,
+  "eval_every_steps": 25,
+  "checkpoint_every_steps": 25,
+  "init_mode": "from_scratch",
+  "checkpoint_mode": "save_final",
+  "launch_parameters": {
+    "device": "cpu",
+    "trainer_script": "tests/fixtures/fake_trainer.py"
+  },
+  "tags": ["stage4", "smoke"]
+}

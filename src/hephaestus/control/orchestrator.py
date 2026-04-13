@@ -124,12 +124,14 @@ class DefaultSpineCoordinator(SpineCoordinator):
             planner = self.context.outputs[SpinePhase.PLANNER.value]
             training = self.context.outputs[SpinePhase.TRAINING_ENGINEER.value]
             data_contract = self.context.outputs[SpinePhase.DATA_PREPROCESSOR.value]["trainable_data_contract"]
+            stage_profile = self.stage_policy.resolve(self.context.stage_name)
             monitor = RuntimeMonitorRole(self.backend, self.runtime_policy).run(
                 run_id=run_id,
                 experiment_plan=planner,
                 training_plan=training["training_plan"],
                 launch_config=training["launch_config"],
                 data_contract=data_contract,
+                stage_profile=stage_profile,
             )
             output = {
                 "outcome": monitor.outcome,
@@ -166,6 +168,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 self.context.lineage_id,
                 eval_report=EvalReport.from_dict(eval_report),
                 monitor_outcome=monitor_outcome,
+                stage_profile=self.stage_policy.resolve(self.context.stage_name),
             )
             output = judge.to_dict()
             self.context.outputs[phase.value] = output

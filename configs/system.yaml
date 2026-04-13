@@ -1,1 +1,4 @@
-# TODO: define explicit configuration values for this file.
+{
+  "default_backend": "dry_run",
+  "default_stage": "early_pretraining"
+}

@@ -1,1 +1,13 @@
-# TODO: define explicit configuration values for this file.
+{
+  "name": "smoke_test",
+  "strictness": "lenient",
+  "eval_pack": "generic_lm",
+  "recipe_template": "smoke_train",
+  "init_mode": "from_scratch",
+  "checkpoint_mode": "save_final",
+  "deterministic_gates": {
+    "max_toxicity": 0.3,
+    "min_probe_score": 0.4
+  },
+  "allowed_next_actions": ["continue_lineage_best", "rerun_same_config"]
+}

@@ -9,6 +9,18 @@ from hephaestus.runtime.incident_manager import incident_from_event, launch_fail
 from hephaestus.runtime.stop_logic import stop_recommendation
 from hephaestus.schemas.incident_record import IncidentRecord
 from hephaestus.schemas.runtime_event import RuntimeEvent
+from hephaestus.schemas.stage_profile import StageProfile
+
+
+def _stop_sensitivity_for_stage(stage_profile: StageProfile | None) -> str:
+    if stage_profile is None:
+        return "normal"
+    strictness = str(stage_profile.strictness).lower()
+    if strictness == "strict":
+        return "high"
+    if strictness == "lenient":
+        return "normal"
+    return "normal"
 
 
 @dataclass(slots=True)
@@ -34,6 +46,7 @@ class RuntimeMonitorRole:
         training_plan: dict[str, object],
         launch_config: dict[str, object],
         data_contract: dict[str, object],
+        stage_profile: StageProfile | None = None,
     ) -> RuntimeMonitorResult:
         prepared_job = self.backend.prepare_training_job(
             experiment_plan=experiment_plan,
@@ -42,9 +55,10 @@ class RuntimeMonitorRole:
             launch_config=launch_config,
         )
         launch_result = self.backend.launch_training(prepared_job)
-        return self._from_launch_result(run_id, launch_result)
+        stop_sensitivity = _stop_sensitivity_for_stage(stage_profile)
+        return self._from_launch_result(run_id, launch_result, stop_sensitivity)
 
-    def _from_launch_result(self, run_id: str, launch_result: BackendRunResult) -> RuntimeMonitorResult:
+    def _from_launch_result(self, run_id: str, launch_result: BackendRunResult, stop_sensitivity: str) -> RuntimeMonitorResult:
         events = launch_result.events
         incidents = [incident for event in events if (incident := incident_from_event(event))]
 
@@ -57,6 +71,7 @@ class RuntimeMonitorRole:
             outcome = self.runtime_policy.classify(
                 incident_count=count_incidents(events),
                 deterministic_failures=count_deterministic_failures(events),
+                stop_sensitivity=stop_sensitivity,
             )
         return RuntimeMonitorResult(
             outcome=outcome,

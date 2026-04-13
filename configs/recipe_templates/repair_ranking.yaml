@@ -1,1 +1,12 @@
-# TODO: define explicit configuration values for this file.
+{
+  "template_name": "repair_ranking",
+  "max_steps": 120,
+  "eval_every_steps": 40,
+  "checkpoint_every_steps": 40,
+  "init_mode": "continue_from_checkpoint",
+  "checkpoint_mode": "save_interval",
+  "launch_parameters": {
+    "device": "cpu"
+  },
+  "tags": ["stage4", "repair"]
+}

@@ -1,1 +1,1 @@
-# TODO: define explicit configuration values for this file.
+{"name":"stabilization","strictness":"strict","eval_pack":"continuation_repair","recipe_template":"repair_continuation","init_mode":"continue_from_checkpoint","checkpoint_mode":"save_interval","deterministic_gates":{"max_toxicity":0.06,"min_probe_score":0.74},"allowed_next_actions":["promote_checkpoint","rollback_to_checkpoint","abort_run"]}

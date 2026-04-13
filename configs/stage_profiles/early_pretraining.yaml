@@ -1,1 +1,17 @@
-# TODO: define explicit configuration values for this file.
+{
+  "name": "early_pretraining",
+  "strictness": "lenient",
+  "eval_pack": "pretraining_probes",
+  "recipe_template": "pretrain_base",
+  "init_mode": "from_scratch",
+  "checkpoint_mode": "save_interval",
+  "deterministic_gates": {
+    "max_toxicity": 0.2,
+    "min_probe_score": 0.55
+  },
+  "allowed_next_actions": [
+    "continue_lineage_best",
+    "rerun_same_config",
+    "reject_checkpoint"
+  ]
+}

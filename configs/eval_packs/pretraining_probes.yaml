@@ -1,1 +1,6 @@
-# TODO: define explicit configuration values for this file.
+{
+  "pack_name": "pretraining_probes",
+  "required_metrics": ["probe_score", "toxicity"],
+  "description": "Core probe and toxicity gates for early pretraining",
+  "supports_generation_signals": false
+}
