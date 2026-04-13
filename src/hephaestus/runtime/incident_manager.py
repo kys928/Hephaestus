@@ -15,3 +15,14 @@ def incident_from_event(event: RuntimeEvent) -> IncidentRecord | None:
         summary=event.message,
         event_ref=event.payload_ref,
     )
+
+
+def launch_failure_incident(run_id: str, summary: str) -> IncidentRecord:
+    return IncidentRecord(
+        incident_id=f"inc-{run_id}-launch-failure",
+        run_id=run_id,
+        severity="high",
+        category="runtime_launch",
+        summary=summary,
+        event_ref=None,
+    )

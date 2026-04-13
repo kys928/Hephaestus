@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.backends.base import ExecutionBackend
 from hephaestus.schemas.preprocessing_report import PreprocessingReport
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
 
 
 @dataclass(slots=True)
 class DataPreprocessorRole:
-    backend: DryRunBackend
+    backend: ExecutionBackend
     name: str = "data_preprocessor"
 
     def run(self, run_id: str, manifest_id: str) -> tuple[PreprocessingReport, TrainableDataContract]:

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
 from hephaestus.control.spine import SPINE_ORDER, PhaseResult, SpineCoordinator, SpinePhase
 from hephaestus.policy.judge_policy import JudgePolicy
@@ -60,7 +61,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
     manifest_store: ManifestStore
     report_store: ReportStore
     artifact_index: ArtifactIndex
-    backend: object
+    backend: ExecutionBackend
     runtime_policy: RuntimePolicy
     stage_policy: StagePolicy
     judge_policy: JudgePolicy
@@ -104,7 +105,15 @@ class DefaultSpineCoordinator(SpineCoordinator):
             return PhaseResult(phase, "ok", [report.processed_dataset_ref], output)
 
         if phase is SpinePhase.TRAINING_ENGINEER:
-            plan, launch = TrainingEngineerRole().run(run_id, self.context.stage_name, self.context.artifact_root)
+            data_contract = self.context.outputs[SpinePhase.DATA_PREPROCESSOR.value]["trainable_data_contract"]
+            plan, launch = TrainingEngineerRole().run(
+                run_id,
+                self.context.stage_name,
+                self.context.artifact_root,
+                data_contract,
+                backend_name=getattr(self.backend, "name", "dry_run"),
+                dry_run=getattr(self.backend, "name", "dry_run") == "dry_run",
+            )
             output = {"training_plan": plan.to_dict(), "launch_config": launch.to_dict()}
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "training_plan", **plan.to_dict()})
@@ -112,12 +121,22 @@ class DefaultSpineCoordinator(SpineCoordinator):
             return PhaseResult(phase, "ok", [], output)
 
         if phase is SpinePhase.RUNTIME_MONITOR:
-            monitor = RuntimeMonitorRole(self.backend, self.runtime_policy).run(run_id)
+            planner = self.context.outputs[SpinePhase.PLANNER.value]
+            training = self.context.outputs[SpinePhase.TRAINING_ENGINEER.value]
+            data_contract = self.context.outputs[SpinePhase.DATA_PREPROCESSOR.value]["trainable_data_contract"]
+            monitor = RuntimeMonitorRole(self.backend, self.runtime_policy).run(
+                run_id=run_id,
+                experiment_plan=planner,
+                training_plan=training["training_plan"],
+                launch_config=training["launch_config"],
+                data_contract=data_contract,
+            )
             output = {
                 "outcome": monitor.outcome,
                 "recommendation": monitor.recommendation,
                 "events": [event.to_dict() for event in monitor.events],
                 "incidents": [incident.to_dict() for incident in monitor.incidents],
+                "training_outputs": monitor.training_outputs,
             }
             self.context.outputs[phase.value] = output
             for event in monitor.events:
@@ -129,7 +148,8 @@ class DefaultSpineCoordinator(SpineCoordinator):
 
         if phase is SpinePhase.EVALUATOR:
             stage_profile = self.stage_policy.resolve(self.context.stage_name)
-            report = EvaluatorRole(self.backend).run(run_id, stage_profile)
+            runtime_output = self.context.outputs[SpinePhase.RUNTIME_MONITOR.value]
+            report = EvaluatorRole().run(run_id, stage_profile, training_outputs=runtime_output["training_outputs"])
             output = report.to_dict()
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "eval_report", **output})
@@ -170,11 +190,13 @@ class Orchestrator:
         eval_id = str(self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]["eval_id"])
         action = _canonical_action(self.coordinator.context.outputs[SpinePhase.JUDGE_EXIT.value]["next_action"])
         monitor_outcome = str(self.coordinator.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["outcome"])
+        runtime_status = str(self.coordinator.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["training_outputs"].get("status", "failed"))
+        run_status = "completed" if monitor_outcome == "healthy" and runtime_status == "completed" else "failed"
         run_record = RunRecord(
             run_id=run_id,
             lineage_id=self.coordinator.context.lineage_id,
             stage_name=self.coordinator.context.stage_name,
-            status="completed",
+            status=run_status,
             artifact_root=self.coordinator.context.artifact_root,
             started_at=started,
             completed_at=_now(),
@@ -210,7 +232,7 @@ def build_orchestrator(
     run_id: str,
     lineage_id: str = "lineage-main",
     stage_name: str = "early_pretraining",
-    backend: object | None = None,
+    backend: ExecutionBackend | None = None,
     runtime_policy: RuntimePolicy | None = None,
     stage_policy: StagePolicy | None = None,
     judge_policy: JudgePolicy | None = None,
