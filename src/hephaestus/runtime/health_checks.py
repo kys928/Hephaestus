@@ -13,3 +13,7 @@ def count_deterministic_failures(events: list[RuntimeEvent]) -> int:
         if event.category is RuntimeEventCategory.DETERMINISTIC_CHECK and "fail" in event.message:
             failures += 1
     return failures
+
+
+def process_failed(returncode: int) -> bool:
+    return returncode != 0

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.backends.base import ExecutionBackend
 from hephaestus.schemas.dataset_manifest import DatasetManifest
 from hephaestus.schemas.dataset_profile import DatasetProfile
 
 
 @dataclass(slots=True)
 class DataAcquisitionAuditRole:
-    backend: DryRunBackend
+    backend: ExecutionBackend
     name: str = "data_acquisition_audit"
 
     def run(self, run_id: str, lineage_id: str) -> tuple[DatasetProfile, DatasetManifest]:
