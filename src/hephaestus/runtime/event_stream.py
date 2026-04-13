@@ -1,5 +1,13 @@
-"""Module scaffold: event_stream."""
-
 from __future__ import annotations
 
-# TODO: implement event_stream with explicit boundaries and typed payloads.
+from dataclasses import dataclass, field
+
+from hephaestus.schemas.runtime_event import RuntimeEvent
+
+
+@dataclass(slots=True)
+class RuntimeEventStream:
+    events: list[RuntimeEvent] = field(default_factory=list)
+
+    def emit(self, event: RuntimeEvent) -> None:
+        self.events.append(event)

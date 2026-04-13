@@ -1,45 +1,40 @@
-"""Runtime Monitor role contract stub."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
-
-class RuntimeOutcome(str, Enum):
-    """Finite runtime outcome categories for Stage 1 architecture boundaries."""
-
-    HEALTHY = "healthy"
-    SOFT_SUSPICION = "soft_suspicion"
-    WASTE_STOP = "waste_stop"
-    HARD_ABORT = "hard_abort"
+from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.policy.runtime_policy import RuntimePolicy
+from hephaestus.runtime.health_checks import count_deterministic_failures, count_incidents
+from hephaestus.runtime.incident_manager import incident_from_event
+from hephaestus.runtime.stop_logic import stop_recommendation
+from hephaestus.schemas.incident_record import IncidentRecord
+from hephaestus.schemas.runtime_event import RuntimeEvent
 
 
 @dataclass(slots=True)
 class RuntimeMonitorResult:
-    """Typed monitor output for explicit control-plane handoff."""
-
-    outcome: RuntimeOutcome
-    summary: str
-    evidence_refs: list[str]
+    outcome: str
+    recommendation: str
+    events: list[RuntimeEvent]
+    incidents: list[IncidentRecord]
 
 
 @dataclass(slots=True)
 class RuntimeMonitorRole:
-    """First-class runtime monitoring role.
-
-    This role is responsible for classifying run health into explicit categories
-    (`healthy`, `soft_suspicion`, `waste_stop`, `hard_abort`) for downstream control
-    decisions. Implementation remains intentionally stubbed in Stage 1.
-    """
-
-    name: str = "RuntimeMonitorRole"
+    backend: DryRunBackend
+    runtime_policy: RuntimePolicy
+    name: str = "runtime_monitor"
 
     def run(self, run_id: str) -> RuntimeMonitorResult:
-        """Classify current runtime state for the given run."""
-        # TODO: implement monitoring logic and evidence collection.
+        events = self.backend.runtime_events(run_id)
+        incidents = [incident for event in events if (incident := incident_from_event(event))]
+        outcome = self.runtime_policy.classify(
+            incident_count=count_incidents(events),
+            deterministic_failures=count_deterministic_failures(events),
+        )
         return RuntimeMonitorResult(
-            outcome=RuntimeOutcome.SOFT_SUSPICION,
-            summary="todo: runtime monitoring not implemented yet",
-            evidence_refs=[],
+            outcome=outcome,
+            recommendation=stop_recommendation(outcome),
+            events=events,
+            incidents=incidents,
         )

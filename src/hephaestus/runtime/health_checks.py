@@ -1,5 +1,15 @@
-"""Module scaffold: health_checks."""
-
 from __future__ import annotations
 
-# TODO: implement health_checks with explicit boundaries and typed payloads.
+from hephaestus.schemas.runtime_event import RuntimeEvent, RuntimeEventCategory
+
+
+def count_incidents(events: list[RuntimeEvent]) -> int:
+    return len([event for event in events if event.category is RuntimeEventCategory.INCIDENT])
+
+
+def count_deterministic_failures(events: list[RuntimeEvent]) -> int:
+    failures = 0
+    for event in events:
+        if event.category is RuntimeEventCategory.DETERMINISTIC_CHECK and "fail" in event.message:
+            failures += 1
+    return failures

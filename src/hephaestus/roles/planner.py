@@ -1,21 +1,20 @@
-"""Role stub: PlannerRole."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from hephaestus.schemas.experiment_plan import ExperimentPlan
 
 
 @dataclass(slots=True)
 class PlannerRole:
-    """Bounded role stub with explicit input/output contract.
+    name: str = "planner"
 
-    TODO: Replace `dict[str, Any]` with concrete schema types once role wiring is finalized.
-    """
-
-    name: str = "PlannerRole"
-
-    def run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Execute role-specific logic without mutating global state directly."""
-        # TODO: implement role logic with strict schema-based inputs and outputs.
-        return {"role": self.name, "status": "todo", "payload": payload}
+    def run(self, run_id: str, stage_name: str) -> ExperimentPlan:
+        return ExperimentPlan(
+            plan_id=f"plan-{run_id}",
+            run_id=run_id,
+            stage_name=stage_name,
+            objective="Generate bounded dry-run outputs for all spine phases.",
+            interventions=["dry_run_backend", "periodic_eval_hooks"],
+            expected_outcomes=["eval_report", "judge_exit_action"],
+        )

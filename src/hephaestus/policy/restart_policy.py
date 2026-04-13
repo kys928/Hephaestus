@@ -1,5 +1,3 @@
-"""Policy module: RestartPolicy."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,8 +5,9 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class RestartPolicy:
-    """Policy stub with explicit, reviewable decisions."""
-
-    def decide(self, context: dict[str, object]) -> dict[str, object]:
-        # TODO: replace with deterministic policy evaluation.
-        return {"policy": "RestartPolicy", "decision": "todo", "context": context}
+    def decide(self, judge_action: str, monitor_outcome: str) -> str:
+        if judge_action == "restart_lineage" or monitor_outcome == "hard_abort":
+            return "restart"
+        if monitor_outcome == "waste_stop":
+            return "rollback"
+        return "continue"

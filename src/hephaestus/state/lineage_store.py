@@ -1,26 +1,18 @@
-"""State store module: LineageStore."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from hephaestus.state._json_store import JsonSingleDocument
+
 
 @dataclass(slots=True)
 class LineageStore:
-    """Append-only / version-aware store skeleton.
-
-    Heavy artifacts must be stored in artifacts/ and referenced by path only.
-    """
-
     root: Path
 
-    def append(self, record: dict[str, Any]) -> None:
-        """TODO: persist record with schema validation and immutable history."""
-        _ = record
+    def set_current(self, record: dict[str, Any]) -> None:
+        JsonSingleDocument(self.root, "lineage_state.json").write(record)
 
-    def get(self, key: str) -> dict[str, Any] | None:
-        """TODO: read latest record version for key."""
-        _ = key
-        return None
+    def get_current(self) -> dict[str, Any] | None:
+        return JsonSingleDocument(self.root, "lineage_state.json").read()

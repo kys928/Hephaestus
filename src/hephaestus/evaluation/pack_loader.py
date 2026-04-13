@@ -1,5 +1,9 @@
-"""Module scaffold: pack_loader."""
-
 from __future__ import annotations
 
-# TODO: implement pack_loader with explicit boundaries and typed payloads.
+
+def load_eval_pack(pack_name: str) -> dict[str, object]:
+    return {
+        "pack_name": pack_name,
+        "required_metrics": ["probe_score", "toxicity"],
+        "description": "dry-run eval pack",
+    }

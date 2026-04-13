@@ -1,5 +1,5 @@
-"""Module scaffold: artifact_collector."""
-
 from __future__ import annotations
 
-# TODO: implement artifact_collector with explicit boundaries and typed payloads.
+
+def collect_artifact_refs(runtime_artifacts: list[str]) -> list[str]:
+    return [artifact for artifact in runtime_artifacts if artifact]

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from ._base import JsonSchema
 
 
 class JudgeExitAction(str, Enum):
-    """Finite judge-exit actions allowed by the control model."""
-
     CONTINUE_LINEAGE_BEST = "continue_lineage_best"
     CONTINUE_FROM_CHECKPOINT = "continue_from_checkpoint"
     RERUN_SAME_CONFIG = "rerun_same_config"
@@ -25,5 +23,8 @@ class JudgeExitAction(str, Enum):
 @dataclass(slots=True)
 class JudgeExit(JsonSchema):
     run_id: str
+    lineage_id: str
     verdict: str
     next_action: JudgeExitAction
+    confidence: float
+    reasons: list[str] = field(default_factory=list)
