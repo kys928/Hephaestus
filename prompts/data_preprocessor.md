@@ -1,0 +1,3 @@
+# Prompt: data_preprocessor
+
+TODO: provide bounded prompt contract with explicit input/output schema expectations.
