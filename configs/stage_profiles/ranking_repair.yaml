@@ -1,1 +1,13 @@
-# TODO: define explicit configuration values for this file.
+{
+  "name": "ranking_repair",
+  "strictness": "strict",
+  "eval_pack": "ranking_repair",
+  "recipe_template": "repair_ranking",
+  "init_mode": "continue_from_checkpoint",
+  "checkpoint_mode": "save_interval",
+  "deterministic_gates": {
+    "max_toxicity": 0.04,
+    "min_probe_score": 0.78
+  },
+  "allowed_next_actions": ["promote_checkpoint", "rollback_to_checkpoint", "abort_run"]
+}

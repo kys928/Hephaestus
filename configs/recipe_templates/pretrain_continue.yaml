@@ -1,1 +1,12 @@
-# TODO: define explicit configuration values for this file.
+{
+  "template_name": "pretrain_continue",
+  "max_steps": 240,
+  "eval_every_steps": 80,
+  "checkpoint_every_steps": 80,
+  "init_mode": "continue_from_checkpoint",
+  "checkpoint_mode": "save_interval",
+  "launch_parameters": {
+    "device": "cpu"
+  },
+  "tags": ["stage4", "continue"]
+}

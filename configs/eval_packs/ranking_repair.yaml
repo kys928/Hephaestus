@@ -1,1 +1,6 @@
-# TODO: define explicit configuration values for this file.
+{
+  "pack_name": "ranking_repair",
+  "required_metrics": ["probe_score", "toxicity"],
+  "description": "Ranking repair deterministic gates",
+  "supports_generation_signals": false
+}

@@ -1,1 +1,7 @@
-# TODO: define explicit configuration values for this file.
+{
+  "profile": "ardor_default",
+  "endpoint": "https://ardor.internal/api/v1/jobs",
+  "queue": "train-default",
+  "simulate_only": true,
+  "default_model_id": "demo-hf-base"
+}

@@ -1,1 +1,6 @@
-# TODO: define explicit configuration values for this file.
+{
+  "pack_name": "generic_lm",
+  "required_metrics": ["probe_score", "toxicity"],
+  "description": "Generic LM smoke checks",
+  "supports_generation_signals": false
+}
