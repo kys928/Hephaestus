@@ -18,3 +18,5 @@ class RunRecord(JsonSchema):
     monitor_outcome: str | None = None
     eval_report_id: str | None = None
     judge_action: str | None = None
+    loop_index: int = 0
+    checkpoint_ref: str | None = None

@@ -8,8 +8,13 @@ from pathlib import Path
 
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.control.branching import create_branch_state
+from hephaestus.control.lineage_transition import compute_lineage_signals
+from hephaestus.control.restart import create_restart_state
+from hephaestus.control.rollback import apply_rollback
 from hephaestus.control.spine import SPINE_ORDER, PhaseResult, SpineCoordinator, SpinePhase
 from hephaestus.policy.judge_policy import JudgePolicy
+from hephaestus.policy.promotion_policy import PromotionPolicy
 from hephaestus.policy.runtime_policy import RuntimePolicy
 from hephaestus.policy.stage_policy import StagePolicy
 from hephaestus.roles.data_acquisition_audit import DataAcquisitionAuditRole
@@ -29,17 +34,9 @@ from hephaestus.state.artifact_index import ArtifactIndex
 from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.state.manifest_store import ManifestStore
+from hephaestus.state.query import Query
 from hephaestus.state.report_store import ReportStore
 from hephaestus.state.run_store import RunStore
-
-
-@dataclass(slots=True)
-class ControlContext:
-    run_id: str
-    lineage_id: str
-    stage_name: str
-    artifact_root: str
-    outputs: dict[str, object] = field(default_factory=dict)
 
 
 def _now() -> str:
@@ -50,6 +47,15 @@ def _canonical_action(value: object) -> str:
     if hasattr(value, "value"):
         return str(getattr(value, "value"))
     return str(value)
+
+
+@dataclass(slots=True)
+class ControlContext:
+    run_id: str
+    lineage_id: str
+    stage_name: str
+    artifact_root: str
+    outputs: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -65,14 +71,21 @@ class DefaultSpineCoordinator(SpineCoordinator):
     runtime_policy: RuntimePolicy
     stage_policy: StagePolicy
     judge_policy: JudgePolicy
+    promotion_policy: PromotionPolicy
+    query: Query
 
     def run_phase(self, phase: SpinePhase, run_id: str) -> PhaseResult:
+        lineage_state = self.lineage_store.get_current(self.context.lineage_id)
+        recent_failures = self.query.recent_failures(self.context.lineage_id)
+
         if phase is SpinePhase.JUDGE_ENTRY:
-            entry, decision = JudgeEntryRole().run(
+            entry, decision = JudgeEntryRole(self.judge_policy).run(
                 run_id=run_id,
                 lineage_id=self.context.lineage_id,
                 stage_name=self.context.stage_name,
                 created_at=_now(),
+                lineage_state=lineage_state,
+                recent_failures=recent_failures,
             )
             output = entry.to_dict()
             self.decision_store.append(decision.to_dict())
@@ -163,16 +176,31 @@ class DefaultSpineCoordinator(SpineCoordinator):
         if phase is SpinePhase.JUDGE_EXIT:
             eval_report = self.context.outputs[SpinePhase.EVALUATOR.value]
             monitor_outcome = str(self.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["outcome"])
-            judge = JudgeExitRole(self.judge_policy).run(
+            judge = JudgeExitRole(self.judge_policy, self.promotion_policy).run(
                 run_id,
                 self.context.lineage_id,
                 eval_report=EvalReport.from_dict(eval_report),
                 monitor_outcome=monitor_outcome,
+                recent_failure_count=len(recent_failures),
+                has_stable_checkpoint=bool((lineage_state or {}).get("last_stable_checkpoint_ref")),
                 stage_profile=self.stage_policy.resolve(self.context.stage_name),
             )
             output = judge.to_dict()
             self.context.outputs[phase.value] = output
-            decision = DecisionRecord(f"dec-{run_id}-exit", run_id, self.context.lineage_id, "judge_exit", judge.next_action.value, "; ".join(judge.reasons), judge.confidence, created_at=_now())
+            decision = DecisionRecord(
+                f"dec-{run_id}-exit",
+                run_id,
+                self.context.lineage_id,
+                "judge_exit",
+                judge.next_action.value,
+                "; ".join(judge.reasons),
+                judge.confidence,
+                created_at=_now(),
+                metadata={
+                    "monitor_outcome": monitor_outcome,
+                    "recent_failure_count": len(recent_failures),
+                },
+            )
             self.decision_store.append(decision.to_dict())
             self.report_store.append({"kind": "judge_exit", **output})
             return PhaseResult(phase, "ok", [], output)
@@ -190,11 +218,17 @@ class Orchestrator:
         for phase in SPINE_ORDER:
             results.append(self.coordinator.run_phase(phase=phase, run_id=run_id))
 
-        eval_id = str(self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]["eval_id"])
+        eval_output = self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]
+        eval_id = str(eval_output["eval_id"])
+        checkpoint_ref = str(eval_output["checkpoint_resolution"].get("selected_checkpoint_ref", "")) or None
         action = _canonical_action(self.coordinator.context.outputs[SpinePhase.JUDGE_EXIT.value]["next_action"])
         monitor_outcome = str(self.coordinator.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["outcome"])
         runtime_status = str(self.coordinator.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["training_outputs"].get("status", "failed"))
         run_status = "completed" if monitor_outcome == "healthy" and runtime_status == "completed" else "failed"
+
+        prior = self.coordinator.lineage_store.get_current(self.coordinator.context.lineage_id) or {}
+        loop_index = int(prior.get("loop_index", 0)) + 1
+
         run_record = RunRecord(
             run_id=run_id,
             lineage_id=self.coordinator.context.lineage_id,
@@ -207,27 +241,101 @@ class Orchestrator:
             monitor_outcome=monitor_outcome,
             eval_report_id=eval_id,
             judge_action=action,
+            loop_index=loop_index,
+            checkpoint_ref=checkpoint_ref,
         )
         self.coordinator.run_store.append(run_record.to_dict())
 
-        lineage = self.coordinator.lineage_store.get_current()
-        best_checkpoint_ref = self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]["checkpoint_resolution"]["selected_checkpoint_ref"]
-        updated = LineageState(
-            lineage_id=self.coordinator.context.lineage_id,
-            parent_lineage_id=(lineage or {}).get("parent_lineage_id"),
-            status="active",
-            stage_name=self.coordinator.context.stage_name,
-            latest_run_id=run_id,
-            best_checkpoint_ref=best_checkpoint_ref,
-            last_decision_id=f"dec-{run_id}-exit",
-            run_count=int((lineage or {}).get("run_count", 0)) + 1,
-            artifact_refs=[best_checkpoint_ref],
-            updated_at=_now(),
+        self._apply_lineage_transition(
+            run_id=run_id,
+            action=action,
+            run_status=run_status,
+            checkpoint_ref=checkpoint_ref,
+            eval_output=eval_output,
+            prior_state=prior,
+            loop_index=loop_index,
         )
-        self.coordinator.lineage_store.set_current(updated.to_dict())
 
         ReporterRole().run(run_id, action, monitor_outcome)
         return results
+
+    def _apply_lineage_transition(
+        self,
+        run_id: str,
+        action: str,
+        run_status: str,
+        checkpoint_ref: str | None,
+        eval_output: dict[str, object],
+        prior_state: dict[str, object],
+        loop_index: int,
+    ) -> None:
+        deterministic_passed = bool(eval_output["regression_summary"].get("deterministic_passed", False))
+        confidence = float(eval_output.get("confidence", 0.0))
+        signal_update = compute_lineage_signals(
+            prior_state=prior_state,
+            run_id=run_id,
+            run_status=run_status,
+            action=action,
+            checkpoint_ref=checkpoint_ref,
+            deterministic_passed=deterministic_passed,
+            confidence=confidence,
+            promotion_policy=self.coordinator.promotion_policy,
+        )
+
+        state = LineageState(
+            lineage_id=self.coordinator.context.lineage_id,
+            parent_lineage_id=prior_state.get("parent_lineage_id") if prior_state else None,
+            stage_name=self.coordinator.context.stage_name,
+            status=signal_update.promotion.status,
+            trust_level=signal_update.trust_level,
+            loop_index=loop_index,
+            latest_run_id=run_id,
+            best_checkpoint_ref=signal_update.promotion.best_checkpoint_ref,
+            last_stable_checkpoint_ref=signal_update.promotion.last_stable_checkpoint_ref,
+            recent_failures=signal_update.failures,
+            known_pathologies=signal_update.known_pathologies,
+            last_decision=action,
+            last_decision_id=f"dec-{run_id}-exit",
+            branch_origin_checkpoint_ref=prior_state.get("branch_origin_checkpoint_ref") if prior_state else None,
+            child_lineage_ids=list(prior_state.get("child_lineage_ids", [])),
+            run_count=int(prior_state.get("run_count", 0)) + 1,
+            updated_at=_now(),
+        )
+
+        if action == "rollback_to_checkpoint":
+            rollback = apply_rollback(state.to_dict())
+            if rollback.succeeded:
+                state.best_checkpoint_ref = rollback.target_checkpoint_ref
+            else:
+                state.status = "blocked"
+                state.known_pathologies = [*state.known_pathologies, *rollback.notes][-5:]
+
+        if action == "branch_new_experiment":
+            child_id = f"{state.lineage_id}-branch-{state.loop_index}"
+            branch = create_branch_state(
+                parent_state=state.to_dict(),
+                child_lineage_id=child_id,
+                stage_name=self.coordinator.context.stage_name,
+                origin_checkpoint_ref=checkpoint_ref or state.best_checkpoint_ref,
+                updated_at=_now(),
+            )
+            self.coordinator.lineage_store.set_current(branch.child_state)
+            self.coordinator.lineage_store.add_child(state.lineage_id, child_id)
+            if child_id not in state.child_lineage_ids:
+                state.child_lineage_ids = [*state.child_lineage_ids, child_id]
+
+        if action == "restart_lineage":
+            restart = create_restart_state(
+                prior_state=state.to_dict(),
+                lineage_id=state.lineage_id,
+                stage_name=self.coordinator.context.stage_name,
+                updated_at=_now(),
+                reason="explicit_restart_action",
+            )
+            self.coordinator.lineage_store.set_current(restart.reset_state)
+            return
+
+        self.coordinator.lineage_store.set_current(state.to_dict())
 
 
 def build_orchestrator(
@@ -239,6 +347,7 @@ def build_orchestrator(
     runtime_policy: RuntimePolicy | None = None,
     stage_policy: StagePolicy | None = None,
     judge_policy: JudgePolicy | None = None,
+    promotion_policy: PromotionPolicy | None = None,
 ) -> Orchestrator:
     context = ControlContext(run_id=run_id, lineage_id=lineage_id, stage_name=stage_name, artifact_root=f"artifacts/{run_id}")
     return Orchestrator(
@@ -254,5 +363,7 @@ def build_orchestrator(
             runtime_policy=runtime_policy or RuntimePolicy(),
             stage_policy=stage_policy or StagePolicy(),
             judge_policy=judge_policy or JudgePolicy(),
+            promotion_policy=promotion_policy or PromotionPolicy(),
+            query=Query(state_root),
         )
     )
