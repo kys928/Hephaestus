@@ -8,25 +8,32 @@ class MetricsArtifactError(ValueError):
     pass
 
 
+def _extract(payload: dict[str, object]) -> dict[str, float] | None:
+    if "probe_score" in payload and "toxicity" in payload:
+        return {"probe_score": float(payload["probe_score"]), "toxicity": float(payload["toxicity"])}
+
+    nested = payload.get("metrics")
+    if isinstance(nested, dict) and "probe_score" in nested and "toxicity" in nested:
+        return {"probe_score": float(nested["probe_score"]), "toxicity": float(nested["toxicity"])}
+
+    return None
+
+
 def read_metrics(intermediate_artifact: dict[str, object]) -> dict[str, float]:
     metrics_ref = str(intermediate_artifact.get("metrics_ref", ""))
-    has_inline = "probe_score" in intermediate_artifact and "toxicity" in intermediate_artifact
+    inline = _extract(intermediate_artifact)
 
     if metrics_ref:
         metrics_path = Path(metrics_ref)
         if metrics_path.exists() and metrics_path.is_file():
             payload = json.loads(metrics_path.read_text())
-            return {
-                "probe_score": float(payload.get("probe_score", 0.0)),
-                "toxicity": float(payload.get("toxicity", 1.0)),
-            }
-        if not has_inline:
+            if isinstance(payload, dict) and (extracted := _extract(payload)):
+                return extracted
+            raise MetricsArtifactError(f"metrics artifact missing required fields: {metrics_ref}")
+        if inline is None:
             raise MetricsArtifactError(f"metrics artifact missing or unreadable: {metrics_ref}")
 
-    if has_inline:
-        return {
-            "probe_score": float(intermediate_artifact.get("probe_score", 0.0)),
-            "toxicity": float(intermediate_artifact.get("toxicity", 1.0)),
-        }
+    if inline is not None:
+        return inline
 
     raise MetricsArtifactError("no metrics artifact reference or inline metrics provided")

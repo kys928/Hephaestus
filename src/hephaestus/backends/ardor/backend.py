@@ -31,11 +31,12 @@ class ArdorBackend:
 
     def resolve_target(self, launch_config: dict[str, object]) -> BackendTarget:
         backend_cfg = load_named_config(self.config_dir, "backends", self.name)
+        parameters = dict(launch_config.get("parameters", {}))
         target_cfg = {
             "endpoint": backend_cfg.get("endpoint"),
             "queue": backend_cfg.get("queue"),
-            "simulate_only": bool(backend_cfg.get("simulate_only", True)),
-            "model_id": str(launch_config.get("parameters", {}).get("model_id", backend_cfg.get("default_model_id", ""))),
+            "execution_mode": parameters.get("ardor_execution_mode", backend_cfg.get("execution_mode")),
+            "model_id": str(parameters.get("model_id", backend_cfg.get("default_model_id", ""))),
         }
         return BackendTarget(backend_name=self.name, dry_run=bool(launch_config.get("dry_run", False)), config=target_cfg)
 
@@ -83,7 +84,6 @@ class ArdorBackend:
             dataset_input=dataset_input,
             backend_config=backend_cfg,
         )
-        job.execution_spec["simulate_only"] = bool(target.config.get("simulate_only", True))
         job.execution_spec["job_spec"]["model"] = {
             "model_id": model.model_id,
             "architecture": model.architecture,
@@ -92,7 +92,8 @@ class ArdorBackend:
         return job
 
     def launch_training(self, prepared_job: PreparedBackendJob) -> BackendRunResult:
-        result = self.runtime_adapter.launch(prepared_job)
+        launch_outcome = self.launcher.launch(prepared_job)
+        result = self.runtime_adapter.normalize_run(prepared_job, launch_outcome)
         result.intermediate_eval = self.eval_adapter.adapt_intermediate_eval(result.intermediate_eval)
         return result
 
