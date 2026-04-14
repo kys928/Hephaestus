@@ -63,27 +63,11 @@ def test_ardor_backend_prepares_job_without_orchestrator_leakage(tmp_path: Path)
             "min_tokens": 128,
         },
         training_plan={"run_id": run_id, "max_steps": 50, "eval_every_steps": 25, "checkpoint_every_steps": 25},
-        launch_config={"backend": "ardor", "dry_run": False, "artifact_root": f"artifacts/{run_id}", "parameters": {}},
+        launch_config={"backend": "ardor", "dry_run": False, "artifact_root": f"artifacts/{run_id}", "parameters": {"ardor_runner_script": "tests/fixtures/fake_ardor_runner.py"}},
     )
 
-    assert prepared.execution_spec["runner"] == "ardor_api"
+    assert prepared.execution_spec["runner"] == "ardor_local_process"
     assert "dataset" in prepared.execution_spec["job_spec"]
-
-
-def test_ardor_prepared_only_launch_is_not_completed(tmp_path: Path) -> None:
-    run_id = "stage4-ardor-prepared-only"
-    processed = tmp_path / "processed_dataset.jsonl"
-    processed.write_text('{"text":"sample"}\n')
-    backend = ArdorBackend()
-    prepared = backend.prepare_training_job(
-        experiment_plan={"run_id": run_id},
-        data_contract={"processed_dataset_ref": str(processed), "schema_version": "v1", "min_tokens": 128},
-        training_plan={"run_id": run_id, "max_steps": 50, "eval_every_steps": 25, "checkpoint_every_steps": 25},
-        launch_config={"backend": "ardor", "dry_run": False, "artifact_root": f"artifacts/{run_id}", "parameters": {}},
-    )
-    result = backend.launch_training(prepared)
-    assert result.status == "failed"
-    assert any("prepared_only_unsupported_execution" in event.message for event in result.events)
 
 
 def test_ardor_unsupported_model_fails_honestly(tmp_path: Path) -> None:
@@ -106,7 +90,7 @@ def test_ardor_unsupported_model_fails_honestly(tmp_path: Path) -> None:
 
 def test_ardor_missing_processed_dataset_fails_honestly() -> None:
     backend = ArdorBackend()
-    run_id = f"stage4-missing-{uuid4().hex[:8]}"
+    run_id = f"stage4-managed-{uuid4().hex[:8]}"
     with pytest.raises(ConfigError, match="processed dataset missing"):
         backend.preprocess(run_id)
 

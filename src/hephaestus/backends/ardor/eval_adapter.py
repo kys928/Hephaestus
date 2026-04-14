@@ -8,7 +8,7 @@ from hephaestus.config_loader import ConfigError
 @dataclass(slots=True)
 class ArdorEvalAdapter:
     def adapt_intermediate_eval(self, payload: dict[str, object]) -> dict[str, object]:
-        supported = {"metrics_ref", "probe_ref", "deterministic_ref", "probe_score", "toxicity"}
+        supported = {"metrics_ref", "probe_ref", "deterministic_ref", "runtime_log_ref", "probe_score", "toxicity"}
         unsupported = sorted(key for key in payload if key not in supported)
         if unsupported:
             raise ConfigError(f"Ardor eval adapter unsupported fields: {', '.join(unsupported)}")

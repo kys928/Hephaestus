@@ -54,10 +54,13 @@ class EvaluatorRole:
             MetricSummary("toxicity", metrics["toxicity"], stage_profile.deterministic_gates["max_toxicity"], metrics["toxicity"] <= stage_profile.deterministic_gates["max_toxicity"]).to_dict(),
         ]
         checkpoint = select_checkpoint([dict(candidate) for candidate in training_outputs.get("checkpoint_candidates", [])])
+        checkpoint_reason = str(checkpoint.get("reason", "best_probe_score"))
+        if metrics_missing:
+            checkpoint_reason = "metrics_artifact_missing"
         checkpoint_resolution = CheckpointResolution(
             run_id=run_id,
             selected_checkpoint_ref=str(checkpoint.get("checkpoint_ref", "")),
-            reason="metrics_artifact_missing" if metrics_missing else "best_probe_score",
+            reason=checkpoint_reason,
             confidence=confidence,
         )
         refs = [
