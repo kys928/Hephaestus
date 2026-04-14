@@ -16,3 +16,4 @@ class DecisionRecord(JsonSchema):
     confidence: float
     evidence_refs: list[str] = field(default_factory=list)
     created_at: str = ""
+    metadata: dict[str, object] = field(default_factory=dict)
