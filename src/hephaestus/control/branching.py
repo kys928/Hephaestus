@@ -30,6 +30,8 @@ def create_branch_state(
         "latest_run_id": None,
         "best_checkpoint_ref": origin_checkpoint_ref,
         "last_stable_checkpoint_ref": parent.get("last_stable_checkpoint_ref"),
+        "certified_stable_checkpoint_ref": parent.get("certified_stable_checkpoint_ref"),
+        "last_certification_result": parent.get("last_certification_result", "certification_not_eligible"),
         "recent_failures": [],
         "known_pathologies": [],
         "last_decision": "branch_new_experiment",

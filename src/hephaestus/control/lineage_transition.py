@@ -25,20 +25,51 @@ def compute_lineage_signals(
     checkpoint_ref: str | None,
     deterministic_passed: bool,
     confidence: float,
+    promotion_bundle_passed: bool,
+    evidence_completeness: float,
+    certification_readiness: str,
+    recheck_recommended: bool,
+    stage_certification_eligibility: str,
+    stage_require_recheck: bool,
+    stage_min_consistent_runs: int,
+    observed_consistent_runs: int,
+    min_promotion_evidence: int,
+    observed_evidence_runs: int,
+    min_stable_evidence: int,
+    min_certification_evidence: int,
+    stability_confidence: float,
+    min_stability_confidence: float,
+    stage_thresholds: dict[str, float],
     promotion_policy: PromotionPolicy,
 ) -> LineageSignalUpdate:
-    promotion_state = promotion_policy.decide(
+    decision = promotion_policy.decide(
         deterministic_passed=deterministic_passed,
         confidence=confidence,
         has_candidate=bool(checkpoint_ref),
+        promotion_bundle_passed=promotion_bundle_passed,
+        evidence_completeness=evidence_completeness,
+        certification_readiness=certification_readiness,
+        recheck_recommended=recheck_recommended,
+        stage_certification_eligibility=stage_certification_eligibility,
+        stage_require_recheck=stage_require_recheck,
+        stage_min_consistent_runs=stage_min_consistent_runs,
+        observed_consistent_runs=observed_consistent_runs,
+        min_promotion_evidence=min_promotion_evidence,
+        observed_evidence_runs=observed_evidence_runs,
+        min_stable_evidence=min_stable_evidence,
+        min_certification_evidence=min_certification_evidence,
+        stability_confidence=stability_confidence,
+        min_stability_confidence=min_stability_confidence,
+        stage_thresholds=stage_thresholds,
     )
     promotion = apply_promotion(
         lineage_state=prior_state,
         candidate_checkpoint_ref=checkpoint_ref,
-        promotion_state=promotion_state,
+        promotion_state=decision.promotion_state,
+        certification_state=decision.certification_state,
         deterministic_passed=deterministic_passed,
         confidence=confidence,
-        stable_confidence_threshold=promotion_policy.min_confidence_for_stable,
+        stable_confidence_threshold=float(stage_thresholds.get("min_confidence_stable", promotion_policy.min_confidence_for_stable)),
     )
 
     failures = list(prior_state.get("recent_failures", []))
@@ -51,6 +82,8 @@ def compute_lineage_signals(
         pathologies.append("deterministic_regression")
     if action == "rollback_to_checkpoint":
         pathologies.append("rollback_triggered")
+    if decision.certification_state == "certification_inconclusive":
+        pathologies.append("certification_inconclusive")
     pathologies = pathologies[-5:]
 
     trust = "low" if len(failures) >= 3 else promotion.trust_level

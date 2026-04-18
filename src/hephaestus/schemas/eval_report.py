@@ -16,4 +16,11 @@ class EvalReport(JsonSchema):
     checkpoint_resolution: dict[str, object] = field(default_factory=dict)
     confidence: float = 0.0
     likely_issue_category: str = "none"
+    evidence_completeness: float = 0.0
+    stability_confidence: float = 0.0
+    certification_readiness: str = "certification_not_eligible"
+    recheck_recommended: bool = False
+    promotion_bundle_passed: bool = False
+    observed_consistent_runs: int = 0
+    evaluation_bundle_summary: dict[str, object] = field(default_factory=dict)
     intermediate_artifact_refs: list[str] = field(default_factory=list)

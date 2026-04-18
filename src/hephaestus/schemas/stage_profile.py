@@ -12,3 +12,4 @@ class StageProfile(JsonSchema):
     eval_pack: str
     deterministic_gates: dict[str, float]
     allowed_next_actions: list[str] = field(default_factory=list)
+    certification_profile: dict[str, object] = field(default_factory=dict)

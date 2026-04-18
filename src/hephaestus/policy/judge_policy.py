@@ -36,6 +36,7 @@ class JudgePolicy:
         deterministic_passed: bool,
         confidence: float,
         monitor_outcome: str,
+        promotion_state: str | None = None,
         has_candidate_checkpoint: bool = True,
         recent_failure_count: int = 0,
         has_stable_checkpoint: bool = False,
@@ -46,15 +47,18 @@ class JudgePolicy:
             return JudgeExitAction.ROLLBACK_TO_CHECKPOINT
         if monitor_outcome == "waste_stop":
             return JudgeExitAction.RERUN_SAME_CONFIG
+        if not has_candidate_checkpoint:
+            return JudgeExitAction.CONTINUE_LINEAGE_BEST
+        if promotion_state is None:
+            promotion_state = self.promotion_policy.decide(
+                deterministic_passed=deterministic_passed,
+                confidence=confidence,
+                has_candidate=has_candidate_checkpoint,
+            ).promotion_state
 
-        promotion_state = self.promotion_policy.decide(
-            deterministic_passed=deterministic_passed,
-            confidence=confidence,
-            has_candidate=has_candidate_checkpoint,
-        )
         if promotion_state == "rejected":
             return JudgeExitAction.REJECT_CHECKPOINT
-        if promotion_state in {"stable", "promoted_best"}:
+        if promotion_state in {"certified_stable", "stable", "promoted_best"}:
             return JudgeExitAction.PROMOTE_CHECKPOINT
         if promotion_state == "candidate_best":
             return JudgeExitAction.CONTINUE_FROM_CHECKPOINT

@@ -2,5 +2,35 @@
   "pack_name": "pretraining_probes",
   "required_metrics": ["probe_score", "toxicity"],
   "description": "Core probe and toxicity gates for early pretraining",
-  "supports_generation_signals": false
+  "supports_generation_signals": false,
+  "regression_bundles": {
+    "promotion": ["probe_score_gate", "toxicity_gate"],
+    "certification": ["probe_score_gate", "toxicity_gate"]
+  },
+  "certification_bundle": {
+    "required_metrics": ["probe_score", "toxicity"],
+    "required_bundle": "certification",
+    "min_stability_confidence": 0.9
+  },
+  "minimum_evidence": {
+    "promotion_runs": 1,
+    "stable_runs": 2,
+    "certification_runs": 3
+  },
+  "recheck_requirements": {
+    "required_for_certification": true,
+    "min_consistent_runs": 2
+  },
+  "stage_tolerances": {
+    "lenient": {
+      "min_confidence_best": 0.6,
+      "min_confidence_stable": 0.82,
+      "min_confidence_certified": 0.93
+    },
+    "strict": {
+      "min_confidence_best": 0.65,
+      "min_confidence_stable": 0.86,
+      "min_confidence_certified": 0.95
+    }
+  }
 }

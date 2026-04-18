@@ -239,17 +239,18 @@ def test_stage6_deterministic_regression_blocks_promote_and_stable_advancement()
         "best_checkpoint_ref": "artifacts/old/best.ckpt",
         "last_stable_checkpoint_ref": "artifacts/old/stable.ckpt",
     }
-    promotion_state = policy.decide(deterministic_passed=False, confidence=0.99, has_candidate=True)
+    decision = policy.decide(deterministic_passed=False, confidence=0.99, has_candidate=True)
     transition = apply_promotion(
         lineage_state=state_before,
         candidate_checkpoint_ref="artifacts/new/candidate.ckpt",
-        promotion_state=promotion_state,
+        promotion_state=decision.promotion_state,
+        certification_state=decision.certification_state,
         deterministic_passed=False,
         confidence=0.99,
         stable_confidence_threshold=policy.min_confidence_for_stable,
     )
 
-    assert promotion_state == "rejected"
+    assert decision.promotion_state == "rejected"
     assert transition.best_checkpoint_ref == "artifacts/old/best.ckpt"
     assert transition.last_stable_checkpoint_ref == "artifacts/old/stable.ckpt"
     assert "stable_checkpoint_updated" not in transition.notes
