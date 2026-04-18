@@ -77,6 +77,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
     def run_phase(self, phase: SpinePhase, run_id: str) -> PhaseResult:
         lineage_state = self.lineage_store.get_current(self.context.lineage_id)
         recent_failures = self.query.recent_failures(self.context.lineage_id)
+        recent_repeatability = self.query.checkpoint_repeatability_summary(self.context.lineage_id)
 
         if phase is SpinePhase.JUDGE_ENTRY:
             entry, decision = JudgeEntryRole(self.judge_policy).run(
@@ -86,6 +87,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 created_at=_now(),
                 lineage_state=lineage_state,
                 recent_failures=recent_failures,
+                recent_repeatability=recent_repeatability,
             )
             output = entry.to_dict()
             self.decision_store.append(decision.to_dict())
@@ -176,6 +178,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
         if phase is SpinePhase.JUDGE_EXIT:
             eval_report = self.context.outputs[SpinePhase.EVALUATOR.value]
             monitor_outcome = str(self.context.outputs[SpinePhase.RUNTIME_MONITOR.value]["outcome"])
+            candidate_ref = str(eval_report.get("checkpoint_resolution", {}).get("selected_checkpoint_ref", ""))
             judge = JudgeExitRole(self.judge_policy, self.promotion_policy).run(
                 run_id,
                 self.context.lineage_id,
@@ -199,6 +202,12 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 metadata={
                     "monitor_outcome": monitor_outcome,
                     "recent_failure_count": len(recent_failures),
+                    "checkpoint_ref": candidate_ref,
+                    "certification_state": next((item.split("=", 1)[1] for item in judge.reasons if item.startswith("certification_state=")), "certification_not_eligible"),
+                    "repeatability_sufficient": bool(eval_report.get("repeatability_sufficient", False)),
+                    "variance_risk": str(eval_report.get("variance_risk", "unknown")),
+                    "repeated_eval_count": int(eval_report.get("repeated_eval_count", 0)),
+                    "consistency_score": float(eval_report.get("consistency_score", 0.0)),
                 },
             )
             self.decision_store.append(decision.to_dict())
@@ -295,6 +304,8 @@ class Orchestrator:
             min_stability_confidence=float(eval_output.get("evaluation_bundle_summary", {}).get("min_stability_confidence", 0.0)),
             stage_thresholds=dict(eval_output.get("evaluation_bundle_summary", {}).get("stage_thresholds", {})),
             promotion_policy=self.coordinator.promotion_policy,
+            repeatability_sufficient=bool(eval_output.get("repeatability_sufficient", False)),
+            variance_risk=str(eval_output.get("variance_risk", "unknown")),
         )
 
         state = LineageState(
@@ -309,6 +320,11 @@ class Orchestrator:
             last_stable_checkpoint_ref=signal_update.promotion.last_stable_checkpoint_ref,
             certified_stable_checkpoint_ref=signal_update.promotion.certified_stable_checkpoint_ref,
             last_certification_result=signal_update.promotion.last_certification_result,
+            last_repeated_eval_count=int(eval_output.get("repeated_eval_count", 0)),
+            last_consistency_score=float(eval_output.get("consistency_score", 0.0)),
+            last_variance_risk=str(eval_output.get("variance_risk", "unknown")),
+            certification_recheck_count=int(eval_output.get("certification_recheck_count", 0)),
+            repeatability_sufficient=bool(eval_output.get("repeatability_sufficient", False)),
             recent_failures=signal_update.failures,
             known_pathologies=signal_update.known_pathologies,
             last_decision=action,

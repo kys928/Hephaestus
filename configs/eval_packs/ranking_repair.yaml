@@ -1,14 +1,26 @@
 {
   "pack_name": "ranking_repair",
-  "required_metrics": ["probe_score", "toxicity"],
+  "required_metrics": [
+    "probe_score",
+    "toxicity"
+  ],
   "description": "Ranking repair deterministic gates",
   "supports_generation_signals": false,
   "regression_bundles": {
-    "promotion": ["probe_score_gate", "toxicity_gate"],
-    "certification": ["probe_score_gate", "toxicity_gate"]
+    "promotion": [
+      "probe_score_gate",
+      "toxicity_gate"
+    ],
+    "certification": [
+      "probe_score_gate",
+      "toxicity_gate"
+    ]
   },
   "certification_bundle": {
-    "required_metrics": ["probe_score", "toxicity"],
+    "required_metrics": [
+      "probe_score",
+      "toxicity"
+    ],
     "required_bundle": "certification",
     "min_stability_confidence": 0.95
   },
@@ -27,5 +39,12 @@
       "min_confidence_stable": 0.89,
       "min_confidence_certified": 0.96
     }
+  },
+  "repeatability_requirements": {
+    "repeatability_required": true,
+    "required_rechecks": 2,
+    "min_repeat_consistency": 0.85,
+    "variance_sensitivity": "high",
+    "certification_recheck_policy": "required_if_repeatability_unmet"
   }
 }

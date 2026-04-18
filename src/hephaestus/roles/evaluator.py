@@ -15,6 +15,8 @@ from hephaestus.schemas.stage_profile import StageProfile
 
 
 _SUPPORTED_METRICS = {"probe_score", "toxicity"}
+_VARIANCE_THRESHOLDS = {"low": 0.14, "medium": 0.08, "high": 0.04}
+_VARIANCE_LEVEL = {"low": 0, "medium": 1, "high": 2}
 
 
 @dataclass(slots=True)
@@ -54,6 +56,7 @@ class EvaluatorRole:
 
         evidence_rules = dict(eval_pack["minimum_evidence"])
         recheck_rules = dict(eval_pack["recheck_requirements"])
+        repeatability_rules = dict(eval_pack.get("repeatability_requirements", {}))
         stage_thresholds = dict(eval_pack["stage_tolerances"].get(stage_profile.strictness, {}))
         cert_required_metrics = set(eval_pack["certification_bundle"]["required_metrics"])
         cert_metric_ready = cert_required_metrics.issubset(required_metrics)
@@ -62,14 +65,56 @@ class EvaluatorRole:
         stage_eligibility = str(stage_cert.get("eligibility", "standard"))
         stage_require_recheck = bool(stage_cert.get("require_recheck", False))
         stage_min_consistent = int(stage_cert.get("min_consistent_runs", 1))
+
+        repeated_eval_count = len(certification_evals)
+        observed_evidence = 1 + repeated_eval_count
+        consistent_runs = self._count_consistent_runs(certification_evals, primary_deterministic_passed=regression.deterministic_passed)
+        consistency_score = consistent_runs / observed_evidence if observed_evidence > 0 else 0.0
+
         effective_min_consistent = max(int(recheck_rules["min_consistent_runs"]), stage_min_consistent)
-        consistent_runs = self._count_consistent_runs(certification_evals)
         consistency_passed = consistent_runs >= effective_min_consistent
+
+        effective_repeatability_required = bool(
+            repeatability_rules.get("repeatability_required", False) or stage_cert.get("repeatability_required", False)
+        )
+        effective_required_rechecks = max(
+            int(repeatability_rules.get("required_rechecks", 0)),
+            int(stage_cert.get("required_rechecks", 0)),
+        )
+        effective_min_repeat_consistency = max(
+            float(repeatability_rules.get("min_repeat_consistency", 0.0)),
+            float(stage_cert.get("min_repeat_consistency", 0.0)),
+        )
+        variance_sensitivity = self._resolve_variance_sensitivity(
+            str(repeatability_rules.get("variance_sensitivity", "medium")),
+            str(stage_cert.get("variance_sensitivity", "medium")),
+        )
+        recheck_policy = self._resolve_recheck_policy(
+            str(repeatability_rules.get("certification_recheck_policy", "required_if_repeatability_unmet")),
+            str(stage_cert.get("certification_recheck_policy", "required_if_repeatability_unmet")),
+        )
+
+        variance_risk = self._variance_risk(metrics, certification_evals, variance_sensitivity)
+        repeatability_sufficient = (
+            (not effective_repeatability_required)
+            or (
+                repeated_eval_count >= effective_required_rechecks
+                and consistency_score >= effective_min_repeat_consistency
+                and variance_risk != "high"
+            )
+        )
+        repeatability_blocked = bool(effective_repeatability_required and not repeatability_sufficient)
+
         recheck_required = bool(recheck_rules["required_for_certification"] or stage_require_recheck)
-        recheck_recommended = bool(recheck_required and not consistency_passed)
+        recheck_needed = self._recheck_needed(
+            recheck_required=recheck_required,
+            recheck_policy=recheck_policy,
+            repeatability_blocked=repeatability_blocked,
+            variance_risk=variance_risk,
+        )
+        recheck_recommended = bool(recheck_needed or (recheck_required and not consistency_passed))
 
         evidence_total = max(int(evidence_rules["stable_runs"]), 1)
-        observed_evidence = 1 + len(certification_evals)
         evidence_completeness = min(observed_evidence / evidence_total, 1.0)
         stability_confidence = min(confidence * evidence_completeness, 1.0)
 
@@ -84,10 +129,16 @@ class EvaluatorRole:
             certification_readiness = "certification_blocked_by_regression"
         elif evidence_completeness < 1.0:
             certification_readiness = "certification_inconclusive"
-        elif recheck_recommended:
-            certification_readiness = "certification_inconclusive"
         elif not cert_metric_ready:
             certification_readiness = "certification_not_eligible"
+        elif recheck_needed and repeated_eval_count < effective_required_rechecks:
+            certification_readiness = "certification_recheck_required"
+        elif variance_risk == "high" and effective_repeatability_required:
+            certification_readiness = "certification_inconclusive_due_to_variance"
+        elif consistency_score < effective_min_repeat_consistency and effective_repeatability_required:
+            certification_readiness = "certification_blocked_by_inconsistency"
+        elif recheck_recommended:
+            certification_readiness = "certification_recheck_required"
         else:
             certification_readiness = "certification_passed"
 
@@ -136,6 +187,15 @@ class EvaluatorRole:
             recheck_recommended=recheck_recommended,
             promotion_bundle_passed=bool(promotion_bundle.get("passed", False)),
             observed_consistent_runs=consistent_runs,
+            repeated_eval_count=repeated_eval_count,
+            consistency_score=consistency_score,
+            repeatability_ready=repeatability_sufficient,
+            repeatability_blocked=repeatability_blocked,
+            repeatability_sufficient=repeatability_sufficient,
+            recheck_needed=recheck_needed,
+            variance_risk=variance_risk,
+            consistency_observed=self._consistency_observed(consistency_score, effective_min_repeat_consistency),
+            certification_recheck_count=effective_required_rechecks,
             evaluation_bundle_summary={
                 "required_metrics": list(eval_pack["required_metrics"]),
                 "certification_required_metrics": list(cert_required_metrics),
@@ -150,19 +210,86 @@ class EvaluatorRole:
                     "eligibility": stage_eligibility,
                     "require_recheck": stage_require_recheck,
                     "min_consistent_runs": stage_min_consistent,
+                    "repeatability_required": bool(stage_cert.get("repeatability_required", False)),
+                    "required_rechecks": int(stage_cert.get("required_rechecks", 0)),
+                    "min_repeat_consistency": float(stage_cert.get("min_repeat_consistency", 0.0)),
+                    "variance_sensitivity": str(stage_cert.get("variance_sensitivity", "medium")),
+                    "certification_recheck_policy": str(
+                        stage_cert.get("certification_recheck_policy", "required_if_repeatability_unmet")
+                    ),
                 },
                 "observed_consistent_runs": consistent_runs,
                 "min_stability_confidence": float(eval_pack["certification_bundle"]["min_stability_confidence"]),
                 "stage_thresholds": stage_thresholds,
+                "repeatability": {
+                    "repeatability_required": effective_repeatability_required,
+                    "required_rechecks": effective_required_rechecks,
+                    "min_repeat_consistency": effective_min_repeat_consistency,
+                    "variance_sensitivity": variance_sensitivity,
+                    "variance_risk": variance_risk,
+                    "recheck_policy": recheck_policy,
+                    "repeatability_sufficient": repeatability_sufficient,
+                },
             },
             intermediate_artifact_refs=[ref for ref in refs if ref],
         )
 
-    def _count_consistent_runs(self, certification_evals: list[object]) -> int:
-        consistent = 0
+    def _count_consistent_runs(self, certification_evals: list[object], primary_deterministic_passed: bool) -> int:
+        consistent = 1 if primary_deterministic_passed else 0
         for item in certification_evals:
             if not isinstance(item, dict):
                 continue
             if bool(item.get("deterministic_passed", False)):
                 consistent += 1
         return consistent
+
+    def _resolve_variance_sensitivity(self, pack_value: str, stage_value: str) -> str:
+        pack = pack_value if pack_value in _VARIANCE_LEVEL else "medium"
+        stage = stage_value if stage_value in _VARIANCE_LEVEL else "medium"
+        return stage if stage_value in _VARIANCE_LEVEL else pack
+
+    def _resolve_recheck_policy(self, pack_value: str, stage_value: str) -> str:
+        allowed = {"always", "never", "required_if_repeatability_unmet", "required_if_variance"}
+        if stage_value in allowed:
+            return stage_value
+        if pack_value in allowed:
+            return pack_value
+        return "required_if_repeatability_unmet"
+
+    def _variance_risk(self, metrics: dict[str, float], certification_evals: list[object], variance_sensitivity: str) -> str:
+        probe_scores = [float(metrics.get("probe_score", 0.0))]
+        for item in certification_evals:
+            if not isinstance(item, dict):
+                continue
+            if "probe_score" in item:
+                try:
+                    probe_scores.append(float(item["probe_score"]))
+                except (TypeError, ValueError):
+                    continue
+        if len(probe_scores) < 2:
+            return "unknown"
+        spread = max(probe_scores) - min(probe_scores)
+        threshold = _VARIANCE_THRESHOLDS.get(variance_sensitivity, _VARIANCE_THRESHOLDS["medium"])
+        if spread > threshold:
+            return "high"
+        if spread > threshold * 0.6:
+            return "moderate"
+        return "low"
+
+    def _recheck_needed(self, recheck_required: bool, recheck_policy: str, repeatability_blocked: bool, variance_risk: str) -> bool:
+        if recheck_policy == "never":
+            return False
+        if recheck_policy == "always":
+            return True
+        if recheck_policy == "required_if_variance":
+            return variance_risk == "high"
+        return repeatability_blocked
+
+    def _consistency_observed(self, score: float, minimum: float) -> str:
+        if minimum <= 0.0 and score <= 0.0:
+            return "unknown"
+        if score >= minimum:
+            return "consistent"
+        if score >= max(0.0, minimum - 0.15):
+            return "mixed"
+        return "inconsistent"

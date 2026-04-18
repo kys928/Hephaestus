@@ -34,9 +34,33 @@ class StagePolicy:
         cert_profile = payload.get("certification_profile", {})
         if not isinstance(cert_profile, dict):
             raise ConfigError(f"stage profile '{stage_name}' certification_profile must be an object")
+
         min_consistent_runs = int(cert_profile.get("min_consistent_runs", 1))
         if min_consistent_runs < 1:
             raise ConfigError(f"stage profile '{stage_name}' certification_profile.min_consistent_runs must be >= 1")
+
+        required_rechecks = int(cert_profile.get("required_rechecks", 0))
+        if required_rechecks < 0:
+            raise ConfigError(f"stage profile '{stage_name}' certification_profile.required_rechecks must be >= 0")
+
+        min_repeat_consistency = float(cert_profile.get("min_repeat_consistency", 0.0))
+        if min_repeat_consistency < 0.0 or min_repeat_consistency > 1.0:
+            raise ConfigError(
+                f"stage profile '{stage_name}' certification_profile.min_repeat_consistency must be between 0.0 and 1.0"
+            )
+
+        variance_sensitivity = str(cert_profile.get("variance_sensitivity", "medium"))
+        if variance_sensitivity not in {"low", "medium", "high"}:
+            raise ConfigError(
+                f"stage profile '{stage_name}' certification_profile.variance_sensitivity must be low, medium, or high"
+            )
+
+        recheck_policy = str(cert_profile.get("certification_recheck_policy", "required_if_repeatability_unmet"))
+        allowed_recheck = {"always", "never", "required_if_repeatability_unmet", "required_if_variance"}
+        if recheck_policy not in allowed_recheck:
+            raise ConfigError(
+                f"stage profile '{stage_name}' certification_profile.certification_recheck_policy must be one of: {', '.join(sorted(allowed_recheck))}"
+            )
 
         return StageProfile(
             name=str(payload.get("name", stage_name)),
@@ -51,5 +75,10 @@ class StagePolicy:
                 "eligibility": str(cert_profile.get("eligibility", "standard")),
                 "require_recheck": bool(cert_profile.get("require_recheck", False)),
                 "min_consistent_runs": min_consistent_runs,
+                "repeatability_required": bool(cert_profile.get("repeatability_required", False)),
+                "required_rechecks": required_rechecks,
+                "min_repeat_consistency": min_repeat_consistency,
+                "variance_sensitivity": variance_sensitivity,
+                "certification_recheck_policy": recheck_policy,
             },
         )

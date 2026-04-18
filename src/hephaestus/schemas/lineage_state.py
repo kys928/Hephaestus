@@ -23,6 +23,11 @@ class LineageState(JsonSchema):
     last_stable_checkpoint_ref: str | None = None
     certified_stable_checkpoint_ref: str | None = None
     last_certification_result: str = "certification_not_eligible"
+    last_repeated_eval_count: int = 0
+    last_consistency_score: float = 0.0
+    last_variance_risk: str = "unknown"
+    certification_recheck_count: int = 0
+    repeatability_sufficient: bool = False
     recent_failures: list[str] = field(default_factory=list)
     known_pathologies: list[str] = field(default_factory=list)
     last_decision: str | None = None

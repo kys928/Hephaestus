@@ -57,7 +57,7 @@ def test_stage7_evaluator_summarizes_multi_part_eval_bundle() -> None:
     )
     assert report.evaluation_bundle_summary["observed_evidence_runs"] == 3
     assert report.evidence_completeness == 1.0
-    assert report.certification_readiness in {"certification_passed", "certification_inconclusive"}
+    assert report.certification_readiness in {"certification_passed", "certification_inconclusive", "certification_recheck_required"}
 
 
 def test_stage7_certification_blocked_when_deterministic_regression_fails() -> None:
@@ -125,7 +125,7 @@ def test_stage7_inconclusive_or_recheck_evidence_blocks_certification() -> None:
     )
     assert inconclusive.promotion_state == "stable"
     assert recheck.promotion_state == "stable"
-    assert recheck.certification_state == "certification_inconclusive"
+    assert recheck.certification_state == "certification_recheck_required"
 
 
 def test_stage7_stage_certification_eligibility_is_enforced() -> None:
@@ -162,7 +162,7 @@ def test_stage7_evaluator_applies_stage_certification_profile_controls() -> None
     )
     assert report.recheck_recommended is True
     assert report.evaluation_bundle_summary["effective_min_consistent_runs"] == 2
-    assert report.observed_consistent_runs == 1
+    assert report.observed_consistent_runs == 2
 
 
 def test_stage7_evaluator_marks_not_eligible_when_stage_disables_certification() -> None:
@@ -207,7 +207,7 @@ def test_stage7_stage_require_recheck_and_min_consistent_runs_are_enforced() -> 
         min_stability_confidence=0.9,
     )
     assert decision.promotion_state == "stable"
-    assert decision.certification_state == "certification_inconclusive"
+    assert decision.certification_state == "certification_recheck_required"
 
 
 def test_stage7_promotion_runs_blocks_promotion_when_unmet() -> None:
