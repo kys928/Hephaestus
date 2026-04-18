@@ -37,6 +37,8 @@ class PromotionPolicy:
         stability_confidence: float = 0.0,
         min_stability_confidence: float = 0.0,
         stage_thresholds: dict[str, float] | None = None,
+        repeatability_sufficient: bool = True,
+        variance_risk: str = "unknown",
     ) -> PromotionDecision:
         thresholds = stage_thresholds or {}
         best_threshold = float(thresholds.get("min_confidence_best", self.min_confidence_for_best))
@@ -68,10 +70,22 @@ class PromotionPolicy:
             certification_state = "certification_not_eligible"
         else:
             certification_state = certification_readiness
+
+        if certification_state in {
+            "certification_inconclusive_due_to_variance",
+            "certification_recheck_required",
+            "certification_blocked_by_inconsistency",
+        }:
+            recheck_recommended = True
+
         needs_recheck = recheck_recommended or (stage_require_recheck and observed_consistent_runs < stage_min_consistent_runs)
         if promotion_state == "stable" and certification_state == "certification_passed":
             if needs_recheck:
-                certification_state = "certification_inconclusive"
+                certification_state = "certification_recheck_required"
+            elif not repeatability_sufficient:
+                certification_state = "certification_recheck_required"
+            elif variance_risk == "high":
+                certification_state = "certification_inconclusive_due_to_variance"
             elif stability_confidence < min_stability_confidence:
                 certification_state = "certification_inconclusive"
             elif confidence >= certified_threshold and observed_evidence_runs >= min_certification_evidence:

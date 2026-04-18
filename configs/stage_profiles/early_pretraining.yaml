@@ -17,6 +17,11 @@
   "certification_profile": {
     "eligibility": "bounded",
     "require_recheck": false,
-    "min_consistent_runs": 1
+    "min_consistent_runs": 1,
+    "repeatability_required": false,
+    "required_rechecks": 1,
+    "min_repeat_consistency": 0.6,
+    "variance_sensitivity": "medium",
+    "certification_recheck_policy": "required_if_repeatability_unmet"
   }
 }

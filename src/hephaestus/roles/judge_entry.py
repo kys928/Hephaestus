@@ -20,8 +20,10 @@ class JudgeEntryRole:
         created_at: str,
         lineage_state: dict[str, object] | None,
         recent_failures: list[dict[str, object]],
+        recent_repeatability: dict[str, object] | None = None,
     ) -> tuple[JudgeEntry, DecisionRecord]:
         state = lineage_state or {}
+        repeatability = recent_repeatability or {}
         mode = self.judge_policy.decide_entry_mode(
             lineage_status=str(state.get("status", "active")),
             recent_failure_count=len(recent_failures),
@@ -37,6 +39,7 @@ class JudgeEntryRole:
                 "preserve_role_boundaries",
                 "compact_state_only",
                 "deterministic_regressions_block_promotion",
+                "repeatability_aware_certification",
                 f"entry_mode={mode.value}",
             ],
             approved=True,
@@ -49,13 +52,14 @@ class JudgeEntryRole:
             lineage_id=lineage_id,
             role="judge_entry",
             action=mode.value,
-            rationale="entry mode selected from lineage truth and recent outcomes",
+            rationale="entry mode selected from lineage truth, recent outcomes, and repeatability history",
             confidence=0.8,
             created_at=created_at,
             metadata={
                 "recent_failure_count": len(recent_failures),
                 "best_checkpoint_ref": state.get("best_checkpoint_ref") if state else None,
                 "last_stable_checkpoint_ref": state.get("last_stable_checkpoint_ref") if state else None,
+                "recent_repeatability": repeatability,
             },
         )
         return entry, decision

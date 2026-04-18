@@ -76,6 +76,22 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
     if not isinstance(recheck, dict):
         raise ConfigError(f"eval pack '{pack_name}' recheck_requirements must be an object")
 
+    repeatability = payload.get("repeatability_requirements", {})
+    if not isinstance(repeatability, dict):
+        raise ConfigError(f"eval pack '{pack_name}' repeatability_requirements must be an object")
+
+    variance_sensitivity = str(repeatability.get("variance_sensitivity", "medium"))
+    if variance_sensitivity not in {"low", "medium", "high"}:
+        raise ConfigError(
+            f"eval pack '{pack_name}' repeatability_requirements.variance_sensitivity must be low, medium, or high"
+        )
+    recheck_policy = str(repeatability.get("certification_recheck_policy", "required_if_repeatability_unmet"))
+    allowed_policies = {"always", "never", "required_if_repeatability_unmet", "required_if_variance"}
+    if recheck_policy not in allowed_policies:
+        raise ConfigError(
+            f"eval pack '{pack_name}' repeatability_requirements.certification_recheck_policy must be one of: {', '.join(sorted(allowed_policies))}"
+        )
+
     stage_tolerances_raw = payload.get("stage_tolerances", {})
     if not isinstance(stage_tolerances_raw, dict):
         raise ConfigError(f"eval pack '{pack_name}' stage_tolerances must be an object")
@@ -111,6 +127,22 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
         "recheck_requirements": {
             "required_for_certification": bool(recheck.get("required_for_certification", False)),
             "min_consistent_runs": _as_int(recheck.get("min_consistent_runs", 1), "recheck_requirements.min_consistent_runs", pack_name),
+        },
+        "repeatability_requirements": {
+            "repeatability_required": bool(repeatability.get("repeatability_required", False)),
+            "required_rechecks": _as_int(
+                repeatability.get("required_rechecks", 0),
+                "repeatability_requirements.required_rechecks",
+                pack_name,
+                minimum=0,
+            ),
+            "min_repeat_consistency": _as_float(
+                repeatability.get("min_repeat_consistency", 0.0),
+                "repeatability_requirements.min_repeat_consistency",
+                pack_name,
+            ),
+            "variance_sensitivity": variance_sensitivity,
+            "certification_recheck_policy": recheck_policy,
         },
         "stage_tolerances": stage_tolerances,
     }

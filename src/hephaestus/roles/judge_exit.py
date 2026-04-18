@@ -52,6 +52,8 @@ class JudgeExitRole:
             stability_confidence=eval_report.stability_confidence,
             min_stability_confidence=float(eval_report.evaluation_bundle_summary.get("min_stability_confidence", 0.0)),
             stage_thresholds=stage_thresholds,
+            repeatability_sufficient=bool(eval_report.repeatability_sufficient),
+            variance_risk=str(eval_report.variance_risk),
         )
         action = self.judge_policy.decide_exit_action(
             deterministic_passed=deterministic_passed,

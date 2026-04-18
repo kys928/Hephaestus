@@ -41,6 +41,8 @@ def compute_lineage_signals(
     min_stability_confidence: float,
     stage_thresholds: dict[str, float],
     promotion_policy: PromotionPolicy,
+    repeatability_sufficient: bool,
+    variance_risk: str,
 ) -> LineageSignalUpdate:
     decision = promotion_policy.decide(
         deterministic_passed=deterministic_passed,
@@ -61,6 +63,8 @@ def compute_lineage_signals(
         stability_confidence=stability_confidence,
         min_stability_confidence=min_stability_confidence,
         stage_thresholds=stage_thresholds,
+        repeatability_sufficient=repeatability_sufficient,
+        variance_risk=variance_risk,
     )
     promotion = apply_promotion(
         lineage_state=prior_state,
@@ -84,6 +88,12 @@ def compute_lineage_signals(
         pathologies.append("rollback_triggered")
     if decision.certification_state == "certification_inconclusive":
         pathologies.append("certification_inconclusive")
+    if decision.certification_state == "certification_inconclusive_due_to_variance":
+        pathologies.append("variance_blocked_certification")
+    if decision.certification_state == "certification_blocked_by_inconsistency":
+        pathologies.append("repeatability_inconsistent")
+    if decision.certification_state == "certification_recheck_required":
+        pathologies.append("certification_recheck_required")
     pathologies = pathologies[-5:]
 
     trust = "low" if len(failures) >= 3 else promotion.trust_level
