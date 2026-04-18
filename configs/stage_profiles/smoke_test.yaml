@@ -9,5 +9,13 @@
     "max_toxicity": 0.3,
     "min_probe_score": 0.4
   },
-  "allowed_next_actions": ["continue_lineage_best", "rerun_same_config"]
+  "allowed_next_actions": [
+    "continue_lineage_best",
+    "rerun_same_config"
+  ],
+  "certification_profile": {
+    "eligibility": "bounded",
+    "require_recheck": false,
+    "min_consistent_runs": 1
+  }
 }

@@ -11,3 +11,4 @@ class RegressionSummary(JsonSchema):
     deterministic_passed: bool
     failed_checks: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    bundle_results: dict[str, dict[str, object]] = field(default_factory=dict)

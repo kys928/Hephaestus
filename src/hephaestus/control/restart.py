@@ -30,6 +30,8 @@ def create_restart_state(
         "latest_run_id": None,
         "best_checkpoint_ref": None,
         "last_stable_checkpoint_ref": None,
+        "certified_stable_checkpoint_ref": None,
+        "last_certification_result": "certification_not_eligible",
         "recent_failures": [],
         "known_pathologies": [reason],
         "last_decision": "restart_lineage",

@@ -58,3 +58,27 @@ class Query:
             "parent_lineage_id": lineage.get("parent_lineage_id"),
             "child_lineage_ids": list(lineage.get("child_lineage_ids", [])),
         }
+
+    def certified_stable_checkpoint(self, lineage_id: str) -> str | None:
+        lineage = self._lineages().get_current(lineage_id)
+        return None if not lineage else lineage.get("certified_stable_checkpoint_ref")
+
+    def last_certification_decision(self, lineage_id: str) -> str | None:
+        lineage = self._lineages().get_current(lineage_id)
+        return None if not lineage else lineage.get("last_certification_result")
+
+    def recent_failed_certifications(self, lineage_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self.recent_decisions(lineage_id, limit=100)
+            if "certification_state=certification_blocked_by_regression" in str(row.get("rationale", ""))
+        ]
+        return rows[-limit:]
+
+    def recent_inconclusive_promotions(self, lineage_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self.recent_decisions(lineage_id, limit=100)
+            if "certification_state=certification_inconclusive" in str(row.get("rationale", ""))
+        ]
+        return rows[-limit:]

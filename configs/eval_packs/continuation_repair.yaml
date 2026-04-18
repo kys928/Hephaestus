@@ -2,5 +2,30 @@
   "pack_name": "continuation_repair",
   "required_metrics": ["probe_score", "toxicity"],
   "description": "Strict deterministic repair gates",
-  "supports_generation_signals": false
+  "supports_generation_signals": false,
+  "regression_bundles": {
+    "promotion": ["probe_score_gate", "toxicity_gate"],
+    "certification": ["probe_score_gate", "toxicity_gate"]
+  },
+  "certification_bundle": {
+    "required_metrics": ["probe_score", "toxicity"],
+    "required_bundle": "certification",
+    "min_stability_confidence": 0.94
+  },
+  "minimum_evidence": {
+    "promotion_runs": 1,
+    "stable_runs": 2,
+    "certification_runs": 3
+  },
+  "recheck_requirements": {
+    "required_for_certification": true,
+    "min_consistent_runs": 2
+  },
+  "stage_tolerances": {
+    "strict": {
+      "min_confidence_best": 0.66,
+      "min_confidence_stable": 0.88,
+      "min_confidence_certified": 0.96
+    }
+  }
 }

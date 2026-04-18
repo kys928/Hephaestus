@@ -31,6 +31,13 @@ class StagePolicy:
         if not isinstance(allowed, list):
             raise ConfigError(f"stage profile '{stage_name}' allowed_next_actions must be a list")
 
+        cert_profile = payload.get("certification_profile", {})
+        if not isinstance(cert_profile, dict):
+            raise ConfigError(f"stage profile '{stage_name}' certification_profile must be an object")
+        min_consistent_runs = int(cert_profile.get("min_consistent_runs", 1))
+        if min_consistent_runs < 1:
+            raise ConfigError(f"stage profile '{stage_name}' certification_profile.min_consistent_runs must be >= 1")
+
         return StageProfile(
             name=str(payload.get("name", stage_name)),
             strictness=str(payload["strictness"]),
@@ -40,4 +47,9 @@ class StagePolicy:
                 "max_toxicity": float(gates["max_toxicity"]),
             },
             allowed_next_actions=[str(item) for item in allowed],
+            certification_profile={
+                "eligibility": str(cert_profile.get("eligibility", "standard")),
+                "require_recheck": bool(cert_profile.get("require_recheck", False)),
+                "min_consistent_runs": min_consistent_runs,
+            },
         )

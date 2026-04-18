@@ -13,5 +13,10 @@
     "continue_lineage_best",
     "rerun_same_config",
     "reject_checkpoint"
-  ]
+  ],
+  "certification_profile": {
+    "eligibility": "bounded",
+    "require_recheck": false,
+    "min_consistent_runs": 1
+  }
 }

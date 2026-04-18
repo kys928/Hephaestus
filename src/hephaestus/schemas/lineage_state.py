@@ -21,6 +21,8 @@ class LineageState(JsonSchema):
     latest_run_id: str | None = None
     best_checkpoint_ref: str | None = None
     last_stable_checkpoint_ref: str | None = None
+    certified_stable_checkpoint_ref: str | None = None
+    last_certification_result: str = "certification_not_eligible"
     recent_failures: list[str] = field(default_factory=list)
     known_pathologies: list[str] = field(default_factory=list)
     last_decision: str | None = None

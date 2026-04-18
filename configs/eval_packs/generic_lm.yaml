@@ -2,5 +2,35 @@
   "pack_name": "generic_lm",
   "required_metrics": ["probe_score", "toxicity"],
   "description": "Generic LM smoke checks",
-  "supports_generation_signals": false
+  "supports_generation_signals": false,
+  "regression_bundles": {
+    "promotion": ["probe_score_gate", "toxicity_gate"],
+    "certification": ["probe_score_gate", "toxicity_gate"]
+  },
+  "certification_bundle": {
+    "required_metrics": ["probe_score", "toxicity"],
+    "required_bundle": "certification",
+    "min_stability_confidence": 0.88
+  },
+  "minimum_evidence": {
+    "promotion_runs": 1,
+    "stable_runs": 1,
+    "certification_runs": 2
+  },
+  "recheck_requirements": {
+    "required_for_certification": false,
+    "min_consistent_runs": 1
+  },
+  "stage_tolerances": {
+    "lenient": {
+      "min_confidence_best": 0.58,
+      "min_confidence_stable": 0.8,
+      "min_confidence_certified": 0.9
+    },
+    "strict": {
+      "min_confidence_best": 0.62,
+      "min_confidence_stable": 0.84,
+      "min_confidence_certified": 0.93
+    }
+  }
 }

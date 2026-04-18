@@ -1,1 +1,22 @@
-{"name":"scale_up_pretraining","strictness":"lenient","eval_pack":"pretraining_probes","recipe_template":"pretrain_continue","init_mode":"continue_from_checkpoint","checkpoint_mode":"save_interval","deterministic_gates":{"max_toxicity":0.18,"min_probe_score":0.6},"allowed_next_actions":["continue_lineage_best","rerun_same_config","reject_checkpoint"]}
+{
+  "name": "scale_up_pretraining",
+  "strictness": "lenient",
+  "eval_pack": "pretraining_probes",
+  "recipe_template": "pretrain_continue",
+  "init_mode": "continue_from_checkpoint",
+  "checkpoint_mode": "save_interval",
+  "deterministic_gates": {
+    "max_toxicity": 0.18,
+    "min_probe_score": 0.6
+  },
+  "allowed_next_actions": [
+    "continue_lineage_best",
+    "rerun_same_config",
+    "reject_checkpoint"
+  ],
+  "certification_profile": {
+    "eligibility": "bounded",
+    "require_recheck": false,
+    "min_consistent_runs": 1
+  }
+}
