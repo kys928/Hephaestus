@@ -108,6 +108,13 @@ def test_stage6_rollback_transition_succeeds_with_stable_target(tmp_path: Path) 
         run_id="s6-rollback-success",
         stage_name="stabilization",
         judge_policy=ForceRollbackPolicy(),
+        operator_responses={
+            "rollback_to_checkpoint": {
+                "outcome": "approved",
+                "operator_id": "stage6.fixture",
+                "note": "legacy rollback test path",
+            }
+        },
     )
     orch.run("s6-rollback-success")
 
@@ -146,6 +153,13 @@ def test_stage6_rollback_transition_fails_honestly_without_target(tmp_path: Path
         run_id="s6-rollback-fail",
         stage_name="stabilization",
         judge_policy=ForceRollbackPolicy(),
+        operator_responses={
+            "rollback_to_checkpoint": {
+                "outcome": "approved",
+                "operator_id": "stage6.fixture",
+                "note": "legacy rollback test path",
+            }
+        },
     )
     orch.run("s6-rollback-fail")
 

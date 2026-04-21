@@ -1,0 +1,25 @@
+{
+  "action_rules": {
+    "promote_checkpoint": "approval_required_high_risk",
+    "rollback_to_checkpoint": "approval_required_high_risk",
+    "restart_lineage": "approval_required_high_risk",
+    "branch_new_experiment": "approval_required",
+    "mark_lineage_poisoned": "approval_required_high_risk"
+  },
+  "high_risk_actions": [
+    "promote_checkpoint",
+    "rollback_to_checkpoint",
+    "restart_lineage",
+    "mark_lineage_poisoned"
+  ],
+  "trust_level_overrides": {
+    "low": {
+      "branch_new_experiment": "approval_required_high_risk"
+    }
+  },
+  "stage_overrides": {
+    "smoke_test": {
+      "branch_new_experiment": "auto_allowed"
+    }
+  }
+}
