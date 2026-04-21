@@ -1,6 +1,6 @@
 # Lineage Policy
 
-## Stage 8 behavior (current)
+## Stage 9 behavior (current)
 
 - Lineage current truth is compact and persisted in `lineage_state.json` plus per-lineage map in `lineage_states.json`.
 - Run and decision history remain append-only in JSONL stores.
@@ -21,16 +21,22 @@
   - recent certification attempts are queryable by checkpoint,
   - repeatability summaries are derived from append-only decision history,
   - no scheduler, queue, vector DB, or distributed orchestrator is introduced.
+- Operator governance for high-impact lineage actions is now explicit and bounded:
+  - approval requirements are policy/config driven (`configs/policies/approval_policy.yaml`),
+  - high-impact requests persist as explicit approval request records,
+  - operator decisions persist as explicit approval decision records (`approved`, `rejected`, `expired`, `superseded`, plus explicit override outcomes),
+  - lineage current state remains compact while tracking only compact governance truth (`pending_approval`, `last_approval_status`, `last_high_impact_request_id`),
+  - high-impact transitions do not auto-execute while approval is pending or rejected.
 
 ## Still simplistic or heuristic
 
 - Variance risk currently uses bounded spread thresholds over available probe scores; this is not a full statistical variance estimator.
 - Consistency scoring is deterministic pass-rate based and bounded to local evidence windows.
-- Cross-stage certification governance still relies on configured thresholds rather than external approval workflows.
+- Override behavior is intentionally bounded to explicit per-request outcomes and does not provide unrestricted admin bypass.
 
 ## Not yet production-grade
 
 - No signed provenance or tamper-evident audit log.
-- No external approval workflow for certification sign-off.
+- No authenticated external identity/authorization provider for operator approvals.
 - No independent multi-cluster replay certification.
 - No formal statistical confidence intervals or power analysis for repeatability claims.

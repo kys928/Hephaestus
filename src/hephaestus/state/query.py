@@ -140,3 +140,64 @@ class Query:
                 1 for attempt in attempts if str(attempt.get("metadata", {}).get("variance_risk", "")) == "high"
             ),
         }
+
+    def pending_approvals(self, lineage_id: str | None = None) -> list[dict[str, Any]]:
+        rows = self._decisions().all_approval_requests()
+        decisions = self._decisions().all_approval_decisions()
+        latest_by_request: dict[str, dict[str, Any]] = {}
+        for row in decisions:
+            latest_by_request[str(row.get("request_id", ""))] = row
+        pending: list[dict[str, Any]] = []
+        for row in rows:
+            request_id = str(row.get("request_id", ""))
+            if lineage_id and str(row.get("lineage_id")) != lineage_id:
+                continue
+            latest = latest_by_request.get(request_id)
+            status = str(latest.get("status")) if latest else str(row.get("status", "pending"))
+            if status == "pending":
+                pending.append(row)
+        return pending
+
+    def latest_approval_decision_for_lineage(self, lineage_id: str) -> dict[str, Any] | None:
+        rows = [row for row in self._decisions().all_approval_decisions() if row.get("lineage_id") == lineage_id]
+        return rows[-1] if rows else None
+
+    def recent_rejected_promotions(self, lineage_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self._decisions().all_approval_decisions()
+            if row.get("lineage_id") == lineage_id
+            and row.get("status") == "rejected"
+            and row.get("metadata", {}).get("proposed_action") == "promote_checkpoint"
+        ]
+        return rows[-limit:]
+
+    def recent_approved_high_impact_actions(self, lineage_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        target_actions = {"rollback_to_checkpoint", "restart_lineage", "branch_new_experiment"}
+        rows = [
+            row
+            for row in self._decisions().all_approval_decisions()
+            if row.get("lineage_id") == lineage_id
+            and row.get("status") == "approved"
+            and row.get("metadata", {}).get("proposed_action") in target_actions
+        ]
+        return rows[-limit:]
+
+    def approval_history_for_lineage(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        requests = [row for row in self._decisions().all_approval_requests() if row.get("lineage_id") == lineage_id]
+        request_by_id = {str(row.get("request_id", "")): row for row in requests}
+        rows = [
+            row
+            for row in self._decisions().all_approval_decisions()
+            if row.get("lineage_id") == lineage_id and str(row.get("request_id", "")) in request_by_id
+        ]
+        return rows[-limit:]
+
+    def approval_history_for_checkpoint(self, lineage_id: str, checkpoint_ref: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self._decisions().all_approval_decisions()
+            if row.get("lineage_id") == lineage_id
+            and str(row.get("metadata", {}).get("checkpoint_ref", "")) == checkpoint_ref
+        ]
+        return rows[-limit:]

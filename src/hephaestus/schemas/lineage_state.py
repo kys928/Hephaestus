@@ -32,6 +32,11 @@ class LineageState(JsonSchema):
     known_pathologies: list[str] = field(default_factory=list)
     last_decision: str | None = None
     last_decision_id: str | None = None
+    last_requested_action: str | None = None
+    last_effective_action: str | None = None
+    last_approval_status: str = "none"
+    pending_approval: bool = False
+    last_high_impact_request_id: str | None = None
     branch_origin_checkpoint_ref: str | None = None
     child_lineage_ids: list[str] = field(default_factory=list)
     run_count: int = 0
