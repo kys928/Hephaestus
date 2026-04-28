@@ -20,4 +20,5 @@ class RunRecord(JsonSchema):
     judge_action: str | None = None
     loop_index: int = 0
     checkpoint_ref: str | None = None
+    data_manifest_id: str | None = None
     replay_metadata: dict[str, object] = field(default_factory=dict)
