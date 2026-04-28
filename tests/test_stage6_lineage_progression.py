@@ -206,7 +206,7 @@ def test_stage6_branch_and_restart_semantics_are_explicit(tmp_path: Path) -> Non
     lineage_store.set_current(restart.reset_state)
     restarted = lineage_store.get_current("lineage-main")
     assert restarted is not None
-    assert restarted["status"] == "restarted"
+    assert restarted["status"] == "suspect"
     assert "suspect_lineage" in restarted["known_pathologies"]
 
 

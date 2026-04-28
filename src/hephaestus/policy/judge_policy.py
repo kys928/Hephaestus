@@ -19,7 +19,7 @@ class JudgePolicy:
         last_stable_checkpoint_ref: str | None,
         parent_lineage_id: str | None,
     ) -> JudgeEntryMode:
-        if lineage_status in {"poisoned", "restarted"}:
+        if lineage_status in {"poisoned", "restarted", "suspect", "blocked"}:
             return JudgeEntryMode.RESTART_LINEAGE
         if recent_failure_count >= 3 and last_stable_checkpoint_ref:
             return JudgeEntryMode.CONTINUE_FROM_LAST_STABLE
