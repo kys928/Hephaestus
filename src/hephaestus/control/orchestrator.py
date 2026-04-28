@@ -15,6 +15,7 @@ from hephaestus.control.rollback import apply_rollback
 from hephaestus.control.spine import SPINE_ORDER, PhaseResult, SpineCoordinator, SpinePhase
 from hephaestus.policy.approval_policy import ApprovalPolicy
 from hephaestus.policy.judge_policy import JudgePolicy
+from hephaestus.policy.promotion_gates import evaluate_promotion_gates
 from hephaestus.policy.promotion_policy import PromotionPolicy
 from hephaestus.policy.runtime_policy import RuntimePolicy
 from hephaestus.policy.stage_policy import StagePolicy
@@ -201,10 +202,11 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 stage_profile=self.stage_policy.resolve(self.context.stage_name),
             )
             output = judge.to_dict()
-            effective_action = judge.next_action.value
+            requested_action = judge.next_action.value
+            effective_action = requested_action
             prior_trust = str((lineage_state or {}).get("trust_level", "unknown"))
             gate = self.approval_policy.decide(
-                action=judge.next_action.value,
+                action=requested_action,
                 stage_name=self.context.stage_name,
                 trust_level=prior_trust,
             )
@@ -212,20 +214,20 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 "approval_outcome": gate.outcome,
                 "approval_risk_level": gate.risk_level,
                 "required_approval_type": gate.required_approval_type,
-                "requested_action": judge.next_action.value,
+                "requested_action": requested_action,
                 "effective_action": effective_action,
                 "approval_request_id": None,
                 "approval_status": "not_required" if gate.outcome == "auto_allowed" else "pending",
                 "operator_override": False,
             }
             if gate.outcome in {"approval_required", "approval_required_high_risk", "override_not_allowed"}:
-                request_id = f"apr-{run_id}-{judge.next_action.value}"
+                request_id = f"apr-{run_id}-{requested_action}"
                 request = ApprovalRequest(
                     request_id=request_id,
                     decision_id=f"dec-{run_id}-exit",
                     lineage_id=self.context.lineage_id,
                     run_id=run_id,
-                    proposed_action=judge.next_action.value,
+                    proposed_action=requested_action,
                     reason=gate.reason,
                     risk_level=gate.risk_level,
                     required_approval_type=gate.required_approval_type,
@@ -236,7 +238,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 self.decision_store.append_approval_request(request.to_dict())
                 governance["approval_request_id"] = request_id
 
-                response = self.operator_responses.get(request_id) or self.operator_responses.get(judge.next_action.value)
+                response = self.operator_responses.get(request_id) or self.operator_responses.get(requested_action)
                 if response:
                     note = str(response.get("note", ""))
                     operator_id = str(response.get("operator_id", "operator.unknown"))
@@ -245,7 +247,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                         override_allowed=gate.outcome != "override_not_allowed",
                     )
                     decision = ApprovalDecision(
-                        decision_event_id=f"apd-{run_id}-{judge.next_action.value}",
+                        decision_event_id=f"apd-{run_id}-{requested_action}",
                         request_id=request_id,
                         lineage_id=self.context.lineage_id,
                         run_id=run_id,
@@ -256,7 +258,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                         effect_on_action=resolution.effect_on_action,
                         created_at=_now(),
                         metadata={
-                            "proposed_action": judge.next_action.value,
+                            "proposed_action": requested_action,
                             "checkpoint_ref": candidate_ref,
                             "resolution_reason": resolution.reason,
                             "override_blocked": resolution.override_blocked,
@@ -272,13 +274,38 @@ class DefaultSpineCoordinator(SpineCoordinator):
                     effective_action = "continue_lineage_best"
                 governance["effective_action"] = effective_action
 
+            data_manifest_rows = self.manifest_store.list_for_run(run_id)
+            data_manifest = data_manifest_rows[-1] if data_manifest_rows else None
+            gate_report = evaluate_promotion_gates(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                requested_action=requested_action,
+                eval_report=EvalReport.from_dict(eval_report),
+                lineage_state=lineage_state,
+                data_manifest=data_manifest,
+                approval_metadata=governance,
+            )
+            if effective_action == requested_action:
+                effective_action = gate_report.recommended_effective_action
+            governance["effective_action"] = effective_action
+            governance["promotion_gate_report"] = gate_report.to_dict()
+            governance["blocking_failures"] = list(gate_report.blocking_failures)
+            governance["gate_warnings"] = list(gate_report.warnings)
+            governance["promotion_allowed"] = gate_report.promotion_allowed
+            governance["rollback_allowed"] = gate_report.rollback_allowed
+            governance["branch_allowed"] = gate_report.branch_allowed
+            governance["restart_allowed"] = gate_report.restart_allowed
+            governance["reject_allowed"] = gate_report.reject_allowed
+            governance["confidence_ceiling"] = gate_report.confidence_ceiling
+            governance["recommended_effective_action"] = gate_report.recommended_effective_action
+
             self.context.outputs[phase.value] = output
             decision = DecisionRecord(
                 f"dec-{run_id}-exit",
                 run_id,
                 self.context.lineage_id,
                 "judge_exit",
-                judge.next_action.value,
+                requested_action,
                 "; ".join(judge.reasons),
                 judge.confidence,
                 created_at=_now(),
@@ -384,6 +411,7 @@ class Orchestrator:
         deterministic_passed = bool(eval_output["regression_summary"].get("deterministic_passed", False))
         confidence = float(eval_output.get("confidence", 0.0))
         blocked = bool(governance.get("approval_status") in {"pending", "rejected", "expired", "superseded"})
+        promotion_allowed = bool(governance.get("promotion_allowed", True))
         signal_update = compute_lineage_signals(
             prior_state=prior_state,
             run_id=run_id,
@@ -422,6 +450,10 @@ class Orchestrator:
             signal_update.trust_level = str(prior_state.get("trust_level", signal_update.trust_level))
             signal_update.failures = list(prior_state.get("recent_failures", []))
             signal_update.known_pathologies = list(prior_state.get("known_pathologies", []))
+        if not promotion_allowed:
+            signal_update.promotion.best_checkpoint_ref = prior_state.get("best_checkpoint_ref")
+            signal_update.promotion.last_stable_checkpoint_ref = prior_state.get("last_stable_checkpoint_ref")
+            signal_update.promotion.certified_stable_checkpoint_ref = prior_state.get("certified_stable_checkpoint_ref")
 
         state = LineageState(
             lineage_id=self.coordinator.context.lineage_id,
