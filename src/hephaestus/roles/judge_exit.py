@@ -26,7 +26,13 @@ class JudgeExitRole:
         stage_profile: StageProfile | None = None,
     ) -> JudgeExit:
         regression = eval_report.regression_summary
-        deterministic_passed = bool(regression["deterministic_passed"])
+        deterministic_passed = bool(eval_report.deterministic_passed)
+        if not eval_report.deterministic_scorecard:
+            deterministic_passed = False
+        elif not deterministic_passed:
+            deterministic_passed = False
+        elif "deterministic_passed" in regression:
+            deterministic_passed = bool(regression["deterministic_passed"]) and deterministic_passed
         candidate_ref = str(eval_report.checkpoint_resolution.get("selected_checkpoint_ref", ""))
         has_candidate = bool(candidate_ref)
         required_evidence = dict(eval_report.evaluation_bundle_summary.get("required_evidence", {}))

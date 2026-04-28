@@ -62,6 +62,14 @@ class StagePolicy:
                 f"stage profile '{stage_name}' certification_profile.certification_recheck_policy must be one of: {', '.join(sorted(allowed_recheck))}"
             )
 
+        gate_config = dict(payload.get("deterministic_gate_config", gates)) if isinstance(payload.get("deterministic_gate_config", gates), dict) else dict(gates)
+        required_evidence = payload.get("required_evidence", {})
+        stage_thresholds = payload.get("stage_thresholds", {})
+        if not isinstance(required_evidence, dict):
+            raise ConfigError(f"stage profile '{stage_name}' required_evidence must be an object")
+        if not isinstance(stage_thresholds, dict):
+            raise ConfigError(f"stage profile '{stage_name}' stage_thresholds must be an object")
+
         return StageProfile(
             name=str(payload.get("name", stage_name)),
             strictness=str(payload["strictness"]),
@@ -81,4 +89,8 @@ class StagePolicy:
                 "variance_sensitivity": variance_sensitivity,
                 "certification_recheck_policy": recheck_policy,
             },
+            eval_pack_ref=str(payload.get("eval_pack_ref", payload["eval_pack"])),
+            required_evidence={str(k): int(v) for k, v in required_evidence.items()},
+            stage_thresholds={str(k): float(v) for k, v in stage_thresholds.items()},
+            deterministic_gate_config={str(k): v for k, v in gate_config.items()},
         )
