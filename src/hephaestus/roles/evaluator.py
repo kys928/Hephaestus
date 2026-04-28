@@ -11,6 +11,7 @@ from hephaestus.evaluation.stage_interpreter import interpret_stage
 from hephaestus.schemas.checkpoint_resolution import CheckpointResolution
 from hephaestus.schemas.eval_report import EvalReport
 from hephaestus.schemas.metric_summary import MetricSummary
+from hephaestus.schemas.scorecard import Scorecard
 from hephaestus.schemas.stage_profile import StageProfile
 
 
@@ -57,7 +58,7 @@ class EvaluatorRole:
         evidence_rules = dict(eval_pack["minimum_evidence"])
         recheck_rules = dict(eval_pack["recheck_requirements"])
         repeatability_rules = dict(eval_pack.get("repeatability_requirements", {}))
-        stage_thresholds = dict(eval_pack["stage_tolerances"].get(stage_profile.strictness, {}))
+        stage_thresholds = stage_profile.stage_thresholds or dict(eval_pack["stage_tolerances"].get(stage_profile.strictness, {}))
         cert_required_metrics = set(eval_pack["certification_bundle"]["required_metrics"])
         cert_metric_ready = cert_required_metrics.issubset(required_metrics)
 
@@ -166,11 +167,53 @@ class EvaluatorRole:
             reason=checkpoint_reason,
             confidence=confidence,
         )
-        refs = [
-            str(intermediate.get("probe_ref", "")),
-            str(intermediate.get("metrics_ref", "")),
-            str(intermediate.get("deterministic_ref", "")),
-        ]
+
+        failed_gates = list(regression.failed_checks)
+        gate_results = {
+            "probe_score_gate": {
+                "passed": metrics["probe_score"] >= stage_profile.deterministic_gates["min_probe_score"],
+                "threshold": stage_profile.deterministic_gates["min_probe_score"],
+                "value": metrics["probe_score"],
+            },
+            "toxicity_gate": {
+                "passed": metrics["toxicity"] <= stage_profile.deterministic_gates["max_toxicity"],
+                "threshold": stage_profile.deterministic_gates["max_toxicity"],
+                "value": metrics["toxicity"],
+            },
+        }
+        passed_gates = sorted([name for name, result in gate_results.items() if bool(result.get("passed", False))])
+        scorecard = Scorecard(
+            scorecard_id=f"scorecard-{run_id}",
+            run_id=run_id,
+            eval_pack_id=str(eval_pack.get("eval_pack_id") or "") or None,
+            eval_pack_version=str(eval_pack.get("eval_pack_version") or "") or None,
+            checkpoint_ref=str(checkpoint.get("checkpoint_ref", "")) or None,
+            deterministic_passed=bool(regression.deterministic_passed),
+            failed_gates=failed_gates,
+            passed_gates=passed_gates,
+            metrics={"probe_score": float(metrics["probe_score"]), "toxicity": float(metrics["toxicity"])},
+            thresholds={
+                "min_probe_score": float(stage_profile.deterministic_gates["min_probe_score"]),
+                "max_toxicity": float(stage_profile.deterministic_gates["max_toxicity"]),
+            },
+            gate_results=gate_results,
+            repetition_passed=None,
+            length_termination_passed=None,
+            structure_passed=None,
+            continuation_passed=None,
+            ranking_passed=None,
+            evidence_refs=[
+                str(intermediate.get("probe_ref", "")),
+                str(intermediate.get("metrics_ref", "")),
+                str(intermediate.get("deterministic_ref", "")),
+            ],
+            scorecard_integrity_level=str(eval_pack.get("eval_pack_integrity_level", "insufficient")),
+            metadata={"dry_run_limited": metrics_missing},
+        ).enforce_semantics()
+        if metrics_missing:
+            scorecard.warnings.append("dry_run_metrics_missing")
+
+        refs = [ref for ref in scorecard.evidence_refs if ref]
         return EvalReport(
             eval_id=f"eval-{run_id}",
             run_id=run_id,
@@ -203,7 +246,7 @@ class EvaluatorRole:
                 "certification_bundle": certification_bundle_name,
                 "certification_bundle_passed": bool(certification_bundle.get("passed", False)),
                 "observed_evidence_runs": observed_evidence,
-                "required_evidence": evidence_rules,
+                "required_evidence": stage_profile.required_evidence or evidence_rules,
                 "consistency_passed": consistency_passed,
                 "effective_min_consistent_runs": effective_min_consistent,
                 "stage_certification_profile": {
@@ -231,7 +274,15 @@ class EvaluatorRole:
                     "repeatability_sufficient": repeatability_sufficient,
                 },
             },
-            intermediate_artifact_refs=[ref for ref in refs if ref],
+            intermediate_artifact_refs=refs,
+            eval_pack_id=str(eval_pack.get("eval_pack_id") or "") or None,
+            eval_pack_version=str(eval_pack.get("eval_pack_version") or "") or None,
+            eval_pack_integrity_level=str(eval_pack.get("eval_pack_integrity_level", "insufficient")),
+            deterministic_scorecard=scorecard.to_dict(),
+            deterministic_passed=bool(scorecard.deterministic_passed),
+            failed_gates=list(scorecard.failed_gates),
+            passed_gates=list(scorecard.passed_gates),
+            scorecard_integrity_level=scorecard.scorecard_integrity_level,
         )
 
     def _count_consistent_runs(self, certification_evals: list[object], primary_deterministic_passed: bool) -> int:

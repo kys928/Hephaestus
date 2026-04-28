@@ -3,11 +3,51 @@ from __future__ import annotations
 from pathlib import Path
 
 from hephaestus.config_loader import ConfigError, load_named_config
+from hephaestus.schemas.eval_pack import EvalPack
 
 
 _DEFAULT_BUNDLES: dict[str, list[str]] = {
     "promotion": ["probe_score_gate", "toxicity_gate"],
     "certification": ["probe_score_gate", "toxicity_gate"],
+}
+
+_ALLOWED_FIELDS = {
+    "pack_name",
+    "eval_pack_id",
+    "version",
+    "name",
+    "description",
+    "stage_name",
+    "created_at",
+    "frozen",
+    "content_hash",
+    "hash_type",
+    "source_ref",
+    "mutation_policy",
+    "integrity_level",
+    "generation_probes",
+    "continuation_prompts",
+    "ranking_sets",
+    "regression_prompts",
+    "structure_tests",
+    "repetition_checks",
+    "length_termination_checks",
+    "human_review_bundle_refs",
+    "decoding_config",
+    "scoring_config",
+    "deterministic_gate_config",
+    "required_evidence",
+    "stage_thresholds",
+    "metadata",
+    "warnings",
+    "required_metrics",
+    "supports_generation_signals",
+    "regression_bundles",
+    "certification_bundle",
+    "minimum_evidence",
+    "recheck_requirements",
+    "repeatability_requirements",
+    "stage_tolerances",
 }
 
 
@@ -42,6 +82,10 @@ def _as_float(value: object, field_name: str, pack_name: str, minimum: float = 0
 
 def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[str, object]:
     payload = load_named_config(config_dir, "eval_packs", pack_name)
+    unknown = sorted(set(payload) - _ALLOWED_FIELDS)
+    if unknown:
+        raise ConfigError(f"eval pack '{pack_name}' has unknown fields: {', '.join(unknown)}")
+
     required = ("pack_name", "required_metrics", "regression_bundles", "certification_bundle", "minimum_evidence")
     missing = [key for key in required if key not in payload]
     if missing:
@@ -101,8 +145,51 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
         for stage_key, value in stage_tolerances_raw.items()
     }
 
+    normalized = EvalPack.normalize(
+        {
+            "eval_pack_id": payload.get("eval_pack_id", payload["pack_name"]),
+            "version": payload.get("version", "v1"),
+            "name": payload.get("name", payload["pack_name"]),
+            "description": payload.get("description", ""),
+            "stage_name": payload.get("stage_name"),
+            "created_at": payload.get("created_at"),
+            "frozen": payload.get("frozen", True),
+            "content_hash": payload.get("content_hash"),
+            "hash_type": payload.get("hash_type"),
+            "source_ref": payload.get("source_ref"),
+            "mutation_policy": payload.get("mutation_policy", "immutable_without_approval"),
+            "generation_probes": payload.get("generation_probes", []),
+            "continuation_prompts": payload.get("continuation_prompts", []),
+            "ranking_sets": payload.get("ranking_sets", []),
+            "regression_prompts": payload.get("regression_prompts", []),
+            "structure_tests": payload.get("structure_tests", []),
+            "repetition_checks": payload.get("repetition_checks", []),
+            "length_termination_checks": payload.get("length_termination_checks", []),
+            "human_review_bundle_refs": payload.get("human_review_bundle_refs", []),
+            "decoding_config": payload.get("decoding_config", {}),
+            "scoring_config": payload.get("scoring_config", {}),
+            "deterministic_gate_config": payload.get("deterministic_gate_config", {}),
+            "required_evidence": payload.get("required_evidence", minimum),
+            "stage_thresholds": payload.get("stage_thresholds", {}),
+            "metadata": payload.get("metadata", {}),
+            "warnings": payload.get("warnings", []),
+        },
+        stage_name=None,
+    )
+
+    if normalized.integrity_level == "content_hash_verified" and not normalized.content_hash:
+        raise ConfigError(f"eval pack '{pack_name}' cannot claim content hash verification without content_hash")
+
     return {
         "pack_name": str(payload["pack_name"]),
+        "eval_pack_id": normalized.eval_pack_id,
+        "eval_pack_version": normalized.version,
+        "eval_pack_integrity_level": normalized.integrity_level,
+        "frozen": normalized.frozen,
+        "mutation_policy": normalized.mutation_policy,
+        "content_hash": normalized.content_hash,
+        "hash_type": normalized.hash_type,
+        "source_ref": normalized.source_ref,
         "required_metrics": [str(metric) for metric in metrics],
         "description": str(payload.get("description", "")),
         "supports_generation_signals": bool(payload.get("supports_generation_signals", False)),
@@ -145,4 +232,5 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
             "certification_recheck_policy": recheck_policy,
         },
         "stage_tolerances": stage_tolerances,
+        "eval_pack": normalized.to_dict(),
     }

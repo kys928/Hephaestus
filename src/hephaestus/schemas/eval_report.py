@@ -33,3 +33,11 @@ class EvalReport(JsonSchema):
     certification_recheck_count: int = 0
     evaluation_bundle_summary: dict[str, object] = field(default_factory=dict)
     intermediate_artifact_refs: list[str] = field(default_factory=list)
+    eval_pack_id: str | None = None
+    eval_pack_version: str | None = None
+    eval_pack_integrity_level: str = "insufficient"
+    deterministic_scorecard: dict[str, object] = field(default_factory=dict)
+    deterministic_passed: bool = False
+    failed_gates: list[str] = field(default_factory=list)
+    passed_gates: list[str] = field(default_factory=list)
+    scorecard_integrity_level: str = "insufficient"
