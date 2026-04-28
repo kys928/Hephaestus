@@ -24,3 +24,4 @@ class JudgeEntry(JsonSchema):
     approved: bool = True
     stage_name: str = ""
     entry_mode: JudgeEntryMode = JudgeEntryMode.RERUN_SAME_CONFIG
+    relevant_memories: list[dict[str, object]] = field(default_factory=list)

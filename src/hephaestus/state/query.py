@@ -8,6 +8,7 @@ from typing import Any
 
 from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.lineage_store import LineageStore
+from hephaestus.state.memory_store import MemoryStore
 from hephaestus.state.run_store import RunStore
 
 
@@ -23,6 +24,10 @@ class Query:
 
     def _lineages(self) -> LineageStore:
         return LineageStore(self.root)
+
+
+    def _memories(self) -> MemoryStore:
+        return MemoryStore(self.root)
 
     def latest_run_in_lineage(self, lineage_id: str) -> dict[str, Any] | None:
         rows = [row for row in self._runs().all() if row.get("lineage_id") == lineage_id]
@@ -200,4 +205,69 @@ class Query:
             if row.get("lineage_id") == lineage_id
             and str(row.get("metadata", {}).get("checkpoint_ref", "")) == checkpoint_ref
         ]
+        return rows[-limit:]
+
+
+    def memories_for_lineage(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        return self._memories().list_for_lineage(lineage_id)[-limit:]
+
+    def dead_ends_for_lineage(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = [row for row in self._memories().list_for_lineage(lineage_id) if row.get("memory_type") == "known_dead_end"]
+        return rows[-limit:]
+
+    def similar_failure_patterns(
+        self,
+        lineage_id: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        rows = self._memories().list_all()
+        if lineage_id:
+            rows = [row for row in rows if row.get("lineage_id") == lineage_id]
+        rows = [
+            row
+            for row in rows
+            if row.get("memory_type") in {"repeated_failure", "promotion_block", "known_dead_end", "runtime_issue", "eval_issue", "data_issue"}
+        ]
+        if tags:
+            wanted = set(tags)
+            rows = [row for row in rows if wanted.intersection(set(str(item) for item in row.get("tags", [])))]
+        return rows[-limit:]
+
+    def prior_promotion_blocks(self, lineage_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self._memories().find_by_type("promotion_block")
+        if lineage_id:
+            rows = [row for row in rows if row.get("lineage_id") == lineage_id]
+        return rows[-limit:]
+
+    def data_issues_for_lineage(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = [row for row in self._memories().list_for_lineage(lineage_id) if row.get("memory_type") == "data_issue"]
+        return rows[-limit:]
+
+    def eval_issues_for_lineage(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = [row for row in self._memories().list_for_lineage(lineage_id) if row.get("memory_type") == "eval_issue"]
+        return rows[-limit:]
+
+    def intervention_history(self, lineage_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self._memories().list_for_lineage(lineage_id)
+            if row.get("memory_type") in {"rollback_event", "branch_event", "successful_intervention", "lineage_status_change"}
+        ]
+        return rows[-limit:]
+
+    def stable_lineages(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = []
+        for lineage_id, state in self._lineages().list_lineages().items():
+            if str(state.get("status", "")) == "active" and str(state.get("trust_level", "")) in {"trusted", "stable"}:
+                rows.append({"lineage_id": lineage_id, **state})
+        return rows[-limit:]
+
+    def suspect_or_poisoned_lineages(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = []
+        for lineage_id, state in self._lineages().list_lineages().items():
+            status = str(state.get("status", ""))
+            trust = str(state.get("trust_level", ""))
+            if status in {"poisoned", "deprecated", "archived", "blocked"} or trust in {"watch", "degraded"}:
+                rows.append({"lineage_id": lineage_id, **state})
         return rows[-limit:]
