@@ -13,6 +13,7 @@ from hephaestus.control.lineage_transition import compute_lineage_signals
 from hephaestus.control.restart import create_restart_state
 from hephaestus.control.rollback import apply_rollback
 from hephaestus.control.spine import SPINE_ORDER, PhaseResult, SpineCoordinator, SpinePhase
+from hephaestus.policy.action_registry import evaluate_action_boundary
 from hephaestus.policy.approval_policy import ApprovalPolicy
 from hephaestus.policy.judge_policy import JudgePolicy
 from hephaestus.policy.promotion_gates import evaluate_promotion_gates
@@ -216,11 +217,25 @@ class DefaultSpineCoordinator(SpineCoordinator):
             requested_action = judge.next_action.value
             effective_action = requested_action
             prior_trust = str((lineage_state or {}).get("trust_level", "unknown"))
+            boundary_context: dict[str, object] = {}
+            boundary = evaluate_action_boundary(requested_action, context=boundary_context)
+
             gate = self.approval_policy.decide(
                 action=requested_action,
                 stage_name=self.context.stage_name,
                 trust_level=prior_trust,
             )
+            if bool(boundary.get("requires_approval", False)) and gate.outcome == "auto_allowed":
+                gate = self.approval_policy.decide(
+                    action=requested_action,
+                    stage_name=self.context.stage_name,
+                    trust_level=prior_trust,
+                )
+                gate.outcome = "approval_required_high_risk" if bool(boundary.get("high_risk", False)) else "approval_required"
+                gate.risk_level = "high" if bool(boundary.get("high_risk", False)) else "moderate"
+                gate.required_approval_type = "operator_high_risk_approval" if bool(boundary.get("high_risk", False)) else "operator_approval"
+                gate.reason = f"action_registry:{requested_action}:{gate.outcome}"
+
             governance: dict[str, object] = {
                 "approval_outcome": gate.outcome,
                 "approval_risk_level": gate.risk_level,
@@ -230,8 +245,22 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 "approval_request_id": None,
                 "approval_status": "not_required" if gate.outcome == "auto_allowed" else "pending",
                 "operator_override": False,
+                "action_boundary": boundary,
+                "action_category": boundary.get("category", "unknown"),
+                "action_forbidden": bool(boundary.get("forbidden", False)),
+                "action_requires_approval": bool(boundary.get("requires_approval", False)),
+                "action_high_risk": bool(boundary.get("high_risk", False)),
             }
-            if gate.outcome in {"approval_required", "approval_required_high_risk", "override_not_allowed"}:
+
+            if not bool(boundary.get("known_action", False)) or bool(boundary.get("forbidden", False)):
+                effective_action = "continue_lineage_best"
+                governance["approval_status"] = "rejected"
+                governance["approval_outcome"] = "blocked_unknown_or_forbidden_action"
+                governance["required_approval_type"] = "none"
+                governance["approval_risk_level"] = "high" if bool(boundary.get("forbidden", False)) else "moderate"
+                governance["effective_action"] = effective_action
+
+            if gate.outcome in {"approval_required", "approval_required_high_risk", "override_not_allowed"} and governance["approval_outcome"] != "blocked_unknown_or_forbidden_action":
                 request_id = f"apr-{run_id}-{requested_action}"
                 request = ApprovalRequest(
                     request_id=request_id,
