@@ -32,6 +32,7 @@ from hephaestus.schemas.approval_request import ApprovalRequest
 from hephaestus.schemas.decision_record import DecisionRecord
 from hephaestus.schemas.eval_report import EvalReport
 from hephaestus.schemas.lineage_state import LineageState
+from hephaestus.schemas.replay_metadata import build_replay_metadata
 from hephaestus.schemas.run_record import RunRecord
 from hephaestus.state.artifact_index import ArtifactIndex
 from hephaestus.state.decision_store import DecisionStore
@@ -307,6 +308,10 @@ class Orchestrator:
         eval_output = self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]
         eval_id = str(eval_output["eval_id"])
         checkpoint_ref = str(eval_output["checkpoint_resolution"].get("selected_checkpoint_ref", "")) or None
+        replay_metadata = build_replay_metadata(
+            checkpoint_ref=checkpoint_ref,
+            checkpoint_evidence=dict(eval_output.get("checkpoint_resolution", {})),
+        )
         judge_output = self.coordinator.context.outputs[SpinePhase.JUDGE_EXIT.value]
         action = _canonical_action(judge_output["next_action"])
         judge_decision = self.coordinator.decision_store.get(f"dec-{run_id}-exit") or {}
@@ -333,6 +338,7 @@ class Orchestrator:
             judge_action=action,
             loop_index=loop_index,
             checkpoint_ref=checkpoint_ref,
+            replay_metadata=replay_metadata,
         )
         self.coordinator.run_store.append(run_record.to_dict())
 

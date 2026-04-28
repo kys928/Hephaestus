@@ -36,6 +36,8 @@
 
 ## Not yet production-grade
 
+- Stage 10 does not yet provide subject-level ProvenanceRecord persistence. Current provenance is limited to manifests, artifact refs, decision records, run records, and artifact index entries.
+- Checkpoint replay guarantees are reference-only unless checkpoint content hashes are explicitly recorded as evidence.
 - No signed provenance or tamper-evident audit log.
 - No authenticated external identity/authorization provider for operator approvals.
 - No independent multi-cluster replay certification.
