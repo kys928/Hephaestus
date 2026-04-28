@@ -107,13 +107,19 @@ class DefaultSpineCoordinator(SpineCoordinator):
             return PhaseResult(phase, "ok", [], output)
 
         if phase is SpinePhase.DATA_ACQUISITION_AUDIT:
-            profile, manifest = DataAcquisitionAuditRole(self.backend).run(run_id, self.context.lineage_id)
+            profile, manifest = DataAcquisitionAuditRole(self.backend).run(
+                run_id,
+                self.context.lineage_id,
+                stage_name=self.context.stage_name,
+            )
             output = {"dataset_profile": profile.to_dict(), "dataset_manifest": manifest.to_dict()}
             self.context.outputs[phase.value] = output
             self.manifest_store.append(manifest.to_dict())
             self.report_store.append({"kind": "dataset_profile", **profile.to_dict()})
-            self.artifact_index.append({"run_id": run_id, "kind": "dataset_manifest", "ref": manifest.artifact_ref})
-            return PhaseResult(phase, "ok", [manifest.artifact_ref], output)
+            manifest_ref = str(manifest.artifact_ref or "")
+            if manifest_ref:
+                self.artifact_index.append({"run_id": run_id, "kind": "dataset_manifest", "ref": manifest_ref})
+            return PhaseResult(phase, "ok", [manifest_ref] if manifest_ref else [], output)
 
         if phase is SpinePhase.DATA_PREPROCESSOR:
             manifest_id = str(self.context.outputs[SpinePhase.DATA_ACQUISITION_AUDIT.value]["dataset_manifest"]["manifest_id"])
@@ -324,6 +330,10 @@ class Orchestrator:
         prior = self.coordinator.lineage_store.get_current(self.coordinator.context.lineage_id) or {}
         loop_index = int(prior.get("loop_index", 0)) + 1
 
+        data_manifest = self.coordinator.manifest_store.list_for_run(run_id)
+        latest_data_manifest = data_manifest[-1] if data_manifest else {}
+        data_manifest_id = str(latest_data_manifest.get("manifest_id", "")) or None
+
         run_record = RunRecord(
             run_id=run_id,
             lineage_id=self.coordinator.context.lineage_id,
@@ -338,6 +348,7 @@ class Orchestrator:
             judge_action=action,
             loop_index=loop_index,
             checkpoint_ref=checkpoint_ref,
+            data_manifest_id=data_manifest_id,
             replay_metadata=replay_metadata,
         )
         self.coordinator.run_store.append(run_record.to_dict())
@@ -426,7 +437,14 @@ class Orchestrator:
             updated_at=_now(),
             architecture_contract_ref=prior_state.get("architecture_contract_ref"),
             tokenizer_contract_ref=prior_state.get("tokenizer_contract_ref"),
-            data_policy_ref=prior_state.get("data_policy_ref"),
+            data_policy_ref=(
+                str(
+                    self.coordinator.context.outputs.get(SpinePhase.DATA_ACQUISITION_AUDIT.value, {})
+                    .get("dataset_manifest", {})
+                    .get("stage_data_policy_ref", "")
+                )
+                or prior_state.get("data_policy_ref")
+            ),
             training_recipe_ref=prior_state.get("training_recipe_ref"),
             eval_policy_ref=prior_state.get("eval_policy_ref"),
             loop_index=loop_index,
