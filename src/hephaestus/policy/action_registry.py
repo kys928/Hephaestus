@@ -87,7 +87,14 @@ _ACTION_DESCRIPTIONS = {
     "delete_run_history": "Delete persisted run history.",
     "delete_decision_history": "Delete persisted decision history.",
     "rewrite_memory_without_source_record": "Rewrite memory records without source provenance.",
+    "propose_code_edit": "Propose constrained code-edit plan for review only.",
+    "approve_code_edit": "Approve a proposed code edit under operator governance.",
+    "execute_code_edit": "Execute an approved code edit in a future constrained executor.",
+    "execute_unapproved_code_edit": "Execute code edit without required approval.",
+    "edit_forbidden_path": "Attempt edits against forbidden path policy.",
+    "rewrite_frozen_eval_pack": "Rewrite frozen evaluation pack files.",
 }
+
 
 
 AUTO_ALLOWED_ACTIONS = [
@@ -113,6 +120,7 @@ APPROVAL_REQUIRED_ACTIONS = [
     "modify_training_recipe",
     "modify_data_policy",
     "modify_eval_policy",
+    "propose_code_edit",
 ]
 
 HIGH_RISK_APPROVAL_REQUIRED_ACTIONS = [
@@ -123,6 +131,8 @@ HIGH_RISK_APPROVAL_REQUIRED_ACTIONS = [
     "archive_lineage",
     "delete_artifact_reference",
     "reset_lineage_state",
+    "approve_code_edit",
+    "execute_code_edit",
 ]
 
 FORBIDDEN_ACTIONS = [
@@ -136,6 +146,9 @@ FORBIDDEN_ACTIONS = [
     "delete_run_history",
     "delete_decision_history",
     "rewrite_memory_without_source_record",
+    "execute_unapproved_code_edit",
+    "edit_forbidden_path",
+    "rewrite_frozen_eval_pack",
 ]
 
 
