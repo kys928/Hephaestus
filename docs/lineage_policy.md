@@ -28,6 +28,42 @@
   - lineage current state remains compact while tracking only compact governance truth (`pending_approval`, `last_approval_status`, `last_high_impact_request_id`),
   - high-impact transitions do not auto-execute while approval is pending or rejected.
 
+## First-class lineage record contract
+
+Lineage is the durable model-family record. `RunRecord` describes one run. `DecisionRecord` describes one decision. `LineageState` describes evolving family truth across runs.
+
+Canonical lineage status values:
+- `exploratory`
+- `promising`
+- `stable`
+- `suspect`
+- `poisoned`
+- `archived`
+- `deprecated`
+- `blocked`
+
+Canonical trust levels:
+- `unknown`
+- `low`
+- `medium`
+- `high`
+- `certified`
+
+Compatibility note: older persisted state can still contain legacy statuses (`active`, `degraded`, `unstable`, `restarted`). Lineage loading remains backward compatible and normalizes missing fields by schema defaults.
+
+Persisted lineage records now include first-class fields for:
+- identity and parent/child linkage,
+- origin and timestamps,
+- contracts (`architecture_contract_ref`, `tokenizer_contract_ref`, `data_policy_ref`, `training_recipe_ref`, `eval_policy_ref`),
+- run/checkpoint tracking,
+- decision and governance tracking,
+- reliability/repeatability signals,
+- failure memory (`recent_failures`, `known_pathologies`),
+- `major_interventions`,
+- structured `metadata`.
+
+A lineage may be continued, branched, rolled back, restarted, archived, deprecated, or marked poisoned. Trust level is not identical to status. Certified stability must not be inherited by branches unless explicitly revalidated.
+
 ## Still simplistic or heuristic
 
 - Variance risk currently uses bounded spread thresholds over available probe scores; this is not a full statistical variance estimator.

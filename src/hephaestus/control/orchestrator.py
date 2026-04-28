@@ -415,10 +415,22 @@ class Orchestrator:
         state = LineageState(
             lineage_id=self.coordinator.context.lineage_id,
             parent_lineage_id=prior_state.get("parent_lineage_id") if prior_state else None,
+            child_lineage_ids=list(prior_state.get("child_lineage_ids", [])),
             stage_name=self.coordinator.context.stage_name,
             status=signal_update.promotion.status,
             trust_level=signal_update.trust_level,
+            origin_run_id=str(prior_state.get("origin_run_id") or run_id),
+            origin_checkpoint_ref=prior_state.get("origin_checkpoint_ref") or checkpoint_ref,
+            branch_origin_checkpoint_ref=prior_state.get("branch_origin_checkpoint_ref") if prior_state else None,
+            created_at=str(prior_state.get("created_at") or _now()),
+            updated_at=_now(),
+            architecture_contract_ref=prior_state.get("architecture_contract_ref"),
+            tokenizer_contract_ref=prior_state.get("tokenizer_contract_ref"),
+            data_policy_ref=prior_state.get("data_policy_ref"),
+            training_recipe_ref=prior_state.get("training_recipe_ref"),
+            eval_policy_ref=prior_state.get("eval_policy_ref"),
             loop_index=loop_index,
+            run_count=int(prior_state.get("run_count", 0)) + 1,
             latest_run_id=run_id,
             best_checkpoint_ref=signal_update.promotion.best_checkpoint_ref,
             last_stable_checkpoint_ref=signal_update.promotion.last_stable_checkpoint_ref,
@@ -438,14 +450,21 @@ class Orchestrator:
             last_approval_status=str(governance.get("approval_status", "not_required")),
             pending_approval=bool(governance.get("approval_status") == "pending"),
             last_high_impact_request_id=str(governance.get("approval_request_id") or "") or None,
-            branch_origin_checkpoint_ref=prior_state.get("branch_origin_checkpoint_ref") if prior_state else None,
-            child_lineage_ids=list(prior_state.get("child_lineage_ids", [])),
-            run_count=int(prior_state.get("run_count", 0)) + 1,
-            updated_at=_now(),
+            major_interventions=[dict(item) for item in prior_state.get("major_interventions", []) if isinstance(item, dict)],
+            metadata=dict(prior_state.get("metadata", {})),
         )
 
         if action == "rollback_to_checkpoint":
             rollback = apply_rollback(state.to_dict())
+            state.major_interventions = [
+                *state.major_interventions,
+                {
+                    "type": "rollback",
+                    "run_id": run_id,
+                    "target_checkpoint_ref": rollback.target_checkpoint_ref,
+                    "created_at": _now(),
+                },
+            ][-20:]
             if rollback.succeeded:
                 state.best_checkpoint_ref = rollback.target_checkpoint_ref
             else:
