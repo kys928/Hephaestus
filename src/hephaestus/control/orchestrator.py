@@ -39,6 +39,8 @@ from hephaestus.state.artifact_index import ArtifactIndex
 from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.state.manifest_store import ManifestStore
+from hephaestus.state.memory_builder import build_memory_records_from_run
+from hephaestus.state.memory_store import MemoryStore
 from hephaestus.state.query import Query
 from hephaestus.state.report_store import ReportStore
 from hephaestus.state.run_store import RunStore
@@ -71,6 +73,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
     decision_store: DecisionStore
     manifest_store: ManifestStore
     report_store: ReportStore
+    memory_store: MemoryStore
     artifact_index: ArtifactIndex
     backend: ExecutionBackend
     runtime_policy: RuntimePolicy
@@ -85,6 +88,13 @@ class DefaultSpineCoordinator(SpineCoordinator):
         lineage_state = self.lineage_store.get_current(self.context.lineage_id)
         recent_failures = self.query.recent_failures(self.context.lineage_id)
         recent_repeatability = self.query.checkpoint_repeatability_summary(self.context.lineage_id)
+        relevant_memories = [
+            *self.query.dead_ends_for_lineage(self.context.lineage_id, limit=5),
+            *self.query.prior_promotion_blocks(self.context.lineage_id, limit=5),
+            *self.query.data_issues_for_lineage(self.context.lineage_id, limit=5),
+            *self.query.eval_issues_for_lineage(self.context.lineage_id, limit=5),
+        ]
+        relevant_memories = relevant_memories[-10:]
 
         if phase is SpinePhase.JUDGE_ENTRY:
             entry, decision = JudgeEntryRole(self.judge_policy).run(
@@ -95,6 +105,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 lineage_state=lineage_state,
                 recent_failures=recent_failures,
                 recent_repeatability=recent_repeatability,
+                relevant_memories=relevant_memories,
             )
             output = entry.to_dict()
             self.decision_store.append(decision.to_dict())
@@ -391,9 +402,36 @@ class Orchestrator:
             loop_index=loop_index,
             governance=governance,
         )
+        self._build_and_persist_memory(run_id=run_id, run_record=run_record.to_dict())
 
         ReporterRole().run(run_id, action, monitor_outcome)
         return results
+
+    def _build_and_persist_memory(self, run_id: str, run_record: dict[str, object]) -> None:
+        try:
+            lineage = self.coordinator.lineage_store.get_current(self.coordinator.context.lineage_id)
+            decisions = [row for row in self.coordinator.decision_store.all() if str(row.get("run_id")) == run_id]
+            reports = [row for row in self.coordinator.report_store.all() if str(row.get("run_id")) == run_id]
+            manifests = self.coordinator.manifest_store.list_for_run(run_id)
+            records = build_memory_records_from_run(
+                run_id=run_id,
+                run_record=run_record,
+                lineage_state=lineage,
+                decisions=decisions,
+                reports=reports,
+                manifests=manifests,
+            )
+            for record in records:
+                self.coordinator.memory_store.append(record)
+        except Exception as exc:  # pragma: no cover - protective non-fatal guard
+            self.coordinator.report_store.append(
+                {
+                    "kind": "warning",
+                    "run_id": run_id,
+                    "warning_type": "memory_builder_failed",
+                    "warning": str(exc),
+                }
+            )
 
     def _apply_lineage_transition(
         self,
@@ -571,6 +609,7 @@ def build_orchestrator(
             decision_store=DecisionStore(state_root),
             manifest_store=ManifestStore(state_root),
             report_store=ReportStore(state_root),
+            memory_store=MemoryStore(state_root),
             artifact_index=ArtifactIndex(state_root),
             backend=backend or DryRunBackend(),
             runtime_policy=runtime_policy or RuntimePolicy(),

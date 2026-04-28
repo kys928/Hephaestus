@@ -21,9 +21,11 @@ class JudgeEntryRole:
         lineage_state: dict[str, object] | None,
         recent_failures: list[dict[str, object]],
         recent_repeatability: dict[str, object] | None = None,
+        relevant_memories: list[dict[str, object]] | None = None,
     ) -> tuple[JudgeEntry, DecisionRecord]:
         state = lineage_state or {}
         repeatability = recent_repeatability or {}
+        memory_context = relevant_memories or []
         mode = self.judge_policy.decide_entry_mode(
             lineage_status=str(state.get("status", "active")),
             recent_failure_count=len(recent_failures),
@@ -45,6 +47,7 @@ class JudgeEntryRole:
             approved=True,
             stage_name=stage_name,
             entry_mode=mode,
+            relevant_memories=memory_context,
         )
         decision = DecisionRecord(
             decision_id=f"dec-{run_id}-entry",
@@ -60,6 +63,7 @@ class JudgeEntryRole:
                 "best_checkpoint_ref": state.get("best_checkpoint_ref") if state else None,
                 "last_stable_checkpoint_ref": state.get("last_stable_checkpoint_ref") if state else None,
                 "recent_repeatability": repeatability,
+                "relevant_memories": memory_context,
             },
         )
         return entry, decision
