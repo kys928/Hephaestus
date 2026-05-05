@@ -136,3 +136,26 @@ def test_stage5_existing_backends_still_work(tmp_path: Path) -> None:
 
     assert dry_outputs["runtime_monitor"]["training_outputs"]["status"] == "completed"
     assert local_outputs["runtime_monitor"]["training_outputs"]["status"] == "completed"
+
+
+def test_stage5_ardor_missing_optional_refs_warns_not_fail(tmp_path: Path) -> None:
+    backend = ArdorBackend()
+    prepared = _prepare_run(backend, tmp_path, "stage5-ardor-missing-opt", {"ardor_omit_optional_refs": "1"})
+    result = backend.launch_training(prepared)
+    assert result.status == "completed"
+    assert any("ardor_missing_optional_" in event.message for event in result.events)
+
+
+def test_stage5_ardor_preserves_checkpoint_metadata(tmp_path: Path) -> None:
+    backend = ArdorBackend()
+    prepared = _prepare_run(backend, tmp_path, "stage5-ardor-metadata")
+    result = backend.launch_training(prepared)
+    assert any(candidate.get("content_hash") for candidate in result.checkpoint_candidates)
+    assert any(candidate.get("integrity_level") == "content_hash" for candidate in result.checkpoint_candidates)
+
+
+def test_stage5_ardor_malformed_candidate_fails_when_no_valid_candidates(tmp_path: Path) -> None:
+    backend = ArdorBackend()
+    prepared = _prepare_run(backend, tmp_path, "stage5-ardor-bad-candidate", {"ardor_malformed_candidate": "1"})
+    result = backend.launch_training(prepared)
+    assert result.status == "failed"
