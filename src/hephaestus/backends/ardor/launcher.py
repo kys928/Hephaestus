@@ -130,6 +130,12 @@ class ArdorLauncher:
             "--contract-path",
             str(artifact_root / "ardor_runtime_contract.json"),
         ]
+
+        if parameters.get("stage_name"):
+            command.extend(["--stage-name", str(parameters["stage_name"])])
+        if parameters.get("lineage_id"):
+            command.extend(["--lineage-id", str(parameters["lineage_id"])])
+        command.extend(["--contract-version", "ardor_runtime_contract.v1"])
         for flag_name, cli_flag in (
             ("ardor_fail_launch", "--fail-launch"),
             ("ardor_fail_runtime", "--fail-runtime"),
@@ -137,6 +143,9 @@ class ArdorLauncher:
             ("ardor_omit_checkpoint", "--omit-checkpoint"),
             ("ardor_malformed_contract", "--malformed-contract"),
             ("ardor_unsupported_state", "--unsupported-state"),
+            ("ardor_legacy_contract", "--legacy-contract"),
+            ("ardor_malformed_candidate", "--malformed-candidate"),
+            ("ardor_omit_optional_refs", "--omit-optional-refs"),
         ):
             if str(parameters.get(flag_name, "0")) == "1":
                 command.append(cli_flag)
