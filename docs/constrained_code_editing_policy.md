@@ -53,3 +53,27 @@ Also blocked:
 ## Future integration constraint
 
 Any future coder agent must use this protocol and remain approval-gated with path restrictions. This policy intentionally does **not** add autonomous code mutation, self-healing patching, or planner-driven rewrites.
+
+## Stage 11 governed proposal flow
+
+Stage 11 adds a small, auditable workflow helper for code-edit governance. It remains **proposal + governance only**:
+
+1. A caller supplies `run_id`, `lineage_id`, `requested_by`, `purpose`, `target_files`, `rollback_plan`, `test_plan`, and optional metadata.
+2. The workflow constructs a `CodeEditProposal` and normalizes it through `evaluate_code_edit_proposal` before persistence.
+3. `CodeEditProposalStore` persists the evaluated record in JSONL state storage.
+4. Operators may query:
+   - pending proposals (`approval_required`)
+   - blocked proposals
+   - proposals for a run
+   - proposals for a lineage
+5. Approval resolution is explicit:
+   - approval-required proposals may become `approved`
+   - approval-required proposals may become `rejected`
+   - blocked proposals cannot become approved
+   - forbidden-path proposals remain `blocked`
+6. Execution is not implemented. The Stage 11 execution helper only returns an auditable dry-run record:
+   - unapproved proposals return `refused`
+   - approved proposals return `dry_run_ready`
+   - no target files are mutated
+
+This flow does not grant autonomous file editing authority and does not bypass operator approval policy.
