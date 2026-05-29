@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from hephaestus.policy.promotion_policy import PromotionPolicy
 from hephaestus.schemas.judge_entry import JudgeEntryMode
@@ -9,7 +9,7 @@ from hephaestus.schemas.judge_exit import JudgeExitAction
 
 @dataclass(slots=True)
 class JudgePolicy:
-    promotion_policy: PromotionPolicy = PromotionPolicy()
+    promotion_policy: PromotionPolicy = field(default_factory=PromotionPolicy)
 
     def decide_entry_mode(
         self,

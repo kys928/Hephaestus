@@ -131,3 +131,18 @@ class CodeEditProposal(JsonSchema):
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "CodeEditProposal":
         return cls(**normalize_code_edit_proposal(payload))
+
+
+@dataclass(slots=True)
+class CodeEditExecutionRecord(JsonSchema):
+    execution_id: str
+    proposal_id: str
+    run_id: str | None = None
+    lineage_id: str | None = None
+    requested_by: str = "unknown"
+    status: str = "refused"
+    dry_run: bool = True
+    reason: str = ""
+    target_files: list[str] = field(default_factory=list)
+    created_at: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
