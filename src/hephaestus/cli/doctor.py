@@ -59,7 +59,7 @@ def check(state_root: Path | None = None) -> dict[str, Any]:
                 latest_run_id = str(runs[-1].get("run_id") or "") or None
                 if latest_run_id:
                     latest_replay_status = str(verify_run_replay(state_root, latest_run_id).to_dict().get("status") or "") or None
-                    if latest_replay_status not in {"verified", "partial"}:
+                    if latest_replay_status not in {"reproducible", "partial"}:
                         warnings.append("latest_replay_insufficient")
                 else:
                     warnings.append("latest_run_id_missing")
