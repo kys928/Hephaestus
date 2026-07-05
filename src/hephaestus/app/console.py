@@ -67,7 +67,7 @@ def _runs_html(root: Path) -> str:
 
 
 def _index_html(state_root: Path) -> str:
-    return _page("Hephaestus Operator Console", f"<h1>Hephaestus Operator Console</h1><p><strong>Read-only:</strong> this console performs inspection only and exposes no approval, rejection, execution, or training-launch actions.</p><p>State root: <code>{_e(state_root)}</code></p>" + _runs_html(state_root).split("<h1>Runs</h1>", 1)[1].split("</body>", 1)[0])
+    return _page("Hephaestus Operator Console", f"<h1>Hephaestus Operator Console</h1><p><strong>Governed console:</strong> GET routes remain inspection-only. The only mutation route is policy-gated <code>POST /api/operator-actions</code>, which appends operator action records and may route approval/rejection decisions through governance. It does not edit files, apply patches, launch training, or mutate eval packs.</p><p>State root: <code>{_e(state_root)}</code></p>" + _runs_html(state_root).split("<h1>Runs</h1>", 1)[1].split("</body>", 1)[0])
 
 
 def _lineages_html(root: Path) -> str:
@@ -197,7 +197,17 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
                     _json_response(self, 404, result); return
             _json_response(self, 200 if action.status == "accepted" else 403, result)
 
-        do_PUT = do_DELETE = do_PATCH = do_POST
+        def _method_not_allowed(self) -> None:
+            _json_response(self, 405, OperatorConsolePayload(status="error", error="method_not_allowed", read_only=True).to_dict())
+
+        def do_PUT(self) -> None:  # noqa: N802
+            self._method_not_allowed()
+
+        def do_PATCH(self) -> None:  # noqa: N802
+            self._method_not_allowed()
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            self._method_not_allowed()
 
         def log_message(self, format: str, *args: object) -> None:
             return
