@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from typing import Any
 
 from ._base import JsonSchema
 
@@ -41,3 +42,8 @@ class EvalReport(JsonSchema):
     failed_gates: list[str] = field(default_factory=list)
     passed_gates: list[str] = field(default_factory=list)
     scorecard_integrity_level: str = "insufficient"
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "EvalReport":
+        keys = {field_.name for field_ in fields(cls)}
+        return cls(**{key: value for key, value in payload.items() if key in keys})

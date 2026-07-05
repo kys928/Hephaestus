@@ -29,6 +29,14 @@ from hephaestus.roles.planner import PlannerRole
 from hephaestus.roles.reporter import ReporterRole
 from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.roles.training_engineer import TrainingEngineerRole
+from hephaestus.safety.checkpoint_guard import check_checkpoint_candidates, check_selected_checkpoint
+from hephaestus.safety.dataset_guard import check_dataset_manifest, check_trainable_data_contract
+from hephaestus.safety.eval_guard import check_eval_report
+from hephaestus.safety.launch_guard import check_launch_request
+from hephaestus.safety.policy import decide_boundary
+from hephaestus.safety.role_boundary_guard import check_phase_order
+from hephaestus.safety.state_guard import check_lineage_state
+from hephaestus.schemas.safety_guard import SafetyGuardInput
 from hephaestus.schemas.approval_decision import ApprovalDecision
 from hephaestus.schemas.approval_request import ApprovalRequest
 from hephaestus.schemas.decision_record import DecisionRecord
@@ -126,6 +134,26 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 stage_name=self.context.stage_name,
             )
             output = {"dataset_profile": profile.to_dict(), "dataset_manifest": manifest.to_dict()}
+            guard_decision = decide_boundary(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                boundary="data_acquisition_audit",
+                guard_results=[
+                    check_dataset_manifest(
+                        SafetyGuardInput(
+                            guard_id="dataset_manifest_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="data_acquisition_audit",
+                            payload=output["dataset_manifest"],
+                        )
+                    )
+                ],
+            )
+            output["safety"] = guard_decision.to_dict()
+            if not guard_decision.allowed:
+                self.report_store.append({"kind": "safety_guard", **guard_decision.to_dict()})
+                return PhaseResult(phase, "blocked", [], output)
             self.context.outputs[phase.value] = output
             self.manifest_store.append(manifest.to_dict())
             self.report_store.append({"kind": "dataset_profile", **profile.to_dict()})
@@ -138,6 +166,26 @@ class DefaultSpineCoordinator(SpineCoordinator):
             manifest_id = str(self.context.outputs[SpinePhase.DATA_ACQUISITION_AUDIT.value]["dataset_manifest"]["manifest_id"])
             report, contract = DataPreprocessorRole(self.backend).run(run_id, manifest_id)
             output = {"preprocessing_report": report.to_dict(), "trainable_data_contract": contract.to_dict()}
+            guard_decision = decide_boundary(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                boundary="data_preprocessor",
+                guard_results=[
+                    check_trainable_data_contract(
+                        SafetyGuardInput(
+                            guard_id="trainable_data_contract_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="data_preprocessor",
+                            payload=output["trainable_data_contract"],
+                        )
+                    )
+                ],
+            )
+            output["safety"] = guard_decision.to_dict()
+            if not guard_decision.allowed:
+                self.report_store.append({"kind": "safety_guard", **guard_decision.to_dict()})
+                return PhaseResult(phase, "blocked", [], output)
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "preprocessing_report", **report.to_dict()})
             self.report_store.append({"kind": "trainable_data_contract", **contract.to_dict()})
@@ -155,6 +203,26 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 dry_run=getattr(self.backend, "name", "dry_run") == "dry_run",
             )
             output = {"training_plan": plan.to_dict(), "launch_config": launch.to_dict()}
+            guard_decision = decide_boundary(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                boundary="training_engineer_launch",
+                guard_results=[
+                    check_launch_request(
+                        SafetyGuardInput(
+                            guard_id="launch_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="training_engineer_launch",
+                            payload={**output, "data_contract": data_contract},
+                        )
+                    )
+                ],
+            )
+            output["safety"] = guard_decision.to_dict()
+            if not guard_decision.allowed:
+                self.report_store.append({"kind": "safety_guard", **guard_decision.to_dict()})
+                return PhaseResult(phase, "blocked", [], output)
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "training_plan", **plan.to_dict()})
             self.report_store.append({"kind": "launch_config", **launch.to_dict()})
@@ -180,6 +248,23 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 "incidents": [incident.to_dict() for incident in monitor.incidents],
                 "training_outputs": monitor.training_outputs,
             }
+            guard_decision = decide_boundary(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                boundary="runtime_monitor_checkpoint_candidates",
+                guard_results=[
+                    check_checkpoint_candidates(
+                        SafetyGuardInput(
+                            guard_id="checkpoint_candidate_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="runtime_monitor_checkpoint_candidates",
+                            payload=monitor.training_outputs,
+                        )
+                    )
+                ],
+            )
+            output["safety"] = guard_decision.to_dict()
             self.context.outputs[phase.value] = output
             for event in monitor.events:
                 if event.payload_ref:
@@ -193,6 +278,32 @@ class DefaultSpineCoordinator(SpineCoordinator):
             runtime_output = self.context.outputs[SpinePhase.RUNTIME_MONITOR.value]
             report = EvaluatorRole().run(run_id, stage_profile, training_outputs=runtime_output["training_outputs"])
             output = report.to_dict()
+            guard_decision = decide_boundary(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                boundary="evaluation_promotion_boundary",
+                guard_results=[
+                    check_eval_report(
+                        SafetyGuardInput(
+                            guard_id="eval_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="evaluation_promotion_boundary",
+                            payload=output,
+                        )
+                    ),
+                    check_selected_checkpoint(
+                        SafetyGuardInput(
+                            guard_id="selected_checkpoint_guard",
+                            run_id=run_id,
+                            lineage_id=self.context.lineage_id,
+                            boundary="evaluation_promotion_boundary",
+                            payload=output,
+                        )
+                    ),
+                ],
+            )
+            output["safety"] = guard_decision.to_dict()
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "eval_report", **output})
             for ref in report.intermediate_artifact_refs:
@@ -377,6 +488,28 @@ class Orchestrator:
         started = _now()
         for phase in SPINE_ORDER:
             results.append(self.coordinator.run_phase(phase=phase, run_id=run_id))
+            if results[-1].status == "blocked":
+                return results
+
+        spine_guard = decide_boundary(
+            run_id=run_id,
+            lineage_id=self.coordinator.context.lineage_id,
+            boundary="orchestrator_phase_order",
+            guard_results=[
+                check_phase_order(
+                    SafetyGuardInput(
+                        guard_id="role_boundary_guard",
+                        run_id=run_id,
+                        lineage_id=self.coordinator.context.lineage_id,
+                        boundary="orchestrator_phase_order",
+                        payload={"phase_order": [item.phase.value for item in results]},
+                    )
+                )
+            ],
+        )
+        if not spine_guard.allowed:
+            self.coordinator.report_store.append({"kind": "safety_guard", **spine_guard.to_dict()})
+            return results
 
         eval_output = self.coordinator.context.outputs[SpinePhase.EVALUATOR.value]
         eval_id = str(eval_output["eval_id"])
@@ -613,7 +746,27 @@ class Orchestrator:
             self.coordinator.lineage_store.set_current(restart.reset_state)
             return
 
-        self.coordinator.lineage_store.set_current(state.to_dict())
+        state_payload = state.to_dict()
+        state_guard = decide_boundary(
+            run_id=run_id,
+            lineage_id=self.coordinator.context.lineage_id,
+            boundary="lineage_state_persistence",
+            guard_results=[
+                check_lineage_state(
+                    SafetyGuardInput(
+                        guard_id="state_guard",
+                        run_id=run_id,
+                        lineage_id=self.coordinator.context.lineage_id,
+                        boundary="lineage_state_persistence",
+                        payload=state_payload,
+                    )
+                )
+            ],
+        )
+        state_payload["metadata"] = {**dict(state_payload.get("metadata", {})), "last_safety_guard": state_guard.to_dict()}
+        if not state_guard.allowed:
+            state_payload["status"] = "blocked"
+        self.coordinator.lineage_store.set_current(state_payload)
 
 
 def build_orchestrator(
