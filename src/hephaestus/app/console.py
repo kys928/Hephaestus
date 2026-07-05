@@ -3,16 +3,26 @@ from __future__ import annotations
 import argparse
 import html
 import json
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from hephaestus.cli.inspect_run import _load as load_run
 from hephaestus.control.replay_verification import verify_run_replay
+from hephaestus.policy.operator_console_policy import OperatorConsolePolicy
+from hephaestus.schemas.approval_decision import ApprovalDecision
+from hephaestus.schemas.operator_action import OperatorActionRecord, OperatorActionRequest
 from hephaestus.schemas.operator_console import OperatorConsolePayload
 from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
+from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.lineage_store import LineageStore
+from hephaestus.state.operator_action_store import OperatorActionStore
 from hephaestus.state.run_store import RunStore
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, object]) -> None:
@@ -82,6 +92,29 @@ def _code_edits_html(root: Path) -> str:
     return _page("Code Edits", f"<h1>Code Edits</h1><table><tbody>{''.join(rows) or '<tr><td>No code edit proposals found.</td></tr>'}</tbody></table>")
 
 
+def _read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, object]:
+    length = int(handler.headers.get("Content-Length", "0") or "0")
+    if length <= 0:
+        return {}
+    raw = handler.rfile.read(length).decode("utf-8")
+    payload = json.loads(raw or "{}")
+    if not isinstance(payload, dict):
+        raise ValueError("json_object_required")
+    return payload
+
+
+def _lineage_for_run(root: Path, run: dict[str, object] | None) -> dict[str, object]:
+    lineage_id = str((run or {}).get("lineage_id") or "")
+    lineage = LineageStore(root).get_current(lineage_id) if lineage_id else None
+    return lineage or {}
+
+
+def _record_operator_action(root: Path, record: OperatorActionRecord) -> dict[str, object]:
+    payload = record.to_dict()
+    OperatorActionStore(root).append(payload)
+    return payload
+
+
 def _run_detail(root: Path, run_id: str) -> dict[str, object] | None:
     try:
         payload = load_run(root, run_id)
@@ -141,6 +174,11 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/code-edits":
                 _json_response(self, 200, {"read_only": True, "code_edits": CodeEditProposalStore(root).list_all()}); return
+            if path == "/api/approvals/pending":
+                pending = [r for r in DecisionStore(root).all_approval_requests() if r.get("status") == "pending" and not DecisionStore(root).get_latest_approval_decision(str(r.get("request_id", "")))]
+                _json_response(self, 200, {"read_only": True, "approval_requests": pending}); return
+            if path == "/api/operator-actions":
+                _json_response(self, 200, {"read_only": True, "operator_actions": OperatorActionStore(root).all()}); return
             if path in {"/api/run", "/run"}:
                 run_id = (parse_qs(parsed.query).get("run_id") or [""])[0]
                 if not run_id:
@@ -154,9 +192,85 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
             _json_response(self, 404, OperatorConsolePayload(status="error", error="not_found", read_only=True).to_dict())
 
         def do_POST(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            path = parsed.path
+            try:
+                payload = _read_json_body(self)
+                if path.startswith("/api/approvals/") and path.endswith("/decisions"):
+                    request_id = unquote(path.removeprefix("/api/approvals/")[: -len("/decisions")])
+                    request = DecisionStore(root).get_approval_request(request_id)
+                    if request is None:
+                        _json_response(self, 404, {"read_only": False, "status": "error", "error": "approval_request_not_found"}); return
+                    action_request = OperatorActionRequest(
+                        action=str(request.get("proposed_action", "")),
+                        operator_id=str(payload.get("operator_id", "operator.unknown")),
+                        run_id=str(request.get("run_id", "")),
+                        lineage_id=str(request.get("lineage_id", "")),
+                        request_id=request_id,
+                        outcome=str(payload.get("outcome", "rejected")),
+                        note=str(payload.get("note", "")),
+                        metadata={"source": "operator_console"},
+                    )
+                    override_allowed = str(request.get("required_approval_type")) != "operator_approval_no_override"
+                    resolution = OperatorConsolePolicy().approval_policy.resolve_operator_outcome(action_request.outcome or "rejected", override_allowed=override_allowed)
+                    decision = ApprovalDecision(
+                        decision_event_id=f"apd-console-{request_id}-{len(DecisionStore(root).all_approval_decisions()) + 1}",
+                        request_id=request_id,
+                        lineage_id=action_request.lineage_id or "",
+                        run_id=action_request.run_id or "",
+                        operator_id=action_request.operator_id,
+                        outcome=resolution.outcome,
+                        status=resolution.status,
+                        note=action_request.note,
+                        effect_on_action=resolution.effect_on_action,
+                        created_at=_now(),
+                        metadata={"resolution_reason": resolution.reason, "override_blocked": resolution.override_blocked, "source": "operator_console"},
+                    )
+                    DecisionStore(root).append_approval_decision(decision.to_dict())
+                    action = _record_operator_action(root, OperatorActionRecord(
+                        action_event_id=f"opa-{decision.decision_event_id}", action_kind="approval_decision", action=action_request.action,
+                        operator_id=action_request.operator_id, status=resolution.status, created_at=decision.created_at,
+                        run_id=action_request.run_id, lineage_id=action_request.lineage_id, request_id=request_id,
+                        note=action_request.note, policy_decision=decision.metadata, metadata={"approval_decision": decision.to_dict()},
+                    ))
+                    _json_response(self, 201, {"read_only": False, "approval_decision": decision.to_dict(), "operator_action": action}); return
+                if path.startswith("/api/runs/") and path.endswith("/replay-requests"):
+                    run_id = unquote(path.removeprefix("/api/runs/")[: -len("/replay-requests")])
+                    run = RunStore(root).get(run_id)
+                    if run is None:
+                        _json_response(self, 404, {"read_only": False, "status": "error", "error": "run_not_found"}); return
+                    report = verify_run_replay(root, run_id).to_dict()
+                    action = _record_operator_action(root, OperatorActionRecord(
+                        action_event_id=f"opr-{run_id}-{len(OperatorActionStore(root).all()) + 1}", action_kind="replay_verification_request",
+                        action="request_recheck", operator_id=str(payload.get("operator_id", "operator.unknown")), status="recorded",
+                        created_at=_now(), run_id=run_id, lineage_id=str(run.get("lineage_id", "")), note=str(payload.get("note", "")),
+                        reason=str(payload.get("reason", "operator_requested_replay_verification")), metadata={"replay_verification": report},
+                    ))
+                    _json_response(self, 201, {"read_only": False, "operator_action": action, "replay": report}); return
+                if path.startswith("/api/runs/") and path.endswith("/commands"):
+                    run_id = unquote(path.removeprefix("/api/runs/")[: -len("/commands")])
+                    run = RunStore(root).get(run_id)
+                    if run is None:
+                        _json_response(self, 404, {"read_only": False, "status": "error", "error": "run_not_found"}); return
+                    command = str(payload.get("command", ""))
+                    lineage = _lineage_for_run(root, run)
+                    policy = OperatorConsolePolicy().decide_run_command(command=command, stage_name=str(run.get("stage_name", "")), trust_level=str(lineage.get("trust_level", "unknown")))
+                    status = "accepted" if bool(policy.get("allowed")) else "rejected"
+                    action = _record_operator_action(root, OperatorActionRecord(
+                        action_event_id=f"opc-{run_id}-{len(OperatorActionStore(root).all()) + 1}", action_kind="run_command", action=command,
+                        operator_id=str(payload.get("operator_id", "operator.unknown")), status=status, created_at=_now(), run_id=run_id,
+                        lineage_id=str(run.get("lineage_id", "")), note=str(payload.get("note", "")), reason=str(payload.get("reason", "")),
+                        policy_decision=policy, metadata={"command_record_only": True},
+                    ))
+                    _json_response(self, 201 if status == "accepted" else 403, {"read_only": False, "operator_action": action}); return
+            except (json.JSONDecodeError, ValueError) as exc:
+                _json_response(self, 400, {"read_only": False, "status": "error", "error": str(exc)}); return
             _json_response(self, 405, OperatorConsolePayload(status="error", error="method_not_allowed", read_only=True).to_dict())
 
-        do_PUT = do_DELETE = do_PATCH = do_POST
+        def do_PUT(self) -> None:  # noqa: N802
+            _json_response(self, 405, OperatorConsolePayload(status="error", error="method_not_allowed", read_only=True).to_dict())
+
+        do_DELETE = do_PATCH = do_PUT
 
         def log_message(self, format: str, *args: object) -> None:
             return
