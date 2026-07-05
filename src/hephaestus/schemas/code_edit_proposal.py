@@ -80,7 +80,7 @@ def normalize_code_edit_proposal(payload: dict[str, object]) -> dict[str, object
     if missing_required_fields:
         metadata["missing_required_fields"] = sorted(set(missing_required_fields))
 
-    if status not in {"rejected", "blocked", "approved", "superseded"}:
+    if status not in {"rejected", "blocked", "approved", "executed", "superseded"}:
         status = "approval_required"
 
     return {
@@ -144,5 +144,7 @@ class CodeEditExecutionRecord(JsonSchema):
     dry_run: bool = True
     reason: str = ""
     target_files: list[str] = field(default_factory=list)
+    changed_files: list[str] = field(default_factory=list)
+    rollback_plan: str | None = None
     created_at: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)

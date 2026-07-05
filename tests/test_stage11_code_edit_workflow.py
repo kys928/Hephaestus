@@ -167,3 +167,72 @@ def test_query_helpers_work(tmp_path) -> None:
         blocked.proposal_id,
     }
     assert [row["proposal_id"] for row in workflow.store.list_for_lineage("lineage-query")] == [pending.proposal_id]
+
+
+def test_approved_proposal_can_record_real_execution(tmp_path) -> None:
+    workflow = _workflow(tmp_path)
+    proposal = workflow.create_proposal(
+        run_id="run-execute",
+        lineage_id="lineage-execute",
+        requested_by="operator",
+        purpose="Update docs",
+        target_files=["docs/constrained_code_editing_policy.md"],
+        rollback_plan="Revert docs commit",
+        test_plan=["pytest -q"],
+    )
+    approved = workflow.approve_proposal(proposal.proposal_id, operator_id="operator", note="approved for execution")
+
+    execution = workflow.execute_approved(
+        approved.proposal_id,
+        requested_by="operator",
+        changed_files=["docs/constrained_code_editing_policy.md"],
+        metadata={"executor": "unit-test"},
+    )
+
+    assert execution.status == "executed"
+    assert execution.dry_run is False
+    assert execution.rollback_plan == "Revert docs commit"
+    assert execution.changed_files == ["docs/constrained_code_editing_policy.md"]
+    assert workflow.store.get(approved.proposal_id)["status"] == "executed"  # type: ignore[index]
+    stored_executions = workflow.store.list_executions_for_proposal(approved.proposal_id)
+    assert stored_executions[-1]["status"] == "executed"
+    assert stored_executions[-1]["changed_files"] == ["docs/constrained_code_editing_policy.md"]
+
+
+def test_real_execution_refuses_unapproved_or_unauthorized_paths(tmp_path) -> None:
+    workflow = _workflow(tmp_path)
+    proposal = workflow.create_proposal(
+        run_id="run-refuse",
+        lineage_id="lineage-refuse",
+        requested_by="operator",
+        purpose="Update docs",
+        target_files=["docs/constrained_code_editing_policy.md"],
+        rollback_plan="Revert docs commit",
+        test_plan=["pytest -q"],
+    )
+
+    unapproved = workflow.execute_approved(
+        proposal.proposal_id,
+        requested_by="operator",
+        changed_files=["docs/constrained_code_editing_policy.md"],
+    )
+    assert unapproved.status == "refused"
+    assert unapproved.reason == "proposal_not_approved"
+
+    approved = workflow.approve_proposal(proposal.proposal_id, operator_id="operator", note="approved for execution")
+    escaped = workflow.execute_approved(
+        approved.proposal_id,
+        requested_by="operator",
+        changed_files=["../secrets/token.json"],
+    )
+    assert escaped.status == "refused"
+    assert escaped.reason == "unauthorized_path_access"
+
+    outside_scope = workflow.execute_approved(
+        approved.proposal_id,
+        requested_by="operator",
+        changed_files=["tests/test_stage11_code_edit_workflow.py"],
+    )
+    assert outside_scope.status == "refused"
+    assert outside_scope.reason == "unauthorized_path_access"
+    assert outside_scope.metadata["unauthorized_paths"] == ["tests/test_stage11_code_edit_workflow.py"]

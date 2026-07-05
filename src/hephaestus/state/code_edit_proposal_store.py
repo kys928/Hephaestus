@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hephaestus.policy.code_edit_policy import evaluate_code_edit_proposal
-from hephaestus.schemas.code_edit_proposal import CodeEditProposal
+from hephaestus.schemas.code_edit_proposal import CodeEditExecutionRecord, CodeEditProposal
 from hephaestus.state._json_store import JsonStore
 
 
@@ -51,3 +51,17 @@ class CodeEditProposalStore:
     def record_resolution(self, proposal: CodeEditProposal | dict[str, object]) -> None:
         evaluated = evaluate_code_edit_proposal(proposal)
         JsonStore(self.root, "code_edit_proposals.jsonl").append(evaluated.to_dict())
+
+    def record_execution(self, execution: CodeEditExecutionRecord | dict[str, object]) -> None:
+        record = execution.to_dict() if isinstance(execution, CodeEditExecutionRecord) else dict(execution)
+        JsonStore(self.root, "code_edit_executions.jsonl").append(record)
+
+    def get_execution(self, execution_id: str) -> dict[str, object] | None:
+        return JsonStore(self.root, "code_edit_executions.jsonl").get_latest("execution_id", execution_id)
+
+    def list_executions_for_proposal(self, proposal_id: str) -> list[dict[str, object]]:
+        return [
+            row
+            for row in JsonStore(self.root, "code_edit_executions.jsonl").all()
+            if str(row.get("proposal_id") or "") == proposal_id
+        ]
