@@ -1,5 +1,7 @@
-"""Module scaffold: time."""
-
 from __future__ import annotations
 
-# TODO: implement time with explicit boundaries and typed payloads.
+from datetime import datetime, timezone
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()

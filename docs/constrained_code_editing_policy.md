@@ -2,12 +2,12 @@
 
 ## Scope
 
-Hephaestus supports **proposal-first** constrained code editing. This protocol classifies and stores edit proposals, but does **not** execute patches or mutate files.
+Hephaestus supports **proposal-first** constrained code editing. This protocol classifies and stores edit proposals, records approval decisions, and persists bounded execution-attempt records, but does **not** apply patches or mutate target files.
 
 ## Protocol guarantees
 
 - Code editing is proposal-first and approval-gated.
-- The system may classify and persist proposals, but does not execute them.
+- The system may classify and persist proposals and dry-run execution attempts, but it does not mutate target files.
 - All code-edit proposals require `operator_approval`.
 - Forbidden paths are blocked and marked `not_approvable_forbidden_path`.
 - Frozen eval packs, state/run history, artifacts, model weights, secrets, and external data are protected.
@@ -71,9 +71,10 @@ Stage 11 adds a small, auditable workflow helper for code-edit governance. It re
    - approval-required proposals may become `rejected`
    - blocked proposals cannot become approved
    - forbidden-path proposals remain `blocked`
-6. Execution is not implemented. The Stage 11 execution helper only returns an auditable dry-run record:
+6. Execution is bounded to approved proposals and persisted as an auditable dry-run record:
    - unapproved proposals return `refused`
-   - approved proposals return `dry_run_ready`
+   - approved proposals return `dry_run_ready` and append an execution record
+   - approved proposals may transition to durable post-approval status `executed` only after the dry-run record is persisted
    - no target files are mutated
 
 This flow does not grant autonomous file editing authority and does not bypass operator approval policy.

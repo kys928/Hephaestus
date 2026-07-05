@@ -36,6 +36,8 @@ from hephaestus.schemas.eval_report import EvalReport
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.schemas.replay_metadata import build_replay_metadata
 from hephaestus.schemas.run_record import RunRecord
+from hephaestus.safety.dataset_guard import evaluate_dataset_manifest_guard
+from hephaestus.safety.launch_guard import evaluate_launch_guard
 from hephaestus.state.artifact_index import ArtifactIndex
 from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.lineage_store import LineageStore
@@ -129,6 +131,9 @@ class DefaultSpineCoordinator(SpineCoordinator):
             self.context.outputs[phase.value] = output
             self.manifest_store.append(manifest.to_dict())
             self.report_store.append({"kind": "dataset_profile", **profile.to_dict()})
+            dataset_guard = evaluate_dataset_manifest_guard(manifest)
+            self.report_store.append({"kind": "safety_guard", **dataset_guard.to_dict()})
+            output["safety_guard"] = dataset_guard.to_dict()
             manifest_ref = str(manifest.artifact_ref or "")
             if manifest_ref:
                 self.artifact_index.append({"run_id": run_id, "kind": "dataset_manifest", "ref": manifest_ref})
@@ -158,6 +163,9 @@ class DefaultSpineCoordinator(SpineCoordinator):
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "training_plan", **plan.to_dict()})
             self.report_store.append({"kind": "launch_config", **launch.to_dict()})
+            launch_guard = evaluate_launch_guard(launch.to_dict())
+            self.report_store.append({"kind": "safety_guard", **launch_guard.to_dict()})
+            output["safety_guard"] = launch_guard.to_dict()
             return PhaseResult(phase, "ok", [], output)
 
         if phase is SpinePhase.RUNTIME_MONITOR:

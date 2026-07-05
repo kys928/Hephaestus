@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from hephaestus.backends.base import ExecutionBackend
+from hephaestus.data.acquisition import normalize_acquired_dataset
 from hephaestus.schemas.dataset_manifest import DatasetManifest
 from hephaestus.schemas.dataset_profile import DatasetProfile
 
@@ -14,7 +15,7 @@ class DataAcquisitionAuditRole:
     name: str = "data_acquisition_audit"
 
     def run(self, run_id: str, lineage_id: str, stage_name: str | None = None) -> tuple[DatasetProfile, DatasetManifest]:
-        acquired = self.backend.acquire_dataset(run_id)
+        acquired = normalize_acquired_dataset(self.backend.acquire_dataset(run_id))
         profile = DatasetProfile(
             dataset_id=str(acquired["dataset_id"]),
             source_identity=str(acquired["source_identity"]),

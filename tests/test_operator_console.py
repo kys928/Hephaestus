@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 from hephaestus.app.console import make_handler
 from hephaestus.cli.create_demo_state import create_demo_state
 from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
+from hephaestus.state.operator_action_store import OperatorActionStore
 
 
 def _server(root: Path):
@@ -62,3 +63,37 @@ def test_operator_console_routes_are_read_only_and_complete(tmp_path):
         thread.join(timeout=5)
     after = {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
     assert after == before
+
+
+def _request_json(base: str, path: str, *, method: str, payload: dict[str, object]) -> dict[str, object]:
+    data = json.dumps(payload).encode("utf-8")
+    request = Request(f"{base}{path}", data=data, method=method, headers={"Content-Type": "application/json"})
+    with urlopen(request) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def test_operator_console_operator_actions_only_accept_post(tmp_path):
+    root = tmp_path / "state"
+    create_demo_state(root, "demo-run")
+    server, thread, base = _server(root)
+    try:
+        payload = {"action_type": "note", "requested_by": "operator", "reason": "audit note"}
+        created = _request_json(base, "/api/operator-actions", method="POST", payload=payload)
+        assert created["operator_action"]["status"] == "accepted"
+        assert created["operator_action"]["action_type"] == "note"
+        assert len(OperatorActionStore(root).list_all()) == 1
+
+        for method in ["PUT", "PATCH", "DELETE"]:
+            before = OperatorActionStore(root).list_all()
+            try:
+                _request_json(base, "/api/operator-actions", method=method, payload=payload)
+            except HTTPError as exc:
+                assert exc.code == 405
+                body = json.loads(exc.read().decode("utf-8"))
+                assert body["error"] == "method_not_allowed"
+            else:  # pragma: no cover
+                raise AssertionError(f"{method} unexpectedly appended an operator action")
+            assert OperatorActionStore(root).list_all() == before
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)

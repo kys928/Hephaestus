@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from hephaestus.backends.base import ExecutionBackend
+from hephaestus.data.preprocessing import normalize_preprocessing_output
 from hephaestus.schemas.preprocessing_report import PreprocessingReport
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
 
@@ -13,7 +14,7 @@ class DataPreprocessorRole:
     name: str = "data_preprocessor"
 
     def run(self, run_id: str, manifest_id: str) -> tuple[PreprocessingReport, TrainableDataContract]:
-        processed = self.backend.preprocess(run_id)
+        processed = normalize_preprocessing_output(self.backend.preprocess(run_id))
         report = PreprocessingReport(
             report_id=f"prep-{run_id}",
             run_id=run_id,

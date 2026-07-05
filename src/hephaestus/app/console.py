@@ -8,10 +8,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from hephaestus.cli.inspect_run import _load as load_run
+from hephaestus.control.code_edit_workflow import CodeEditProposalWorkflow
 from hephaestus.control.replay_verification import verify_run_replay
 from hephaestus.schemas.operator_console import OperatorConsolePayload
 from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
 from hephaestus.state.lineage_store import LineageStore
+from hephaestus.state.operator_action_store import OperatorActionStore
 from hephaestus.state.run_store import RunStore
 
 
@@ -65,7 +67,7 @@ def _runs_html(root: Path) -> str:
 
 
 def _index_html(state_root: Path) -> str:
-    return _page("Hephaestus Operator Console", f"<h1>Hephaestus Operator Console</h1><p><strong>Read-only:</strong> this console performs inspection only and exposes no approval, rejection, execution, or training-launch actions.</p><p>State root: <code>{_e(state_root)}</code></p>" + _runs_html(state_root).split("<h1>Runs</h1>", 1)[1].split("</body>", 1)[0])
+    return _page("Hephaestus Operator Console", f"<h1>Hephaestus Operator Console</h1><p><strong>Governed console:</strong> GET routes remain inspection-only. The only mutation route is policy-gated <code>POST /api/operator-actions</code>, which appends operator action records and may route approval/rejection decisions through governance. It does not edit files, apply patches, launch training, or mutate eval packs.</p><p>State root: <code>{_e(state_root)}</code></p>" + _runs_html(state_root).split("<h1>Runs</h1>", 1)[1].split("</body>", 1)[0])
 
 
 def _lineages_html(root: Path) -> str:
@@ -73,6 +75,13 @@ def _lineages_html(root: Path) -> str:
     for lineage_id, lineage in LineageStore(root).all().items():
         rows.append(f"<tr><td>{_e(lineage_id)}</td><td>{_e(lineage.get('stage_name'))}</td><td>{_e(lineage.get('status'))}</td><td>{_e(lineage.get('latest_run_id'))}</td><td>{_e(lineage.get('last_decision'))}</td></tr>")
     return _page("Lineages", f"<h1>Lineages</h1><table><tbody>{''.join(rows) or '<tr><td>No lineages found.</td></tr>'}</tbody></table>")
+
+
+def _operator_actions_html(root: Path) -> str:
+    rows = []
+    for action in OperatorActionStore(root).list_all():
+        rows.append(f"<tr><td>{_e(action.get('action_id'))}</td><td>{_e(action.get('action_type'))}</td><td>{_e(action.get('target_id'))}</td><td>{_e(action.get('status'))}</td><td>{_e(action.get('reason'))}</td></tr>")
+    return _page("Operator Actions", f"<h1>Operator Actions</h1><table><tbody>{''.join(rows) or '<tr><td>No operator actions found.</td></tr>'}</tbody></table>")
 
 
 def _code_edits_html(root: Path) -> str:
@@ -124,6 +133,8 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
                 _html_response(self, 200, _lineages_html(root)); return
             if path == "/code-edits":
                 _html_response(self, 200, _code_edits_html(root)); return
+            if path == "/operator-actions":
+                _html_response(self, 200, _operator_actions_html(root)); return
             if path == "/healthz":
                 _json_response(self, 200, OperatorConsolePayload(status="ok", read_only=True).to_dict()); return
             if path == "/api/runs":
@@ -140,7 +151,10 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
                 else: _json_response(self, 200, OperatorConsolePayload(run=data, read_only=True).to_dict())
                 return
             if path == "/api/code-edits":
-                _json_response(self, 200, {"read_only": True, "code_edits": CodeEditProposalStore(root).list_all()}); return
+                store = CodeEditProposalStore(root)
+                _json_response(self, 200, {"read_only": True, "code_edits": store.list_all(), "executions": store.list_executions()}); return
+            if path == "/api/operator-actions":
+                _json_response(self, 200, {"read_only": True, "operator_actions": OperatorActionStore(root).list_all()}); return
             if path in {"/api/run", "/run"}:
                 run_id = (parse_qs(parsed.query).get("run_id") or [""])[0]
                 if not run_id:
@@ -154,9 +168,46 @@ def make_handler(state_root: Path) -> type[BaseHTTPRequestHandler]:
             _json_response(self, 404, OperatorConsolePayload(status="error", error="not_found", read_only=True).to_dict())
 
         def do_POST(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            if parsed.path != "/api/operator-actions":
+                _json_response(self, 405, OperatorConsolePayload(status="error", error="method_not_allowed", read_only=True).to_dict()); return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            except (ValueError, json.JSONDecodeError):
+                _json_response(self, 400, {"status": "error", "error": "invalid_json", "read_only": False}); return
+            import hashlib
+            from datetime import datetime, timezone
+            created_at = datetime.now(timezone.utc).isoformat()
+            base = {**payload, "created_at": created_at}
+            digest = hashlib.sha256(json.dumps(base, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+            action = OperatorActionStore(root).append({**base, "action_id": f"op-{digest}"})
+            result: dict[str, object] = {"read_only": False, "operator_action": action.to_dict()}
+            if action.status == "accepted" and action.action_type in {"approve_code_edit", "reject_code_edit"}:
+                workflow = CodeEditProposalWorkflow(CodeEditProposalStore(root))
+                try:
+                    if action.action_type == "approve_code_edit":
+                        proposal = workflow.approve_proposal(action.target_id, operator_id=action.requested_by, note=action.reason)
+                    else:
+                        proposal = workflow.reject_proposal(action.target_id, operator_id=action.requested_by, note=action.reason)
+                    result["code_edit_proposal"] = proposal.to_dict()
+                except ValueError as exc:
+                    result["status"] = "error"
+                    result["error"] = str(exc)
+                    _json_response(self, 404, result); return
+            _json_response(self, 200 if action.status == "accepted" else 403, result)
+
+        def _method_not_allowed(self) -> None:
             _json_response(self, 405, OperatorConsolePayload(status="error", error="method_not_allowed", read_only=True).to_dict())
 
-        do_PUT = do_DELETE = do_PATCH = do_POST
+        def do_PUT(self) -> None:  # noqa: N802
+            self._method_not_allowed()
+
+        def do_PATCH(self) -> None:  # noqa: N802
+            self._method_not_allowed()
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            self._method_not_allowed()
 
         def log_message(self, format: str, *args: object) -> None:
             return

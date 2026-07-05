@@ -6,6 +6,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from hephaestus.backends._evidence import summarize_artifact_evidence
 from hephaestus.backends.base import BackendRunResult, BackendTarget, PreparedBackendJob
 from hephaestus.runtime.artifact_collector import collect_existing_artifacts
 from hephaestus.runtime.event_stream import events_from_process_output
@@ -112,13 +113,14 @@ class LocalProcessBackend:
             "probe_ref": next((ref for ref in existing if ref.endswith("probe.json")), ""),
             "deterministic_ref": next((ref for ref in existing if ref.endswith("deterministic.json")), ""),
         }
+        evidence = summarize_artifact_evidence([*existing, *missing])
         return BackendRunResult(
             run_id=prepared_job.run_id,
             status=status,
             events=events,
             artifact_refs=existing,
             checkpoint_candidates=checkpoint_candidates,
-            intermediate_eval=intermediate_eval,
+            intermediate_eval={**intermediate_eval, "execution_evidence": evidence},
         )
 
     def stop(self, run_id: str) -> None:
