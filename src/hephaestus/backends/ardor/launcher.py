@@ -50,6 +50,8 @@ class ArdorLauncher:
         processed_dataset_ref = str(manifest.get("path", "")).strip()
         if not processed_dataset_ref:
             raise ConfigError("Ardor launcher requires dataset_manifest.path")
+        if not Path(processed_dataset_ref).exists():
+            raise ConfigError(f"Ardor dataset_manifest.path missing: {processed_dataset_ref}")
 
         max_steps = int(training_plan.get("max_steps", 0))
         if max_steps <= 0:
@@ -64,6 +66,8 @@ class ArdorLauncher:
             raise ConfigError(f"Ardor execution_mode '{execution_mode}' is unsupported")
 
         local_runner_path = str(parameters.get("ardor_runner_script") or backend_config.get("local_runner_path") or "").strip()
+        if local_runner_path and not Path(local_runner_path).exists():
+            raise ConfigError(f"Ardor local runner path missing: {local_runner_path}")
         if not local_runner_path:
             raise ConfigError("Ardor local_process mode requires explicit local_runner_path or parameters.ardor_runner_script")
 
@@ -88,7 +92,11 @@ class ArdorLauncher:
             run_id=run_id,
             backend_name="ardor",
             artifact_root=artifact_root,
-            expected_artifacts=[f"{artifact_root}/ardor_runtime_contract.json"],
+            expected_artifacts=[
+                f"{artifact_root}/ardor_runtime_contract.json",
+                f"{artifact_root}/ardor_metrics.json",
+                f"{artifact_root}/ardor_deterministic.json",
+            ],
             execution_spec=execution_spec,
         )
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from hephaestus.backends.ardor.backend import ArdorBackend
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.backends.hf_causal_lm import HFCausalLMBackend
 from hephaestus.backends.local_process_backend import LocalProcessBackend
 from hephaestus.config_loader import ConfigError, load_config_file
 
@@ -18,6 +19,8 @@ def resolve_backend(name: str, config_dir: Path = Path("configs")) -> ExecutionB
         return LocalProcessBackend()
     if name == "ardor":
         return ArdorBackend(config_dir=config_dir)
+    if name == "hf_causal_lm":
+        return HFCausalLMBackend(config_dir=config_dir)
     raise ValueError(f"Unsupported backend: {name}")
 
 
