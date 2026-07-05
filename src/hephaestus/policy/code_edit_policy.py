@@ -144,7 +144,7 @@ def evaluate_code_edit_proposal(
         status = "blocked"
         risk_level = "forbidden"
     else:
-        status = normalized.status if normalized.status in {"rejected", "blocked", "approved"} else "approval_required"
+        status = normalized.status if normalized.status in {"rejected", "blocked", "approved", "executed"} else "approval_required"
         risk_level = _classify_risk(allowed_files)
         if risk_level == "high":
             required_approvals.add("high_risk_approval")

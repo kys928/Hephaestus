@@ -86,7 +86,7 @@ class CodeEditProposalWorkflow:
     def execute_dry_run(self, proposal_id: str, *, requested_by: str) -> CodeEditExecutionRecord:
         proposal = self._load(proposal_id)
         if proposal.status != "approved":
-            return CodeEditExecutionRecord(
+            record = CodeEditExecutionRecord(
                 execution_id=f"exec-{proposal.proposal_id}",
                 proposal_id=proposal.proposal_id,
                 run_id=proposal.run_id,
@@ -98,7 +98,8 @@ class CodeEditProposalWorkflow:
                 target_files=list(proposal.target_files),
                 created_at=_utc_now(),
             )
-        return CodeEditExecutionRecord(
+            return self.store.record_execution(record)
+        record = CodeEditExecutionRecord(
             execution_id=f"exec-{proposal.proposal_id}",
             proposal_id=proposal.proposal_id,
             run_id=proposal.run_id,
@@ -110,6 +111,10 @@ class CodeEditProposalWorkflow:
             target_files=list(proposal.target_files),
             created_at=_utc_now(),
         )
+        self.store.record_execution(record)
+        executed = evaluate_code_edit_proposal({**proposal.to_dict(), "status": "executed"})
+        self.store.record_resolution(executed)
+        return record
 
     def _load(self, proposal_id: str) -> CodeEditProposal:
         record = self.store.get(proposal_id)

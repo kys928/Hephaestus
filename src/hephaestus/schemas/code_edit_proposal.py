@@ -80,7 +80,7 @@ def normalize_code_edit_proposal(payload: dict[str, object]) -> dict[str, object
     if missing_required_fields:
         metadata["missing_required_fields"] = sorted(set(missing_required_fields))
 
-    if status not in {"rejected", "blocked", "approved", "superseded"}:
+    if status not in {"rejected", "blocked", "approved", "executed", "superseded"}:
         status = "approval_required"
 
     return {
@@ -146,3 +146,20 @@ class CodeEditExecutionRecord(JsonSchema):
     target_files: list[str] = field(default_factory=list)
     created_at: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
+
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "CodeEditExecutionRecord":
+        return cls(
+            execution_id=_as_str(payload.get("execution_id")) or "exec-unknown",
+            proposal_id=_as_str(payload.get("proposal_id")) or "proposal-unknown",
+            run_id=_as_str(payload.get("run_id")),
+            lineage_id=_as_str(payload.get("lineage_id")),
+            requested_by=_as_str(payload.get("requested_by")) or "unknown",
+            status=_as_str(payload.get("status")) or "refused",
+            dry_run=bool(payload.get("dry_run", True)),
+            reason=_as_str(payload.get("reason")) or "",
+            target_files=_as_str_list(payload.get("target_files")),
+            created_at=_as_str(payload.get("created_at")) or datetime.now(timezone.utc).isoformat(),
+            metadata=_as_object_dict(payload.get("metadata")),
+        )
