@@ -13,11 +13,13 @@ from hephaestus.control.lineage_transition import compute_lineage_signals
 from hephaestus.control.restart import create_restart_state
 from hephaestus.control.rollback import apply_rollback
 from hephaestus.control.spine import SPINE_ORDER, PhaseResult, SpineCoordinator, SpinePhase
+from hephaestus.evaluation.pack_loader import load_eval_pack
 from hephaestus.policy.action_registry import evaluate_action_boundary
 from hephaestus.policy.approval_policy import ApprovalPolicy
 from hephaestus.policy.judge_policy import JudgePolicy
 from hephaestus.policy.promotion_gates import evaluate_promotion_gates
 from hephaestus.policy.promotion_policy import PromotionPolicy
+from hephaestus.policy.run_readiness import RunReadinessPolicy
 from hephaestus.policy.runtime_policy import RuntimePolicy
 from hephaestus.policy.stage_policy import StagePolicy
 from hephaestus.roles.data_acquisition_audit import DataAcquisitionAuditRole
@@ -36,6 +38,7 @@ from hephaestus.schemas.eval_report import EvalReport
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.schemas.replay_metadata import build_replay_metadata
 from hephaestus.schemas.run_record import RunRecord
+from hephaestus.schemas.stage_contract import StageContract
 from hephaestus.safety.dataset_guard import evaluate_dataset_manifest_guard
 from hephaestus.safety.launch_guard import evaluate_launch_guard
 from hephaestus.state.artifact_index import ArtifactIndex
@@ -84,6 +87,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
     judge_policy: JudgePolicy
     promotion_policy: PromotionPolicy
     approval_policy: ApprovalPolicy
+    readiness_policy: RunReadinessPolicy
     query: Query
     operator_responses: dict[str, dict[str, str]] = field(default_factory=dict)
 
@@ -151,6 +155,26 @@ class DefaultSpineCoordinator(SpineCoordinator):
 
         if phase is SpinePhase.TRAINING_ENGINEER:
             data_contract = self.context.outputs[SpinePhase.DATA_PREPROCESSOR.value]["trainable_data_contract"]
+            manifest = self.context.outputs[SpinePhase.DATA_ACQUISITION_AUDIT.value]["dataset_manifest"]
+            stage_profile = self.stage_policy.resolve(self.context.stage_name)
+            stage_contract = StageContract.from_stage_profile(stage_profile.to_dict())
+            eval_pack = load_eval_pack(stage_profile.eval_pack)
+            readiness = self.readiness_policy.evaluate(
+                run_id=run_id,
+                lineage_id=self.context.lineage_id,
+                stage_name=self.context.stage_name,
+                stage_contract=stage_contract,
+                backend_name=getattr(self.backend, "name", "dry_run"),
+                dataset_manifest=dict(manifest),
+                data_contract=dict(data_contract),
+                eval_pack=eval_pack,
+            )
+            readiness_payload = readiness.to_dict()
+            self.context.outputs["run_readiness"] = readiness_payload
+            self.report_store.append({"kind": "run_readiness_report", **readiness_payload})
+            if not readiness.launch_allowed:
+                raise ConfigError(f"run readiness blocked launch: {', '.join(readiness.blockers)}")
+
             plan, launch = TrainingEngineerRole().run(
                 run_id,
                 self.context.stage_name,
@@ -159,7 +183,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 backend_name=getattr(self.backend, "name", "dry_run"),
                 dry_run=getattr(self.backend, "name", "dry_run") == "dry_run",
             )
-            output = {"training_plan": plan.to_dict(), "launch_config": launch.to_dict()}
+            output = {"training_plan": plan.to_dict(), "launch_config": launch.to_dict(), "run_readiness_report": readiness_payload}
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "training_plan", **plan.to_dict()})
             self.report_store.append({"kind": "launch_config", **launch.to_dict()})
@@ -654,6 +678,7 @@ def build_orchestrator(
             judge_policy=judge_policy or JudgePolicy(),
             promotion_policy=promotion_policy or PromotionPolicy(),
             approval_policy=approval_policy or ApprovalPolicy(),
+            readiness_policy=RunReadinessPolicy(),
             query=Query(state_root),
             operator_responses=operator_responses or {},
         )
