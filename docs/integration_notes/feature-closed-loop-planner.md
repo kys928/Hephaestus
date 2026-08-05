@@ -57,6 +57,8 @@ Memory is advisory evidence with source linkage. The planner does not mutate mem
 8. Emit governed dataset/model search requests only when the selected intervention needs them.
 9. Validate selection decisions, baseline, criteria, evidence, budget, approvals, and rollback before emitting an experiment proposal.
 
+Selection decisions must match the deterministic request ID produced for the diagnosis/intervention pair. A nominally selected decision with blocking issues is rejected.
+
 ## Contracts consumed and produced
 
 Consumed:
@@ -103,6 +105,7 @@ Diagnosis adapters should populate these optional metadata references when avail
 - Known dead end without new evidence: candidate rejected and reason preserved.
 - Missing baseline without explicit justification: no experiment; `ExperimentPlanningError`.
 - Required dataset/model decision absent, inconclusive, blocked, or empty: no experiment.
+- Selection decision belongs to a different search request or carries a blocking issue: no experiment.
 - Unneeded selection decision supplied: no experiment, preventing accidental governed-input substitution.
 - `stop` recommendation: no experiment.
 

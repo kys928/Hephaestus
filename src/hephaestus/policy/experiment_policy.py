@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from hephaestus.policy.approval_policy import ApprovalPolicy
+from hephaestus.schemas.contract_common import INTERVENTION_KINDS
 from hephaestus.schemas.experiment_contract import InterventionProposal
 
 
@@ -226,6 +227,8 @@ class ExperimentPolicy:
 
     def validate_intervention(self, intervention: InterventionProposal) -> list[str]:
         reasons: list[str] = []
+        if intervention.intervention_kind not in INTERVENTION_KINDS:
+            reasons.append("unsupported_intervention_kind")
         primary = intervention.primary_variable.strip()
         if primary not in PRIMARY_VARIABLES:
             reasons.append("primary_variable_must_name_exactly_one_supported_variable")
@@ -236,6 +239,11 @@ class ExperimentPolicy:
             reasons.append("one_primary_variable_rule_violated")
         if not intervention.controlled_variables:
             reasons.append("controlled_variables_required")
+        if not intervention.expected_effect.strip():
+            reasons.append("expected_effect_required")
+        required_costs = {"compute", "data", "storage", "evaluation", "time"}
+        if not required_costs.issubset(intervention.expected_cost):
+            reasons.append("compute_data_storage_evaluation_and_time_costs_required")
         if not intervention.success_criteria:
             reasons.append("success_criteria_required")
         if not intervention.failure_criteria:

@@ -7,6 +7,7 @@ import pytest
 from hephaestus.interfaces import ExperimentPlanningService
 from hephaestus.planning import ClosedLoopExperimentPlanner, ExperimentPlanningError
 from hephaestus.policy.experiment_policy import ExperimentPolicy
+from hephaestus.schemas.contract_common import CONTRACT_STATUSES, ContractIssue
 from hephaestus.schemas.diagnosis_contract import (
     DiagnosisReport,
     DiagnosticHypothesis,
@@ -274,6 +275,39 @@ def test_selected_model_is_required_for_model_change() -> None:
     assert set(experiment.required_approvals) == {"model_selection_approval", "runtime_capacity_approval"}
 
 
+def test_selection_must_match_the_exact_governed_request() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis()
+    intervention = _proposal(planner, diagnosis, "replace_or_mix_dataset")
+    selection = DatasetSelectionDecision(
+        decision_id="dataset-decision-wrong-request",
+        request_id="dataset-search-for-another-intervention",
+        status="selected",
+        selected_candidate_ids=["dataset-candidate-1"],
+    )
+
+    with pytest.raises(ExperimentPlanningError, match="dataset_selection_request_mismatch"):
+        planner.propose_experiment(diagnosis, intervention, selection, None)
+
+
+def test_blocking_selection_issue_prevents_experiment() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis()
+    intervention = _proposal(planner, diagnosis, "replace_or_mix_dataset")
+    request, _ = planner.create_discovery_requests(diagnosis, intervention)
+    assert request is not None
+    selection = DatasetSelectionDecision(
+        decision_id="dataset-decision-blocked",
+        request_id=request.request_id,
+        status="selected",
+        selected_candidate_ids=["dataset-candidate-1"],
+        issues=[ContractIssue("license", "license_unknown", "License unresolved.", blocking=True)],
+    )
+
+    with pytest.raises(ExperimentPlanningError, match="dataset_selection_contains_blocking_issue"):
+        planner.propose_experiment(diagnosis, intervention, selection, None)
+
+
 def test_baseline_is_required_unless_explicitly_justified() -> None:
     planner = ClosedLoopExperimentPlanner()
     diagnosis = _diagnosis()
@@ -288,6 +322,9 @@ def test_baseline_is_required_unless_explicitly_justified() -> None:
     experiment = planner.propose_experiment(diagnosis, intervention, None, None)
     assert experiment.baseline_ref is None
     assert experiment.metadata["baseline_justification"]
+    assert "baseline_absence_justification" in experiment.required_evidence
+    assert "baseline_comparison" not in experiment.required_evidence
+    assert experiment.success_criteria["baseline_comparison_required"] is False
 
 
 def test_high_impact_approval_policy_is_preserved() -> None:
@@ -296,6 +333,43 @@ def test_high_impact_approval_policy_is_preserved() -> None:
         "operator_high_risk_approval",
     )
     assert policy.required_approvals("branch", "smoke_test", "medium") == ()
+
+
+def test_policy_approvals_cannot_be_removed_from_intervention_metadata() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis(
+        hypotheses=[
+            DiagnosticHypothesis(
+                hypothesis_id="hyp-checkpoint",
+                failure_domain="checkpoint_integrity",
+                summary="The current checkpoint is corrupt.",
+                recommended_intervention_kinds=["rollback"],
+                confidence=0.9,
+            )
+        ]
+    )
+    intervention = _proposal(planner, diagnosis, "rollback")
+    intervention.metadata["required_approvals"] = []
+
+    experiment = planner.propose_experiment(diagnosis, intervention, None, None)
+
+    assert experiment.required_approvals == ["operator_high_risk_approval"]
+    assert experiment.status in CONTRACT_STATUSES
+    assert experiment.metadata["approval_state"] == "required"
+
+
+def test_incomplete_or_blocked_diagnosis_only_returns_diagnostic_work() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis()
+    diagnosis.status = "inconclusive"
+    diagnosis.issues = [
+        ContractIssue("missing-gradients", "missing_evidence", "Gradient evidence is absent.", blocking=True)
+    ]
+
+    interventions = list(planner.propose_interventions(diagnosis))
+
+    assert interventions
+    assert all(item.intervention_kind in {"collect_more_evidence", "repair_evaluation"} for item in interventions)
 
 
 def test_planner_conforms_to_shared_service_protocol() -> None:

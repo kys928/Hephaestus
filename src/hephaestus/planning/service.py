@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, Sequence, runtime_checkable
 
 from hephaestus.policy.experiment_policy import ExperimentPolicy, InterventionAssessment
+from hephaestus.schemas.contract_common import INTERVENTION_KINDS
 from hephaestus.schemas.diagnosis_contract import DiagnosisReport, DiagnosticHypothesis
 from hephaestus.schemas.discovery_contract import (
     DatasetSearchRequest,
@@ -132,7 +133,7 @@ class ClosedLoopExperimentPlanner:
             for kind in kinds:
                 candidates.append(self._candidate(diagnosis, hypothesis, kind, memories))
 
-        if diagnosis.missing_evidence or not hypotheses:
+        if self._diagnosis_requires_conservative_outcome(diagnosis) or not hypotheses:
             synthetic = DiagnosticHypothesis(
                 hypothesis_id="missing-evidence",
                 failure_domain="inconclusive",
@@ -289,7 +290,15 @@ class ClosedLoopExperimentPlanner:
         dataset_selection_id: str | None = None
         model_selection_id: str | None = None
         selection_evidence: list[str] = []
-        approvals = set(str(item) for item in intervention.metadata.get("required_approvals", []))
+        trust_level = str(diagnosis.metadata.get("lineage_trust_level", "unknown"))
+        approvals = set(
+            self.policy.required_approvals(
+                intervention.intervention_kind,
+                diagnosis.stage_name,
+                trust_level,
+            )
+        )
+        approvals.update(str(item) for item in intervention.metadata.get("required_approvals", []))
         if intervention.intervention_kind == "replace_or_mix_dataset":
             if dataset_selection is None or dataset_selection.status != "selected":
                 raise ExperimentPlanningError("selected_dataset_decision_required")
@@ -303,6 +312,7 @@ class ClosedLoopExperimentPlanner:
             dataset_selection_id = dataset_selection.decision_id
             approvals.update(dataset_selection.required_approvals)
             selection_evidence.extend(dataset_selection.evidence_refs)
+            selection_evidence.append(f"dataset-selection:{dataset_selection.decision_id}")
         elif dataset_selection is not None:
             raise ExperimentPlanningError("dataset_selection_not_required_for_intervention")
 
@@ -319,6 +329,7 @@ class ClosedLoopExperimentPlanner:
             model_selection_id = model_selection.decision_id
             approvals.update(model_selection.required_approvals)
             selection_evidence.extend(model_selection.evidence_refs)
+            selection_evidence.append(f"model-selection:{model_selection.decision_id}")
         elif model_selection is not None:
             raise ExperimentPlanningError("model_selection_not_required_for_intervention")
 
@@ -328,17 +339,22 @@ class ClosedLoopExperimentPlanner:
         training_constraints["training_required"] = not diagnostic_only
         training_constraints["one_primary_variable"] = intervention.primary_variable
 
+        baseline_evidence = "baseline_comparison" if baseline_ref else "baseline_absence_justification"
         required_evidence = _unique_strings(
             [
                 *self._evidence_refs(diagnosis),
                 *selection_evidence,
                 *intervention.required_inputs,
-                "baseline_comparison",
+                baseline_evidence,
                 "deterministic_scorecard",
                 "frozen_eval_pack",
                 "diagnostic_result" if diagnostic_only else "training_run_evidence",
             ]
         )
+        success_criteria = dict(intervention.success_criteria)
+        if baseline_ref is None:
+            success_criteria["baseline_comparison_required"] = False
+            success_criteria["baseline_justification_required"] = True
         budget = dict(diagnosis.metadata.get("budget", {}))
         budget.setdefault("estimated_cost", intervention.expected_cost)
         budget.setdefault("enforcement", "downstream_readiness_and_training_services")
@@ -365,7 +381,7 @@ class ClosedLoopExperimentPlanner:
             controlled_variables=dict(intervention.controlled_variables),
             training_constraints=training_constraints,
             budget=budget,
-            success_criteria=dict(intervention.success_criteria),
+            success_criteria=success_criteria,
             failure_criteria=dict(intervention.failure_criteria),
             required_evidence=required_evidence,
             required_approvals=sorted(approvals),
@@ -378,7 +394,7 @@ class ClosedLoopExperimentPlanner:
                 "planner_rank": intervention.metadata.get("rank"),
                 "planner_score": intervention.metadata.get("ranking_score"),
                 "planner_does_not_execute": True,
-                "approval_pending": bool(approvals),
+                "approval_state": "required" if approvals else "not_required",
             },
         )
 
@@ -406,8 +422,9 @@ class ClosedLoopExperimentPlanner:
         memory_evidence = {
             str(ref) for memory in matching_dead_ends for ref in memory.get("evidence_refs", [])
         }
+        hypothesis_evidence = {str(item) for item in hypothesis.supporting_evidence_refs}
         explicit_new = {str(item) for item in diagnosis.metadata.get("new_evidence_refs", [])}
-        has_new_evidence = bool((set(evidence_refs) | explicit_new) - memory_evidence) and bool(memory_evidence)
+        has_new_evidence = bool((hypothesis_evidence | explicit_new) - memory_evidence) and bool(memory_evidence)
         known_dead_end = bool(matching_dead_ends) and not ignore_dead_end
         completeness = self._evidence_completeness(diagnosis)
         baseline_quality = _clamp(
@@ -429,7 +446,7 @@ class ClosedLoopExperimentPlanner:
             prior_attempts=prior_attempts,
             known_dead_end=known_dead_end,
             has_new_evidence=has_new_evidence,
-            missing_evidence_count=len(diagnosis.missing_evidence),
+            missing_evidence_count=self._effective_missing_evidence_count(diagnosis),
             required_approvals=approvals,
         )
         success, failure = self._criteria(kind, hypothesis)
@@ -506,7 +523,10 @@ class ClosedLoopExperimentPlanner:
         values = hypothesis.recommended_intervention_kinds or list(
             _DOMAIN_INTERVENTIONS.get(hypothesis.failure_domain, ("collect_more_evidence",))
         )
-        return tuple(dict.fromkeys(str(item) for item in values))
+        normalized = tuple(
+            dict.fromkeys(str(item) for item in values if str(item) in INTERVENTION_KINDS)
+        )
+        return normalized or ("collect_more_evidence",)
 
     @staticmethod
     def _primary_variable(kind: str, hypothesis: DiagnosticHypothesis) -> str:
@@ -580,6 +600,7 @@ class ClosedLoopExperimentPlanner:
                 "stage_primary_metric_delta_min": 0.01,
                 "deterministic_regression_count_max": 0,
                 "baseline_comparison_required": True,
+                "required_behavioral_evidence": True,
             },
             {
                 "stage_primary_metric_delta_max": 0.0,
@@ -626,6 +647,23 @@ class ClosedLoopExperimentPlanner:
         if present + missing == 0:
             return 0.0
         return round(present / (present + missing), 6)
+
+    @staticmethod
+    def _diagnosis_requires_conservative_outcome(diagnosis: DiagnosisReport) -> bool:
+        return (
+            diagnosis.status != "completed"
+            or bool(diagnosis.missing_evidence)
+            or any(issue.blocking for issue in diagnosis.issues)
+        )
+
+    @classmethod
+    def _effective_missing_evidence_count(cls, diagnosis: DiagnosisReport) -> int:
+        count = len(diagnosis.missing_evidence)
+        if diagnosis.status != "completed":
+            count += 1
+        if any(issue.blocking for issue in diagnosis.issues):
+            count += 1
+        return count
 
     @staticmethod
     def _memory_matches(
