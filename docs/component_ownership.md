@@ -63,7 +63,7 @@ Owned paths:
 
 Consumes `ExperimentProposal` and training evidence; produces `ExperimentComparison` and existing eval reports/scorecards.
 
-### Real training lifecycle
+### Real training lifecycle and governed model discovery
 
 Branch: `feature/real-training-lifecycle`
 
@@ -72,9 +72,10 @@ Owned paths:
 - `src/hephaestus/backends/`
 - `src/hephaestus/training/`
 - `src/hephaestus/runtime/`
-- training/backend tests and documentation
+- `src/hephaestus/providers/models/`
+- training/backend/model-provider tests and documentation
 
-Consumes `ExperimentProposal`; produces and updates `TrainingRunHandle` through the lifecycle protocol.
+Consumes `ModelSearchRequest` and `ExperimentProposal`; produces model candidates, a governed `ModelSelectionDecision`, and updates `TrainingRunHandle` through the lifecycle protocol. Model providers discover metadata and compatibility; they do not decide experiment strategy or bypass approval policy.
 
 ### Closed-loop planner
 
