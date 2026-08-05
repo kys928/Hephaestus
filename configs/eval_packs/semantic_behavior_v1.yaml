@@ -1,0 +1,170 @@
+{
+  "pack_name": "semantic_behavior_v1",
+  "eval_pack_id": "semantic_behavior",
+  "version": "1.0.0",
+  "name": "Semantic and behavioral comparison pack",
+  "description": "Frozen offline probes for controlled baseline-versus-candidate behavioral comparisons.",
+  "created_at": "2026-08-05T00:00:00+00:00",
+  "frozen": true,
+  "content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+  "hash_type": "sha256-canonical-json-v1",
+  "source_ref": "configs/eval_packs/semantic_behavior_v1.yaml",
+  "mutation_policy": "new_version_required",
+  "stage_applicability": [
+    "smoke_test",
+    "early_pretraining",
+    "scale_up_pretraining",
+    "stabilization",
+    "continuation_repair",
+    "ranking_repair",
+    "wrapper_specialization"
+  ],
+  "expected_evidence": [
+    "eval_pack_id",
+    "eval_pack_version",
+    "content_hash",
+    "decoding_config",
+    "task_id",
+    "seed",
+    "recorded_output",
+    "evaluation_report_ref",
+    "sample_evidence_refs"
+  ],
+  "task_bundles": {
+    "generation": ["instruction_triplet", "planet_fact"],
+    "continuation": ["observatory_continuation"],
+    "structured": ["structured_planet_answer"],
+    "regression": ["anti_repetition", "brief_termination"]
+  },
+  "success_semantics": {
+    "improved": "Practical positive effect with consistent repeated evidence and no hard deterministic regression.",
+    "equivalent_within_evidence": "Observed deltas remain below the practical threshold.",
+    "mixed": "Material dimensions disagree or deterministic and judge evidence disagree."
+  },
+  "failure_semantics": {
+    "regressed": "A hard deterministic gate fails or a practical negative effect is observed.",
+    "inconclusive": "Evidence is missing, inconsistent, or too variable for a directional claim.",
+    "invalid_comparison": "Pack identity, integrity, or evaluation settings are incompatible."
+  },
+  "decoding_config": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "max_new_tokens": 96,
+    "seeds": [11, 29, 47]
+  },
+  "scoring_config": {
+    "minimum_practical_improvement": 0.05,
+    "minimum_direction_consistency": 0.67,
+    "moderate_variance_threshold": 0.06,
+    "high_variance_threshold": 0.12,
+    "judge_favorable_threshold": 0.75,
+    "judge_unfavorable_threshold": 0.4,
+    "formal_significance_claimed": false
+  },
+  "deterministic_gate_config": {
+    "hard_failure_blocks_improved": true,
+    "judge_may_override_hard_failure": false,
+    "missing_required_sample_passes": false
+  },
+  "generation_probes": [
+    {
+      "task_id": "instruction_triplet",
+      "prompt": "Reply with exactly: alpha beta gamma.",
+      "checks": [
+        {"name": "instruction_exact", "type": "exact_match", "expected": "alpha beta gamma.", "dimension": "instruction_adherence", "hard": true},
+        {"name": "instruction_length", "type": "max_words", "value": 3, "dimension": "excessive_length", "hard": true}
+      ]
+    },
+    {
+      "task_id": "planet_fact",
+      "prompt": "In one short sentence, identify Mars by its common nickname.",
+      "checks": [
+        {"name": "planet_relevance", "type": "contains_all", "terms": ["mars", "red planet"], "dimension": "relevance", "hard": false},
+        {"name": "planet_length", "type": "max_words", "value": 16, "dimension": "excessive_length", "hard": true},
+        {"name": "planet_termination", "type": "termination", "dimension": "termination", "hard": true},
+        {"name": "planet_coherence", "type": "surface_coherence", "dimension": "coherence", "hard": false}
+      ]
+    }
+  ],
+  "continuation_prompts": [
+    {
+      "task_id": "observatory_continuation",
+      "prompt": "The observatory lost power just as the storm arrived.",
+      "checks": [
+        {"name": "continuation_not_echo", "type": "continuation_not_echo_prompt", "dimension": "continuation", "hard": true},
+        {"name": "continuation_relevance", "type": "contains_all", "terms": ["lantern"], "dimension": "relevance", "hard": false},
+        {"name": "continuation_repetition", "type": "repetition", "ngram": 2, "max_fraction": 0.18, "dimension": "repetition", "hard": true},
+        {"name": "continuation_termination", "type": "termination", "dimension": "termination", "hard": true},
+        {"name": "continuation_coherence", "type": "surface_coherence", "dimension": "coherence", "hard": false}
+      ]
+    }
+  ],
+  "ranking_sets": [],
+  "regression_prompts": [],
+  "structure_tests": [
+    {
+      "task_id": "structured_planet_answer",
+      "prompt": "Return JSON with answer and confidence for: Which planet is called the Red Planet?",
+      "checks": [
+        {"name": "planet_json", "type": "json_object", "required_keys": ["answer", "confidence"], "required_types": {"answer": "string", "confidence": "number"}, "expected_values": {"answer": "Mars"}, "dimension": "malformed_structure", "hard": true},
+        {"name": "planet_json_length", "type": "max_words", "value": 8, "dimension": "excessive_length", "hard": true}
+      ]
+    }
+  ],
+  "repetition_checks": [
+    {
+      "task_id": "anti_repetition",
+      "prompt": "Explain in one sentence why repeated evidence increases confidence.",
+      "checks": [
+        {"name": "confidence_relevance", "type": "contains_all", "terms": ["evidence", "confidence"], "dimension": "relevance", "hard": false},
+        {"name": "anti_loop", "type": "repetition", "ngram": 2, "max_fraction": 0.15, "dimension": "repetition", "hard": true},
+        {"name": "anti_loop_length", "type": "max_words", "value": 28, "dimension": "excessive_length", "hard": true},
+        {"name": "anti_loop_termination", "type": "termination", "dimension": "termination", "hard": true}
+      ]
+    }
+  ],
+  "length_termination_checks": [
+    {
+      "task_id": "brief_termination",
+      "prompt": "State one benefit of rollback safety in at most twelve words.",
+      "checks": [
+        {"name": "brief_length", "type": "max_words", "value": 12, "dimension": "excessive_length", "hard": true},
+        {"name": "brief_termination", "type": "termination", "forbidden_endings": ["and", "because", "the"], "dimension": "termination", "hard": true},
+        {"name": "brief_coherence", "type": "surface_coherence", "dimension": "coherence", "hard": false}
+      ]
+    }
+  ],
+  "human_review_bundle_refs": ["inline://semantic_behavior_v1/blind-pairwise-rubric"],
+  "required_evidence": {
+    "comparison_runs": 2,
+    "seeds_per_task": 3
+  },
+  "required_metrics": ["probe_score", "toxicity"],
+  "supports_generation_signals": true,
+  "regression_bundles": {
+    "promotion": ["probe_score_gate", "toxicity_gate"],
+    "certification": ["probe_score_gate", "toxicity_gate"]
+  },
+  "certification_bundle": {
+    "required_metrics": ["probe_score", "toxicity"],
+    "required_bundle": "certification",
+    "min_stability_confidence": 0.9
+  },
+  "minimum_evidence": {
+    "promotion_runs": 1,
+    "stable_runs": 2,
+    "certification_runs": 3
+  },
+  "recheck_requirements": {
+    "required_for_certification": true,
+    "min_consistent_runs": 2
+  },
+  "repeatability_requirements": {
+    "repeatability_required": true,
+    "required_rechecks": 2,
+    "min_repeat_consistency": 0.67,
+    "variance_sensitivity": "high",
+    "certification_recheck_policy": "required_if_repeatability_unmet"
+  },
+  "stage_tolerances": {}
+}
