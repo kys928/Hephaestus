@@ -1,0 +1,36 @@
+name: Autonomous loop integration
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/hephaestus/**"
+      - "tests/**"
+      - "configs/**"
+      - ".github/workflows/autonomous-loop-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test runner
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Compile source
+        run: python -m compileall -q src/hephaestus hephaestus tests
+
+      - name: Run full test suite
+        run: python -m pytest -q
