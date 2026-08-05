@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 from hephaestus.config_loader import ConfigError, load_named_config
@@ -48,7 +50,33 @@ _ALLOWED_FIELDS = {
     "recheck_requirements",
     "repeatability_requirements",
     "stage_tolerances",
+    "task_bundles",
+    "success_semantics",
+    "failure_semantics",
+    "stage_applicability",
+    "expected_evidence",
 }
+
+
+def _verified_content_hash(payload: dict[str, object], pack_name: str) -> str | None:
+    claimed = str(payload.get("content_hash") or "").strip()
+    if not claimed:
+        return None
+    hash_type = str(payload.get("hash_type") or "").strip()
+    if hash_type != "sha256-canonical-json-v1":
+        raise ConfigError(
+            f"eval pack '{pack_name}' has content_hash but unsupported hash_type "
+            f"'{hash_type or 'missing'}'"
+        )
+    canonical = dict(payload)
+    canonical.pop("content_hash", None)
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    observed = hashlib.sha256(encoded).hexdigest()
+    if observed != claimed:
+        raise ConfigError(
+            f"eval pack '{pack_name}' content hash mismatch: expected {claimed}, observed {observed}"
+        )
+    return observed
 
 
 def _as_float_map(value: object, field_name: str, pack_name: str) -> dict[str, float]:
@@ -90,6 +118,8 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
     missing = [key for key in required if key not in payload]
     if missing:
         raise ConfigError(f"eval pack '{pack_name}' missing fields: {', '.join(missing)}")
+
+    verified_content_hash = _verified_content_hash(payload, pack_name)
 
     metrics = payload["required_metrics"]
     if not isinstance(metrics, list) or not metrics:
@@ -145,6 +175,23 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
         for stage_key, value in stage_tolerances_raw.items()
     }
 
+    metadata = dict(payload.get("metadata", {})) if isinstance(payload.get("metadata", {}), dict) else {}
+    metadata.update(
+        {
+            "task_bundles": dict(payload.get("task_bundles", {}))
+            if isinstance(payload.get("task_bundles", {}), dict)
+            else {},
+            "success_semantics": dict(payload.get("success_semantics", {}))
+            if isinstance(payload.get("success_semantics", {}), dict)
+            else {},
+            "failure_semantics": dict(payload.get("failure_semantics", {}))
+            if isinstance(payload.get("failure_semantics", {}), dict)
+            else {},
+            "stage_applicability": [str(item) for item in payload.get("stage_applicability", [])],
+            "expected_evidence": [str(item) for item in payload.get("expected_evidence", [])],
+        }
+    )
+
     normalized = EvalPack.normalize(
         {
             "eval_pack_id": payload.get("eval_pack_id", payload["pack_name"]),
@@ -171,7 +218,7 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
             "deterministic_gate_config": payload.get("deterministic_gate_config", {}),
             "required_evidence": payload.get("required_evidence", minimum),
             "stage_thresholds": payload.get("stage_thresholds", {}),
-            "metadata": payload.get("metadata", {}),
+            "metadata": metadata,
             "warnings": payload.get("warnings", []),
         },
         stage_name=None,
@@ -188,6 +235,7 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
         "frozen": normalized.frozen,
         "mutation_policy": normalized.mutation_policy,
         "content_hash": normalized.content_hash,
+        "content_hash_verified": bool(verified_content_hash),
         "hash_type": normalized.hash_type,
         "source_ref": normalized.source_ref,
         "required_metrics": [str(metric) for metric in metrics],
@@ -232,5 +280,10 @@ def load_eval_pack(pack_name: str, config_dir: Path = Path("configs")) -> dict[s
             "certification_recheck_policy": recheck_policy,
         },
         "stage_tolerances": stage_tolerances,
+        "task_bundles": dict(metadata["task_bundles"]),
+        "success_semantics": dict(metadata["success_semantics"]),
+        "failure_semantics": dict(metadata["failure_semantics"]),
+        "stage_applicability": list(metadata["stage_applicability"]),
+        "expected_evidence": list(metadata["expected_evidence"]),
         "eval_pack": normalized.to_dict(),
     }
