@@ -220,6 +220,10 @@ class ClosedLoopExperimentPlanner:
         validation = self.policy.validate_intervention(intervention)
         if validation:
             raise ExperimentPlanningError(";".join(validation))
+        if intervention.diagnosis_report_id != diagnosis.report_id:
+            raise ExperimentPlanningError("intervention_diagnosis_mismatch")
+        if self._diagnosis_requires_conservative_outcome(diagnosis):
+            raise ExperimentPlanningError("diagnosis_not_ready_for_discovery")
         evidence_refs = self._evidence_refs(diagnosis)
         problem = intervention.hypothesis
         dataset_request: DatasetSearchRequest | None = None
@@ -275,6 +279,9 @@ class ClosedLoopExperimentPlanner:
             raise ExperimentPlanningError("intervention_diagnosis_mismatch")
         if intervention.intervention_kind == "stop":
             raise ExperimentPlanningError("stop_is_a_recommendation_not_an_experiment")
+        diagnostic_only = intervention.intervention_kind in {"collect_more_evidence", "repair_evaluation"}
+        if self._diagnosis_requires_conservative_outcome(diagnosis) and not diagnostic_only:
+            raise ExperimentPlanningError("diagnosis_not_ready_for_training_experiment")
 
         baseline_ref = str(
             intervention.metadata.get("baseline_ref") or diagnosis.metadata.get("baseline_ref") or ""
@@ -333,7 +340,6 @@ class ClosedLoopExperimentPlanner:
         elif model_selection is not None:
             raise ExperimentPlanningError("model_selection_not_required_for_intervention")
 
-        diagnostic_only = intervention.intervention_kind in {"collect_more_evidence", "repair_evaluation"}
         training_constraints = dict(diagnosis.metadata.get("training_constraints", {}))
         training_constraints.update(dict(intervention.metadata.get("training_constraints", {})))
         training_constraints["training_required"] = not diagnostic_only
@@ -425,7 +431,12 @@ class ClosedLoopExperimentPlanner:
         hypothesis_evidence = {str(item) for item in hypothesis.supporting_evidence_refs}
         explicit_new = {str(item) for item in diagnosis.metadata.get("new_evidence_refs", [])}
         has_new_evidence = bool((hypothesis_evidence | explicit_new) - memory_evidence) and bool(memory_evidence)
-        known_dead_end = bool(matching_dead_ends) and not ignore_dead_end
+        lineage_status = str(diagnosis.metadata.get("lineage_status", ""))
+        unsafe_lineage = lineage_status in {"poisoned", "deprecated", "archived"}
+        safe_lineage_kinds = {"branch", "restart", "stop", "collect_more_evidence"}
+        known_dead_end = (
+            bool(matching_dead_ends) or (unsafe_lineage and kind not in safe_lineage_kinds)
+        ) and not ignore_dead_end
         completeness = self._evidence_completeness(diagnosis)
         baseline_quality = _clamp(
             diagnosis.metadata.get("baseline_quality", 0.7 if diagnosis.metadata.get("baseline_ref") else 0.0)
@@ -483,6 +494,7 @@ class ClosedLoopExperimentPlanner:
                 "known_dead_end_matches": _unique_strings(
                     [memory.get("memory_id", "") for memory in matching_dead_ends]
                 ),
+                "lineage_status": lineage_status or "unknown",
                 "new_evidence_overrides_dead_end": has_new_evidence,
                 "changed_variables": [primary],
                 "baseline_ref": diagnosis.metadata.get("baseline_ref"),
@@ -575,6 +587,17 @@ class ClosedLoopExperimentPlanner:
             "training_recipe": metadata.get("training_recipe_ref", "held_constant"),
         }
         controls.pop(primary, None)
+        if primary == "dataset_mixture":
+            controls["dataset_manifest"] = "held_constant_except_mixture_fields_and_new_manifest_identity"
+        if primary in {"learning_rate", "scheduler", "training_duration", "batch_construction"}:
+            controls["training_recipe"] = f"held_constant_except_{primary}"
+        if primary == "model_candidate":
+            controls["architecture"] = "varies_only_as_implied_by_selected_model_candidate"
+            controls["tokenizer"] = "held_constant_or_justified_as_unavoidable_model_compatibility_change"
+        if primary == "decoding_setting":
+            controls["baseline_decoding"] = "held_constant_except_selected_decoding_setting"
+        if primary == "evaluation_protocol":
+            controls["evaluation_reference"] = "frozen_baseline_retained_and_candidate_protocol_isolated"
         return controls
 
     @staticmethod

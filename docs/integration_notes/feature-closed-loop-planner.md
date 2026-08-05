@@ -102,7 +102,9 @@ Diagnosis adapters should populate these optional metadata references when avail
 - Invalid or multiple primary variables: proposal rejected.
 - Missing controls, success/failure criteria, or rollback: proposal rejected.
 - Material missing evidence: training-like interventions rejected; diagnostic proposal returned.
+- Inconclusive/blocked diagnosis or a blocking diagnosis issue: no discovery or training experiment.
 - Known dead end without new evidence: candidate rejected and reason preserved.
+- Poisoned/deprecated/archived lineage: continuation-like candidates rejected even when memory retrieval is unavailable.
 - Missing baseline without explicit justification: no experiment; `ExperimentPlanningError`.
 - Required dataset/model decision absent, inconclusive, blocked, or empty: no experiment.
 - Selection decision belongs to a different search request or carries a blocking issue: no experiment.

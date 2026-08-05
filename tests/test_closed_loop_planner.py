@@ -371,6 +371,36 @@ def test_incomplete_or_blocked_diagnosis_only_returns_diagnostic_work() -> None:
     assert interventions
     assert all(item.intervention_kind in {"collect_more_evidence", "repair_evaluation"} for item in interventions)
 
+    stale_training_intervention = _proposal(ClosedLoopExperimentPlanner(), _diagnosis(), "change_training_recipe")
+    with pytest.raises(ExperimentPlanningError, match="diagnosis_not_ready_for_training_experiment"):
+        planner.propose_experiment(diagnosis, stale_training_intervention, None, None)
+
+
+def test_poisoned_lineage_does_not_continue_training() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis(hypotheses=[_diagnosis().hypotheses[0]])
+    diagnosis.metadata["lineage_status"] = "poisoned"
+
+    interventions = list(planner.propose_interventions(diagnosis))
+
+    assert all(item.intervention_kind != "change_training_recipe" for item in interventions)
+    assert any(
+        reason == "known_dead_end_without_new_evidence"
+        for item in interventions
+        for reason in item.alternatives_rejected.values()
+    )
+
+
+def test_controls_describe_primary_variable_exceptions_without_contradiction() -> None:
+    planner = ClosedLoopExperimentPlanner()
+    diagnosis = _diagnosis()
+
+    recipe = _proposal(planner, diagnosis, "change_training_recipe")
+    dataset = _proposal(planner, diagnosis, "replace_or_mix_dataset")
+
+    assert recipe.controlled_variables["training_recipe"] == "held_constant_except_learning_rate"
+    assert "except_mixture" in str(dataset.controlled_variables["dataset_manifest"])
+
 
 def test_planner_conforms_to_shared_service_protocol() -> None:
     assert isinstance(ClosedLoopExperimentPlanner(), ExperimentPlanningService)
