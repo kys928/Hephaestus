@@ -1,0 +1,32 @@
+name: Production autonomy integration
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install core and test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install '.[test]'
+      - name: Compile
+        run: python -m compileall -q src/hephaestus tests
+      - name: Run composed suite
+        run: pytest -q
+      - name: Verify core imports without optional ML dependencies
+        run: python -c "import hephaestus; from hephaestus.generation import EvaluationGenerationService, TransformersCausalLMGenerationBackend; print(TransformersCausalLMGenerationBackend.capability())"

@@ -55,6 +55,7 @@ class DatasetAcquisitionApproval:
     selection_decision_id: str
     approved_candidate_ids: tuple[str, ...]
     approval_refs: tuple[str, ...]
+    approved_requirements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

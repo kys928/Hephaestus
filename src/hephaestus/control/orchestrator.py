@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
@@ -50,6 +51,12 @@ from hephaestus.state.memory_store import MemoryStore
 from hephaestus.state.query import Query
 from hephaestus.state.report_store import ReportStore
 from hephaestus.state.run_store import RunStore
+
+if TYPE_CHECKING:
+    from hephaestus.control.staged_autonomous import (
+        GovernedStagedOrchestrator,
+        StagedAutonomousDependencies,
+    )
 
 
 def _now() -> str:
@@ -660,7 +667,27 @@ def build_orchestrator(
     promotion_policy: PromotionPolicy | None = None,
     approval_policy: ApprovalPolicy | None = None,
     operator_responses: dict[str, dict[str, str]] | None = None,
-) -> Orchestrator:
+    mode: str = "legacy",
+    staged_dependencies: "StagedAutonomousDependencies | None" = None,
+) -> "Orchestrator | GovernedStagedOrchestrator":
+    if mode == "governed_autonomous":
+        from hephaestus.control.staged_autonomous import (
+            StagedAutonomousDependencies,
+            build_staged_autonomous_orchestrator,
+        )
+
+        if not isinstance(staged_dependencies, StagedAutonomousDependencies):
+            raise ValueError(
+                "governed_autonomous mode requires explicit StagedAutonomousDependencies"
+            )
+        return build_staged_autonomous_orchestrator(
+            run_id=run_id,
+            lineage_id=lineage_id,
+            stage_name=stage_name,
+            dependencies=staged_dependencies,
+        )
+    if mode != "legacy":
+        raise ValueError(f"unknown orchestration mode: {mode}")
     context = ControlContext(run_id=run_id, lineage_id=lineage_id, stage_name=stage_name, artifact_root=f"artifacts/{run_id}")
     return Orchestrator(
         coordinator=DefaultSpineCoordinator(
