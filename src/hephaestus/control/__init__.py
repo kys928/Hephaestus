@@ -11,6 +11,7 @@ from .autonomous_experiment import (
     TruthNormalizingEvidenceAdapter,
     normalize_diagnostic_truth_values,
 )
+from .production_autonomy import ProductionAutonomyCoordinator
 from .staged_autonomous import (
     GovernedStagedOrchestrator,
     build_staged_autonomous_orchestrator,
@@ -39,6 +40,7 @@ __all__ = [
     "InMemoryIntegrationRecordSink",
     "IntegratedDiagnosisService",
     "PlanningBundle",
+    "ProductionAutonomyCoordinator",
     "TruthNormalizingEvidenceAdapter",
     "normalize_diagnostic_truth_values",
     "GOVERNED_AUTONOMOUS_MODE",
