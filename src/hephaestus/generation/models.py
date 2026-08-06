@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from hephaestus.schemas.contract_common import ContractIssue
+from hephaestus.schemas.experiment_contract import TrainingRunHandle
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,16 @@ class GeneratedText:
     prompt_tokens: int | None = None
     generated_tokens: int | None = None
     metadata: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.output.strip():
+            raise ValueError("generated output must not be empty")
+        if self.finish_reason not in {"completed", "eos", "length"}:
+            raise ValueError(f"unsupported generation finish reason: {self.finish_reason}")
+        if self.prompt_tokens is not None and self.prompt_tokens < 0:
+            raise ValueError("prompt_tokens must be non-negative")
+        if self.generated_tokens is not None and self.generated_tokens < 0:
+            raise ValueError("generated_tokens must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,4 +127,4 @@ class GenerationReport:
 @dataclass(frozen=True, slots=True)
 class GenerationResult:
     report: GenerationReport
-    run_handle: object
+    run_handle: TrainingRunHandle
