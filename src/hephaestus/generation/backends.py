@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol, Sequence
 
+from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
+
 from .models import GeneratedText, GenerationTask
 
 
@@ -68,10 +70,10 @@ class DeterministicFakeGenerationBackend:
 
 @dataclass(slots=True)
 class TransformersCausalLMGenerationBackend:
-    """Lazy optional local-checkpoint inference backend.
+    """Lazy optional inference from a finalized local training checkpoint.
 
-    Model and tokenizer files must already exist locally. This adapter never enables
-    remote code and never performs implicit network acquisition.
+    Model and tokenizer files must already exist inside the same verified
+    checkpoint. This adapter never enables remote code or implicit network access.
     """
 
     device: str = "cpu"
@@ -91,6 +93,7 @@ class TransformersCausalLMGenerationBackend:
             "missing_packages": missing,
             "remote_code": False,
             "network_acquisition": False,
+            "checkpoint_manifest_required": True,
         }
 
     def generate_batch(
@@ -124,6 +127,18 @@ class TransformersCausalLMGenerationBackend:
         if not model_ref.is_dir() or not tokenizer_ref.is_dir():
             raise GenerationBackendError(
                 "generation_artifact_missing", "Model or tokenizer artifact directory is missing."
+            )
+        checkpoint_root = model_ref.parent
+        if tokenizer_ref.parent != checkpoint_root:
+            raise GenerationBackendError(
+                "generation_artifact_boundary_mismatch",
+                "Model and tokenizer artifacts must belong to the same finalized checkpoint.",
+            )
+        valid, manifest_evidence = validate_checkpoint_manifest(checkpoint_root)
+        if not valid:
+            raise GenerationBackendError(
+                "checkpoint_integrity_failure",
+                f"Generation checkpoint verification failed: {manifest_evidence}",
             )
 
         import torch  # type: ignore[import-not-found]
@@ -167,8 +182,8 @@ class TransformersCausalLMGenerationBackend:
         do_sample = temperature > 0.0
         results: list[GeneratedText] = []
 
-        # Group by seed so batching does not share mutable RNG state across seeds.
-        # Frozen semantic_behavior_v1 is greedy, making task order immaterial.
+        # Sampling requests with different seeds are isolated. Greedy requests may
+        # batch safely because the seed does not affect token selection.
         for start in range(0, len(tasks), max(1, self.batch_size)):
             batch = list(tasks[start : start + max(1, self.batch_size)])
             if not batch:
@@ -197,16 +212,17 @@ class TransformersCausalLMGenerationBackend:
             )
             encoded = {key: value.to(self.device) for key, value in encoded.items()}
             input_width = int(encoded["input_ids"].shape[1])
+            generation_kwargs: dict[str, object] = {
+                "do_sample": do_sample,
+                "max_new_tokens": max_new_tokens,
+                "pad_token_id": tokenizer.pad_token_id,
+                "eos_token_id": tokenizer.eos_token_id,
+            }
+            if do_sample:
+                generation_kwargs["temperature"] = temperature
+                generation_kwargs["top_p"] = top_p
             with torch.inference_mode():
-                generated = model.generate(
-                    **encoded,
-                    do_sample=do_sample,
-                    temperature=temperature if do_sample else None,
-                    top_p=top_p if do_sample else None,
-                    max_new_tokens=max_new_tokens,
-                    pad_token_id=tokenizer.pad_token_id,
-                    eos_token_id=tokenizer.eos_token_id,
-                )
+                generated = model.generate(**encoded, **generation_kwargs)
             for row, task in enumerate(batch):
                 continuation = generated[row, input_width:]
                 output = tokenizer.decode(continuation, skip_special_tokens=True).strip()
@@ -216,7 +232,12 @@ class TransformersCausalLMGenerationBackend:
                         finish_reason="completed",
                         prompt_tokens=int(encoded["attention_mask"][row].sum().item()),
                         generated_tokens=int(continuation.shape[0]),
-                        metadata={"seed": task.seed, "device": self.device, "dtype": self.dtype},
+                        metadata={
+                            "seed": task.seed,
+                            "device": self.device,
+                            "dtype": self.dtype,
+                            "checkpoint_manifest_hash": manifest_evidence,
+                        },
                     )
                 )
         return results
