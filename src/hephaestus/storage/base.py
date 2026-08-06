@@ -62,6 +62,7 @@ class LockLease:
     owner: str
     acquired_at: datetime
     expires_at: datetime
+    lease_token: str | None = None
 
 
 class DistributedLockProvider(Protocol):

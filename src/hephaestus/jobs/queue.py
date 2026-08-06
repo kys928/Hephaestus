@@ -85,6 +85,29 @@ class JobQueue(Protocol):
     ) -> JobRecord: ...
 
 
+class DurableJobQueue(JobQueue, Protocol):
+    """Extended boundary for persistent queues with recovery and dead letter."""
+
+    def ready(self) -> bool: ...
+
+    def schema_version(self) -> int: ...
+
+    def recover_expired_leases(
+        self, *, now: datetime | None = None
+    ) -> list[JobRecord]: ...
+
+    def retry(self, job_id: str, *, now: datetime | None = None) -> JobRecord: ...
+
+    def replay_dead_letter(
+        self,
+        job_id: str,
+        *,
+        actor: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> JobRecord: ...
+
+
 def _timestamp(now: datetime | None) -> datetime:
     value = now or datetime.now(timezone.utc)
     if value.tzinfo is None or value.utcoffset() is None:

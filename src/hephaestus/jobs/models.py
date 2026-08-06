@@ -15,6 +15,7 @@ class JobStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+    DEAD_LETTER = "dead_letter"
 
 
 TERMINAL_JOB_STATUSES = {
@@ -22,6 +23,7 @@ TERMINAL_JOB_STATUSES = {
     JobStatus.FAILED,
     JobStatus.CANCELLED,
     JobStatus.EXPIRED,
+    JobStatus.DEAD_LETTER,
 }
 
 
@@ -44,6 +46,13 @@ class JobRecord:
     result_ref: str | None = None
     error_ref: str | None = None
     cancellation_requested: bool = False
+    cancellation_acknowledged: bool = False
+    lease_token: str | None = None
+    lease_expiration_count: int = 0
+    maximum_attempts: int = 3
+    dead_letter_reason: str | None = None
+    dead_lettered_at: datetime | None = None
+    replay_count: int = 0
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -54,6 +63,7 @@ class JobRecord:
             "lease_expires_at",
             "started_at",
             "finished_at",
+            "dead_lettered_at",
         ):
             value = payload[key]
             payload[key] = value.isoformat() if isinstance(value, datetime) else None
