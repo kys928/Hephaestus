@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hephaestus-research-engineering"
+version = "0.1.0"
+description = "Audit-first infrastructure and control adapters for Hephaestus"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+s3 = ["boto3>=1.35,<2"]
+aws-secrets = ["boto3>=1.35,<2"]
+telemetry = ["opentelemetry-api>=1.27,<2", "opentelemetry-sdk>=1.27,<2"]
+test = ["pytest>=8,<9"]
+
+[project.scripts]
+hephaestus-infrastructure = "hephaestus.infrastructure.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["hephaestus*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
