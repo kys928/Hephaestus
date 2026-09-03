@@ -5,10 +5,15 @@ on:
     branches: [feature/first-scientific-manifest]
     paths:
       - .github/workflows/runpod-volume-inventory.yml
+      - scripts/runpod_volume_inventory.py
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: runpod-scientific-volume-inventory
+  cancel-in-progress: true
 
 jobs:
   inventory:
