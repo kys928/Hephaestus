@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/runpod-volume-inventory.yml
       - scripts/runpod_volume_inventory.py
+      - scripts/runpod_verify_scientific_state.py
   workflow_dispatch:
 
 permissions:
@@ -33,15 +34,19 @@ jobs:
           python-version: '3.12'
       - name: Install S3 client
         run: python -m pip install 'boto3>=1.35,<2'
-      - name: Inventory scientific artifacts
+      - name: Inventory scientific namespaces
         run: python scripts/runpod_volume_inventory.py
-      - name: Upload inventory evidence
+      - name: Verify artifact bytes and reconstruct first experiment bindings
+        run: python scripts/runpod_verify_scientific_state.py
+      - name: Upload inventory and verification evidence
         uses: actions/upload-artifact@v4
         with:
-          name: runpod-volume-inventory
+          name: runpod-scientific-state
           path: |
             volume_inventory.json
             full_object_index.json
             candidate_paths.txt
+            artifact_verification.json
+            first_scientific_experiment_reconstruction.json
           if-no-files-found: error
           retention-days: 7
