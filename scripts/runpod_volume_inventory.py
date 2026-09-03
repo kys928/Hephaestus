@@ -13,22 +13,20 @@ import boto3
 from botocore.config import Config
 
 
-JUNK_PREFIXES = (
-    ".cache/pip/",
-    ".cache/uv/",
-    ".cache/torch/",
-    ".cache/triton/",
+SKIP_TOP_LEVEL_PREFIXES = {
+    ".cache/",
     ".local/",
     ".npm/",
     ".cargo/",
     ".rustup/",
     ".conda/",
+    ".config/",
     "tmp/",
     "temp/",
-    "var/cache/",
     "usr/",
-    "opt/conda/",
-)
+    "opt/",
+    "var/",
+}
 JUNK_PARTS = {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "site-packages", "node_modules"}
 DATA_EXTENSIONS = {".jsonl", ".parquet", ".arrow", ".csv", ".tsv", ".txt", ".json", ".bin"}
 MODEL_FILES = {
@@ -74,8 +72,6 @@ def _required(name: str) -> str:
 
 def _junk_reason(key: str) -> str | None:
     lower = key.lower().lstrip("/")
-    if lower.startswith(JUNK_PREFIXES):
-        return "environment_cache"
     parts = {part.lower() for part in PurePosixPath(lower).parts}
     if parts & JUNK_PARTS:
         return "environment_tree"
@@ -151,66 +147,85 @@ def main() -> None:
     client.head_bucket(Bucket=bucket)
 
     paginator = client.get_paginator("list_objects_v2")
-    all_objects: list[dict[str, object]] = []
+    root_objects: list[dict[str, object]] = []
+    top_level_prefixes: set[str] = set()
+    for page in paginator.paginate(Bucket=bucket, Delimiter="/", PaginationConfig={"PageSize": 1000}):
+        root_objects.extend(page.get("Contents", []) or [])
+        top_level_prefixes.update(str(item.get("Prefix", "")) for item in (page.get("CommonPrefixes") or []))
+
+    skipped_prefixes = sorted(prefix for prefix in top_level_prefixes if prefix.lower() in SKIP_TOP_LEVEL_PREFIXES)
+    scanned_prefixes = sorted(prefix for prefix in top_level_prefixes if prefix.lower() not in SKIP_TOP_LEVEL_PREFIXES)
+
+    objects_to_process: list[dict[str, object]] = list(root_objects)
+    for prefix in scanned_prefixes:
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix, PaginationConfig={"PageSize": 1000}):
+            objects_to_process.extend(page.get("Contents", []) or [])
+
+    scanned_objects: list[dict[str, object]] = []
     candidates: list[dict[str, object]] = []
     ignored = Counter()
     categories = Counter()
     prefix_bytes: dict[str, int] = defaultdict(int)
     prefix_counts = Counter()
 
-    for page in paginator.paginate(Bucket=bucket, PaginationConfig={"PageSize": 1000}):
-        for item in page.get("Contents", []) or []:
-            key = str(item.get("Key", ""))
-            size = int(item.get("Size", 0))
-            last_modified = item.get("LastModified")
-            timestamp = last_modified.isoformat() if last_modified is not None else None
-            root_prefix = key.split("/", 1)[0] if "/" in key else "<root>"
-            prefix_bytes[root_prefix] += size
-            prefix_counts[root_prefix] += 1
-            row = {"key": key, "size": size, "last_modified": timestamp, "etag": str(item.get("ETag", "")).strip('"') or None}
-            all_objects.append(row)
+    seen: set[str] = set()
+    for item in objects_to_process:
+        key = str(item.get("Key", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        size = int(item.get("Size", 0))
+        last_modified = item.get("LastModified")
+        timestamp = last_modified.isoformat() if last_modified is not None else None
+        root_prefix = key.split("/", 1)[0] if "/" in key else "<root>"
+        prefix_bytes[root_prefix] += size
+        prefix_counts[root_prefix] += 1
+        row = {"key": key, "size": size, "last_modified": timestamp, "etag": str(item.get("ETag", "")).strip('"') or None}
+        scanned_objects.append(row)
 
-            reason = _junk_reason(key)
-            if reason:
-                ignored[reason] += 1
-                continue
-            category = _classify(key)
-            if category is None:
-                ignored["unclassified_non_scientific"] += 1
-                continue
+        reason = _junk_reason(key)
+        if reason:
+            ignored[reason] += 1
+            continue
+        category = _classify(key)
+        if category is None:
+            ignored["unclassified_non_scientific"] += 1
+            continue
 
-            categories[category] += 1
-            try:
-                head = client.head_object(Bucket=bucket, Key=key)
-            except Exception as exc:
-                head = {"head_error": type(exc).__name__}
-            candidate = {
-                **row,
-                "category": category,
-                "content_type": head.get("ContentType"),
-                "metadata": head.get("Metadata") if isinstance(head.get("Metadata"), dict) else {},
-                "storage_class": head.get("StorageClass"),
-                "checksum_sha256": head.get("ChecksumSHA256"),
-                "json_preview": _safe_json_preview(client, bucket, key, size),
-            }
-            candidates.append(candidate)
+        categories[category] += 1
+        try:
+            head = client.head_object(Bucket=bucket, Key=key)
+        except Exception as exc:
+            head = {"head_error": type(exc).__name__}
+        candidate = {
+            **row,
+            "category": category,
+            "content_type": head.get("ContentType"),
+            "metadata": head.get("Metadata") if isinstance(head.get("Metadata"), dict) else {},
+            "storage_class": head.get("StorageClass"),
+            "checksum_sha256": head.get("ChecksumSHA256"),
+            "json_preview": _safe_json_preview(client, bucket, key, size),
+        }
+        candidates.append(candidate)
 
-    all_objects.sort(key=lambda x: str(x["key"]))
+    scanned_objects.sort(key=lambda x: str(x["key"]))
     candidates.sort(key=lambda x: (str(x["category"]), str(x["key"])))
     summary = {
-        "inventory_version": "runpod-volume-inventory.v1",
+        "inventory_version": "runpod-volume-inventory.v2",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "volume_id": bucket,
         "datacenter_id": region,
         "endpoint": endpoint,
         "read_only": True,
-        "total_objects": len(all_objects),
-        "total_bytes": sum(int(x["size"]) for x in all_objects),
+        "skipped_top_level_prefixes": skipped_prefixes,
+        "scanned_top_level_prefixes": scanned_prefixes,
+        "scanned_objects": len(scanned_objects),
+        "scanned_bytes": sum(int(x["size"]) for x in scanned_objects),
         "candidate_objects": len(candidates),
         "candidate_bytes": sum(int(x["size"]) for x in candidates),
         "category_counts": dict(sorted(categories.items())),
-        "ignored_counts": dict(sorted(ignored.items())),
-        "top_level_prefixes": [
+        "ignored_counts_within_scanned_namespaces": dict(sorted(ignored.items())),
+        "scanned_prefix_summary": [
             {"prefix": prefix, "objects": prefix_counts[prefix], "bytes": prefix_bytes[prefix]}
             for prefix in sorted(prefix_counts, key=lambda p: (-prefix_bytes[p], p))
         ],
@@ -219,14 +234,14 @@ def main() -> None:
     with open("volume_inventory.json", "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, sort_keys=True)
     with open("full_object_index.json", "w", encoding="utf-8") as fh:
-        json.dump({"summary": summary, "objects": all_objects}, fh, indent=2, sort_keys=True)
+        json.dump({"summary": summary, "objects": scanned_objects}, fh, indent=2, sort_keys=True)
     with open("candidate_paths.txt", "w", encoding="utf-8") as fh:
-        for item in candidates:
-            fh.write(f"{item['category']}\t{item['size']}\t{item['key']}\n")
+        for candidate in candidates:
+            fh.write(f"{candidate['category']}\t{candidate['size']}\t{candidate['key']}\n")
 
     print(json.dumps(summary, sort_keys=True))
-    for item in candidates[:250]:
-        print(json.dumps({k: item[k] for k in ("category", "key", "size", "last_modified", "etag", "json_preview")}, sort_keys=True))
+    for candidate in candidates[:300]:
+        print(json.dumps({k: candidate[k] for k in ("category", "key", "size", "last_modified", "etag", "json_preview")}, sort_keys=True))
 
 
 if __name__ == "__main__":
