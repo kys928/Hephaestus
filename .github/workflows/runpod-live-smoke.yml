@@ -1,0 +1,69 @@
+name: RunPod live smoke
+
+on:
+  push:
+    branches: [feature/runpod-live-adapters]
+    paths:
+      - .github/workflows/runpod-live-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runpod-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  live-smoke:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Validate repository RunPod contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          required = [
+              'RUNPOD_API_KEY',
+              'RUNPOD_S3_ACCESS_KEY_ID',
+              'RUNPOD_S3_SECRET_ACCESS_KEY',
+              'RUNPOD_DATACENTER_ID',
+              'RUNPOD_NETWORK_VOLUME_ID',
+              'RUNPOD_S3_ENDPOINT_URL',
+              'RUNPOD_API_BASE_URL',
+          ]
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit('Missing repository configuration: ' + ', '.join(missing))
+          expected = {
+              'RUNPOD_DATACENTER_ID': 'EU-CZ-1',
+              'RUNPOD_NETWORK_VOLUME_ID': 'cviwpryzao',
+              'RUNPOD_S3_ENDPOINT_URL': 'https://s3api-eu-cz-1.runpod.io/',
+              'RUNPOD_API_BASE_URL': 'https://rest.runpod.io/v1',
+          }
+          mismatched = [name for name, value in expected.items() if os.environ[name] != value]
+          if mismatched:
+              raise SystemExit('Unexpected repository variable values: ' + ', '.join(mismatched))
+          print('RunPod repository contract present and non-secret variables match expected values.')
+          PY
+      - name: Install RunPod adapter dependencies
+        run: python -m pip install --upgrade pip && python -m pip install '.[s3,test]'
+      - name: Run RunPod adapter unit tests
+        run: pytest -q tests/test_runpod_provider.py
+      - name: List Network Volume and create/delete disposable CPU Pod
+        run: python -m hephaestus.providers.runpod.smoke --max-items 100
