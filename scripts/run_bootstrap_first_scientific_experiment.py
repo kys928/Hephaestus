@@ -11,8 +11,19 @@ immutable identity.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+from pathlib import Path
+from types import ModuleType
 
-from scripts import bootstrap_first_scientific_experiment as bootstrap
+
+def _load_bootstrap() -> ModuleType:
+    path = Path(__file__).with_name("bootstrap_first_scientific_experiment.py")
+    spec = importlib.util.spec_from_file_location("hephaestus_first_scientific_bootstrap", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load bootstrap module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _verify_key(self, key: str, digest: str, byte_size: int) -> bool:
@@ -42,6 +53,7 @@ def _verify_key(self, key: str, digest: str, byte_size: int) -> bool:
 
 
 def main() -> None:
+    bootstrap = _load_bootstrap()
     bootstrap.RunPodContentAddressedStore._verify_key = _verify_key
     bootstrap.main()
 
