@@ -1,4 +1,5 @@
 name: Second controlled experiment
+# Attempt-aware execution: stale Network Volume sentinels are archived before each launch.
 
 on:
   push:
