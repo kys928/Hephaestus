@@ -1,0 +1,103 @@
+{
+  "evidence_records": [
+    {
+      "confidence": 0.95,
+      "evidence_kind": "training_metrics",
+      "measurements": {
+        "base_learning_rate": 0.0005,
+        "configured_max_steps": 100,
+        "final_epoch_fraction": 0.014577790735813988,
+        "final_learning_rate": 0.0,
+        "first_loss": 8.864677429199219,
+        "first_step": 5,
+        "last_loss": 7.302044868469238,
+        "last_step": 100,
+        "loss_materially_lower": true,
+        "maximum_gradient_norm": 2.80792236328125,
+        "metric_points": 20,
+        "minimum_gradient_norm": 0.7821573615074158,
+        "reached_configured_step_budget": true,
+        "scheduler": "linear",
+        "scheduler_conforms_to_recorded_shape": true,
+        "tail_loss_slope_per_step": 0.0019888196672712055,
+        "tail_point_count": 6,
+        "tail_still_improving": false,
+        "tiny_epoch_fraction": true,
+        "total_loss_drop": 1.5626325607299805,
+        "total_loss_drop_fraction": 0.1762763025739493,
+        "warmup_steps": 10
+      },
+      "numerically_stable": true,
+      "optimizer_stable": true,
+      "scheduler_misconfigured": false,
+      "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+      "summary": "Measured the complete persisted optimization trace for budget exhaustion, learning-curve direction, numerical stability, and scheduler conformance.",
+      "training_budget_exhausted": false,
+      "undertraining_detected": false
+    },
+    {
+      "confidence": 0.95,
+      "data_coverage_gap": true,
+      "data_coverage_verified": false,
+      "evidence_kind": "data_audit",
+      "measurements": {
+        "exact_frozen_eval_prompt_hits": 0,
+        "instruction_cue_rows": 29,
+        "prompt_target_rows": 0,
+        "requires_instruction_behavior": true,
+        "requires_length_control": true,
+        "requires_structured_behavior": true,
+        "rows_scanned": 54878,
+        "structured_target_rows": 0,
+        "supervised_instruction_coverage_present": false,
+        "supervised_structure_coverage_present": false,
+        "text_rows": 54878
+      },
+      "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+      "summary": "Scanned the complete processed training dataset for structural coverage of the frozen semantic_behavior_v1 instruction, structure, and constraint tasks."
+    }
+  ],
+  "measurements": {
+    "dataset_task_coverage": {
+      "exact_frozen_eval_prompt_hits": 0,
+      "instruction_cue_rows": 29,
+      "prompt_target_rows": 0,
+      "requires_instruction_behavior": true,
+      "requires_length_control": true,
+      "requires_structured_behavior": true,
+      "rows_scanned": 54878,
+      "structured_target_rows": 0,
+      "supervised_instruction_coverage_present": false,
+      "supervised_structure_coverage_present": false,
+      "text_rows": 54878
+    },
+    "training_dynamics": {
+      "base_learning_rate": 0.0005,
+      "configured_max_steps": 100,
+      "final_epoch_fraction": 0.014577790735813988,
+      "final_learning_rate": 0.0,
+      "first_loss": 8.864677429199219,
+      "first_step": 5,
+      "last_loss": 7.302044868469238,
+      "last_step": 100,
+      "loss_materially_lower": true,
+      "maximum_gradient_norm": 2.80792236328125,
+      "metric_points": 20,
+      "minimum_gradient_norm": 0.7821573615074158,
+      "reached_configured_step_budget": true,
+      "scheduler": "linear",
+      "scheduler_conforms_to_recorded_shape": true,
+      "tail_loss_slope_per_step": 0.0019888196672712055,
+      "tail_point_count": 6,
+      "tail_still_improving": false,
+      "tiny_epoch_fraction": true,
+      "total_loss_drop": 1.5626325607299805,
+      "total_loss_drop_fraction": 0.1762763025739493,
+      "warmup_steps": 10
+    }
+  },
+  "unresolved_questions": [
+    "model-family limitation requires a controlled model-family comparison",
+    "overfitting requires held-out train/eval-gap evidence"
+  ]
+}
