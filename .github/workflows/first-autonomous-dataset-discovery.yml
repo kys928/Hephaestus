@@ -1,0 +1,54 @@
+name: First autonomous dataset discovery
+
+on:
+  push:
+    branches:
+      - integration/first-autonomous-dataset-discovery
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-audit-select-plan:
+    runs-on: ubuntu-latest
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install discovery dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -e .
+          'pytest>=8,<9'
+          'boto3>=1.35,<2'
+          'tokenizers>=0.20,<1'
+      - name: Verify discovery, selection, provider, and planner boundaries
+        run: >-
+          pytest -q
+          tests/test_autonomous_data_discovery.py
+          tests/test_huggingface_dataset_acquisition.py
+          tests/test_closed_loop_planner.py
+          tests/test_resolved_evidence_planner.py
+      - name: Compile live discovery driver
+        run: python -m py_compile scripts/run_first_autonomous_dataset_discovery.py
+      - name: Discover, audit, select, then plan
+        run: python scripts/run_first_autonomous_dataset_discovery.py
+      - name: Upload discovery proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-autonomous-dataset-discovery
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            first_autonomous_dataset_discovery.json
+            first_autonomous_dataset_candidates.json
+            first_autonomous_dataset_selection.json
+            first_autonomous_dataset_experiment.json
