@@ -1,0 +1,651 @@
+{
+  "diagnosis": {
+    "confidence": 0.825,
+    "contract_version": "autonomous-experiment.v1",
+    "hypotheses": [
+      {
+        "confidence": 0.825,
+        "contradicting_evidence_refs": [],
+        "failure_domain": "data_coverage",
+        "hypothesis_id": "hyp-7e786c88f78ff621",
+        "metadata": {
+          "causation_claimed": false,
+          "distinct_contradicting_sources": 0,
+          "distinct_supporting_sources": 1,
+          "eval_integrity_confidence_cap_applied": false,
+          "statement_type": "hypothesis"
+        },
+        "recommended_intervention_kinds": [
+          "replace_or_mix_dataset",
+          "collect_more_evidence"
+        ],
+        "required_tests": [
+          "measure capability coverage against manifest domains"
+        ],
+        "summary": "Explicit coverage evidence indicates a possible data-coverage gap.",
+        "supporting_evidence_refs": [
+          "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+        ]
+      }
+    ],
+    "issues": [],
+    "leading_hypothesis_id": "hyp-7e786c88f78ff621",
+    "lineage_id": "lineage-first-scientific",
+    "metadata": {
+      "architecture_ref": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "baseline_justification": "The failed run is the immutable matched baseline. A follow-up must retain the same random initialization, tokenizer, evaluation pack, decoding settings, and recipe except for the single Planner-selected primary variable.",
+      "baseline_quality": 0.95,
+      "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+      "capability_targets": [
+        "instruction adherence",
+        "structured JSON response",
+        "bounded response length",
+        "termination",
+        "non-repetition",
+        "causal-LM continuation"
+      ],
+      "confidence_meaning": "support for the ranked hypothesis, not causal certainty",
+      "dataset_manifest_ref": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "decoding_ref": "generation-settings-2ba1dd1322d04d4925c36ac4",
+      "deterministic_layer_authoritative": true,
+      "diagnostic_order_preserved": true,
+      "epistemic_distinctions": {
+        "confidence": "bounded support from source evidence after contradictions and policy caps",
+        "hypothesis": "ranked possible explanation that does not assert causation",
+        "inference": "deterministic rule match between recorded signals and a finite failure domain",
+        "observation": "normalized content explicitly present in a source record",
+        "recommendation": "diagnostic test or intervention kind proposed for later review, not execution"
+      },
+      "eval_pack_ref": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+      "lineage_trust_level": "verified",
+      "new_evidence_refs": [
+        "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "random_seed": 1729,
+      "recommendations_executed": false,
+      "required_domains": [
+        "general language",
+        "instruction following"
+      ],
+      "required_formats": [
+        "causal_lm_text",
+        "instruction_response",
+        "structured_json"
+      ],
+      "required_languages": [
+        "en"
+      ],
+      "resolved_intervention_evidence": [
+        "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "resolved_intervention_kinds": [
+        "collect_more_evidence"
+      ],
+      "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "training_constraints": {
+        "batch_size": 8,
+        "context_length": 256,
+        "learning_rate": 0.0005,
+        "max_steps": 100,
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "scheduler": "linear",
+        "seed": 1729,
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "warmup_steps": 10
+      },
+      "training_recipe_ref": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+    },
+    "missing_evidence": [],
+    "observations": [
+      {
+        "confidence": 0.7071067811865476,
+        "evidence_kind": "eval_report",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "decoding_verified",
+            "eval_integrity_verified"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-55137ce93b4cfacb",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "summary": "Frozen semantic_behavior_v1 comparison recorded a verified regression."
+      },
+      {
+        "confidence": 0.95,
+        "evidence_kind": "data_audit",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "data_coverage_gap"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-57e6e9a5719bc48e",
+        "severity": "major",
+        "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+        "summary": "Scanned the complete processed training dataset for structural coverage of the frozen semantic_behavior_v1 instruction, structure, and constraint tasks."
+      },
+      {
+        "confidence": 0.8,
+        "evidence_kind": "checkpoint_evidence",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "checkpoint_verified"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-58746f0bf906d257",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "summary": "checkpoint_evidence evidence recorded"
+      },
+      {
+        "confidence": 0.95,
+        "evidence_kind": "dataset_manifest",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "tokenizer_compatible"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-6c1b22d5b0d45804",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "summary": "dataset_manifest evidence recorded"
+      },
+      {
+        "confidence": 0.8,
+        "evidence_kind": "explicit_check",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "architecture_compatible",
+            "decoding_verified"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-8d352c97f9bf808b",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "summary": "explicit_check evidence recorded"
+      },
+      {
+        "confidence": 0.8,
+        "evidence_kind": "training_metrics",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "numerically_stable"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-c15e31ebf04f4e67",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "summary": "training_metrics evidence recorded"
+      },
+      {
+        "confidence": 0.8,
+        "evidence_kind": "run_record",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "runtime_healthy"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-c4931c8560348a16",
+        "severity": "major",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "summary": "run_record evidence recorded"
+      },
+      {
+        "confidence": 0.95,
+        "evidence_kind": "training_metrics",
+        "metadata": {
+          "normalized": true,
+          "signals": [
+            "numerically_stable",
+            "optimizer_stable"
+          ],
+          "statement_type": "observation"
+        },
+        "observation_id": "obs-ee021efac22f9e80",
+        "severity": "major",
+        "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "summary": "Measured the complete persisted optimization trace for budget exhaustion, learning-curve direction, numerical stability, and scheduler conformance."
+      }
+    ],
+    "report_id": "diag-b6b21afc926ffa31",
+    "request_id": "diagnose-first-semantic-regression-targeted-probes-001",
+    "run_id": "first-bounded-scientific-training-001-33866198758",
+    "stage_name": "smoke_test",
+    "status": "completed"
+  },
+  "leading_diagnosis": {
+    "confidence": 0.825,
+    "contradicting_evidence_refs": [],
+    "failure_domain": "data_coverage",
+    "hypothesis_id": "hyp-7e786c88f78ff621",
+    "metadata": {
+      "causation_claimed": false,
+      "distinct_contradicting_sources": 0,
+      "distinct_supporting_sources": 1,
+      "eval_integrity_confidence_cap_applied": false,
+      "statement_type": "hypothesis"
+    },
+    "recommended_intervention_kinds": [
+      "replace_or_mix_dataset",
+      "collect_more_evidence"
+    ],
+    "required_tests": [
+      "measure capability coverage against manifest domains"
+    ],
+    "summary": "Explicit coverage evidence indicates a possible data-coverage gap.",
+    "supporting_evidence_refs": [
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+    ]
+  },
+  "planner": {
+    "dataset_search_request": {
+      "capability_targets": [
+        "bounded response length",
+        "causal-LM continuation",
+        "instruction adherence",
+        "non-repetition",
+        "structured JSON response",
+        "termination"
+      ],
+      "contract_version": "autonomous-experiment.v1",
+      "diagnosis_report_id": "diag-b6b21afc926ffa31",
+      "evidence_refs": [
+        "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "license_allowlist": [],
+      "license_denylist": [],
+      "metadata": {
+        "intervention_id": "intervention-0b05ae5169cd5943"
+      },
+      "model_constraints": {},
+      "problem_statement": "Explicit coverage evidence indicates a possible data-coverage gap.",
+      "provider_allowlist": [],
+      "request_id": "dataset-search-4c7158b167aff959",
+      "required_domains": [
+        "general language",
+        "instruction following"
+      ],
+      "required_formats": [
+        "causal_lm_text",
+        "instruction_response",
+        "structured_json"
+      ],
+      "required_languages": [
+        "en"
+      ],
+      "size_constraints": {},
+      "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+    },
+    "experiment_proposal": null,
+    "model_search_request": null,
+    "one_primary_variable": "dataset_mixture",
+    "planner_executed_intervention": false,
+    "proposal_blocked_on": "dataset_discovery_and_selection",
+    "ranked_interventions": [
+      {
+        "alternatives_rejected": {},
+        "confidence": 0.92125,
+        "contract_version": "autonomous-experiment.v1",
+        "controlled_variables": {
+          "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+          "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+          "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+          "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+          "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+          "random_seed": 1729,
+          "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+        },
+        "diagnosis_report_id": "diag-b6b21afc926ffa31",
+        "expected_cost": {
+          "aggregate_score": 0.65,
+          "basis": "bounded_heuristic_not_measured_cost",
+          "compute": 0.55,
+          "data": 0.8,
+          "evaluation": 0.55,
+          "storage": 0.65,
+          "time": 0.7
+        },
+        "expected_effect": "Test whether changing only dataset_mixture addresses: Explicit coverage evidence indicates a possible data-coverage gap.",
+        "failure_criteria": {
+          "budget_exhausted_without_evaluable_result": true,
+          "deterministic_regression_count_min": 1,
+          "stage_primary_metric_delta_max": 0.0
+        },
+        "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+        "intervention_id": "intervention-0b05ae5169cd5943",
+        "intervention_kind": "replace_or_mix_dataset",
+        "metadata": {
+          "alternatives_considered": [
+            {
+              "accepted": true,
+              "intervention_id": "intervention-0b05ae5169cd5943",
+              "kind": "replace_or_mix_dataset",
+              "primary_variable": "dataset_mixture",
+              "rejection_reason": null,
+              "score": 0.6094
+            },
+            {
+              "accepted": true,
+              "intervention_id": "intervention-e4527f35c8e6883e",
+              "kind": "collect_more_evidence",
+              "primary_variable": "diagnostic_measurement",
+              "rejection_reason": null,
+              "score": 0.7055
+            }
+          ],
+          "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+          "candidate_count": 2,
+          "changed_variables": [
+            "dataset_mixture"
+          ],
+          "estimate_confidence": 0.92125,
+          "estimate_semantics": "heuristic_ordering_not_calibrated_probability",
+          "failure_domain": "data_coverage",
+          "hypothesis_id": "hyp-7e786c88f78ff621",
+          "known_dead_end_matches": [],
+          "lineage_status": "unknown",
+          "new_evidence_overrides_dead_end": false,
+          "prior_attempt_count": 0,
+          "rank": 1,
+          "ranking_score": 0.6094,
+          "ranking_score_components": {
+            "approval_penalty": 0.5,
+            "baseline_quality": 0.95,
+            "cost_penalty": 0.65,
+            "evidence_completeness": 1.0,
+            "expected_benefit": 0.68,
+            "hypothesis_support": 0.825,
+            "information_gain": 0.65,
+            "prior_attempt_penalty": 0.0,
+            "reversibility": 0.8,
+            "risk_penalty": 0.4,
+            "stage_appropriateness": 0.65
+          },
+          "required_approvals": [
+            "dataset_selection_approval"
+          ],
+          "resolution_boundary_applied": true,
+          "resolved_intervention_kinds_skipped": [
+            "collect_more_evidence"
+          ]
+        },
+        "primary_variable": "dataset_mixture",
+        "required_inputs": [
+          "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+          "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+          "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+          "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+        ],
+        "risks": [
+          "baseline_or_eval_mismatch",
+          "contamination_or_provenance_risk",
+          "data_lineage_corruption",
+          "heuristic_expected_value_estimate"
+        ],
+        "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+        "success_criteria": {
+          "baseline_comparison_required": true,
+          "deterministic_regression_count_max": 0,
+          "required_behavioral_evidence": true,
+          "stage_primary_metric_delta_min": 0.01
+        }
+      }
+    ],
+    "selected_intervention": {
+      "alternatives_rejected": {},
+      "confidence": 0.92125,
+      "contract_version": "autonomous-experiment.v1",
+      "controlled_variables": {
+        "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+        "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+        "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+        "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+        "random_seed": 1729,
+        "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+      },
+      "diagnosis_report_id": "diag-b6b21afc926ffa31",
+      "expected_cost": {
+        "aggregate_score": 0.65,
+        "basis": "bounded_heuristic_not_measured_cost",
+        "compute": 0.55,
+        "data": 0.8,
+        "evaluation": 0.55,
+        "storage": 0.65,
+        "time": 0.7
+      },
+      "expected_effect": "Test whether changing only dataset_mixture addresses: Explicit coverage evidence indicates a possible data-coverage gap.",
+      "failure_criteria": {
+        "budget_exhausted_without_evaluable_result": true,
+        "deterministic_regression_count_min": 1,
+        "stage_primary_metric_delta_max": 0.0
+      },
+      "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+      "intervention_id": "intervention-0b05ae5169cd5943",
+      "intervention_kind": "replace_or_mix_dataset",
+      "metadata": {
+        "alternatives_considered": [
+          {
+            "accepted": true,
+            "intervention_id": "intervention-0b05ae5169cd5943",
+            "kind": "replace_or_mix_dataset",
+            "primary_variable": "dataset_mixture",
+            "rejection_reason": null,
+            "score": 0.6094
+          },
+          {
+            "accepted": true,
+            "intervention_id": "intervention-e4527f35c8e6883e",
+            "kind": "collect_more_evidence",
+            "primary_variable": "diagnostic_measurement",
+            "rejection_reason": null,
+            "score": 0.7055
+          }
+        ],
+        "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+        "candidate_count": 2,
+        "changed_variables": [
+          "dataset_mixture"
+        ],
+        "estimate_confidence": 0.92125,
+        "estimate_semantics": "heuristic_ordering_not_calibrated_probability",
+        "failure_domain": "data_coverage",
+        "hypothesis_id": "hyp-7e786c88f78ff621",
+        "known_dead_end_matches": [],
+        "lineage_status": "unknown",
+        "new_evidence_overrides_dead_end": false,
+        "prior_attempt_count": 0,
+        "rank": 1,
+        "ranking_score": 0.6094,
+        "ranking_score_components": {
+          "approval_penalty": 0.5,
+          "baseline_quality": 0.95,
+          "cost_penalty": 0.65,
+          "evidence_completeness": 1.0,
+          "expected_benefit": 0.68,
+          "hypothesis_support": 0.825,
+          "information_gain": 0.65,
+          "prior_attempt_penalty": 0.0,
+          "reversibility": 0.8,
+          "risk_penalty": 0.4,
+          "stage_appropriateness": 0.65
+        },
+        "required_approvals": [
+          "dataset_selection_approval"
+        ],
+        "resolution_boundary_applied": true,
+        "resolved_intervention_kinds_skipped": [
+          "collect_more_evidence"
+        ]
+      },
+      "primary_variable": "dataset_mixture",
+      "required_inputs": [
+        "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "risks": [
+        "baseline_or_eval_mismatch",
+        "contamination_or_provenance_risk",
+        "data_lineage_corruption",
+        "heuristic_expected_value_estimate"
+      ],
+      "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+      "success_criteria": {
+        "baseline_comparison_required": true,
+        "deterministic_regression_count_max": 0,
+        "required_behavioral_evidence": true,
+        "stage_primary_metric_delta_min": 0.01
+      }
+    },
+    "training_launched": false
+  },
+  "probe": {
+    "evidence_records": [
+      {
+        "confidence": 0.95,
+        "evidence_kind": "training_metrics",
+        "measurements": {
+          "base_learning_rate": 0.0005,
+          "configured_max_steps": 100,
+          "final_epoch_fraction": 0.014577790735813988,
+          "final_learning_rate": 0.0,
+          "first_loss": 8.864677429199219,
+          "first_step": 5,
+          "last_loss": 7.302044868469238,
+          "last_step": 100,
+          "loss_materially_lower": true,
+          "maximum_gradient_norm": 2.80792236328125,
+          "metric_points": 20,
+          "minimum_gradient_norm": 0.7821573615074158,
+          "reached_configured_step_budget": true,
+          "scheduler": "linear",
+          "scheduler_conforms_to_recorded_shape": true,
+          "tail_loss_slope_per_step": 0.0019888196672712055,
+          "tail_point_count": 6,
+          "tail_still_improving": false,
+          "tiny_epoch_fraction": true,
+          "total_loss_drop": 1.5626325607299805,
+          "total_loss_drop_fraction": 0.1762763025739493,
+          "warmup_steps": 10
+        },
+        "numerically_stable": true,
+        "optimizer_stable": true,
+        "scheduler_misconfigured": false,
+        "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "summary": "Measured the complete persisted optimization trace for budget exhaustion, learning-curve direction, numerical stability, and scheduler conformance.",
+        "training_budget_exhausted": false,
+        "undertraining_detected": false
+      },
+      {
+        "confidence": 0.95,
+        "data_coverage_gap": true,
+        "data_coverage_verified": false,
+        "evidence_kind": "data_audit",
+        "measurements": {
+          "exact_frozen_eval_prompt_hits": 0,
+          "instruction_cue_rows": 29,
+          "prompt_target_rows": 0,
+          "requires_instruction_behavior": true,
+          "requires_length_control": true,
+          "requires_structured_behavior": true,
+          "rows_scanned": 54878,
+          "structured_target_rows": 0,
+          "supervised_instruction_coverage_present": false,
+          "supervised_structure_coverage_present": false,
+          "text_rows": 54878
+        },
+        "source_ref": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+        "summary": "Scanned the complete processed training dataset for structural coverage of the frozen semantic_behavior_v1 instruction, structure, and constraint tasks."
+      }
+    ],
+    "measurements": {
+      "dataset_task_coverage": {
+        "exact_frozen_eval_prompt_hits": 0,
+        "instruction_cue_rows": 29,
+        "prompt_target_rows": 0,
+        "requires_instruction_behavior": true,
+        "requires_length_control": true,
+        "requires_structured_behavior": true,
+        "rows_scanned": 54878,
+        "structured_target_rows": 0,
+        "supervised_instruction_coverage_present": false,
+        "supervised_structure_coverage_present": false,
+        "text_rows": 54878
+      },
+      "training_dynamics": {
+        "base_learning_rate": 0.0005,
+        "configured_max_steps": 100,
+        "final_epoch_fraction": 0.014577790735813988,
+        "final_learning_rate": 0.0,
+        "first_loss": 8.864677429199219,
+        "first_step": 5,
+        "last_loss": 7.302044868469238,
+        "last_step": 100,
+        "loss_materially_lower": true,
+        "maximum_gradient_norm": 2.80792236328125,
+        "metric_points": 20,
+        "minimum_gradient_norm": 0.7821573615074158,
+        "reached_configured_step_budget": true,
+        "scheduler": "linear",
+        "scheduler_conforms_to_recorded_shape": true,
+        "tail_loss_slope_per_step": 0.0019888196672712055,
+        "tail_point_count": 6,
+        "tail_still_improving": false,
+        "tiny_epoch_fraction": true,
+        "total_loss_drop": 1.5626325607299805,
+        "total_loss_drop_fraction": 0.1762763025739493,
+        "warmup_steps": 10
+      }
+    },
+    "unresolved_questions": [
+      "model-family limitation requires a controlled model-family comparison",
+      "overfitting requires held-out train/eval-gap evidence"
+    ]
+  },
+  "result_version": "first-targeted-post-failure-diagnostics.v2",
+  "s3_evidence": {
+    "dataset_bytes": 15920505,
+    "dataset_key": "hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+    "dataset_rows": 54878,
+    "dataset_sha256": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+    "metric_points": 20,
+    "metrics_key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+    "metrics_sha256": "sha256:b1170f513878eedbf80f1cbdda805298e95ead06a00dc4398116167c7bfb0223",
+    "training_config_key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/normalized_training_config.json",
+    "training_config_sha256": "sha256:fd0296a5bedfc059522d4a7d6acc0f71f8cb4b50181a830bd331fb15f815003f"
+  },
+  "upstream": {
+    "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+    "eval_pack_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+    "evaluation_run_id": "first-semantic-evaluation-001-33869352751",
+    "model_identity": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+    "previous_diagnosis_report_id": "diag-49904c2b7fa6cd1a",
+    "previous_diagnosis_status": "inconclusive",
+    "processed_dataset_identity": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+    "tokenizer_identity": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+    "training_run_id": "first-bounded-scientific-training-001-33866198758"
+  }
+}

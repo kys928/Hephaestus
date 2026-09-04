@@ -1,0 +1,269 @@
+{
+  "dataset_search_request": {
+    "capability_targets": [
+      "bounded response length",
+      "causal-LM continuation",
+      "instruction adherence",
+      "non-repetition",
+      "structured JSON response",
+      "termination"
+    ],
+    "contract_version": "autonomous-experiment.v1",
+    "diagnosis_report_id": "diag-b6b21afc926ffa31",
+    "evidence_refs": [
+      "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+    ],
+    "license_allowlist": [],
+    "license_denylist": [],
+    "metadata": {
+      "intervention_id": "intervention-0b05ae5169cd5943"
+    },
+    "model_constraints": {},
+    "problem_statement": "Explicit coverage evidence indicates a possible data-coverage gap.",
+    "provider_allowlist": [],
+    "request_id": "dataset-search-4c7158b167aff959",
+    "required_domains": [
+      "general language",
+      "instruction following"
+    ],
+    "required_formats": [
+      "causal_lm_text",
+      "instruction_response",
+      "structured_json"
+    ],
+    "required_languages": [
+      "en"
+    ],
+    "size_constraints": {},
+    "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+  },
+  "experiment_proposal": null,
+  "model_search_request": null,
+  "one_primary_variable": "dataset_mixture",
+  "planner_executed_intervention": false,
+  "proposal_blocked_on": "dataset_discovery_and_selection",
+  "ranked_interventions": [
+    {
+      "alternatives_rejected": {},
+      "confidence": 0.92125,
+      "contract_version": "autonomous-experiment.v1",
+      "controlled_variables": {
+        "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+        "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+        "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+        "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+        "random_seed": 1729,
+        "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+      },
+      "diagnosis_report_id": "diag-b6b21afc926ffa31",
+      "expected_cost": {
+        "aggregate_score": 0.65,
+        "basis": "bounded_heuristic_not_measured_cost",
+        "compute": 0.55,
+        "data": 0.8,
+        "evaluation": 0.55,
+        "storage": 0.65,
+        "time": 0.7
+      },
+      "expected_effect": "Test whether changing only dataset_mixture addresses: Explicit coverage evidence indicates a possible data-coverage gap.",
+      "failure_criteria": {
+        "budget_exhausted_without_evaluable_result": true,
+        "deterministic_regression_count_min": 1,
+        "stage_primary_metric_delta_max": 0.0
+      },
+      "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+      "intervention_id": "intervention-0b05ae5169cd5943",
+      "intervention_kind": "replace_or_mix_dataset",
+      "metadata": {
+        "alternatives_considered": [
+          {
+            "accepted": true,
+            "intervention_id": "intervention-0b05ae5169cd5943",
+            "kind": "replace_or_mix_dataset",
+            "primary_variable": "dataset_mixture",
+            "rejection_reason": null,
+            "score": 0.6094
+          },
+          {
+            "accepted": true,
+            "intervention_id": "intervention-e4527f35c8e6883e",
+            "kind": "collect_more_evidence",
+            "primary_variable": "diagnostic_measurement",
+            "rejection_reason": null,
+            "score": 0.7055
+          }
+        ],
+        "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+        "candidate_count": 2,
+        "changed_variables": [
+          "dataset_mixture"
+        ],
+        "estimate_confidence": 0.92125,
+        "estimate_semantics": "heuristic_ordering_not_calibrated_probability",
+        "failure_domain": "data_coverage",
+        "hypothesis_id": "hyp-7e786c88f78ff621",
+        "known_dead_end_matches": [],
+        "lineage_status": "unknown",
+        "new_evidence_overrides_dead_end": false,
+        "prior_attempt_count": 0,
+        "rank": 1,
+        "ranking_score": 0.6094,
+        "ranking_score_components": {
+          "approval_penalty": 0.5,
+          "baseline_quality": 0.95,
+          "cost_penalty": 0.65,
+          "evidence_completeness": 1.0,
+          "expected_benefit": 0.68,
+          "hypothesis_support": 0.825,
+          "information_gain": 0.65,
+          "prior_attempt_penalty": 0.0,
+          "reversibility": 0.8,
+          "risk_penalty": 0.4,
+          "stage_appropriateness": 0.65
+        },
+        "required_approvals": [
+          "dataset_selection_approval"
+        ],
+        "resolution_boundary_applied": true,
+        "resolved_intervention_kinds_skipped": [
+          "collect_more_evidence"
+        ]
+      },
+      "primary_variable": "dataset_mixture",
+      "required_inputs": [
+        "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "risks": [
+        "baseline_or_eval_mismatch",
+        "contamination_or_provenance_risk",
+        "data_lineage_corruption",
+        "heuristic_expected_value_estimate"
+      ],
+      "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+      "success_criteria": {
+        "baseline_comparison_required": true,
+        "deterministic_regression_count_max": 0,
+        "required_behavioral_evidence": true,
+        "stage_primary_metric_delta_min": 0.01
+      }
+    }
+  ],
+  "selected_intervention": {
+    "alternatives_rejected": {},
+    "confidence": 0.92125,
+    "contract_version": "autonomous-experiment.v1",
+    "controlled_variables": {
+      "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+      "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+      "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+      "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+      "random_seed": 1729,
+      "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+    },
+    "diagnosis_report_id": "diag-b6b21afc926ffa31",
+    "expected_cost": {
+      "aggregate_score": 0.65,
+      "basis": "bounded_heuristic_not_measured_cost",
+      "compute": 0.55,
+      "data": 0.8,
+      "evaluation": 0.55,
+      "storage": 0.65,
+      "time": 0.7
+    },
+    "expected_effect": "Test whether changing only dataset_mixture addresses: Explicit coverage evidence indicates a possible data-coverage gap.",
+    "failure_criteria": {
+      "budget_exhausted_without_evaluable_result": true,
+      "deterministic_regression_count_min": 1,
+      "stage_primary_metric_delta_max": 0.0
+    },
+    "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+    "intervention_id": "intervention-0b05ae5169cd5943",
+    "intervention_kind": "replace_or_mix_dataset",
+    "metadata": {
+      "alternatives_considered": [
+        {
+          "accepted": true,
+          "intervention_id": "intervention-0b05ae5169cd5943",
+          "kind": "replace_or_mix_dataset",
+          "primary_variable": "dataset_mixture",
+          "rejection_reason": null,
+          "score": 0.6094
+        },
+        {
+          "accepted": true,
+          "intervention_id": "intervention-e4527f35c8e6883e",
+          "kind": "collect_more_evidence",
+          "primary_variable": "diagnostic_measurement",
+          "rejection_reason": null,
+          "score": 0.7055
+        }
+      ],
+      "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+      "candidate_count": 2,
+      "changed_variables": [
+        "dataset_mixture"
+      ],
+      "estimate_confidence": 0.92125,
+      "estimate_semantics": "heuristic_ordering_not_calibrated_probability",
+      "failure_domain": "data_coverage",
+      "hypothesis_id": "hyp-7e786c88f78ff621",
+      "known_dead_end_matches": [],
+      "lineage_status": "unknown",
+      "new_evidence_overrides_dead_end": false,
+      "prior_attempt_count": 0,
+      "rank": 1,
+      "ranking_score": 0.6094,
+      "ranking_score_components": {
+        "approval_penalty": 0.5,
+        "baseline_quality": 0.95,
+        "cost_penalty": 0.65,
+        "evidence_completeness": 1.0,
+        "expected_benefit": 0.68,
+        "hypothesis_support": 0.825,
+        "information_gain": 0.65,
+        "prior_attempt_penalty": 0.0,
+        "reversibility": 0.8,
+        "risk_penalty": 0.4,
+        "stage_appropriateness": 0.65
+      },
+      "required_approvals": [
+        "dataset_selection_approval"
+      ],
+      "resolution_boundary_applied": true,
+      "resolved_intervention_kinds_skipped": [
+        "collect_more_evidence"
+      ]
+    },
+    "primary_variable": "dataset_mixture",
+    "required_inputs": [
+      "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+    ],
+    "risks": [
+      "baseline_or_eval_mismatch",
+      "contamination_or_provenance_risk",
+      "data_lineage_corruption",
+      "heuristic_expected_value_estimate"
+    ],
+    "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+    "success_criteria": {
+      "baseline_comparison_required": true,
+      "deterministic_regression_count_max": 0,
+      "required_behavioral_evidence": true,
+      "stage_primary_metric_delta_min": 0.01
+    }
+  },
+  "training_launched": false
+}
