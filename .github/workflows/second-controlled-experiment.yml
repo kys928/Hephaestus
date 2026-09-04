@@ -7,6 +7,7 @@ on:
       - .github/workflows/second-controlled-experiment.yml
       - scripts/run_second_controlled_training.py
       - scripts/run_second_controlled_training_v2.py
+      - scripts/run_second_controlled_training_v3.py
       - scripts/launch_second_controlled_training.py
       - scripts/launch_second_controlled_training_v2.py
       - scripts/launch_second_controlled_training_v3.py
@@ -63,6 +64,7 @@ jobs:
           python -m py_compile scripts/runpod_capacity_selection.py
           python -m py_compile scripts/run_second_controlled_training.py
           python -m py_compile scripts/run_second_controlled_training_v2.py
+          python -m py_compile scripts/run_second_controlled_training_v3.py
           python -m py_compile scripts/launch_second_controlled_training.py
           python -m py_compile scripts/launch_second_controlled_training_v2.py
           python -m py_compile scripts/launch_second_controlled_training_v3.py
