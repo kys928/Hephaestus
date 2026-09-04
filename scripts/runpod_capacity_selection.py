@@ -11,6 +11,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any
@@ -63,13 +64,13 @@ def _query() -> list[dict[str, Any]]:
         }}
       }}
     }}'''
+    # RunPod's documented GraphQL management path authenticates catalog queries
+    # with the api_key query parameter. Do not persist or print the expanded URL.
+    url = GRAPHQL_URL + "?api_key=" + urllib.parse.quote(_required_api_key(), safe="")
     request = urllib.request.Request(
-        GRAPHQL_URL,
+        url,
         data=json.dumps({"query": query}).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {_required_api_key()}",
-            "Content-Type": "application/json",
-        },
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
@@ -122,7 +123,7 @@ def discover_available_gpu_ids() -> tuple[list[str], dict[str, object]]:
     preference = {name: index for index, name in enumerate(PREFERENCE)}
     candidates.sort(
         key=lambda item: (
-            preference.get(str(item["display_name"]), len(preference) + 1),
+            preference.get(str(item["id"]), preference.get(str(item["display_name"]), len(preference) + 1)),
             float(item["uninterruptable_price"] or 9999.0),
             str(item["display_name"]),
         )
@@ -131,6 +132,7 @@ def discover_available_gpu_ids() -> tuple[list[str], dict[str, object]]:
     evidence = {
         "queried_at": datetime.now(timezone.utc).isoformat(),
         "graphql_endpoint": GRAPHQL_URL,
+        "authentication_mode": "api_key_query_parameter_not_persisted",
         "datacenter_id": DATACENTER,
         "cloud_type": "SECURE",
         "gpu_count": 1,
