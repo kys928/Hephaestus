@@ -22,6 +22,7 @@ def build_dataset_manifest(
     dedup = dict(evidence["deduplication"])
     contamination = dict(evidence["contamination"])
     tokenizer = dict(evidence["tokenizer_compatibility"])
+    source_ref = candidate.artifact_ref or str(evidence.get("source_content_hash") or "") or None
     return DatasetManifest.from_dict(
         {
             "manifest_id": f"manifest-{run_id}",
@@ -32,7 +33,7 @@ def build_dataset_manifest(
             "datasets": [
                 {
                     "dataset_id": candidate.dataset_id,
-                    "source": candidate.artifact_ref,
+                    "source": source_ref,
                     "version": revision,
                     "split": candidate.splits[0] if candidate.splits else "train",
                     "row_count": output_rows,
@@ -57,11 +58,17 @@ def build_dataset_manifest(
             "tokenizer_ref": tokenizer_ref,
             "tokenizer_compatibility": tokenizer,
             "uses_synthetic_data": bool(candidate.metadata.get("synthetic", False)),
-            "synthetic_data_profile": {"declared_by_provider": bool(candidate.metadata.get("synthetic", False))},
+            "synthetic_data_profile": {
+                "declared_by_provider": bool(candidate.metadata.get("synthetic", False))
+            },
             "uses_hard_negatives": bool(candidate.metadata.get("hard_negative", False)),
-            "hard_negative_profile": {"declared_by_provider": bool(candidate.metadata.get("hard_negative", False))},
+            "hard_negative_profile": {
+                "declared_by_provider": bool(candidate.metadata.get("hard_negative", False))
+            },
             "uses_support_sets": bool(candidate.metadata.get("support_set", False)),
-            "support_set_profile": {"declared_by_provider": bool(candidate.metadata.get("support_set", False))},
+            "support_set_profile": {
+                "declared_by_provider": bool(candidate.metadata.get("support_set", False))
+            },
             "metadata": {
                 "candidate_id": candidate.candidate_id,
                 "provider_id": candidate.provider_id,
@@ -69,6 +76,7 @@ def build_dataset_manifest(
                 "processing_evidence_ref": evidence["processing_evidence_ref"],
                 "approval_refs": evidence["approval_refs"],
                 "source_content_hash": evidence["source_content_hash"],
+                "source_acquisition": dict(evidence.get("source_acquisition", {})),
             },
         }
     )
