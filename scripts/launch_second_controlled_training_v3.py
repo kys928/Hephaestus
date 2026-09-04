@@ -10,16 +10,28 @@ import launch_second_controlled_training_v2  # noqa: F401 - reviewed Pod runtime
 from runpod_capacity_selection import create_with_capacity_retries
 
 _capacity_observations: list[dict[str, object]] = []
+_original_pod_shell = base.pod_shell
+
+
+def _pod_shell_v3() -> str:
+    shell = _original_pod_shell()
+    shell = shell.replace(
+        "scripts/run_second_controlled_training.py scripts/run_second_controlled_training_v2.py",
+        "scripts/run_second_controlled_training.py scripts/run_second_controlled_training_v2.py scripts/run_second_controlled_training_v3.py",
+    )
+    shell = shell.replace(
+        '"$PY" scripts/run_second_controlled_training_v2.py',
+        '"$PY" scripts/run_second_controlled_training_v3.py',
+    )
+    if "run_second_controlled_training_v3.py" not in shell:
+        raise RuntimeError("failed to project audited v3 controlled-training Pod command")
+    return shell
 
 
 def _create_capacity_aware(execution, repo_sha):
     global _capacity_observations
 
     def create_once(gpu_ids):
-        # Same bounded Pod contract as the core adapter, except the scheduler is
-        # explicitly allowed to choose the first actually available GPU from the
-        # current allowlist. Datacenter, volume, Secure Cloud, image and one-GPU
-        # shape remain fixed.
         body = {
             "name": f"hephaestus-{base.RUN_ID}"[:180],
             "computeType": "GPU",
@@ -49,6 +61,7 @@ def _create_capacity_aware(execution, repo_sha):
     return pod
 
 
+base.pod_shell = _pod_shell_v3
 base.create_pod = _create_capacity_aware
 
 
@@ -58,5 +71,6 @@ if __name__ == "__main__":
     if path.is_file():
         payload = json.loads(path.read_text(encoding="utf-8"))
         payload["capacity_selection"] = _capacity_observations
+        payload["training_driver"] = "scripts/run_second_controlled_training_v3.py"
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     raise SystemExit(code)
