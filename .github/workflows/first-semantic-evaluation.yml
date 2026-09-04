@@ -44,7 +44,8 @@ jobs:
           python -m pytest -q \
             tests/test_semantic_judge_integration.py \
             tests/test_semantic_evaluation.py \
-            tests/test_generation_bridge.py
+            tests/test_evaluation_generation_bridge.py \
+            tests/test_generation_hardening.py
       - name: Compile evaluation drivers
         run: |
           python -m py_compile src/hephaestus/control/semantic_judge.py
