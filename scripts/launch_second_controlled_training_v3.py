@@ -28,11 +28,12 @@ def _execution_key(name: str) -> str:
 
 def _archive_stale_execution_evidence() -> dict[str, object] | None:
     """Preserve stale canonical execution files before starting a new attempt."""
-    client = base.s3_client()
+    shared = base.base
+    client = shared.s3_client()
     result_key = _execution_key("driver_result.json")
-    result_raw = base.maybe_read_key(client, result_key)
+    result_raw = shared.maybe_read_key(client, result_key)
     log_key = _execution_key("pod_runtime.log")
-    log_raw = base.maybe_read_key(client, log_key)
+    log_raw = shared.maybe_read_key(client, log_key)
     if result_raw is None and log_raw is None:
         return None
 
@@ -62,10 +63,10 @@ def _archive_stale_execution_evidence() -> dict[str, object] | None:
         if raw is None:
             continue
         destination = f"{archive_prefix}/{name}"
-        if base.maybe_read_key(client, destination) is not None:
+        if shared.maybe_read_key(client, destination) is not None:
             raise RuntimeError(f"stale-execution archive destination already exists: {destination}")
         client.put_object(Bucket=base.VOLUME_ID, Key=destination, Body=raw)
-        roundtrip = base.read_key(client, destination)
+        roundtrip = shared.read_key(client, destination)
         if roundtrip != raw:
             raise RuntimeError(f"stale-execution archive round-trip mismatch: {destination}")
         copied[name] = {
@@ -87,7 +88,7 @@ def _archive_stale_execution_evidence() -> dict[str, object] | None:
     manifest_raw = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     manifest_key = f"{archive_prefix}/archive_manifest.json"
     client.put_object(Bucket=base.VOLUME_ID, Key=manifest_key, Body=manifest_raw)
-    if base.read_key(client, manifest_key) != manifest_raw:
+    if shared.read_key(client, manifest_key) != manifest_raw:
         raise RuntimeError("stale-execution archive manifest round-trip mismatch")
 
     # Delete canonical stale evidence only after every archive copy verifies.
@@ -97,7 +98,7 @@ def _archive_stale_execution_evidence() -> dict[str, object] | None:
     ):
         if raw is not None:
             client.delete_object(Bucket=base.VOLUME_ID, Key=source_key)
-            if base.maybe_read_key(client, source_key) is not None:
+            if shared.maybe_read_key(client, source_key) is not None:
                 raise RuntimeError(f"failed to clear stale canonical execution evidence: {source_key}")
     manifest["manifest_key"] = manifest_key
     return manifest
@@ -153,6 +154,7 @@ def _create_capacity_aware(execution, repo_sha):
 
 def _wait_for_current_result(client, execution, pod_id):
     """Accept only a terminal sentinel produced by this exact launch commit."""
+    shared = base.base
     expected_sha = os.environ.get("GITHUB_SHA", "").strip()
     if not expected_sha:
         raise RuntimeError("GITHUB_SHA is required for attempt-aware result verification")
@@ -162,7 +164,7 @@ def _wait_for_current_result(client, execution, pod_id):
     last_status: str | None = None
     stale_hashes: set[str] = set()
     while time.monotonic() < deadline:
-        raw = base.maybe_read_key(client, key)
+        raw = shared.maybe_read_key(client, key)
         if raw is not None:
             payload = json.loads(raw.decode("utf-8"))
             if not isinstance(payload, dict):
@@ -181,7 +183,7 @@ def _wait_for_current_result(client, execution, pod_id):
                     }
                 )
                 stale_hashes.add(digest)
-        pod = base.base.pod_snapshot(execution, pod_id)
+        pod = shared.pod_snapshot(execution, pod_id)
         status = str(pod.get("desiredStatus", "unknown")) if pod else "unknown"
         if status != last_status:
             observations.append({"at": datetime.now(timezone.utc).isoformat(), "desired_status": status})
