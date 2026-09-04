@@ -1,0 +1,553 @@
+{
+  "bootstrap_inputs_verified_before_launch": {
+    "bootstrap_bundle": {
+      "bytes": 9953,
+      "key": "hephaestus/scientific/v1/objects/sha256/67/6774e92d2b595353a18211ffa772fb82b362d462ee2e3c26144f705d26525436",
+      "sha256": "sha256:6774e92d2b595353a18211ffa772fb82b362d462ee2e3c26144f705d26525436"
+    },
+    "model": {
+      "components": [
+        {
+          "bytes": 833,
+          "key": "hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39/config.json",
+          "sha256": "sha256:e4bae2d91ba1c40722209bf43fadb83dff7260cfb7d39f7d37d89a0e500ced80"
+        },
+        {
+          "bytes": 216,
+          "key": "hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39/generation_config.json",
+          "sha256": "sha256:638dbab69ef55c5387c925da4027750ca5a38f6fa1aa9e99f263b06881261f26"
+        },
+        {
+          "bytes": 7503792,
+          "key": "hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39/model.safetensors",
+          "sha256": "sha256:1bc32006ae216fb4d6b7dd5ce66241e487d552ffcebbbb87c6a029cd22074ce1"
+        }
+      ],
+      "directory_content_identity": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39"
+    },
+    "processed_dataset": {
+      "bytes": 15920505,
+      "key": "hephaestus/scientific/v1/objects/sha256/f7/f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "sha256": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c"
+    },
+    "tokenizer": {
+      "components": [
+        {
+          "bytes": 553606,
+          "key": "hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce/tokenizer.json",
+          "sha256": "sha256:3ebcc9816398d7a2afa341a9db07de5f0ac30d2625ffe63e4752c2eddce40f25"
+        },
+        {
+          "bytes": 271,
+          "key": "hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce/tokenizer_config.json",
+          "sha256": "sha256:ddffe31f2ecc9a35891ac1d9c250cf9dc019cb9c23650a5fd6eeea3e89aab891"
+        }
+      ],
+      "directory_content_identity": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+    }
+  },
+  "completed_at": "2026-09-04T11:06:46.224454+00:00",
+  "cost_per_hour": 0.74,
+  "created_at": "2026-09-04T11:04:37.438824+00:00",
+  "datacenter_id": "EU-CZ-1",
+  "elapsed_seconds": 128.78562032000002,
+  "error": null,
+  "estimated_cost_for_observed_elapsed_time": 0.02647259973244445,
+  "estimated_cost_is_not_billing_record": true,
+  "funds_unavailable": false,
+  "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+  "launcher_version": "first-bounded-scientific-training-launcher.v1",
+  "pod": {
+    "consumerUserId": "user_31dizcodr0plZTdw3Dp3gNxLYcr",
+    "containerDiskInGb": 20,
+    "costPerHr": 0.74,
+    "createdAt": "2026-09-04 11:04:39.483 +0000 UTC",
+    "desiredStatus": "RUNNING",
+    "dockerStartCmd": [
+      "bash",
+      "-lc",
+      "set -Eeuo pipefail\nRUN_DIR=\"/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_RUN_ID}\"\nmkdir -p \"$RUN_DIR\"\nexec >\"$RUN_DIR/pod_runtime.log\" 2>&1\nwrite_bootstrap_failure() {\n  code=$?\n  if [ \"$code\" -ne 0 ] && [ ! -f \"$RUN_DIR/driver_result.json\" ]; then\n    python - \"$RUN_DIR/driver_result.json\" \"$code\" <<'PYFAIL'\nimport json, os, sys\nfrom datetime import datetime, timezone\npath, code = sys.argv[1], int(sys.argv[2])\npayload = {\n    \"result_version\": \"first-bounded-scientific-training-result.v1\",\n    \"created_at\": datetime.now(timezone.utc).isoformat(),\n    \"run_id\": os.environ.get(\"HEPHAESTUS_RUN_ID\", \"unknown\"),\n    \"status\": \"pod_bootstrap_failed\",\n    \"exit_code\": code,\n    \"repo_sha\": os.environ.get(\"HEPHAESTUS_REPO_SHA\", \"unknown\"),\n}\nwith open(path + \".partial\", \"w\", encoding=\"utf-8\") as stream:\n    json.dump(payload, stream, indent=2, sort_keys=True)\nos.replace(path + \".partial\", path)\nPYFAIL\n  fi\n}\ntrap write_bootstrap_failure EXIT\napt-get update\nDEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv\nrm -rf /opt/hephaestus-src /opt/hephaestus-venv\ngit clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src\ncd /opt/hephaestus-src\ngit checkout \"$HEPHAESTUS_REPO_SHA\"\npython -m venv --system-site-packages /opt/hephaestus-venv\nPY=/opt/hephaestus-venv/bin/python\n\"$PY\" -m pip install --disable-pip-version-check -e . 'transformers>=4.46,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1'\n\"$PY\" - <<'PYCHECK'\nimport torch\nassert torch.cuda.is_available(), \"CUDA unavailable after venv bootstrap\"\nprint({\"torch\": torch.__version__, \"cuda\": torch.version.cuda, \"gpu\": torch.cuda.get_device_name(0)})\nPYCHECK\n\"$PY\" -m py_compile scripts/run_first_bounded_scientific_training.py scripts/run_first_bounded_scientific_training_v2.py\n\"$PY\" scripts/run_first_bounded_scientific_training_v2.py\n"
+    ],
+    "env": {
+      "HEPHAESTUS_MAX_WALL_SECONDS": "1200",
+      "HEPHAESTUS_OPERATOR_APPROVAL_REF": "approval://operator/explicit-request-2026-09-04-first-bounded-scientific-training",
+      "HEPHAESTUS_REPO_SHA": "29e64530bc54560df84e4b4d93959b8dfdee38e2",
+      "HEPHAESTUS_RUN_ID": "first-bounded-scientific-training-001-33866198758",
+      "PUBLIC_KEY": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMGo8fi8XvCOkYQz4Ysuij4Zq6Rb6wVex/sYPzQcXpM2 dafco187@gmail.com\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHZywhszFgzDSvbSp2iqcH3NOJCuHzHpKkZkIjG2Xnxu katerinaslavova05@gmail.com\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC2BgbPHN1hssKrN3N4lHBbpvEzXekPrJJ6gS24mCyALmVSAT/BhK7h+Pxjid5xjrjAErX4Jrt5PDGX3s/G8KE9GVDVSRvODoYySdkUr91B7ayDIW7lo271/uAPt5F6L32CyPymCReqXB/usEuVX65QyKR5XvOKAiA8815IgAbuTKummnLVy7xoloFZ3iU2qBM5QuGfs27ltS7Oqf2CKQPssbfafLsi7/qfNzqm9TuE8dYx8etdfXk/+jT2+cwu+d6QVgZ6RI+ppeuSPPBDOYa0h/9GJVn/ddbTgcvN5OWGUN0Nl4msMXfsjvKA025FY9sSevbVOlFsG8mQBzHUQbr1 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC9KnyaWeHIOIv4urObUpGCUUgQhZ8wdlyogekyIMU0l96DnFiRSBG7wO/biclP+1bUyvRdzpYoeLnt729ysYzJb/bFnewh7oxkKkIwJlRQygrvTLLfmD8ChCZfdsLY9kwTAc2ra8VFmaKc2oQVUnIbqeP7pqBMqA5WfQfkcTTnD4J/BcrVj0u0ZG1d30CuixZ5Kq90LVaVi6IO1DUYBmTcw/rlR7M4cTOfwCfqzIwdkoFvS+XBmbLerefznzjhx6V+eHFO86lrCKt72wVGlxbflsHITlKpaQhW8/V01/AVR09H0QkBZh7KRm1P+iAX12O8G+3x3AfhF+iH2jJyUyS5 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOgliQ0eU+GIfGgr4ob4Jv+iOjOfk9iqvp1smcerAtiryu6MbHjDTtNR1QoRDYN2f7hkO8/nD1PevE2M4RpHWY+FK/57SaVPhPNc2z42LmyPmIrk/EsI39H2xpOH6eL4MBfF0LUcCn/x3d00BEutT35WgotrzBvJIFEmrHMosQMTF385QYY3WwH5RWkFdCUgs5VXYXg11Lc9iseB0G2wXugDVxcVvQgW233qSOfrFmr3gXBdHezQL8sLSPCi/1B1oRRsAS+PNnPeGgnvE4EdLnW/OpDmj9piTa0qt1/6JagAnNuklmrbqD12CwNeBZDMYrtpanet9crJ/+G9tP0k/L runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCwxYxN3PerhnNzMTSTsjm/FVoSk6lHtISgt9e2+LNmfinFKTzBjqfdx5X51WEWrdbWg+0Miyyjhhpg0JaJpWg2sIOyNOcNvcBmXk8JbDH4p5Zx5vqDwc8ayjsUFZig2sXCj+LM017a+G+Kbl2E56tAGYVXFmqPtxQoEYjpUUXpzBHmHOkp+SKchm9eq1Vik9dZjggCKWLNo/LGJW8P8LT0nmnwwnRG9GCHDKAyV1e0PR8z9rxbiewiSIbyUuKH9LKhOCXrAW0k2D6LqbAToTVcktJ9hW5ZnCRI3RK3sCSeb3fMJSdhaOmTWvhJsrc0hlDhvp/PvuUJ070adwyTmND7 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDGCdeRmk0v6kQlvywjRQjOt2wUTHbv7pGLIkP9PhTp9UfAbDi/K3Wgo5lOc2zJGHv5XHt7NvtG07oXgQzqKdw1igb4pX2mEoFobpQwV1aNd1Mg/kKToLxh5M4AdCPGXjKBgtpKBNTcSzxTta/EAT1n+t/PPLw9FOU5ex33X4e1CgYGwNTjbtCKG5pI7vB7+4JWW1lk41rEF5EK9om54EMGYKJ6QND8mXXn7IXqZUlykpKaSGhqNy4wOscPYe+mSTyBAsaAwobeOowDODs3zx6CLUDIlmpdlGaUlt1OTtSQCVFJcTitS4wPFO7c58yQxF4UYXYrUjOKe1mbcoLml9Nx runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD6JqI+LX3HLlSF+phiDxRwYmELIo7vftibp2B6+w6aCVAKfaOQaaRK9E9YfsQu+TLsaj2wa7cRnDMv0vJ6XLiWNEaqbH+9b+oj3GarPMys/Nav0Ebo69gzHfDEBZLtGb4vqdFfgoxr1VYp0TxZhbmj9iaR/LpV+TWqrgfmNqW4CvABX3oH1dKul+cqmoBX8MAs2XNjpkpiiDYzuHCiqEo9OunDt5ydt4Z4HH8HgJLZZwhPqyV8qPMl1WdhxN7cpu2Oa56v4jKTGU6/f4Dsg5hLAEa07h/BfvZ7Jmow8gIyVCTXAeUCP6yIIQsMvKhCtLXcFrHS7pn99AS8+WvJ1AGj runpodctl-ssh-key"
+    },
+    "gpuCount": 1,
+    "id": "gm5vea0zpdm8y8",
+    "imageName": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "lastStartedAt": "2026-09-04 11:04:39.479 +0000 UTC",
+    "lastStatusChange": "Rented by User: Fri Sep 04 2026 11:04:39 GMT+0000 (Coordinated Universal Time)",
+    "machine": {},
+    "machineId": "o19z6gz1hra0",
+    "memoryInGb": 125,
+    "name": "hephaestus-first-bounded-scientific-training-001-33866198758",
+    "networkVolumeId": "cviwpryzao",
+    "portMappings": {
+      "22": 40054
+    },
+    "ports": [
+      "8888/http",
+      "22/tcp"
+    ],
+    "publicIp": "213.192.2.108",
+    "templateId": "",
+    "vcpuCount": 32,
+    "volumeInGb": 0,
+    "volumeMountPath": "/workspace"
+  },
+  "pod_id": "gm5vea0zpdm8y8",
+  "pod_status_observations": [
+    {
+      "at": "2026-09-04T11:04:40.867778+00:00",
+      "desired_status": "RUNNING"
+    }
+  ],
+  "repo_sha": "29e64530bc54560df84e4b4d93959b8dfdee38e2",
+  "run_id": "first-bounded-scientific-training-001-33866198758",
+  "teardown": {
+    "deleted": true,
+    "status": 204
+  },
+  "terminal_result": {
+    "bounded_recipe": {
+      "batch_size": 8,
+      "checkpoint_every_steps": 100,
+      "context_length": 256,
+      "learning_rate": 0.0005,
+      "max_steps": 100,
+      "max_total_tokens": 20000000,
+      "max_wall_seconds": 1200,
+      "optimizer": "adamw",
+      "recipe_version": "first-bounded-scientific-training.v2",
+      "scheduler": "linear",
+      "warmup_steps": 10
+    },
+    "checkpoint_record": {
+      "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+      "checkpoint_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100",
+      "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+      "config_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/normalized_training_config.json",
+      "data_identity": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "epoch": 0.014577790735813988,
+      "experiment_id": "experiment-60bff7cb4f478f91",
+      "failure_status": null,
+      "generation_handoff_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/loading_instructions.json",
+      "hash_type": "sha256_component_manifest",
+      "integrity_level": "component_hash_manifest_verified",
+      "metric_evidence": {
+        "elapsed_seconds": 1.8417697828263044,
+        "epoch": 0.014577790735813988,
+        "examples_per_second": 434.3648198920675,
+        "examples_processed": 800,
+        "gradient_norm": 0.9406019449234009,
+        "learning_rate": 0.0,
+        "memory": {
+          "allocated_bytes": 67987968,
+          "max_allocated_bytes": 245344256
+        },
+        "run_id": "first-bounded-scientific-training-001-33866198758",
+        "step": 100,
+        "tokens_per_second": 19467.145315512735,
+        "tokens_processed": 35854,
+        "training_loss": 7.302044868469238
+      },
+      "model_id": "/workspace/hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "partial_write": false,
+      "resume_compatibility": {
+        "architecture_family": "gpt2",
+        "backend_id": "transformers_causal_lm",
+        "model_id": "/workspace/hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "optimizer": "adamw",
+        "processed_dataset_hash": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+        "processed_dataset_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+        "scheduler": "linear",
+        "tokenizer_id": "/workspace/hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "trainable_data_contract_hash": "sha256:a3b761314121c2da021a6bbd2f90f17fea57907bb22dd4b3340fcdaeea4f7e80",
+        "trainable_data_contract_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/trainable_data_contract.json",
+        "training_mode": "full_finetune"
+      },
+      "run_id": "first-bounded-scientific-training-001-33866198758",
+      "step": 100,
+      "tokenizer_id": "/workspace/hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "trainer_ref": "hephaestus.training.hf_worker:v1"
+    },
+    "checkpoint_verification": {
+      "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+      "checkpoint_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100",
+      "valid": true
+    },
+    "created_at": "2026-09-04T11:06:38.446309+00:00",
+    "experiment_id": "experiment-60bff7cb4f478f91",
+    "final_result": {
+      "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+      "checkpoint_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100",
+      "generation_handoff_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/loading_instructions.json",
+      "metrics_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics_summary.json",
+      "model_artifact_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/model",
+      "status": "completed",
+      "tokenizer_artifact_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/tokenizer"
+    },
+    "integration_records": [
+      {
+        "backend_id": "transformers_causal_lm",
+        "checkpoint_refs": [],
+        "contract_version": "autonomous-experiment.v1",
+        "event_stream_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/events.jsonl",
+        "experiment_id": "experiment-60bff7cb4f478f91",
+        "issues": [],
+        "kind": "training_run_handle",
+        "metadata": {
+          "artifact_root": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758",
+          "checkpoint_record_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_record.json",
+          "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+          "final_result_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/runtime_result.json",
+          "incidents_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/incidents.jsonl",
+          "log_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/runtime.log",
+          "normalized_config_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/normalized_training_config.json",
+          "pid": 1181,
+          "prepared_job_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/prepared_job.json",
+          "resource_estimate_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/resource_estimate.json"
+        },
+        "metrics_ref": null,
+        "resume_token_ref": null,
+        "run_id": "first-bounded-scientific-training-001-33866198758",
+        "status": "running"
+      }
+    ],
+    "lineage_id": "lineage-first-scientific",
+    "metrics_summary": {
+      "determinism": {
+        "deterministic_algorithms_requested": true,
+        "perfect_determinism_claimed": false,
+        "seed": 1729,
+        "warning": null
+      },
+      "elapsed_seconds": 2.313926801085472,
+      "examples_processed": 800,
+      "final_gradient_norm": 0.9406019449234009,
+      "final_training_loss": 7.302044868469238,
+      "finite": true,
+      "limitation": "Training loss is optimization evidence, not semantic evaluation evidence.",
+      "memory": {
+        "allocated_bytes": 67987968,
+        "max_allocated_bytes": 245344256
+      },
+      "run_id": "first-bounded-scientific-training-001-33866198758",
+      "steps": 100,
+      "tokens_per_second": 15494.8721727847,
+      "tokens_processed": 35854
+    },
+    "normalized_training_config": {
+      "architecture_family": "gpt2",
+      "batch_size": 8,
+      "cache_dir": null,
+      "checkpoint_every_steps": 100,
+      "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+      "context_length": 256,
+      "dataloader_settings": {
+        "drop_last": false,
+        "num_workers": 0,
+        "shuffle": false
+      },
+      "dataset_identity": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "dataset_summary": {
+        "bytes": 15920505,
+        "contract_id": "trainable-data-first-scientific-bootstrap-001",
+        "declared_tokens": 2039763,
+        "rows": 54878
+      },
+      "device": "cuda",
+      "dtype": "float32",
+      "environment_summary": {
+        "perfect_determinism_claimed": false,
+        "platform": "linux",
+        "python": "3.12.3"
+      },
+      "eos_handling": "append_if_missing",
+      "framework_versions": {
+        "accelerate": null,
+        "peft": null,
+        "tokenizers": "0.23.2",
+        "torch": "2.14.0+cu126",
+        "transformers": "5.16.1"
+      },
+      "gradient_accumulation_steps": 1,
+      "gradient_clipping": 1.0,
+      "hidden_size": 128,
+      "ignored_label_token": -100,
+      "learning_rate": 0.0005,
+      "loader_settings": {
+        "hidden_size": 128,
+        "parameter_count": 1874688,
+        "use_safetensors": true
+      },
+      "local_files_only": true,
+      "logging_every_steps": 5,
+      "max_epochs": null,
+      "max_steps": 100,
+      "max_total_tokens": 20000000,
+      "maximum_rows": 100000,
+      "mixed_precision": false,
+      "model_id": "/workspace/hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "optimizer": "adamw",
+      "padding": "batch_right_padding",
+      "parameter_count": 1874688,
+      "processing_evidence_hash": "sha256:dd33ce96fde7ef0c0d707e76736d4514cc8062e40bb8531a434c25313b49038a",
+      "processing_evidence_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/processing_evidence.json",
+      "prompt_masking": "mask_prompt_for_prompt_target",
+      "scheduler": "linear",
+      "seed": 1729,
+      "simulate_oom": "",
+      "special_token_ids": {
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "pad_token_id": 3,
+        "unk_token_id": 0
+      },
+      "step_delay_seconds": 0.0,
+      "tokenizer_id": "/workspace/hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "training_mode": "full_finetune",
+      "truncation": "right_to_context_length",
+      "trust_remote_code": false,
+      "vocabulary_size": 8192,
+      "warmup_steps": 10,
+      "weight_decay": 0.01
+    },
+    "operator_approval_ref": "approval://operator/explicit-request-2026-09-04-first-bounded-scientific-training",
+    "prepared_job": {
+      "artifact_root": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758",
+      "capability": {
+        "devices": [
+          "cpu",
+          "cuda_optional"
+        ],
+        "framework_versions": {
+          "accelerate": null,
+          "peft": null,
+          "tokenizers": "0.23.2",
+          "torch": "2.14.0+cu126",
+          "transformers": "5.16.1"
+        },
+        "limitations": [
+          "Transformers training is an optional capability and is not imported by core Hephaestus.",
+          "A tiny smoke run does not establish useful large-model training quality."
+        ],
+        "missing_packages": [],
+        "supported": true
+      },
+      "compatibility": {
+        "architecture_family": "gpt2",
+        "backend_id": "transformers_causal_lm",
+        "model_id": "/workspace/hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "optimizer": "adamw",
+        "processed_dataset_hash": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+        "processed_dataset_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+        "scheduler": "linear",
+        "tokenizer_id": "/workspace/hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "trainable_data_contract_hash": "sha256:a3b761314121c2da021a6bbd2f90f17fea57907bb22dd4b3340fcdaeea4f7e80",
+        "trainable_data_contract_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/trainable_data_contract.json",
+        "training_mode": "full_finetune"
+      },
+      "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+      "experiment_id": "experiment-60bff7cb4f478f91",
+      "lineage_id": "lineage-first-scientific",
+      "resource_estimate": {
+        "activation_estimate_bytes": 12582912,
+        "available_device_memory_bytes": 50450006016,
+        "available_memory_observation": "torch_cuda_mem_get_info",
+        "dataset_bytes": 15920505,
+        "dataset_rows": 54878,
+        "estimated_peak_bytes": 42577920,
+        "expected_checkpoint_bytes": 29995008,
+        "expected_steps": 100,
+        "fingerprint_inputs": {
+          "batch_size": 8,
+          "context_length": 256,
+          "hidden_size": 128,
+          "parameters": 1874688
+        },
+        "gradient_memory_bytes": 7498752,
+        "optimizer_state_memory_bytes": 14997504,
+        "parameter_memory_bytes": 7498752,
+        "uncertainty": "conservative_formula_not_runtime_measurement"
+      },
+      "resume_token_ref": null,
+      "run_id": "first-bounded-scientific-training-001-33866198758",
+      "stage_name": "smoke_test",
+      "training_config": {
+        "architecture_family": "gpt2",
+        "batch_size": 8,
+        "cache_dir": null,
+        "checkpoint_every_steps": 100,
+        "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+        "context_length": 256,
+        "dataloader_settings": {
+          "drop_last": false,
+          "num_workers": 0,
+          "shuffle": false
+        },
+        "dataset_identity": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+        "dataset_summary": {
+          "bytes": 15920505,
+          "contract_id": "trainable-data-first-scientific-bootstrap-001",
+          "declared_tokens": 2039763,
+          "rows": 54878
+        },
+        "device": "cuda",
+        "dtype": "float32",
+        "environment_summary": {
+          "perfect_determinism_claimed": false,
+          "platform": "linux",
+          "python": "3.12.3"
+        },
+        "eos_handling": "append_if_missing",
+        "framework_versions": {
+          "accelerate": null,
+          "peft": null,
+          "tokenizers": "0.23.2",
+          "torch": "2.14.0+cu126",
+          "transformers": "5.16.1"
+        },
+        "gradient_accumulation_steps": 1,
+        "gradient_clipping": 1.0,
+        "hidden_size": 128,
+        "ignored_label_token": -100,
+        "learning_rate": 0.0005,
+        "loader_settings": {
+          "hidden_size": 128,
+          "parameter_count": 1874688,
+          "use_safetensors": true
+        },
+        "local_files_only": true,
+        "logging_every_steps": 5,
+        "max_epochs": null,
+        "max_steps": 100,
+        "max_total_tokens": 20000000,
+        "maximum_rows": 100000,
+        "mixed_precision": false,
+        "model_id": "/workspace/hephaestus/scientific/v1/materialized/models/7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "optimizer": "adamw",
+        "padding": "batch_right_padding",
+        "parameter_count": 1874688,
+        "processing_evidence_hash": "sha256:dd33ce96fde7ef0c0d707e76736d4514cc8062e40bb8531a434c25313b49038a",
+        "processing_evidence_ref": "/workspace/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/processing_evidence.json",
+        "prompt_masking": "mask_prompt_for_prompt_target",
+        "scheduler": "linear",
+        "seed": 1729,
+        "simulate_oom": "",
+        "special_token_ids": {
+          "bos_token_id": 1,
+          "eos_token_id": 2,
+          "pad_token_id": 3,
+          "unk_token_id": 0
+        },
+        "step_delay_seconds": 0.0,
+        "tokenizer_id": "/workspace/hephaestus/scientific/v1/materialized/tokenizers/123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "training_mode": "full_finetune",
+        "truncation": "right_to_context_length",
+        "trust_remote_code": false,
+        "vocabulary_size": 8192,
+        "warmup_steps": 10,
+        "weight_decay": 0.01
+      }
+    },
+    "repo_sha": "29e64530bc54560df84e4b4d93959b8dfdee38e2",
+    "resource_estimate": {
+      "activation_estimate_bytes": 12582912,
+      "available_device_memory_bytes": 50450006016,
+      "available_memory_observation": "torch_cuda_mem_get_info",
+      "dataset_bytes": 15920505,
+      "dataset_rows": 54878,
+      "estimated_peak_bytes": 42577920,
+      "expected_checkpoint_bytes": 29995008,
+      "expected_steps": 100,
+      "fingerprint_inputs": {
+        "batch_size": 8,
+        "context_length": 256,
+        "hidden_size": 128,
+        "parameters": 1874688
+      },
+      "gradient_memory_bytes": 7498752,
+      "optimizer_state_memory_bytes": 14997504,
+      "parameter_memory_bytes": 7498752,
+      "uncertainty": "conservative_formula_not_runtime_measurement"
+    },
+    "result_version": "first-bounded-scientific-training-result.v1",
+    "run_id": "first-bounded-scientific-training-001-33866198758",
+    "run_root": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758",
+    "runtime_environment": {
+      "cuda_available": true,
+      "cuda_runtime": "12.6",
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "gpu_total_memory_bytes": 50864390144,
+      "hostname": "d08ece6c601f",
+      "python": "3.12.3",
+      "tokenizers": "0.23.2",
+      "torch": "2.14.0+cu126",
+      "transformers": "5.16.1"
+    },
+    "runtime_result": {
+      "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+      "checkpoint_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100",
+      "generation_handoff_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/loading_instructions.json",
+      "metrics_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics_summary.json",
+      "model_artifact_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/model",
+      "status": "completed",
+      "tokenizer_artifact_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/tokenizer"
+    },
+    "stage_name": "smoke_test",
+    "status": "completed",
+    "training_run_handle": {
+      "backend_id": "transformers_causal_lm",
+      "checkpoint_refs": [
+        "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100"
+      ],
+      "contract_version": "autonomous-experiment.v1",
+      "event_stream_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/events.jsonl",
+      "experiment_id": "experiment-60bff7cb4f478f91",
+      "issues": [],
+      "metadata": {
+        "artifact_root": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758",
+        "checkpoint_record_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_record.json",
+        "config_fingerprint": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97",
+        "final_result_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/runtime_result.json",
+        "incidents_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/incidents.jsonl",
+        "log_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/runtime.log",
+        "normalized_config_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/normalized_training_config.json",
+        "pid": 1181,
+        "prepared_job_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/prepared_job.json",
+        "resource_estimate_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/resource_estimate.json",
+        "returncode": 0,
+        "runtime_result_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/runtime_result.json"
+      },
+      "metrics_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics_summary.json",
+      "resume_token_ref": "/workspace/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/resume_token.json",
+      "run_id": "first-bounded-scientific-training-001-33866198758",
+      "status": "completed"
+    },
+    "verified_inputs": {
+      "bootstrap_bundle_artifact_ref": "sha256:6774e92d2b595353a18211ffa772fb82b362d462ee2e3c26144f705d26525436",
+      "dataset_id": "Salesforce/wikitext",
+      "dataset_revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+      "model_directory_identity": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "processed_dataset_sha256": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "raw_dataset_sha256": "sha256:e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7",
+      "tokenizer_directory_identity": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+    }
+  },
+  "verification_status": "verified",
+  "volume_id": "cviwpryzao"
+}
