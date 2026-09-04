@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capacity-aware wrapper for the second controlled training launcher."""
+"""Availability-priority wrapper for the second controlled training launcher."""
 from __future__ import annotations
 
 import json
@@ -10,28 +10,39 @@ import launch_second_controlled_training_v2  # noqa: F401 - reviewed Pod runtime
 from runpod_capacity_selection import create_with_capacity_retries
 
 _capacity_observations: list[dict[str, object]] = []
-_original_create = base.create_pod
 
 
 def _create_capacity_aware(execution, repo_sha):
     global _capacity_observations
 
     def create_once(gpu_ids):
-        # Reproduce the base call with only execution routing changed.
-        return execution.create_bounded_gpu_pod(
-            name=f"hephaestus-{base.RUN_ID}"[:180],
-            image_name=base.IMAGE,
-            gpu_type_ids=list(gpu_ids),
-            docker_start_cmd=["bash", "-lc", base.pod_shell()],
-            env={
+        # Same bounded Pod contract as the core adapter, except the scheduler is
+        # explicitly allowed to choose the first actually available GPU from the
+        # current allowlist. Datacenter, volume, Secure Cloud, image and one-GPU
+        # shape remain fixed.
+        body = {
+            "name": f"hephaestus-{base.RUN_ID}"[:180],
+            "computeType": "GPU",
+            "gpuCount": 1,
+            "gpuTypeIds": list(gpu_ids),
+            "gpuTypePriority": "availability",
+            "cloudType": "SECURE",
+            "dataCenterIds": [base.DATACENTER_ID],
+            "dataCenterPriority": "custom",
+            "imageName": base.IMAGE,
+            "containerDiskInGb": 20,
+            "networkVolumeId": base.VOLUME_ID,
+            "volumeMountPath": "/workspace",
+            "dockerStartCmd": ["bash", "-lc", base.pod_shell()],
+            "interruptible": False,
+            "env": {
                 "HEPHAESTUS_RUN_ID": base.RUN_ID,
                 "HEPHAESTUS_REPO_SHA": repo_sha,
                 "HEPHAESTUS_OPERATOR_APPROVAL_REF": base.APPROVAL_REF,
                 "HEPHAESTUS_MAX_WALL_SECONDS": "1200",
             },
-            container_disk_in_gb=20,
-            interruptible=False,
-        )
+        }
+        return execution._create_pod(body)  # integration-only scheduler projection
 
     pod, observations = create_with_capacity_retries(create_once)
     _capacity_observations = observations
