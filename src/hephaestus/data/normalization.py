@@ -9,6 +9,14 @@ from hephaestus.schemas.discovery_contract import DatasetCandidate
 from hephaestus.utils.hashing import hash_json
 
 
+_INSTRUCTION_PAIR_KEYS: tuple[tuple[str, str], ...] = (
+    ("prompt", "target"),
+    ("input", "output"),
+    ("instruction", "response"),
+    ("question", "answer"),
+)
+
+
 def _sorted_unique(values: list[str]) -> list[str]:
     return sorted({str(value).strip().casefold() for value in values if str(value).strip()})
 
@@ -74,14 +82,21 @@ def normalize_text(value: object) -> str:
 
 
 def normalize_record(record: Mapping[str, Any]) -> dict[str, object] | None:
-    """Normalize common text and prompt/target records conservatively."""
+    """Normalize common text and instruction-pair records conservatively.
 
-    if "prompt" in record or "target" in record:
-        prompt = normalize_text(record.get("prompt", ""))
-        target = normalize_text(record.get("target", ""))
-        if not prompt or not target:
-            return None
-        return {"prompt": prompt, "target": target}
+    Pair aliases are normalized into the existing ``prompt``/``target`` shape so
+    downstream wrapper construction and TrainableDataContract behavior remain
+    unchanged. A partially present pair is treated as malformed rather than
+    silently falling through to another schema.
+    """
+
+    for prompt_key, target_key in _INSTRUCTION_PAIR_KEYS:
+        if prompt_key in record or target_key in record:
+            prompt = normalize_text(record.get(prompt_key, ""))
+            target = normalize_text(record.get(target_key, ""))
+            if not prompt or not target:
+                return None
+            return {"prompt": prompt, "target": target}
     for key in ("text", "content", "completion"):
         if key in record:
             text = normalize_text(record.get(key, ""))
