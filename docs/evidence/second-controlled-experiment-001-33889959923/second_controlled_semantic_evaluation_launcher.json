@@ -1,0 +1,671 @@
+{
+  "baseline_checkpoint_verified_before_launch": {
+    "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+    "checkpoint_prefix": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100",
+    "component_count": 7,
+    "components": [
+      {
+        "bytes": 754,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/loading_instructions.json",
+        "sha256": "sha256:25ca4b00b47d989a9cb16f449157b68fd51579c7dbc2ad30ac1cb271e7b7aeab"
+      },
+      {
+        "bytes": 833,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/model/config.json",
+        "sha256": "sha256:e4bae2d91ba1c40722209bf43fadb83dff7260cfb7d39f7d37d89a0e500ced80"
+      },
+      {
+        "bytes": 216,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/model/generation_config.json",
+        "sha256": "sha256:638dbab69ef55c5387c925da4027750ca5a38f6fa1aa9e99f263b06881261f26"
+      },
+      {
+        "bytes": 7503792,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/model/model.safetensors",
+        "sha256": "sha256:0f8898ad054bc52798599b7048c2c98523916ea0dca729200c1ee433c6f09001"
+      },
+      {
+        "bytes": 553606,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/tokenizer/tokenizer.json",
+        "sha256": "sha256:3ebcc9816398d7a2afa341a9db07de5f0ac30d2625ffe63e4752c2eddce40f25"
+      },
+      {
+        "bytes": 319,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/tokenizer/tokenizer_config.json",
+        "sha256": "sha256:fb069999c643cf4b9b3a930be1483f6ad5806123153941cc6b7f42ea0804d1d9"
+      },
+      {
+        "bytes": 15053567,
+        "key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/training_state.pt",
+        "sha256": "sha256:d1301193c198c18793ec5d4ff9e0720368e6aa47929f4c76ee9023ee3c660b82"
+      }
+    ],
+    "manifest_key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/checkpoint_manifest.json"
+  },
+  "baseline_training_run_id": "first-bounded-scientific-training-001-33866198758",
+  "candidate_checkpoint_manifest_hash": "sha256:d06829b4738b2abc170a5a96d4a76c8dbe9a32869f0a8071c26e3b1550e31a64",
+  "candidate_checkpoint_verified_before_launch": {
+    "checkpoint_manifest_hash": "sha256:d06829b4738b2abc170a5a96d4a76c8dbe9a32869f0a8071c26e3b1550e31a64",
+    "checkpoint_prefix": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100",
+    "component_count": 7,
+    "components": [
+      {
+        "bytes": 691,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/loading_instructions.json",
+        "sha256": "sha256:167dd7c31136a0c50bcf62a31e6e33f101fa3059fa797aa7bb1813aae76d82ac"
+      },
+      {
+        "bytes": 833,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/model/config.json",
+        "sha256": "sha256:e4bae2d91ba1c40722209bf43fadb83dff7260cfb7d39f7d37d89a0e500ced80"
+      },
+      {
+        "bytes": 216,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/model/generation_config.json",
+        "sha256": "sha256:638dbab69ef55c5387c925da4027750ca5a38f6fa1aa9e99f263b06881261f26"
+      },
+      {
+        "bytes": 7503792,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/model/model.safetensors",
+        "sha256": "sha256:35f771de43686daa87146d1a7ca21a1346ed846d3c76516aca77155ef1d47fe9"
+      },
+      {
+        "bytes": 553606,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/tokenizer/tokenizer.json",
+        "sha256": "sha256:3ebcc9816398d7a2afa341a9db07de5f0ac30d2625ffe63e4752c2eddce40f25"
+      },
+      {
+        "bytes": 319,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/tokenizer/tokenizer_config.json",
+        "sha256": "sha256:fb069999c643cf4b9b3a930be1483f6ad5806123153941cc6b7f42ea0804d1d9"
+      },
+      {
+        "bytes": 15053503,
+        "key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/training_state.pt",
+        "sha256": "sha256:22b85652395e21d29fa7a6a06fcafe9fa5137ea99bb2fd8d605c828158f90fa2"
+      }
+    ],
+    "manifest_key": "hephaestus/scientific/v1/runs/planned-run-b8e558e54effac85/checkpoint_step_100/checkpoint_manifest.json"
+  },
+  "candidate_training_run_id": "planned-run-b8e558e54effac85",
+  "capacity_selection": [
+    {
+      "attempt": 1,
+      "catalog_graphql_from_github_runner": "blocked_http_403_error_1010",
+      "cloud_type": "SECURE",
+      "create_status": "created",
+      "created_pod_id": "h10x5xp5hbkarz",
+      "datacenter_id": "EU-CZ-1",
+      "gpu_count": 1,
+      "gpu_type_priority": "availability",
+      "ordered_gpu_type_ids": [
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA L4",
+        "NVIDIA A40",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA H100 PCIe",
+        "NVIDIA H100 80GB HBM3",
+        "NVIDIA H100 NVL",
+        "NVIDIA H200",
+        "NVIDIA GeForce RTX 4080 SUPER",
+        "NVIDIA GeForce RTX 4080"
+      ],
+      "queried_at": "2026-09-04T15:36:20.591834+00:00",
+      "selection_source": "runpod_rest_v1_schema_verified_gpu_enum_with_scheduler_availability"
+    }
+  ],
+  "completed_at": "2026-09-04T15:37:19.272100+00:00",
+  "cost_per_hour": 0.74,
+  "created_at": "2026-09-04T15:36:20.591804+00:00",
+  "datacenter_id": "EU-CZ-1",
+  "elapsed_seconds": 58.68029056700004,
+  "error": null,
+  "estimated_cost_for_observed_elapsed_time": 0.01206205972766112,
+  "estimated_cost_is_not_billing_record": true,
+  "experiment_id": "experiment-d0e911d6bd1fb7ae",
+  "funds_unavailable": false,
+  "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+  "launcher_version": "second-controlled-semantic-evaluation-launcher.v1",
+  "operator_approval_ref": "approval://operator/chat-2026-09-04-second-controlled-experiment",
+  "pod": {
+    "consumerUserId": "user_31dizcodr0plZTdw3Dp3gNxLYcr",
+    "containerDiskInGb": 20,
+    "costPerHr": 0.74,
+    "createdAt": "2026-09-04 15:36:21.542 +0000 UTC",
+    "desiredStatus": "RUNNING",
+    "dockerStartCmd": [
+      "bash",
+      "-lc",
+      "set -Eeuo pipefail\nRUN_DIR=\"/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_EVAL_RUN_ID}\"\nmkdir -p \"$RUN_DIR\"\nexec >\"$RUN_DIR/pod_runtime.log\" 2>&1\nwrite_bootstrap_failure() {\n  code=$?\n  if [ \"$code\" -ne 0 ] && [ ! -f \"$RUN_DIR/driver_result.json\" ]; then\n    python - \"$RUN_DIR/driver_result.json\" \"$code\" <<'PYFAIL'\nimport json, os, sys\nfrom datetime import datetime, timezone\npath, code = sys.argv[1], int(sys.argv[2])\npayload = {\n    \"result_version\": \"second-controlled-semantic-evaluation-result.v1\",\n    \"created_at\": datetime.now(timezone.utc).isoformat(),\n    \"run_id\": os.environ.get(\"HEPHAESTUS_EVAL_RUN_ID\", \"unknown\"),\n    \"status\": \"pod_bootstrap_failed\",\n    \"exit_code\": code,\n    \"repo_sha\": os.environ.get(\"HEPHAESTUS_REPO_SHA\", \"unknown\"),\n    \"training_performed\": False,\n    \"action_applied\": False,\n}\nwith open(path + \".partial\", \"w\", encoding=\"utf-8\") as stream:\n    json.dump(payload, stream, indent=2, sort_keys=True)\nos.replace(path + \".partial\", path)\nPYFAIL\n  fi\n}\ntrap write_bootstrap_failure EXIT\napt-get update\nDEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv\nrm -rf /opt/hephaestus-src /opt/hephaestus-venv\ngit clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src\ncd /opt/hephaestus-src\ngit checkout \"$HEPHAESTUS_REPO_SHA\"\npython -m venv --system-site-packages /opt/hephaestus-venv\nPY=/opt/hephaestus-venv/bin/python\n\"$PY\" -m pip install --disable-pip-version-check -e . 'transformers>=4.46,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1'\n\"$PY\" - <<'PYCHECK'\nimport torch\nassert torch.cuda.is_available(), \"CUDA unavailable after controlled-evaluation venv bootstrap\"\nprint({\"torch\": torch.__version__, \"cuda\": torch.version.cuda, \"gpu\": torch.cuda.get_device_name(0)})\nPYCHECK\n\"$PY\" -m py_compile src/hephaestus/control/semantic_judge.py scripts/run_second_controlled_semantic_evaluation.py scripts/run_second_controlled_semantic_evaluation_v2.py\n\"$PY\" scripts/run_second_controlled_semantic_evaluation_v2.py\n"
+    ],
+    "env": {
+      "HEPHAESTUS_CANDIDATE_CHECKPOINT_HASH": "sha256:d06829b4738b2abc170a5a96d4a76c8dbe9a32869f0a8071c26e3b1550e31a64",
+      "HEPHAESTUS_EVAL_RUN_ID": "second-controlled-semantic-evaluation-001-33889959923",
+      "HEPHAESTUS_OPERATOR_APPROVAL_REF": "approval://operator/chat-2026-09-04-second-controlled-experiment",
+      "HEPHAESTUS_REPO_SHA": "e4f6298e911524f3ad91673ec4b8aac8d45f1bfb",
+      "PUBLIC_KEY": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMGo8fi8XvCOkYQz4Ysuij4Zq6Rb6wVex/sYPzQcXpM2 dafco187@gmail.com\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHZywhszFgzDSvbSp2iqcH3NOJCuHzHpKkZkIjG2Xnxu katerinaslavova05@gmail.com\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC2BgbPHN1hssKrN3N4lHBbpvEzXekPrJJ6gS24mCyALmVSAT/BhK7h+Pxjid5xjrjAErX4Jrt5PDGX3s/G8KE9GVDVSRvODoYySdkUr91B7ayDIW7lo271/uAPt5F6L32CyPymCReqXB/usEuVX65QyKR5XvOKAiA8815IgAbuTKummnLVy7xoloFZ3iU2qBM5QuGfs27ltS7Oqf2CKQPssbfafLsi7/qfNzqm9TuE8dYx8etdfXk/+jT2+cwu+d6QVgZ6RI+ppeuSPPBDOYa0h/9GJVn/ddbTgcvN5OWGUN0Nl4msMXfsjvKA025FY9sSevbVOlFsG8mQBzHUQbr1 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC9KnyaWeHIOIv4urObUpGCUUgQhZ8wdlyogekyIMU0l96DnFiRSBG7wO/biclP+1bUyvRdzpYoeLnt729ysYzJb/bFnewh7oxkKkIwJlRQygrvTLLfmD8ChCZfdsLY9kwTAc2ra8VFmaKc2oQVUnIbqeP7pqBMqA5WfQfkcTTnD4J/BcrVj0u0ZG1d30CuixZ5Kq90LVaVi6IO1DUYBmTcw/rlR7M4cTOfwCfqzIwdkoFvS+XBmbLerefznzjhx6V+eHFO86lrCKt72wVGlxbflsHITlKpaQhW8/V01/AVR09H0QkBZh7KRm1P+iAX12O8G+3x3AfhF+iH2jJyUyS5 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDOgliQ0eU+GIfGgr4ob4Jv+iOjOfk9iqvp1smcerAtiryu6MbHjDTtNR1QoRDYN2f7hkO8/nD1PevE2M4RpHWY+FK/57SaVPhPNc2z42LmyPmIrk/EsI39H2xpOH6eL4MBfF0LUcCn/x3d00BEutT35WgotrzBvJIFEmrHMosQMTF385QYY3WwH5RWkFdCUgs5VXYXg11Lc9iseB0G2wXugDVxcVvQgW233qSOfrFmr3gXBdHezQL8sLSPCi/1B1oRRsAS+PNnPeGgnvE4EdLnW/OpDmj9piTa0qt1/6JagAnNuklmrbqD12CwNeBZDMYrtpanet9crJ/+G9tP0k/L runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCwxYxN3PerhnNzMTSTsjm/FVoSk6lHtISgt9e2+LNmfinFKTzBjqfdx5X51WEWrdbWg+0Miyyjhhpg0JaJpWg2sIOyNOcNvcBmXk8JbDH4p5Zx5vqDwc8ayjsUFZig2sXCj+LM017a+G+Kbl2E56tAGYVXFmqPtxQoEYjpUUXpzBHmHOkp+SKchm9eq1Vik9dZjggCKWLNo/LGJW8P8LT0nmnwwnRG9GCHDKAyV1e0PR8z9rxbiewiSIbyUuKH9LKhOCXrAW0k2D6LqbAToTVcktJ9hW5ZnCRI3RK3sCSeb3fMJSdhaOmTWvhJsrc0hlDhvp/PvuUJ070adwyTmND7 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDGCdeRmk0v6kQlvywjRQjOt2wUTHbv7pGLIkP9PhTp9UfAbDi/K3Wgo5lOc2zJGHv5XHt7NvtG07oXgQzqKdw1igb4pX2mEoFobpQwV1aNd1Mg/kKToLxh5M4AdCPGXjKBgtpKBNTcSzxTta/EAT1n+t/PPLw9FOU5ex33X4e1CgYGwNTjbtCKG5pI7vB7+4JWW1lk41rEF5EK9om54EMGYKJ6QND8mXXn7IXqZUlykpKaSGhqNy4wOscPYe+mSTyBAsaAwobeOowDODs3zx6CLUDIlmpdlGaUlt1OTtSQCVFJcTitS4wPFO7c58yQxF4UYXYrUjOKe1mbcoLml9Nx runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD6JqI+LX3HLlSF+phiDxRwYmELIo7vftibp2B6+w6aCVAKfaOQaaRK9E9YfsQu+TLsaj2wa7cRnDMv0vJ6XLiWNEaqbH+9b+oj3GarPMys/Nav0Ebo69gzHfDEBZLtGb4vqdFfgoxr1VYp0TxZhbmj9iaR/LpV+TWqrgfmNqW4CvABX3oH1dKul+cqmoBX8MAs2XNjpkpiiDYzuHCiqEo9OunDt5ydt4Z4HH8HgJLZZwhPqyV8qPMl1WdhxN7cpu2Oa56v4jKTGU6/f4Dsg5hLAEa07h/BfvZ7Jmow8gIyVCTXAeUCP6yIIQsMvKhCtLXcFrHS7pn99AS8+WvJ1AGj runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCnB+RjoLcPjzlyPvHDm1qlkoaDva7itMk1qawsTBU0RJUCkCS6B240m1ZdU/pos+19Og+prwaXg7ulNAMFNZ55brXR0Mzrj67PefJSuIsUPmgVbVHgdRBqmabG8FM2Usim4fWJmsJfGVp1/7Jrd6+LILvDKu4Y3Dq7S5OlZ2pbn2IZdIfvq321SB7Nj4sbEwO3+EnjSnPhjIsU8EgSOZUPtQHV19uZcnevaLlozshctGmG8TVpnUeOnpe+kfIBQoxTDcMxJXmzG3zl0BFtdkUlK/KJZbftlwCeeo81irCn5BFKYBv9RvluovbyugjufSsegSL35Zi9B65ronQtAKeR runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDapsWn/rAWjKLtf3+wSNEgEodKh6OKVvEb3kJMUOcK+rV5Ab1Y2z6aci5gIvTY0SFulhsZENdf5pI+KZuEgblLoGJNjB/xQpmQ/2JE10YHjySvqdNpjHe5bgSEtVcWZhObJ0kSP6gNL+XiPjNLt8xfWPJeNnthjkc8ruQjHCMA71T4TbYnEM546Az5ZH4z6OE3JM5QY65IIvfcB7zN371SXTDVu7iarDENi4t8GmBs8NPaPbAKcNMvSKcl3WOE2hFPvYcUf+yAicDlxX13hvUG15Yx9YNn0WvgQ9xQcKmJW4tauOlyz1roPmZ5pIsrUbLj+Vsrxn3y2JrozXAaeVqV runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCVGE5ktKDl1bREwrtbIqiQyi+UIBAxzfoVxxXb1Rq9BPSwBVjnUoTaPMsswKOLYf8hAIou+0QKpBMag/WsITzaB9MzHQls6v1f9a8K/WOsLxHFuxGAcv4+Z07U8VAURGdbmDIk2UsSR6YGSGixf2nSJnSRe/2WMZluLAD2U+8OB4mOASFGnAlsbaab5vYqfNjfIs/hLVWPnwiRo82YttFuU6CEVVFaiWcCvQ/7uX5ZyiJVqgARZJSETKXO31PCypL8DtcHJ1N1rCiYtpDdeQtb9Aq/eJJ5C0KCQJXKKJXe3mceJ+MgEqGHvKvcf1OMANSI5Mwm6W46R9de9O6BZLdZ runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCYcXpukxkGr3bC92x59VodPtxgrdiHGLDVOmQC2CoVKpRWrH9XtccBSgtEJa5ZyX2Tx6rgwIvTavA/oUNV+wzicYpf8npcfzeJ8FmTZLrY6wkRaCes26B5Gk8X4FKGtIfux7hNunQIxuytmPYTHHgm+vXHN0zNtgWs+SnmRtfZN0VJmkS+mU7RVKIgKYQtzNR3xUHmqIOPMcLT3b/CwSeAR9L/qg/U0HbhaMvBkPmuERXPTTYld+k5QheO31qbbVgVZPAF2xU0cuTK99IYaxMNByQ1ZLk1OWI4msD0Kx3XsSKSjHYiSROJSZ1cEcoscyasf+rT0uRR865DZ+iEaXs9 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDD5aUa9auVUqrXQ/64eSLm4cPQ2cfTzsp6Dcj5COUrgVWIDscJxpQQNr0JPpxuZluumW6PuIIXkEFejR6bwqB97rbmICzH9avaYTcENgh4dkSPEgMtCKr8+HXa3zvteUrzWOFqUF8KXJhijSwpaoTx3sU40Pq6xaPWVcnivX72gwovYZQ+pPB3JHsmmaiU6u2WBbVPbZhp2S1/kn+/DmvBR3B2Ts1CrHA86sdQsLp/XXgjSmscCN9KTflqjl2ic2lfW2XTzluzAMBgLpemUJUK+Z6GMmCsTTLZL0AaR1ZibEsBoROLMRdh/YNGAz2Jq0e5jUlSbHAOcPS3uTDGtlAn runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDIKspB7/1nKrFrGUB+yBcEK9OA4I/0K+oA/MJ3/WK6cd6wzJtVpoCrVfiZZyPzrey158+QIErTLHSROaod1g5BVkoMLBmfmICyljfD63wbIsaN4+rtBA/52dL2dg1irhsNfOkWibs5uYNhyD8Hx4CJtp6ouWjsr0a5SvhJwGYAC9fUrz/pvKHDQvF8x3A2UVk8aawwKBfxQm1zDp9UPXgdFWPtYFkYYGj4JW7F7VHAJLDW2nsUwT8XSTIyMk6J/ZL/h+2YEjg94zdOszBq/fweCHhAdkn3XTK4xPVZBDBY5Ime3QXz5zIgGicKPEQgn+MX+pQ+3RPl4Ev5Vu4tpsEV runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCe4az8LIMIdVkx5tD+SiB63RQo5YRrU8yfnM/4TyyluRiDXQm1KWlsBu54LM7wV1wPRPayjydyaGVlGwncxyXBSoe8NR2DoqjqD8iiqref7D/4jmUjwcMdSnLNq7G7JS1z0T8JYdXCRAC5GJOTpdrmiCP8MsxhHSQD/PVsF1jJ2R7/giUBINFDrqk0JHhZ/E9LTtIalQCXRHRnM1QCuD7msIXPe2WdrjmGv5ieIm1qadHvIRPFpjHDthPADI64x4SKKy1BEsoesJ3hKRz+U/p6inw4ro71fcaUPIn6Ya4t+iUtgafFT+oK7p148fMR8myeJ6NsEBIEMyGIvRsWYEaZ runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC9nfH6CyvtX2w71stN59f8uWlk173m+71mptgUfs2WJeEWBMwsI6njiRuwHL3OuItctRJXfijl+9ilGR1XlphRhs0P2zhbiBQg0Z7j4/LGun3pmx2/Bn1PTBLWeETc0JFDqG2XvpVeZbx5SyZX2xJerCb61+U5GeT2kBBiUfuN8OwfdG0Q776oLO9zQurtLhHWZNSD3kKTr5VNNCHMTGFZj3E7LbrvFa8raGxpF4L1J1S76Ns+YuG4XCAXNGK3hJdD7L+x+FDUXuoh8SypS68DEbedqKyZ6g6JkOEVgJ/y5P+UiN6MF0GC8owStHA3+eYXit3sKDlPjweed58xd7/1 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDcCUTi74BpsvYVGEMxtuGLL9Bqk1sUyOeb7D0NT2hYMiny+5Wi6q91IBarddYqQxqlKHYT1pcZw0D2wuqnLzB2CUmJIsuup7f+lKVy5lDyv9OSqYVTrSACrltF2/HdUhw/v0W+KBgl0YwqvJ9qUz9C2J+vRizQV4kXAygSH7xWRcMv+OO4XApL2h/jwgTXCEy6HQEVGkFezmDbKkwoL6WLOKNU5ne/bVzirqZYIGfatrEeGi19q03eR1rmfp+PQcEPWTuI8exI0ulOh45r1nHRUzNiE/tuLG/36ujcxOPn+RLJZfSVkxezJVMNjGyLVJBZAoEi4oSHvQONhzuSvc7X runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCwy3EfxANcv4uTjmWAQjyh2VO1VwaEIi6+27FEfA0se+EK006kn6/dcIHB+m16dmEd9guLmQl/sjFVXVZN7s2eWrPX8wMAVcuXml1RLndHoFkCioKEwpJrmef43PNAcozDywWrxZiS913NfYau1LEev735U4hALgtfcq0bLAU+MNkwT5k2IWyZfcgtw7QNuHn4xCtzKcZPKXgwNi4wGzJ1jMzf6MsN1bcbFXOL4v7uxcWGno+rTkDbMmK/n1huoAolVuMAfQcZGcrDBf8QZJ5nxLFfnBUEn5rHnD4tZhyyjEawfXluV0UNchX8HOJ9zJh+OEncMT3jZa6qrUeeGFVZ runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDmc1fxwxIWc+8vwr4vbP1tE1MLbc5/2pbJT01CLBuyyvLOfvNVL+e7nHwimP41jwGQY7FE8FnsWCr3NkB4DK82Y2ndJV1aFBMwzEsc1R/miLiSZr0rPY+4J/7mJkKSj7cxJmGaER4CHtVKgonpK5iNwQ/Rqvt9fgppVqO207gcP7ovduc+gyaEZL+COyQ5j1PcEZNOqTn9qBvuq3yOQWHlhWei0a3FldMvqxnqDTy5rrPkzA7l+YRd1j10p1gjtV/eaZYlDlfpehHBBOCku2fa+Pswm0Lt12Ml5m29fsWcNHUGSEEiEFbUsDiBUQ0SYBxIBepZSyHRMa3gVNxi6RPV runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCY+LGT/eCFrW/WVCzI3V6+MfqXcS16/hWwhW6AonsJxl0T4UNOutBpKPp+bWesLAHGtCX7KYri/2SFVhB2y2pDBkKtnbGfZISh17UpW04Le3V6CkqvzXZafaXLG7ab+yLnuktZ4DGO1xJ9vIUkXAVfF1wPSP1qtcCNpxS0ZyodA8kHwCtyOOZ72X0sMjHvdZA+7JYfKbP/wKK7uPXN0Y+A1FIaOZp+da8ZA1+Zjbq2QyimXGcxdUjW/0GTIWAw0RTuhkVa/0hserv20EaRxnORR9H08ataj2vybdujpdQs3gvNKF409tca0HowY6uoTmDWIMqGTTXMrnFhsCjWqC6x runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCnLMJ3Q+7SlQbgYlYPEH1gKQqbKQlUpgIW9TFqFqEXrev8sFRSQ3fQ9eAd7j3o58MxOqi/e/Bjtqu0EOKxOEMi4EY8QnJH0dp1LhuI7Ix3yFkA4ySdMhqoKP4/qSSlwocyFCkTLRIdkiM6tLA5hw9C16My9WjQciSbiYcxUh7DbY4HOeUazS+kOoFQBdYF3fkK4/aqOoY/XtM435DfOZDtwFnENucFKhxJbni5FWSsG90yR7UXCflLc/4QV+M9YwNyYTnw07pdUkS9Jxq/hjfwnNEyCWVeFmxQDvIHWKvfit+8xJLvKjSPT8L2bCo9wh3ClhFBa/tBpLYb/vUJz9fJ runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDCkS0EDZ0LiDTW8yL7DSA2faH/LZTg2DrDSSJA6D/X7YOoEw/7u3fdeWny/0QxWh0p/A/bfTFUfHhvNZK3BBXAjPif7UGY8iJqt5CIRPDmcPNJtYp8ZnA5xSl/PeZX3IjTEfjzm7eXlMOeAoPsANkIYlhY2fyrK4qPjrCxRYljQ6fXzvrYpcYnEYSKEiFU1+W08CVTTzt5IIZq93IvT6QIgnHN5FTYBKUdsaEjtHeTEhVF3E8zz0r5a3EgzXeh7LbCP1aypw4Sxi/HnzxZOspZt4w8Ykcfnqg6eXHeaxPyzdVkTs+QJrsv9y0/pYX23uwqg1JaWTBMlW0ysiptWP5d runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCZTvO7BQz1Mw2ldDO724hV8WixZ3z/RxKDoLwAlGZ4CLLZouEaWPiskwIjlPWe5mc0ryl8GXK99rHWT4ff00ICiVsMh3Wb0aqjyBF9t/ZV/N/Vj49jNqR5O9Ajey6GWOF/nqZpu2nskSEtO4pBWWy+FMaQqcE4m5lSSVMbw3E4kwnDYAcTFSWTwkrrIH+vgFK+oB925QQTORNmGZ+bicbVTw4Nmf71TelzRR+Jyu1Sz5hyFdlJajTfr8+iioZG58lNPP4iqac9Dvo1afe+5It9/fKu+fvCB7QIAnRuQApK09YFztnTVNdACeXUnDr3JbXKUoyzkodoRTp64WV9vQhn runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDeUmqHgAGEHCs3Pn/Rhe3qOLJdJZG4IJPuMY7arMPoaBiZWyaPfiGw+tR5nGMKgMNmZlmP7vgkIAS26KDDMgvd7zkVRSF3JLWdfIHkMEBez0QWzGxSHrEMkiTdWTR5jfSXCOZlmDFBwrCoUo5nNSbOEOkByLG99HQLTMDugV2GNZPfKoxmDMOj2geCkHQj66skeP7YZX9LkvVRgR2WiS9M7MEVEFKsJxPFoz8CU+55QHiqixei4+bisaMR7GrPv4xXkEBHFEhbt9KnSLlM0CzeFTNBOeHoTeQjHKNJLSxlIVMTRZqUkHFyZQmQYuRyR4CGihyC3B6oeZ1ApGe8X/X7 runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDkjrCLgTvX9buB29iAhPExy2aLdPolYb4roFR3QJc2D8f5BBocDVhusiDdfk8oZBCjlIGp5lZ6pDgEnrFzLA4l6rs5z+YXNBNTa229Wy87te9RCaI12LL3JigowPJHQfUnKy+uqX67R5ZLRxyslQd+41tccU1eMOwlKkWSNo8aSyt8cimo0X4LwjB1byx6h4bBPUhl4SrhjI0vR00KwjLo2qi/u+m4g5XT2epW41lzLb/VCpuZGWjOlbDAhO9mLpD0CCrJMrQXgwnk7HXMghUlGUR9Yv0FIJggTbA3q3qJK83Sdz8pwcqyK9ou8spx7H/yObSGfGifsyAZx4mHK9BZ runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDrwf9lPm3+DxlcwQ38Tx1lEyiiC4l/a8QXZxtQSd7qntqeUSgslGNSr6EvelUGKNYYTIEgBF680jSwfmM7A93wVEMgqx5+sbETTSZDUG95CyG6BhJRo5sPKi7/KiWqeYcZjubs5wUschY2vJ7yhoZeuO/YII2GOtTSdBH4RFQ2QrlmqcCplCXLspn9k79B1dkWGE3UGyjnDSKWhDcveMnnK7iwyZjpUBmSVBGazfHMWMKQu9S4LoPY9Mtj5xNpjQPRVfXqD+a8KwdLNZMuseEFV+bjdaqhLW8VNmt+1yuWF7/ud10FpjBnkERgueUIXfPbiybdZj+FmeuFLCfh6IMb runpodctl-ssh-key\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3it5eyFXR1ZQfMhAA1DN+K3x0FBn+4VLaFt1IgKuxytj2JnApsIgUc80J1TA/n8oUkZ7ocvnfYX72CIOdUnHm3Wv1hdIh7SubV7thZV76XozBlOF7zG3V5xL1lk0pR9UFG/OedkGtcnqV+uIA5pc/1aEnUrnfQXgEmSPD6joiuJGSt6sxYikNLLLnSJqP86zrTroCfH8PeyxdPRAH0mBMjyGK7BV3HzlEUmvCwyZfYzhf0/Zr4p3Cw9mxPr32EjZ56OPJk8UuLm8IdeJ4jzot4g3i85VrlshiUkRwlCf9O7M84M01FKy4w66ULR4huUfDlevSreBw5wK94OGiNvgF runpodctl-ssh-key"
+    },
+    "gpuCount": 1,
+    "id": "h10x5xp5hbkarz",
+    "imageName": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "lastStartedAt": "2026-09-04 15:36:21.536 +0000 UTC",
+    "lastStatusChange": "Rented by User: Fri Sep 04 2026 15:36:21 GMT+0000 (Coordinated Universal Time)",
+    "machine": {},
+    "machineId": "nwh2ngtzuypz",
+    "memoryInGb": 125,
+    "name": "hephaestus-second-controlled-semantic-evaluation-001-33889959923",
+    "networkVolumeId": "cviwpryzao",
+    "portMappings": {
+      "22": 40004
+    },
+    "ports": [
+      "8888/http",
+      "22/tcp"
+    ],
+    "publicIp": "213.192.2.69",
+    "templateId": "",
+    "vcpuCount": 32,
+    "volumeInGb": 0,
+    "volumeMountPath": "/workspace"
+  },
+  "pod_id": "h10x5xp5hbkarz",
+  "pod_status_observations": [
+    {
+      "at": "2026-09-04T15:36:22.619334+00:00",
+      "desired_status": "RUNNING"
+    }
+  ],
+  "primary_variable": "dataset_mixture",
+  "repo_sha": "e4f6298e911524f3ad91673ec4b8aac8d45f1bfb",
+  "run_id": "second-controlled-semantic-evaluation-001-33889959923",
+  "teardown": {
+    "deleted": true,
+    "status": 204
+  },
+  "terminal_result": {
+    "action_applied": false,
+    "baseline_training_run_id": "first-bounded-scientific-training-001-33866198758",
+    "candidate_training_run_id": "planned-run-b8e558e54effac85",
+    "comparison": {
+      "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+      "candidate_run_ids": [
+        "planned-run-b8e558e54effac85"
+      ],
+      "comparison_id": "comparison-experiment-d0e911d6bd1fb7ae",
+      "confidence": 0.7071067811865476,
+      "contract_version": "autonomous-experiment.v1",
+      "deterministic_gate_status": "failed",
+      "effect_summary": {
+        "baseline": {
+          "count": 18,
+          "maximum": 0.2,
+          "mean": 0.03333333333333334,
+          "minimum": 0.0,
+          "population_stddev": 0.07453559924999299,
+          "spread": 0.2
+        },
+        "candidate": {
+          "count": 18,
+          "maximum": 0.5,
+          "mean": 0.4138888888888889,
+          "minimum": 0.25,
+          "population_stddev": 0.0964253053206099,
+          "spread": 0.25
+        },
+        "deterministic": {
+          "baseline_pass_rate": 0.0,
+          "candidate_hard_failures": [
+            "anti_repetition:11:anti_loop_termination",
+            "anti_repetition:29:anti_loop_termination",
+            "anti_repetition:47:anti_loop_termination",
+            "brief_termination:11:brief_termination",
+            "brief_termination:29:brief_termination",
+            "brief_termination:47:brief_termination",
+            "instruction_triplet:11:instruction_exact",
+            "instruction_triplet:29:instruction_exact",
+            "instruction_triplet:47:instruction_exact",
+            "observatory_continuation:11:continuation_termination",
+            "observatory_continuation:29:continuation_termination",
+            "observatory_continuation:47:continuation_termination",
+            "planet_fact:11:planet_termination",
+            "planet_fact:29:planet_termination",
+            "planet_fact:47:planet_termination",
+            "structured_planet_answer:11:planet_json",
+            "structured_planet_answer:29:planet_json",
+            "structured_planet_answer:47:planet_json"
+          ],
+          "candidate_pass_rate": 0.0
+        },
+        "dimensions": {
+          "coherence": {
+            "baseline_count": 9,
+            "baseline_mean": 0.0,
+            "candidate_count": 9,
+            "candidate_mean": 0.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          },
+          "continuation": {
+            "baseline_count": 3,
+            "baseline_mean": 1.0,
+            "candidate_count": 3,
+            "candidate_mean": 1.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          },
+          "excessive_length": {
+            "baseline_count": 15,
+            "baseline_mean": 0.0,
+            "candidate_count": 15,
+            "candidate_mean": 1.0,
+            "delta": 1.0,
+            "effect": "improved"
+          },
+          "instruction_adherence": {
+            "baseline_count": 3,
+            "baseline_mean": 0.0,
+            "candidate_count": 3,
+            "candidate_mean": 0.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          },
+          "malformed_structure": {
+            "baseline_count": 3,
+            "baseline_mean": 0.0,
+            "candidate_count": 3,
+            "candidate_mean": 0.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          },
+          "relevance": {
+            "baseline_count": 9,
+            "baseline_mean": 0.0,
+            "candidate_count": 9,
+            "candidate_mean": 0.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          },
+          "repetition": {
+            "baseline_count": 6,
+            "baseline_mean": 0.0,
+            "candidate_count": 6,
+            "candidate_mean": 1.0,
+            "delta": 1.0,
+            "effect": "improved"
+          },
+          "termination": {
+            "baseline_count": 12,
+            "baseline_mean": 0.0,
+            "candidate_count": 12,
+            "candidate_mean": 0.0,
+            "delta": 0.0,
+            "effect": "equivalent_within_evidence"
+          }
+        },
+        "judge": {
+          "adapter_used": false,
+          "deterministic_precedence": true,
+          "disagreements": [],
+          "evidence_count": 0
+        },
+        "minimum_practical_improvement": 0.05,
+        "missing_evidence": [],
+        "overall_delta": 0.3805555555555556,
+        "overall_effect": "improved",
+        "repeatability": {
+          "candidate_run_count": 1,
+          "candidate_sample_count": 18,
+          "direction_consistency": 1.0,
+          "formal_significance_claimed": false,
+          "repeat_unit_spread": {
+            "count": 3,
+            "maximum": 0.4138888888888889,
+            "mean": 0.4138888888888889,
+            "minimum": 0.4138888888888889,
+            "population_stddev": 0.0,
+            "spread": 0.0
+          },
+          "variance_risk": "low"
+        }
+      },
+      "evaluation_report_refs": [
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/generation_report.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/generation_report.json"
+      ],
+      "evidence_refs": [
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/0f08af667e6f9133e9b0953e.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2717fc5f954699234a402f9a.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2a51e004c0d32eb9e66f92b4.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/3045ddc72a33dd6adf118228.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/431e7e04891ee96f6f9b097d.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/7a470fc8f16ab84bb65aac38.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/8b765260622af44612e20ab6.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9a20a0ac445c0452e5c43ffd.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9b342e4db7554169bd779481.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9d690ff11c5d180cdcb2024c.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a6be7fc5b6e2b4840e5a5e48.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a9b9fddf4aed9ec50274e1e8.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/b9f3286a15880b1a55f2c969.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/bcc4a00849f64be26e23d252.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/c516dbb4c926e9220cf5ee5d.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/ea61c14285cb6962f0503623.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/f26c8f1b71e614f1f1a3ecc6.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/faa4af4d7680e05497072fcb.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/0f08af667e6f9133e9b0953e.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2717fc5f954699234a402f9a.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2a51e004c0d32eb9e66f92b4.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/3045ddc72a33dd6adf118228.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/431e7e04891ee96f6f9b097d.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/7a470fc8f16ab84bb65aac38.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/8b765260622af44612e20ab6.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9a20a0ac445c0452e5c43ffd.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9b342e4db7554169bd779481.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9d690ff11c5d180cdcb2024c.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a6be7fc5b6e2b4840e5a5e48.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a9b9fddf4aed9ec50274e1e8.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/b9f3286a15880b1a55f2c969.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/bcc4a00849f64be26e23d252.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/c516dbb4c926e9220cf5ee5d.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/ea61c14285cb6962f0503623.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/f26c8f1b71e614f1f1a3ecc6.json",
+        "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/faa4af4d7680e05497072fcb.json"
+      ],
+      "experiment_id": "experiment-d0e911d6bd1fb7ae",
+      "issues": [],
+      "metadata": {
+        "comparison_configuration": {
+          "decoding_config": {
+            "max_new_tokens": 96,
+            "seeds": [
+              11,
+              29,
+              47
+            ],
+            "temperature": 0.0,
+            "top_p": 1.0
+          },
+          "minimum_direction_consistency": 0.67,
+          "minimum_practical_improvement": 0.05
+        },
+        "confidence_ceiling": 0.75,
+        "does_not_promote": true,
+        "eval_pack_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+        "eval_pack_id": "semantic_behavior",
+        "eval_pack_version": "1.0.0",
+        "human_review_bundle": {
+          "blind_review_recommended": true,
+          "bundle_id": "human-review-comparison-experiment-d0e911d6bd1fb7ae",
+          "judge_disagreements": [],
+          "persistence_status": "inline_bundle_requires_caller_persistence",
+          "rubric": [
+            "instruction_adherence",
+            "relevance",
+            "coherence",
+            "factual_or_task_correctness"
+          ],
+          "samples": [
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/ea61c14285cb6962f0503623.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/ea61c14285cb6962f0503623.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Explain in one sentence why repeated evidence increases confidence.",
+              "seed": "11",
+              "task_id": "anti_repetition"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/faa4af4d7680e05497072fcb.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/faa4af4d7680e05497072fcb.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Explain in one sentence why repeated evidence increases confidence.",
+              "seed": "29",
+              "task_id": "anti_repetition"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/f26c8f1b71e614f1f1a3ecc6.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/f26c8f1b71e614f1f1a3ecc6.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Explain in one sentence why repeated evidence increases confidence.",
+              "seed": "47",
+              "task_id": "anti_repetition"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/0f08af667e6f9133e9b0953e.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/0f08af667e6f9133e9b0953e.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "State one benefit of rollback safety in at most twelve words.",
+              "seed": "11",
+              "task_id": "brief_termination"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/c516dbb4c926e9220cf5ee5d.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/c516dbb4c926e9220cf5ee5d.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "State one benefit of rollback safety in at most twelve words.",
+              "seed": "29",
+              "task_id": "brief_termination"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a9b9fddf4aed9ec50274e1e8.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a9b9fddf4aed9ec50274e1e8.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "State one benefit of rollback safety in at most twelve words.",
+              "seed": "47",
+              "task_id": "brief_termination"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9a20a0ac445c0452e5c43ffd.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9a20a0ac445c0452e5c43ffd.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Reply with exactly: alpha beta gamma.",
+              "seed": "11",
+              "task_id": "instruction_triplet"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/431e7e04891ee96f6f9b097d.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/431e7e04891ee96f6f9b097d.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Reply with exactly: alpha beta gamma.",
+              "seed": "29",
+              "task_id": "instruction_triplet"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9d690ff11c5d180cdcb2024c.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9d690ff11c5d180cdcb2024c.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Reply with exactly: alpha beta gamma.",
+              "seed": "47",
+              "task_id": "instruction_triplet"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/bcc4a00849f64be26e23d252.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/bcc4a00849f64be26e23d252.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "The observatory lost power just as the storm arrived.",
+              "seed": "11",
+              "task_id": "observatory_continuation"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a6be7fc5b6e2b4840e5a5e48.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/a6be7fc5b6e2b4840e5a5e48.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "The observatory lost power just as the storm arrived.",
+              "seed": "29",
+              "task_id": "observatory_continuation"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/3045ddc72a33dd6adf118228.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/3045ddc72a33dd6adf118228.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "The observatory lost power just as the storm arrived.",
+              "seed": "47",
+              "task_id": "observatory_continuation"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/7a470fc8f16ab84bb65aac38.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/7a470fc8f16ab84bb65aac38.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "In one short sentence, identify Mars by its common nickname.",
+              "seed": "11",
+              "task_id": "planet_fact"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/b9f3286a15880b1a55f2c969.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/b9f3286a15880b1a55f2c969.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "In one short sentence, identify Mars by its common nickname.",
+              "seed": "29",
+              "task_id": "planet_fact"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2a51e004c0d32eb9e66f92b4.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2a51e004c0d32eb9e66f92b4.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "In one short sentence, identify Mars by its common nickname.",
+              "seed": "47",
+              "task_id": "planet_fact"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9b342e4db7554169bd779481.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/9b342e4db7554169bd779481.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Return JSON with answer and confidence for: Which planet is called the Red Planet?",
+              "seed": "11",
+              "task_id": "structured_planet_answer"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2717fc5f954699234a402f9a.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/2717fc5f954699234a402f9a.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Return JSON with answer and confidence for: Which planet is called the Red Planet?",
+              "seed": "29",
+              "task_id": "structured_planet_answer"
+            },
+            {
+              "baseline_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/8b765260622af44612e20ab6.json",
+              "baseline_run_id": "first-bounded-scientific-training-001-33866198758",
+              "candidate_output_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/samples/8b765260622af44612e20ab6.json",
+              "candidate_run_id": "planned-run-b8e558e54effac85",
+              "prompt": "Return JSON with answer and confidence for: Which planet is called the Red Planet?",
+              "seed": "47",
+              "task_id": "structured_planet_answer"
+            }
+          ]
+        }
+      },
+      "primary_outcome": "regressed",
+      "recommendation": "reject_candidate_evidence",
+      "variance_risk": "low"
+    },
+    "completed_at": "2026-09-04T15:37:07.098532+00:00",
+    "created_at": "2026-09-04T15:36:58.152561+00:00",
+    "evidence_files": {
+      "baseline_generation_report": {
+        "bytes": 37429,
+        "path": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/baseline_generation_report.json",
+        "sha256": "sha256:0cc4bff4f43dc296d3b406968dc4e7c687ddb6809d7a9c2fbe0abc35ad104602"
+      },
+      "candidate_generation_report": {
+        "bytes": 30661,
+        "path": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/candidate_generation_report.json",
+        "sha256": "sha256:338980c11bfdcb76f9678f5c0deb0d714204cdcce580feb1d7be32e39ea0e2bd"
+      },
+      "experiment_comparison": {
+        "bytes": 31687,
+        "path": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/experiment_comparison.json",
+        "sha256": "sha256:3a0408c9861ca705194f16dae1227ec5482494f5ab52f5d9e8025fc9158e8c43"
+      },
+      "human_review_bundle": {
+        "bytes": 15882,
+        "path": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/human_review_bundle.json",
+        "sha256": "sha256:e0985becb69cc077043bf1eca5685cae21e1d3c6d4ed596241debb8561c78183"
+      },
+      "judge_exit": {
+        "bytes": 526,
+        "path": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/judge_exit.json",
+        "sha256": "sha256:0aa00e96532fdbf883bfa1b9ecc21018a1bfb8c5b22419535fe5855ad9810d69"
+      }
+    },
+    "experiment_id": "experiment-d0e911d6bd1fb7ae",
+    "generation": {
+      "baseline": {
+        "report_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/first-bounded-scientific-training-001-33866198758/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/generation_report.json",
+        "run_id": "first-bounded-scientific-training-001-33866198758",
+        "sample_count": 18,
+        "status": "completed"
+      },
+      "candidate": {
+        "report_ref": "/workspace/hephaestus/scientific/v1/evaluations/second-controlled-semantic-evaluation-001-33889959923/generation/planned-run-b8e558e54effac85/semantic_generation/generation-settings-2ba1dd1322d04d4925c36ac4/generation_report.json",
+        "run_id": "planned-run-b8e558e54effac85",
+        "sample_count": 18,
+        "status": "completed"
+      }
+    },
+    "judge_exit": {
+      "confidence": 0.7071067811865476,
+      "lineage_id": "lineage-first-scientific",
+      "next_action": "reject_checkpoint",
+      "reasons": [
+        "semantic_outcome=regressed",
+        "semantic_recommendation=reject_candidate_evidence",
+        "deterministic_gate_status=failed",
+        "promotion_state=rejected",
+        "certification_state=certification_blocked_by_regression",
+        "human_review_pending=False",
+        "recheck_required=False",
+        "blocking_issues=none"
+      ],
+      "run_id": "planned-run-b8e558e54effac85",
+      "verdict": "blocked"
+    },
+    "lineage_id": "lineage-first-scientific",
+    "primary_variable": "dataset_mixture",
+    "repo_sha": "e4f6298e911524f3ad91673ec4b8aac8d45f1bfb",
+    "result_version": "second-controlled-semantic-evaluation-result.v1",
+    "run_id": "second-controlled-semantic-evaluation-001-33889959923",
+    "runtime_environment": {
+      "cuda": "12.6",
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "python": "3.12.3",
+      "torch": "2.14.0+cu126"
+    },
+    "stage_name": "smoke_test",
+    "status": "completed",
+    "training_performed": false,
+    "verified_inputs": {
+      "baseline_checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+      "candidate_checkpoint_manifest_hash": "sha256:d06829b4738b2abc170a5a96d4a76c8dbe9a32869f0a8071c26e3b1550e31a64",
+      "eval_pack_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+      "eval_pack_id": "semantic_behavior",
+      "eval_pack_version": "1.0.0",
+      "generation_settings_id": "generation-settings-2ba1dd1322d04d4925c36ac4",
+      "primary_variable": "dataset_mixture",
+      "random_init_model_directory_identity": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "seed_identity": "seed-set-8c3598742bd3db5b46521974",
+      "task_seed_count": 18,
+      "tokenizer_directory_identity": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+    }
+  },
+  "verification_status": "verified",
+  "volume_id": "cviwpryzao"
+}
