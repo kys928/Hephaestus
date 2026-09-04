@@ -1,0 +1,80 @@
+{
+  "projection_policy": {
+    "invented_failure_domain_signals": [],
+    "only_frozen_supported_facts": true,
+    "regression_is_not_itself_a_cause": true
+  },
+  "projection_version": "first-post-failure-diagnosis-input.v1",
+  "request": {
+    "constraints": {},
+    "contract_version": "autonomous-experiment.v1",
+    "evidence_refs": [],
+    "lineage_id": "lineage-first-scientific",
+    "observed_failures": [
+      {
+        "confidence": 0.7071067811865476,
+        "decoding_verified": true,
+        "deterministic_scorecard": {
+          "gate_results": {
+            "semantic_behavior_v1": {
+              "deterministic_gate_status": "failed",
+              "passed": false,
+              "primary_outcome": "regressed"
+            }
+          }
+        },
+        "eval_pack_integrity_level": "content_hash_verified",
+        "evidence_kind": "eval_report",
+        "overall_delta": -0.16388888888888886,
+        "scorecard_integrity_level": "content_hash_verified",
+        "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "summary": "Frozen semantic_behavior_v1 comparison recorded a verified regression."
+      },
+      {
+        "evidence_kind": "run_record",
+        "experiment_id": "experiment-60bff7cb4f478f91",
+        "run_id": "first-bounded-scientific-training-001-33866198758",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "status": "completed"
+      },
+      {
+        "evidence_kind": "dataset_manifest",
+        "manifest_integrity_level": "complete",
+        "processed_dataset_hash": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "tokenizer_compatibility": {
+          "status": "compatible",
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+        }
+      },
+      {
+        "checkpoint_manifest_hash": "sha256:7a6be1e0cee47f29d5dd47d41bc01beed066c4de64e24ee18544ff4edcb3f4c3",
+        "checkpoint_verified": true,
+        "evidence_kind": "checkpoint_evidence",
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json"
+      },
+      {
+        "evidence_kind": "training_metrics",
+        "final_gradient_norm": 0.9406019449234009,
+        "final_training_loss": 7.302044868469238,
+        "finite": true,
+        "numerically_stable": true,
+        "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "steps": 100,
+        "tokens_processed": 35854
+      },
+      {
+        "architecture_compatible": true,
+        "decoding_verified": true,
+        "evidence_kind": "explicit_check",
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+      }
+    ],
+    "request_id": "diagnose-first-semantic-regression-001",
+    "requested_by": "judge_exit_post_failure_handoff",
+    "run_id": "first-bounded-scientific-training-001-33866198758",
+    "stage_name": "smoke_test"
+  }
+}
