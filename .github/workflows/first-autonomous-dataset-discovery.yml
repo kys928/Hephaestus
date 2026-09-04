@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - integration/first-autonomous-dataset-discovery
+    paths:
+      - scripts/run_first_autonomous_dataset_discovery.py
+      - .github/workflows/first-autonomous-dataset-discovery.yml
   workflow_dispatch:
 
 permissions:
