@@ -4,23 +4,22 @@
 This command is read-only with respect to model/data artifacts. It reads the
 exact failed run from the RunPod Network Volume through S3, gathers targeted
 diagnostic evidence, reruns EvidenceBasedDiagnosisService, and only then hands
-the resulting DiagnosisReport to ClosedLoopExperimentPlanner. It never launches
+the resulting DiagnosisReport to the closed-loop Planner. It never launches
 training or applies a Planner/Judge action.
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import boto3
 from botocore.config import Config
 
 from hephaestus.diagnosis import EvidenceBasedDiagnosisService, PostFailureDiagnosticProbe
-from hephaestus.planning.service import ClosedLoopExperimentPlanner
+from hephaestus.planning import ResolvedEvidenceExperimentPlanner
 from hephaestus.schemas.diagnosis_contract import DiagnosisRequest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,40 +84,6 @@ def get_bytes(client: Any, bucket: str, key: str) -> bytes:
         body.close()
 
 
-def get_json(client: Any, bucket: str, key: str) -> dict[str, object]:
-    payload = json.loads(get_bytes(client, bucket, key).decode("utf-8"))
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"S3 JSON has invalid shape: {key}")
-    return payload
-
-
-def get_jsonl(client: Any, bucket: str, key: str) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for raw in get_bytes(client, bucket, key).decode("utf-8").splitlines():
-        if not raw.strip():
-            continue
-        item = json.loads(raw)
-        if not isinstance(item, dict):
-            raise RuntimeError(f"S3 JSONL row has invalid shape: {key}")
-        rows.append(item)
-    return rows
-
-
-def stream_dataset_rows(client: Any, bucket: str, key: str) -> Iterable[dict[str, object]]:
-    response = client.get_object(Bucket=bucket, Key=key)
-    body = response["Body"]
-    try:
-        for raw in body.iter_lines(chunk_size=1024 * 1024):
-            if not raw:
-                continue
-            item = json.loads(raw.decode("utf-8"))
-            if not isinstance(item, dict):
-                raise RuntimeError("processed dataset row is not an object")
-            yield item
-    finally:
-        body.close()
-
-
 def verify_frozen_inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     previous_dir = ROOT / "docs/evidence/first-post-failure-diagnosis-001-33871942379"
     report_path = previous_dir / "report.json"
@@ -158,6 +123,8 @@ def enrich_for_planner(report: Any, config: dict[str, object]) -> None:
             "training_recipe_ref": config.get("config_fingerprint", "first-bounded-scientific-training.v2"),
             "lineage_trust_level": "verified",
             "new_evidence_refs": [METRICS_KEY, DATASET_KEY],
+            "resolved_intervention_kinds": ["collect_more_evidence"],
+            "resolved_intervention_evidence": [METRICS_KEY, DATASET_KEY],
             "capability_targets": [
                 "instruction adherence",
                 "structured JSON response",
@@ -190,7 +157,7 @@ def main() -> int:
     client = s3_client()
 
     metrics_raw = get_bytes(client, bucket, METRICS_KEY)
-    metrics = []
+    metrics: list[dict[str, object]] = []
     for line in metrics_raw.decode("utf-8").splitlines():
         if line.strip():
             item = json.loads(line)
@@ -206,11 +173,10 @@ def main() -> int:
 
     dataset_head = client.head_object(Bucket=bucket, Key=DATASET_KEY)
     dataset_bytes = int(dataset_head.get("ContentLength", -1))
-    # Full byte identity is checked while streaming the same object below through a second pass.
     dataset_raw = get_bytes(client, bucket, DATASET_KEY)
     if sha_bytes(dataset_raw) != PROCESSED_DATA:
         raise RuntimeError("processed dataset content identity drifted")
-    dataset_rows = []
+    dataset_rows: list[dict[str, object]] = []
     for raw in dataset_raw.decode("utf-8").splitlines():
         if raw.strip():
             item = json.loads(raw)
@@ -245,7 +211,7 @@ def main() -> int:
     diagnosis = EvidenceBasedDiagnosisService().diagnose(request)
     enrich_for_planner(diagnosis, config)
 
-    planner = ClosedLoopExperimentPlanner()
+    planner = ResolvedEvidenceExperimentPlanner()
     interventions = list(planner.propose_interventions(diagnosis))
     if not interventions:
         raise RuntimeError("planner produced no intervention")
@@ -265,7 +231,7 @@ def main() -> int:
         None,
     )
     result = {
-        "result_version": "first-targeted-post-failure-diagnostics.v1",
+        "result_version": "first-targeted-post-failure-diagnostics.v2",
         "upstream": {
             "training_run_id": TRAIN_RUN,
             "evaluation_run_id": EVAL_RUN,
