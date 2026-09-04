@@ -1,0 +1,93 @@
+{
+  "approval_applied": false,
+  "called_after_selected_decision": true,
+  "dataset_acquired": false,
+  "experiment_proposal": {
+    "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+    "budget": {
+      "enforcement": "downstream_readiness_and_training_services",
+      "estimated_cost": {
+        "aggregate_score": 0.65,
+        "basis": "bounded_heuristic_not_measured_cost",
+        "compute": 0.55,
+        "data": 0.8,
+        "evaluation": 0.55,
+        "storage": 0.65,
+        "time": 0.7
+      }
+    },
+    "contract_version": "autonomous-experiment.v1",
+    "controlled_variables": {
+      "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+      "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+      "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+      "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+      "random_seed": 1729,
+      "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+    },
+    "dataset_selection_id": "dataset-selection-fd8699f8cbd8b4957ca2",
+    "diagnosis_report_id": "diag-b6b21afc926ffa31",
+    "experiment_id": "experiment-d0e911d6bd1fb7ae",
+    "failure_criteria": {
+      "budget_exhausted_without_evaluable_result": true,
+      "deterministic_regression_count_min": 1,
+      "stage_primary_metric_delta_max": 0.0
+    },
+    "intervention_id": "intervention-0b05ae5169cd5943",
+    "lineage_id": "lineage-first-scientific",
+    "metadata": {
+      "alternatives_rejected": {},
+      "approval_state": "required",
+      "baseline_justification": "The failed run is the immutable matched baseline. A follow-up must retain the same random initialization, tokenizer, evaluation pack, decoding settings, and recipe except for the single Planner-selected primary variable.",
+      "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+      "planner_does_not_execute": true,
+      "planner_rank": 1,
+      "planner_score": 0.6094
+    },
+    "model_selection_id": null,
+    "primary_variable": "dataset_mixture",
+    "required_approvals": [
+      "dataset_selection_approval"
+    ],
+    "required_evidence": [
+      "baseline_comparison",
+      "dataset-selection:dataset-selection-fd8699f8cbd8b4957ca2",
+      "deterministic_scorecard",
+      "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "frozen_eval_pack",
+      "https://datasets-server.huggingface.co/splits?dataset=sail/symbolic-instruction-tuning",
+      "https://huggingface.co/datasets/sail/symbolic-instruction-tuning",
+      "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+      "training_run_evidence"
+    ],
+    "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+    "run_id": "planned-run-b8e558e54effac85",
+    "stage_name": "smoke_test",
+    "status": "pending",
+    "success_criteria": {
+      "baseline_comparison_required": true,
+      "deterministic_regression_count_max": 0,
+      "required_behavioral_evidence": true,
+      "stage_primary_metric_delta_min": 0.01
+    },
+    "training_constraints": {
+      "batch_size": 8,
+      "context_length": 256,
+      "learning_rate": 0.0005,
+      "max_steps": 100,
+      "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+      "one_primary_variable": "dataset_mixture",
+      "scheduler": "linear",
+      "seed": 1729,
+      "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+      "training_required": true,
+      "warmup_steps": 10
+    }
+  },
+  "training_launched": false
+}

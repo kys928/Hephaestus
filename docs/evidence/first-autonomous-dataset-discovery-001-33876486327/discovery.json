@@ -1,0 +1,1726 @@
+{
+  "candidate_audits": [
+    {
+      "candidate_id": "dataset-fd124d14e9128b67",
+      "dataset_card_ref": "https://huggingface.co/datasets/allenai/tulu-3-sft-personas-instruction-following/blob/fe0c7d350c9b4542b8d829a6f1daa1c259f0ba0e/README.md",
+      "dataset_id": "allenai/tulu-3-sft-personas-instruction-following",
+      "estimated_bytes": 39171921,
+      "estimated_rows": null,
+      "license": "odc-by",
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.391892,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.932432,
+          "structured JSON response": 0.0,
+          "termination": 0.851351
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 29,
+        "instruction_pair_rows": 74,
+        "non_repetitive_response_count": 69,
+        "response_count": 74,
+        "rows_previewed": 74,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 63,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.07933884,
+          "over_context_text_count": 48,
+          "texts_checked": 605,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 55449,
+          "unknown_token_count": 1012,
+          "unknown_token_fraction": 0.01825101
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "fe0c7d350c9b4542b8d829a6f1daa1c259f0ba0e",
+      "source_formats": [
+        "parquet"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-3e3363076eeee0f0",
+      "dataset_card_ref": "https://huggingface.co/datasets/nvidia/Nemotron-SFT-Instruction-Following-Chat-v3/blob/be3b3e04ef605ac9d3f8f35b9d5a632f4a3a3402/README.md",
+      "dataset_id": "nvidia/Nemotron-SFT-Instruction-Following-Chat-v3",
+      "estimated_bytes": 20250303823,
+      "estimated_rows": null,
+      "license": "apache-2.0,cc-by-4.0,odc-by,other",
+      "material_file_count": 2,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 0.6,
+          "non-repetition": 0.88,
+          "structured JSON response": 0.0,
+          "termination": 0.68
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 6,
+        "non_repetitive_response_count": 22,
+        "response_count": 25,
+        "rows_previewed": 10,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 17,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.26056338,
+          "over_context_text_count": 37,
+          "texts_checked": 142,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 67261,
+          "unknown_token_count": 2056,
+          "unknown_token_fraction": 0.03056749
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "be3b3e04ef605ac9d3f8f35b9d5a632f4a3a3402",
+      "source_formats": [
+        "jsonl"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-e273dc4d7327fe08",
+      "dataset_card_ref": "https://huggingface.co/datasets/nvidia/Nemotron-RL-Instruction-Following-Structured-Outputs-v2/blob/bbf79030fcff484c29321faecaeec91a21ba2259/README.md",
+      "dataset_id": "nvidia/Nemotron-RL-Instruction-Following-Structured-Outputs-v2",
+      "estimated_bytes": 762947723,
+      "estimated_rows": null,
+      "license": "cc-by-4.0",
+      "material_file_count": 3,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 0.0,
+          "non-repetition": 0.0,
+          "structured JSON response": 0.0,
+          "termination": 0.0
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 0,
+        "non_repetitive_response_count": 0,
+        "response_count": 0,
+        "rows_previewed": 18,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 0,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.31506849,
+          "over_context_text_count": 46,
+          "texts_checked": 146,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 76407,
+          "unknown_token_count": 2092,
+          "unknown_token_fraction": 0.02737969
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "bbf79030fcff484c29321faecaeec91a21ba2259",
+      "source_formats": [
+        "parquet"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-37e29de5e6f8635f",
+      "dataset_card_ref": "https://huggingface.co/datasets/alespalla/chatbot_instruction_prompts/blob/6ea5ce09647e5451860801a46db6a46b28e259bf/README.md",
+      "dataset_id": "alespalla/chatbot_instruction_prompts",
+      "estimated_bytes": 78591384,
+      "estimated_rows": null,
+      "license": "apache-2.0",
+      "material_file_count": 2,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.01,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.98,
+          "structured JSON response": 0.0,
+          "termination": 0.95
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 1,
+        "instruction_pair_rows": 100,
+        "non_repetitive_response_count": 98,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 95,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.055,
+          "over_context_text_count": 11,
+          "texts_checked": 200,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 12497,
+          "unknown_token_count": 286,
+          "unknown_token_fraction": 0.02288549
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "6ea5ce09647e5451860801a46db6a46b28e259bf",
+      "source_formats": [
+        "parquet"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-6c5d1f3f5da3bb8a",
+      "dataset_card_ref": "https://huggingface.co/datasets/iamplus/Instruction_Tuning/blob/3e1b56d5c8c78c136ee377814b2f0085f16e4e21/README.md",
+      "dataset_id": "iamplus/Instruction_Tuning",
+      "estimated_bytes": 2553292538,
+      "estimated_rows": null,
+      "license": "apache-2.0",
+      "material_file_count": 29,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 0.0,
+          "non-repetition": 0.73,
+          "structured JSON response": 0.0,
+          "termination": 0.96
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 0,
+        "non_repetitive_response_count": 73,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 96,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.13,
+          "over_context_text_count": 26,
+          "texts_checked": 200,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 32749,
+          "unknown_token_count": 992,
+          "unknown_token_fraction": 0.030291
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "3e1b56d5c8c78c136ee377814b2f0085f16e4e21",
+      "source_formats": [
+        "csv"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-f6878fc185019db7",
+      "dataset_card_ref": "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset/blob/bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17/README.md",
+      "dataset_id": "FinLang/investopedia-instruction-tuning-dataset",
+      "estimated_bytes": 307524500,
+      "estimated_rows": null,
+      "license": "cc-by-nc-4.0",
+      "material_file_count": 2,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.98,
+          "structured JSON response": 0.0,
+          "termination": 0.95
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 100,
+        "non_repetitive_response_count": 98,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 95,
+        "tokenizer": {
+          "compatible": true,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.00571429,
+          "over_context_text_count": 4,
+          "texts_checked": 700,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 38564,
+          "unknown_token_count": 330,
+          "unknown_token_fraction": 0.0085572
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "resolved_revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+      "source_formats": [
+        "csv"
+      ],
+      "status": "audited"
+    },
+    {
+      "candidate_id": "dataset-fb91684d87fe5f28",
+      "dataset_card_ref": "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+      "dataset_id": "sail/symbolic-instruction-tuning",
+      "estimated_bytes": 1162784387,
+      "estimated_rows": null,
+      "license": "mit",
+      "material_file_count": 13,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.08,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.98,
+          "structured JSON response": 0.0,
+          "termination": 0.48
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 8,
+        "instruction_pair_rows": 100,
+        "non_repetitive_response_count": 98,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 48,
+        "tokenizer": {
+          "compatible": true,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.075,
+          "over_context_text_count": 15,
+          "texts_checked": 200,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 17720,
+          "unknown_token_count": 0,
+          "unknown_token_fraction": 0.0
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "resolved_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+      "source_formats": [
+        "json"
+      ],
+      "status": "audited"
+    },
+    {
+      "candidate_id": "dataset-518980c78f35d700",
+      "dataset_card_ref": "https://huggingface.co/datasets/snorkelai/snorkel-curated-instruction-tuning/blob/cc5a9ff8125cea344b7d1c0467320c69e646e87a/README.md",
+      "dataset_id": "snorkelai/snorkel-curated-instruction-tuning",
+      "estimated_bytes": 39736008,
+      "estimated_rows": null,
+      "license": "apache-2.0",
+      "material_file_count": 2,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.036364,
+          "causal-LM continuation": 1.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.709091,
+          "structured JSON response": 0.009091,
+          "termination": 0.863636
+        },
+        "continuation_rows": 55,
+        "explicit_constraint_rows": 2,
+        "instruction_pair_rows": 55,
+        "non_repetitive_response_count": 78,
+        "response_count": 110,
+        "rows_previewed": 55,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response",
+          "structured_json",
+          "causal_lm_text"
+        ],
+        "structured_response_count": 1,
+        "terminated_response_count": 95,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.23636364,
+          "over_context_text_count": 78,
+          "texts_checked": 330,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 52943,
+          "unknown_token_count": 1207,
+          "unknown_token_fraction": 0.0227981
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "cc5a9ff8125cea344b7d1c0467320c69e646e87a",
+      "source_formats": [
+        "jsonl"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-3f2ba58760c7a779",
+      "dataset_card_ref": "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered/blob/1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a/README.md",
+      "dataset_id": "HuggingFaceH4/instruction-pilot-outputs-filtered",
+      "estimated_bytes": 1872629,
+      "estimated_rows": null,
+      "license": "apache-2.0",
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 0.0,
+          "non-repetition": 0.0,
+          "structured JSON response": 0.0,
+          "termination": 0.0
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 0,
+        "non_repetitive_response_count": 0,
+        "response_count": 0,
+        "rows_previewed": 41,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 0,
+        "tokenizer": {
+          "compatible": true,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.00152439,
+          "over_context_text_count": 1,
+          "texts_checked": 656,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 14256,
+          "unknown_token_count": 129,
+          "unknown_token_fraction": 0.00904882
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "resolved_revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+      "source_formats": [
+        "jsonl"
+      ],
+      "status": "audited"
+    },
+    {
+      "candidate_id": "dataset-662bf66fa55aec72",
+      "dataset_card_ref": "https://huggingface.co/datasets/rewoo/planner_instruction_tuning_2k/blob/688613d4b9792c12c5f154bab807d4e1f546c31c/README.md",
+      "dataset_id": "rewoo/planner_instruction_tuning_2k",
+      "estimated_bytes": 2648026,
+      "estimated_rows": null,
+      "license": "mit",
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.29,
+          "structured JSON response": 0.0,
+          "termination": 0.99
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 100,
+        "non_repetitive_response_count": 29,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 99,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.0,
+          "over_context_text_count": 0,
+          "texts_checked": 300,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 36244,
+          "unknown_token_count": 810,
+          "unknown_token_fraction": 0.02234853
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "688613d4b9792c12c5f154bab807d4e1f546c31c",
+      "source_formats": [
+        "json"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-2956666594b490ac",
+      "dataset_card_ref": "https://huggingface.co/datasets/Fredithefish/Instruction-Tuning-with-GPT-4-RedPajama-Chat/blob/e0947516fbff80572774b6c431160e30f6cf8dd9/README.md",
+      "dataset_id": "Fredithefish/Instruction-Tuning-with-GPT-4-RedPajama-Chat",
+      "estimated_bytes": 41600562,
+      "estimated_rows": null,
+      "license": "cc",
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 1.0,
+          "instruction adherence": 0.0,
+          "non-repetition": 0.0,
+          "structured JSON response": 0.0,
+          "termination": 0.0
+        },
+        "continuation_rows": 100,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 0,
+        "non_repetitive_response_count": 0,
+        "response_count": 0,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 0,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.29,
+          "over_context_text_count": 29,
+          "texts_checked": 100,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 19688,
+          "unknown_token_count": 632,
+          "unknown_token_fraction": 0.03210077
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "e0947516fbff80572774b6c431160e30f6cf8dd9",
+      "source_formats": [
+        "jsonl"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-02cfdf665daeb80d",
+      "dataset_card_ref": "https://huggingface.co/datasets/tasksource/symbolic-instruction-tuning-sql/blob/b3ba0a3b57d7eec7d78e3a90f3b6568ce86868fa/README.md",
+      "dataset_id": "tasksource/symbolic-instruction-tuning-sql",
+      "estimated_bytes": 148817199,
+      "estimated_rows": null,
+      "license": "mit",
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.0,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 0.0,
+          "non-repetition": 0.0,
+          "structured JSON response": 0.0,
+          "termination": 0.0
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 0,
+        "instruction_pair_rows": 0,
+        "non_repetitive_response_count": 0,
+        "response_count": 0,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 0,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.48,
+          "over_context_text_count": 96,
+          "texts_checked": 200,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 67103,
+          "unknown_token_count": 1510,
+          "unknown_token_fraction": 0.02250272
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "b3ba0a3b57d7eec7d78e3a90f3b6568ce86868fa",
+      "source_formats": [
+        "parquet"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-3c6a1b7b08745875",
+      "dataset_card_ref": "https://huggingface.co/datasets/iamtarun/python_code_instructions_18k_alpaca/blob/7cae181e29701a8663a07a3ea43c8e105b663ba1/README.md",
+      "dataset_id": "iamtarun/python_code_instructions_18k_alpaca",
+      "estimated_bytes": 11357076,
+      "estimated_rows": null,
+      "license": null,
+      "material_file_count": 1,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.03,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.92,
+          "structured JSON response": 0.0,
+          "termination": 0.7
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 3,
+        "instruction_pair_rows": 100,
+        "non_repetitive_response_count": 92,
+        "response_count": 100,
+        "rows_previewed": 100,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 70,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.15934066,
+          "over_context_text_count": 58,
+          "texts_checked": 364,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 60454,
+          "unknown_token_count": 4028,
+          "unknown_token_fraction": 0.06662917
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "7cae181e29701a8663a07a3ea43c8e105b663ba1",
+      "source_formats": [
+        "parquet"
+      ],
+      "status": "rejected"
+    },
+    {
+      "candidate_id": "dataset-f61d029a69c1ece4",
+      "dataset_card_ref": "https://huggingface.co/datasets/ise-uiuc/Magicoder-OSS-Instruct-75K-Instruction-Response/blob/1a1653016dcf0c0de15d5758c1d87095685622f6/README.md",
+      "dataset_id": "ise-uiuc/Magicoder-OSS-Instruct-75K-Instruction-Response",
+      "estimated_bytes": 295972969,
+      "estimated_rows": null,
+      "license": null,
+      "material_file_count": 2,
+      "preview": {
+        "capability_coverage": {
+          "bounded response length": 0.114286,
+          "causal-LM continuation": 0.0,
+          "instruction adherence": 1.0,
+          "non-repetition": 0.757143,
+          "structured JSON response": 0.0,
+          "termination": 0.814286
+        },
+        "continuation_rows": 0,
+        "explicit_constraint_rows": 8,
+        "instruction_pair_rows": 70,
+        "non_repetitive_response_count": 53,
+        "response_count": 70,
+        "rows_previewed": 70,
+        "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "structured_response_count": 0,
+        "terminated_response_count": 57,
+        "tokenizer": {
+          "compatible": false,
+          "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+          "over_context_fraction": 0.26175869,
+          "over_context_text_count": 128,
+          "texts_checked": 489,
+          "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+          "tokens_checked": 74917,
+          "unknown_token_count": 3727,
+          "unknown_token_fraction": 0.04974839
+        }
+      },
+      "provenance_confidence": "provider_commit_metadata",
+      "reason": "tokenizer_preview_incompatible",
+      "resolved_revision": "1a1653016dcf0c0de15d5758c1d87095685622f6",
+      "source_formats": [
+        "jsonl",
+        "parquet"
+      ],
+      "status": "rejected"
+    }
+  ],
+  "discovery": {
+    "enrichment_limit": 14,
+    "network_enabled": true,
+    "provider": "huggingface",
+    "queries": [
+      {
+        "candidate_count": 12,
+        "issues": [],
+        "provider_ids": [
+          "huggingface"
+        ],
+        "query": "instruction",
+        "request_id": "dataset-search-4c7158b167aff959-discovery-01"
+      },
+      {
+        "candidate_count": 12,
+        "issues": [],
+        "provider_ids": [
+          "huggingface"
+        ],
+        "query": "instruction tuning",
+        "request_id": "dataset-search-4c7158b167aff959-discovery-02"
+      },
+      {
+        "candidate_count": 12,
+        "issues": [],
+        "provider_ids": [
+          "huggingface"
+        ],
+        "query": "instruction response",
+        "request_id": "dataset-search-4c7158b167aff959-discovery-03"
+      }
+    ],
+    "unique_metadata_candidates": 30
+  },
+  "enriched_candidates": [
+    {
+      "artifact_ref": null,
+      "candidate_id": "dataset-f6878fc185019db7",
+      "compatibility": {
+        "immutable_revision_available": true,
+        "metadata_only": false,
+        "model_compatible": true,
+        "remote_code_required": false,
+        "tokenizer_compatible": true
+      },
+      "contract_version": "autonomous-experiment.v1",
+      "dataset_id": "FinLang/investopedia-instruction-tuning-dataset",
+      "domains": [
+        "general language",
+        "instruction following"
+      ],
+      "estimated_bytes": 307524500,
+      "estimated_rows": null,
+      "evidence_refs": [
+        "https://datasets-server.huggingface.co/splits?dataset=FinLang/investopedia-instruction-tuning-dataset",
+        "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset",
+        "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset/blob/bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17/README.md"
+      ],
+      "format_profile": {
+        "record_format": "csv",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "source_formats": [
+          "csv"
+        ]
+      },
+      "languages": [],
+      "license": "cc-by-nc-4.0",
+      "metadata": {
+        "capability_targets": [
+          "instruction adherence",
+          "termination",
+          "non-repetition"
+        ],
+        "downloads": 179,
+        "gated": false,
+        "immutable_file_count": 2,
+        "likes": 23,
+        "preview_audit": {
+          "capability_coverage": {
+            "bounded response length": 0.0,
+            "causal-LM continuation": 0.0,
+            "instruction adherence": 1.0,
+            "non-repetition": 0.98,
+            "structured JSON response": 0.0,
+            "termination": 0.95
+          },
+          "continuation_rows": 0,
+          "explicit_constraint_rows": 0,
+          "instruction_pair_rows": 100,
+          "non_repetitive_response_count": 98,
+          "response_count": 100,
+          "rows_previewed": 100,
+          "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+          "semantic_formats": [
+            "instruction_response"
+          ],
+          "structured_response_count": 0,
+          "terminated_response_count": 95,
+          "tokenizer": {
+            "compatible": true,
+            "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+            "over_context_fraction": 0.00571429,
+            "over_context_text_count": 4,
+            "texts_checked": 700,
+            "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+            "tokens_checked": 38564,
+            "unknown_token_count": 330,
+            "unknown_token_fraction": 0.0085572
+          }
+        },
+        "preview_status": "checked",
+        "private": false,
+        "requires_normalization": true,
+        "source_formats": [
+          "csv"
+        ]
+      },
+      "missing_metadata": [
+        "estimated_rows"
+      ],
+      "provenance": {
+        "dataset_card_ref": "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset/blob/bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17/README.md",
+        "dataset_card_revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+        "hub_id": "FinLang/investopedia-instruction-tuning-dataset",
+        "kind": "huggingface_immutable_snapshot",
+        "license_source": "huggingface_dataset_card",
+        "provenance_confidence": "provider_commit_metadata",
+        "resolved_revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+        "sha": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17"
+      },
+      "provider_id": "huggingface",
+      "revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+      "risk_signals": [
+        "bounded_preview_not_full_scan",
+        "external_dataset_requires_acquisition_approval"
+      ],
+      "score_components": {},
+      "splits": [],
+      "task_types": [
+        "instruction adherence",
+        "non-repetition",
+        "termination"
+      ],
+      "trust_level": "external_metadata"
+    },
+    {
+      "artifact_ref": null,
+      "candidate_id": "dataset-fb91684d87fe5f28",
+      "compatibility": {
+        "immutable_revision_available": true,
+        "metadata_only": false,
+        "model_compatible": true,
+        "remote_code_required": false,
+        "tokenizer_compatible": true
+      },
+      "contract_version": "autonomous-experiment.v1",
+      "dataset_id": "sail/symbolic-instruction-tuning",
+      "domains": [
+        "general language",
+        "instruction following"
+      ],
+      "estimated_bytes": 1162784387,
+      "estimated_rows": null,
+      "evidence_refs": [
+        "https://datasets-server.huggingface.co/splits?dataset=sail/symbolic-instruction-tuning",
+        "https://huggingface.co/datasets/sail/symbolic-instruction-tuning",
+        "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md"
+      ],
+      "format_profile": {
+        "record_format": "json",
+        "semantic_formats": [
+          "instruction_response"
+        ],
+        "source_formats": [
+          "json"
+        ]
+      },
+      "languages": [],
+      "license": "mit",
+      "metadata": {
+        "capability_targets": [
+          "instruction adherence",
+          "bounded response length",
+          "termination",
+          "non-repetition"
+        ],
+        "downloads": 116,
+        "gated": false,
+        "immutable_file_count": 13,
+        "likes": 15,
+        "preview_audit": {
+          "capability_coverage": {
+            "bounded response length": 0.08,
+            "causal-LM continuation": 0.0,
+            "instruction adherence": 1.0,
+            "non-repetition": 0.98,
+            "structured JSON response": 0.0,
+            "termination": 0.48
+          },
+          "continuation_rows": 0,
+          "explicit_constraint_rows": 8,
+          "instruction_pair_rows": 100,
+          "non_repetitive_response_count": 98,
+          "response_count": 100,
+          "rows_previewed": 100,
+          "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+          "semantic_formats": [
+            "instruction_response"
+          ],
+          "structured_response_count": 0,
+          "terminated_response_count": 48,
+          "tokenizer": {
+            "compatible": true,
+            "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+            "over_context_fraction": 0.075,
+            "over_context_text_count": 15,
+            "texts_checked": 200,
+            "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+            "tokens_checked": 17720,
+            "unknown_token_count": 0,
+            "unknown_token_fraction": 0.0
+          }
+        },
+        "preview_status": "checked",
+        "private": false,
+        "requires_normalization": true,
+        "source_formats": [
+          "json"
+        ]
+      },
+      "missing_metadata": [
+        "estimated_rows"
+      ],
+      "provenance": {
+        "dataset_card_ref": "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+        "dataset_card_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+        "hub_id": "sail/symbolic-instruction-tuning",
+        "kind": "huggingface_immutable_snapshot",
+        "license_source": "huggingface_dataset_card",
+        "provenance_confidence": "provider_commit_metadata",
+        "resolved_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+        "sha": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c"
+      },
+      "provider_id": "huggingface",
+      "revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+      "risk_signals": [
+        "bounded_preview_not_full_scan",
+        "external_dataset_requires_acquisition_approval"
+      ],
+      "score_components": {},
+      "splits": [],
+      "task_types": [
+        "bounded response length",
+        "instruction adherence",
+        "non-repetition",
+        "termination"
+      ],
+      "trust_level": "external_metadata"
+    },
+    {
+      "artifact_ref": null,
+      "candidate_id": "dataset-3f2ba58760c7a779",
+      "compatibility": {
+        "immutable_revision_available": true,
+        "metadata_only": false,
+        "model_compatible": true,
+        "remote_code_required": false,
+        "tokenizer_compatible": true
+      },
+      "contract_version": "autonomous-experiment.v1",
+      "dataset_id": "HuggingFaceH4/instruction-pilot-outputs-filtered",
+      "domains": [
+        "general language"
+      ],
+      "estimated_bytes": 1872629,
+      "estimated_rows": null,
+      "evidence_refs": [
+        "https://datasets-server.huggingface.co/splits?dataset=HuggingFaceH4/instruction-pilot-outputs-filtered",
+        "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered",
+        "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered/blob/1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a/README.md"
+      ],
+      "format_profile": {
+        "record_format": "jsonl",
+        "semantic_formats": [
+          "causal_lm_text"
+        ],
+        "source_formats": [
+          "jsonl"
+        ]
+      },
+      "languages": [],
+      "license": "apache-2.0",
+      "metadata": {
+        "capability_targets": [],
+        "downloads": 76,
+        "gated": false,
+        "immutable_file_count": 1,
+        "likes": 12,
+        "preview_audit": {
+          "capability_coverage": {
+            "bounded response length": 0.0,
+            "causal-LM continuation": 0.0,
+            "instruction adherence": 0.0,
+            "non-repetition": 0.0,
+            "structured JSON response": 0.0,
+            "termination": 0.0
+          },
+          "continuation_rows": 0,
+          "explicit_constraint_rows": 0,
+          "instruction_pair_rows": 0,
+          "non_repetitive_response_count": 0,
+          "response_count": 0,
+          "rows_previewed": 41,
+          "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+          "semantic_formats": [
+            "causal_lm_text"
+          ],
+          "structured_response_count": 0,
+          "terminated_response_count": 0,
+          "tokenizer": {
+            "compatible": true,
+            "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+            "over_context_fraction": 0.00152439,
+            "over_context_text_count": 1,
+            "texts_checked": 656,
+            "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+            "tokens_checked": 14256,
+            "unknown_token_count": 129,
+            "unknown_token_fraction": 0.00904882
+          }
+        },
+        "preview_status": "checked",
+        "private": false,
+        "requires_normalization": true,
+        "source_formats": [
+          "jsonl"
+        ]
+      },
+      "missing_metadata": [
+        "estimated_rows"
+      ],
+      "provenance": {
+        "dataset_card_ref": "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered/blob/1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a/README.md",
+        "dataset_card_revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+        "hub_id": "HuggingFaceH4/instruction-pilot-outputs-filtered",
+        "kind": "huggingface_immutable_snapshot",
+        "license_source": "huggingface_dataset_card",
+        "provenance_confidence": "provider_commit_metadata",
+        "resolved_revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+        "sha": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a"
+      },
+      "provider_id": "huggingface",
+      "revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+      "risk_signals": [
+        "bounded_preview_not_full_scan",
+        "external_dataset_requires_acquisition_approval"
+      ],
+      "score_components": {},
+      "splits": [],
+      "task_types": [],
+      "trust_level": "external_metadata"
+    }
+  ],
+  "planner": {
+    "approval_applied": false,
+    "called_after_selected_decision": true,
+    "dataset_acquired": false,
+    "experiment_proposal": {
+      "baseline_ref": "run://first-bounded-scientific-training-001-33866198758",
+      "budget": {
+        "enforcement": "downstream_readiness_and_training_services",
+        "estimated_cost": {
+          "aggregate_score": 0.65,
+          "basis": "bounded_heuristic_not_measured_cost",
+          "compute": 0.55,
+          "data": 0.8,
+          "evaluation": 0.55,
+          "storage": 0.65,
+          "time": 0.7
+        }
+      },
+      "contract_version": "autonomous-experiment.v1",
+      "controlled_variables": {
+        "all_non_primary_variables": "held_constant_unless_documented_unavoidable",
+        "architecture": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "baseline_decoding": "generation-settings-2ba1dd1322d04d4925c36ac4",
+        "dataset_manifest": "held_constant_except_mixture_fields_and_new_manifest_identity",
+        "evaluation_reference": "sha256:ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+        "random_seed": 1729,
+        "tokenizer": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "training_recipe": "sha256:c1a82687a3a5d7651f10ee94cae06057691fa7e21f7f79311af230f3a45a4d97"
+      },
+      "dataset_selection_id": "dataset-selection-fd8699f8cbd8b4957ca2",
+      "diagnosis_report_id": "diag-b6b21afc926ffa31",
+      "experiment_id": "experiment-d0e911d6bd1fb7ae",
+      "failure_criteria": {
+        "budget_exhausted_without_evaluable_result": true,
+        "deterministic_regression_count_min": 1,
+        "stage_primary_metric_delta_max": 0.0
+      },
+      "intervention_id": "intervention-0b05ae5169cd5943",
+      "lineage_id": "lineage-first-scientific",
+      "metadata": {
+        "alternatives_rejected": {},
+        "approval_state": "required",
+        "baseline_justification": "The failed run is the immutable matched baseline. A follow-up must retain the same random initialization, tokenizer, evaluation pack, decoding settings, and recipe except for the single Planner-selected primary variable.",
+        "hypothesis": "Explicit coverage evidence indicates a possible data-coverage gap.",
+        "planner_does_not_execute": true,
+        "planner_rank": 1,
+        "planner_score": 0.6094
+      },
+      "model_selection_id": null,
+      "primary_variable": "dataset_mixture",
+      "required_approvals": [
+        "dataset_selection_approval"
+      ],
+      "required_evidence": [
+        "baseline_comparison",
+        "dataset-selection:dataset-selection-fd8699f8cbd8b4957ca2",
+        "deterministic_scorecard",
+        "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "frozen_eval_pack",
+        "https://datasets-server.huggingface.co/splits?dataset=sail/symbolic-instruction-tuning",
+        "https://huggingface.co/datasets/sail/symbolic-instruction-tuning",
+        "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+        "training_run_evidence"
+      ],
+      "rollback_plan": "Restore the prior approved dataset selection and immutable mixture manifest.",
+      "run_id": "planned-run-b8e558e54effac85",
+      "stage_name": "smoke_test",
+      "status": "pending",
+      "success_criteria": {
+        "baseline_comparison_required": true,
+        "deterministic_regression_count_max": 0,
+        "required_behavioral_evidence": true,
+        "stage_primary_metric_delta_min": 0.01
+      },
+      "training_constraints": {
+        "batch_size": 8,
+        "context_length": 256,
+        "learning_rate": 0.0005,
+        "max_steps": 100,
+        "model_revision": "sha256:7dbbc38ae31de5075fbf06f1362f17b6ff3b46bc822e85fc9b5f2ea05c6dad39",
+        "one_primary_variable": "dataset_mixture",
+        "scheduler": "linear",
+        "seed": 1729,
+        "tokenizer_revision": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+        "training_required": true,
+        "warmup_steps": 10
+      }
+    },
+    "training_launched": false
+  },
+  "result_version": "first-autonomous-dataset-discovery.v1",
+  "selection": {
+    "confidence": 0.49357699,
+    "contract_version": "autonomous-experiment.v1",
+    "decision_id": "dataset-selection-fd8699f8cbd8b4957ca2",
+    "evidence_refs": [
+      "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "https://datasets-server.huggingface.co/splits?dataset=sail/symbolic-instruction-tuning",
+      "https://huggingface.co/datasets/sail/symbolic-instruction-tuning",
+      "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+      "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+    ],
+    "issues": [],
+    "metadata": {
+      "candidate_audits": {
+        "dataset-3f2ba58760c7a779": {
+          "audit_scope": "metadata_only",
+          "candidate_id": "dataset-3f2ba58760c7a779",
+          "contamination_status": "not_checked",
+          "estimated_cost": {
+            "bytes": 1872629,
+            "rows": null
+          },
+          "hard_negative_status": "not_hard_negative",
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "preprocessing_requirements": [
+            "tokenizer_compatibility_validation",
+            "unicode_and_whitespace_normalization"
+          ],
+          "rejected_reasons": [],
+          "required_approvals": [],
+          "score": 0.41026667,
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 0.5,
+            "expected_benefit": 0.21666667,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.0,
+            "task_fit": 0.0,
+            "trust": 0.65
+          },
+          "support_set_status": "not_support_set",
+          "synthetic_status": "not_synthetic",
+          "uncertainty": 0.28
+        },
+        "dataset-f6878fc185019db7": {
+          "audit_scope": "metadata_only",
+          "candidate_id": "dataset-f6878fc185019db7",
+          "contamination_status": "not_checked",
+          "estimated_cost": {
+            "bytes": 307524500,
+            "rows": null
+          },
+          "hard_negative_status": "not_hard_negative",
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "preprocessing_requirements": [
+            "tokenizer_compatibility_validation",
+            "unicode_and_whitespace_normalization"
+          ],
+          "rejected_reasons": [],
+          "required_approvals": [],
+          "score": 0.54248889,
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 1.0,
+            "expected_benefit": 0.43383838,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.22222222,
+            "task_fit": 0.36363636,
+            "trust": 0.65
+          },
+          "support_set_status": "not_support_set",
+          "synthetic_status": "not_synthetic",
+          "uncertainty": 0.28
+        },
+        "dataset-fb91684d87fe5f28": {
+          "audit_scope": "metadata_only",
+          "candidate_id": "dataset-fb91684d87fe5f28",
+          "contamination_status": "not_checked",
+          "estimated_cost": {
+            "bytes": 1162784387,
+            "rows": null
+          },
+          "hard_negative_status": "not_hard_negative",
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "preprocessing_requirements": [
+            "tokenizer_compatibility_validation",
+            "unicode_and_whitespace_normalization"
+          ],
+          "rejected_reasons": [],
+          "required_approvals": [],
+          "score": 0.60715556,
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 1.0,
+            "expected_benefit": 0.52171717,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.38888889,
+            "task_fit": 0.63636364,
+            "trust": 0.65
+          },
+          "support_set_status": "not_support_set",
+          "synthetic_status": "not_synthetic",
+          "uncertainty": 0.28
+        }
+      },
+      "material_candidates": [
+        {
+          "artifact_ref": null,
+          "candidate_id": "dataset-fb91684d87fe5f28",
+          "compatibility": {
+            "immutable_revision_available": true,
+            "metadata_only": false,
+            "model_compatible": true,
+            "remote_code_required": false,
+            "tokenizer_compatible": true
+          },
+          "contract_version": "autonomous-experiment.v1",
+          "dataset_id": "sail/symbolic-instruction-tuning",
+          "domains": [
+            "general language",
+            "instruction following"
+          ],
+          "estimated_bytes": 1162784387,
+          "estimated_rows": null,
+          "evidence_refs": [
+            "https://datasets-server.huggingface.co/splits?dataset=sail/symbolic-instruction-tuning",
+            "https://huggingface.co/datasets/sail/symbolic-instruction-tuning",
+            "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md"
+          ],
+          "format_profile": {
+            "record_format": "json",
+            "semantic_formats": [
+              "instruction_response"
+            ],
+            "source_formats": [
+              "json"
+            ]
+          },
+          "languages": [],
+          "license": "mit",
+          "metadata": {
+            "capability_targets": [
+              "non-repetition",
+              "bounded response length",
+              "termination",
+              "instruction adherence"
+            ],
+            "downloads": 116,
+            "gated": false,
+            "immutable_file_count": 13,
+            "likes": 15,
+            "preview_audit": {
+              "capability_coverage": {
+                "bounded response length": 0.08,
+                "causal-LM continuation": 0.0,
+                "instruction adherence": 1.0,
+                "non-repetition": 0.98,
+                "structured JSON response": 0.0,
+                "termination": 0.48
+              },
+              "continuation_rows": 0,
+              "explicit_constraint_rows": 8,
+              "instruction_pair_rows": 100,
+              "non_repetitive_response_count": 98,
+              "response_count": 100,
+              "rows_previewed": 100,
+              "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+              "semantic_formats": [
+                "instruction_response"
+              ],
+              "structured_response_count": 0,
+              "terminated_response_count": 48,
+              "tokenizer": {
+                "compatible": true,
+                "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+                "over_context_fraction": 0.075,
+                "over_context_text_count": 15,
+                "texts_checked": 200,
+                "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+                "tokens_checked": 17720,
+                "unknown_token_count": 0,
+                "unknown_token_fraction": 0.0
+              }
+            },
+            "preview_status": "checked",
+            "private": false,
+            "requires_normalization": true,
+            "source_formats": [
+              "json"
+            ]
+          },
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "provenance": {
+            "dataset_card_ref": "https://huggingface.co/datasets/sail/symbolic-instruction-tuning/blob/c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c/README.md",
+            "dataset_card_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+            "hub_id": "sail/symbolic-instruction-tuning",
+            "kind": "huggingface_immutable_snapshot",
+            "license_source": "huggingface_dataset_card",
+            "provenance_confidence": "provider_commit_metadata",
+            "resolved_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+            "sha": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c"
+          },
+          "provider_id": "huggingface",
+          "revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+          "risk_signals": [
+            "bounded_preview_not_full_scan",
+            "external_dataset_requires_acquisition_approval"
+          ],
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 1.0,
+            "expected_benefit": 0.52171717,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.38888889,
+            "task_fit": 0.63636364,
+            "trust": 0.65
+          },
+          "splits": [],
+          "task_types": [
+            "bounded response length",
+            "instruction adherence",
+            "non-repetition",
+            "termination"
+          ],
+          "trust_level": "external_metadata"
+        },
+        {
+          "artifact_ref": null,
+          "candidate_id": "dataset-f6878fc185019db7",
+          "compatibility": {
+            "immutable_revision_available": true,
+            "metadata_only": false,
+            "model_compatible": true,
+            "remote_code_required": false,
+            "tokenizer_compatible": true
+          },
+          "contract_version": "autonomous-experiment.v1",
+          "dataset_id": "FinLang/investopedia-instruction-tuning-dataset",
+          "domains": [
+            "general language",
+            "instruction following"
+          ],
+          "estimated_bytes": 307524500,
+          "estimated_rows": null,
+          "evidence_refs": [
+            "https://datasets-server.huggingface.co/splits?dataset=FinLang/investopedia-instruction-tuning-dataset",
+            "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset",
+            "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset/blob/bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17/README.md"
+          ],
+          "format_profile": {
+            "record_format": "csv",
+            "semantic_formats": [
+              "instruction_response"
+            ],
+            "source_formats": [
+              "csv"
+            ]
+          },
+          "languages": [],
+          "license": "cc-by-nc-4.0",
+          "metadata": {
+            "capability_targets": [
+              "non-repetition",
+              "termination",
+              "instruction adherence"
+            ],
+            "downloads": 179,
+            "gated": false,
+            "immutable_file_count": 2,
+            "likes": 23,
+            "preview_audit": {
+              "capability_coverage": {
+                "bounded response length": 0.0,
+                "causal-LM continuation": 0.0,
+                "instruction adherence": 1.0,
+                "non-repetition": 0.98,
+                "structured JSON response": 0.0,
+                "termination": 0.95
+              },
+              "continuation_rows": 0,
+              "explicit_constraint_rows": 0,
+              "instruction_pair_rows": 100,
+              "non_repetitive_response_count": 98,
+              "response_count": 100,
+              "rows_previewed": 100,
+              "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+              "semantic_formats": [
+                "instruction_response"
+              ],
+              "structured_response_count": 0,
+              "terminated_response_count": 95,
+              "tokenizer": {
+                "compatible": true,
+                "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+                "over_context_fraction": 0.00571429,
+                "over_context_text_count": 4,
+                "texts_checked": 700,
+                "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+                "tokens_checked": 38564,
+                "unknown_token_count": 330,
+                "unknown_token_fraction": 0.0085572
+              }
+            },
+            "preview_status": "checked",
+            "private": false,
+            "requires_normalization": true,
+            "source_formats": [
+              "csv"
+            ]
+          },
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "provenance": {
+            "dataset_card_ref": "https://huggingface.co/datasets/FinLang/investopedia-instruction-tuning-dataset/blob/bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17/README.md",
+            "dataset_card_revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+            "hub_id": "FinLang/investopedia-instruction-tuning-dataset",
+            "kind": "huggingface_immutable_snapshot",
+            "license_source": "huggingface_dataset_card",
+            "provenance_confidence": "provider_commit_metadata",
+            "resolved_revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+            "sha": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17"
+          },
+          "provider_id": "huggingface",
+          "revision": "bbd0e0fc02185b3e8cfd6fba6df04129a4fb3e17",
+          "risk_signals": [
+            "bounded_preview_not_full_scan",
+            "external_dataset_requires_acquisition_approval"
+          ],
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 1.0,
+            "expected_benefit": 0.43383838,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.22222222,
+            "task_fit": 0.36363636,
+            "trust": 0.65
+          },
+          "splits": [],
+          "task_types": [
+            "instruction adherence",
+            "non-repetition",
+            "termination"
+          ],
+          "trust_level": "external_metadata"
+        },
+        {
+          "artifact_ref": null,
+          "candidate_id": "dataset-3f2ba58760c7a779",
+          "compatibility": {
+            "immutable_revision_available": true,
+            "metadata_only": false,
+            "model_compatible": true,
+            "remote_code_required": false,
+            "tokenizer_compatible": true
+          },
+          "contract_version": "autonomous-experiment.v1",
+          "dataset_id": "HuggingFaceH4/instruction-pilot-outputs-filtered",
+          "domains": [
+            "general language"
+          ],
+          "estimated_bytes": 1872629,
+          "estimated_rows": null,
+          "evidence_refs": [
+            "https://datasets-server.huggingface.co/splits?dataset=HuggingFaceH4/instruction-pilot-outputs-filtered",
+            "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered",
+            "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered/blob/1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a/README.md"
+          ],
+          "format_profile": {
+            "record_format": "jsonl",
+            "semantic_formats": [
+              "causal_lm_text"
+            ],
+            "source_formats": [
+              "jsonl"
+            ]
+          },
+          "languages": [],
+          "license": "apache-2.0",
+          "metadata": {
+            "capability_targets": [],
+            "downloads": 76,
+            "gated": false,
+            "immutable_file_count": 1,
+            "likes": 12,
+            "preview_audit": {
+              "capability_coverage": {
+                "bounded response length": 0.0,
+                "causal-LM continuation": 0.0,
+                "instruction adherence": 0.0,
+                "non-repetition": 0.0,
+                "structured JSON response": 0.0,
+                "termination": 0.0
+              },
+              "continuation_rows": 0,
+              "explicit_constraint_rows": 0,
+              "instruction_pair_rows": 0,
+              "non_repetitive_response_count": 0,
+              "response_count": 0,
+              "rows_previewed": 41,
+              "scope": "bounded_public_preview_heuristic_not_full_dataset_proof",
+              "semantic_formats": [
+                "causal_lm_text"
+              ],
+              "structured_response_count": 0,
+              "terminated_response_count": 0,
+              "tokenizer": {
+                "compatible": true,
+                "criterion": "preview unknown-token fraction <= 0.01; over-context rows are preprocessable rather than incompatible",
+                "over_context_fraction": 0.00152439,
+                "over_context_text_count": 1,
+                "texts_checked": 656,
+                "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+                "tokens_checked": 14256,
+                "unknown_token_count": 129,
+                "unknown_token_fraction": 0.00904882
+              }
+            },
+            "preview_status": "checked",
+            "private": false,
+            "requires_normalization": true,
+            "source_formats": [
+              "jsonl"
+            ]
+          },
+          "missing_metadata": [
+            "estimated_rows"
+          ],
+          "provenance": {
+            "dataset_card_ref": "https://huggingface.co/datasets/HuggingFaceH4/instruction-pilot-outputs-filtered/blob/1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a/README.md",
+            "dataset_card_revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+            "hub_id": "HuggingFaceH4/instruction-pilot-outputs-filtered",
+            "kind": "huggingface_immutable_snapshot",
+            "license_source": "huggingface_dataset_card",
+            "provenance_confidence": "provider_commit_metadata",
+            "resolved_revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+            "sha": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a"
+          },
+          "provider_id": "huggingface",
+          "revision": "1cd13f88f02f1197783cdfbb6d81da9c3ca56b3a",
+          "risk_signals": [
+            "bounded_preview_not_full_scan",
+            "external_dataset_requires_acquisition_approval"
+          ],
+          "score_components": {
+            "certainty": 0.72,
+            "compatibility": 1.0,
+            "cost_efficiency": 1.0,
+            "domain_fit": 0.5,
+            "expected_benefit": 0.21666667,
+            "format_fit": 0.33333333,
+            "language_fit": 0.25,
+            "license": 1.0,
+            "provenance": 1.0,
+            "relevance": 0.0,
+            "task_fit": 0.0,
+            "trust": 0.65
+          },
+          "splits": [],
+          "task_types": [],
+          "trust_level": "external_metadata"
+        }
+      ],
+      "minimum_score": 0.45,
+      "selection_algorithm": "deterministic-weighted-v1"
+    },
+    "mixture_weights": {
+      "dataset-fb91684d87fe5f28": 1.0
+    },
+    "preprocessing_requirements": {
+      "operations": [
+        "tokenizer_compatibility_validation",
+        "unicode_and_whitespace_normalization"
+      ]
+    },
+    "ranked_candidate_ids": [
+      "dataset-fb91684d87fe5f28",
+      "dataset-f6878fc185019db7",
+      "dataset-3f2ba58760c7a779"
+    ],
+    "rejected_candidates": {
+      "dataset-3f2ba58760c7a779": "score_below_threshold:0.41026667<0.45000000"
+    },
+    "request_id": "dataset-search-4c7158b167aff959",
+    "required_approvals": [],
+    "selected_candidate_ids": [
+      "dataset-fb91684d87fe5f28"
+    ],
+    "selection_rationale": "selected highest-scoring policy-compatible candidate(s)",
+    "status": "selected"
+  },
+  "source": {
+    "branch_base": "2d285eb8db75a6a310a9ea2a14a5ee534a8bfce0",
+    "dataset_search_request": {
+      "capability_targets": [
+        "bounded response length",
+        "causal-LM continuation",
+        "instruction adherence",
+        "non-repetition",
+        "structured JSON response",
+        "termination"
+      ],
+      "contract_version": "autonomous-experiment.v1",
+      "diagnosis_report_id": "diag-b6b21afc926ffa31",
+      "evidence_refs": [
+        "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+        "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/metrics.jsonl",
+        "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl"
+      ],
+      "license_allowlist": [],
+      "license_denylist": [],
+      "metadata": {
+        "intervention_id": "intervention-0b05ae5169cd5943"
+      },
+      "model_constraints": {},
+      "problem_statement": "Explicit coverage evidence indicates a possible data-coverage gap.",
+      "provider_allowlist": [],
+      "request_id": "dataset-search-4c7158b167aff959",
+      "required_domains": [
+        "general language",
+        "instruction following"
+      ],
+      "required_formats": [
+        "causal_lm_text",
+        "instruction_response",
+        "structured_json"
+      ],
+      "required_languages": [
+        "en"
+      ],
+      "size_constraints": {},
+      "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+    },
+    "diagnosis_report_id": "diag-b6b21afc926ffa31",
+    "intervention_id": "intervention-0b05ae5169cd5943",
+    "primary_variable": "dataset_mixture",
+    "tokenizer_file_sha256": "sha256:3ebcc9816398d7a2afa341a9db07de5f0ac30d2625ffe63e4752c2eddce40f25",
+    "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce",
+    "tokenizer_s3_key": "hephaestus/scientific/v1/runs/first-bounded-scientific-training-001-33866198758/checkpoint_step_100/tokenizer/tokenizer.json"
+  }
+}
