@@ -1,0 +1,44 @@
+name: First post-failure diagnosis
+
+on:
+  push:
+    branches: [integration/first-post-failure-diagnosis]
+    paths:
+      - .github/workflows/first-post-failure-diagnosis.yml
+      - scripts/run_first_post_failure_diagnosis.py
+      - src/hephaestus/diagnosis/**
+      - src/hephaestus/policy/diagnosis_policy.py
+      - docs/evidence/first-bounded-scientific-training-001-33866198758/**
+      - docs/evidence/first-semantic-evaluation-001-33869352751/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install diagnosis test dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Verify diagnosis subsystem
+        run: python -m pytest -q tests/test_evidence_based_diagnosis.py
+      - name: Compile post-failure driver
+        run: python -m py_compile scripts/run_first_post_failure_diagnosis.py
+      - name: Diagnose exact frozen failed checkpoint chain
+        run: python scripts/run_first_post_failure_diagnosis.py
+      - name: Upload diagnosis proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-post-failure-diagnosis
+          path: |
+            first_post_failure_diagnosis_report.json
+            first_post_failure_diagnosis_chain.json
+            first_post_failure_diagnosis_input.json
+          if-no-files-found: error
+          retention-days: 30

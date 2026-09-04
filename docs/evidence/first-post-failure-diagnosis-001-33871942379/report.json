@@ -1,0 +1,140 @@
+{
+  "confidence": 0.0,
+  "contract_version": "autonomous-experiment.v1",
+  "hypotheses": [
+    {
+      "confidence": 0.0,
+      "contradicting_evidence_refs": [],
+      "failure_domain": "inconclusive",
+      "hypothesis_id": "hyp-e3b0c44298fc1c14",
+      "metadata": {
+        "causation_claimed": false,
+        "statement_type": "hypothesis"
+      },
+      "recommended_intervention_kinds": [
+        "collect_more_evidence"
+      ],
+      "required_tests": [
+        "collect independent diagnostic evidence"
+      ],
+      "summary": "Available evidence does not distinguish a likely failure domain.",
+      "supporting_evidence_refs": []
+    }
+  ],
+  "issues": [],
+  "leading_hypothesis_id": "hyp-e3b0c44298fc1c14",
+  "lineage_id": "lineage-first-scientific",
+  "metadata": {
+    "confidence_meaning": "support for the ranked hypothesis, not causal certainty",
+    "deterministic_layer_authoritative": true,
+    "diagnostic_order_preserved": true,
+    "epistemic_distinctions": {
+      "confidence": "bounded support from source evidence after contradictions and policy caps",
+      "hypothesis": "ranked possible explanation that does not assert causation",
+      "inference": "deterministic rule match between recorded signals and a finite failure domain",
+      "observation": "normalized content explicitly present in a source record",
+      "recommendation": "diagnostic test or intervention kind proposed for later review, not execution"
+    },
+    "recommendations_executed": false
+  },
+  "missing_evidence": [],
+  "observations": [
+    {
+      "confidence": 0.7071067811865476,
+      "evidence_kind": "eval_report",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "decoding_verified",
+          "eval_integrity_verified"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-55137ce93b4cfacb",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "summary": "Frozen semantic_behavior_v1 comparison recorded a verified regression."
+    },
+    {
+      "confidence": 0.8,
+      "evidence_kind": "checkpoint_evidence",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "checkpoint_verified"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-58746f0bf906d257",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "summary": "checkpoint_evidence evidence recorded"
+    },
+    {
+      "confidence": 0.95,
+      "evidence_kind": "dataset_manifest",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "tokenizer_compatible"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-6c1b22d5b0d45804",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "summary": "dataset_manifest evidence recorded"
+    },
+    {
+      "confidence": 0.8,
+      "evidence_kind": "explicit_check",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "architecture_compatible",
+          "decoding_verified"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-8d352c97f9bf808b",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "summary": "explicit_check evidence recorded"
+    },
+    {
+      "confidence": 0.8,
+      "evidence_kind": "training_metrics",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "numerically_stable"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-c15e31ebf04f4e67",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "summary": "training_metrics evidence recorded"
+    },
+    {
+      "confidence": 0.8,
+      "evidence_kind": "run_record",
+      "metadata": {
+        "normalized": true,
+        "signals": [
+          "runtime_healthy"
+        ],
+        "statement_type": "observation"
+      },
+      "observation_id": "obs-c4931c8560348a16",
+      "severity": "major",
+      "source_ref": "docs/evidence/first-bounded-scientific-training-001-33866198758/verification.json",
+      "summary": "run_record evidence recorded"
+    }
+  ],
+  "report_id": "diag-49904c2b7fa6cd1a",
+  "request_id": "diagnose-first-semantic-regression-001",
+  "run_id": "first-bounded-scientific-training-001-33866198758",
+  "stage_name": "smoke_test",
+  "status": "inconclusive"
+}
