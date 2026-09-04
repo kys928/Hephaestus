@@ -8,6 +8,7 @@ on:
       - scripts/run_first_selected_dataset_preparation.py
       - scripts/run_first_selected_dataset_preparation_v2.py
       - scripts/run_first_selected_dataset_preparation_v3.py
+      - scripts/run_first_selected_dataset_preparation_v4.py
       - scripts/verify_first_selected_dataset_preparation.py
       - scripts/verify_first_selected_dataset_preparation_v2.py
       - .github/workflows/first-selected-dataset-preparation.yml
@@ -52,10 +53,11 @@ jobs:
           scripts/run_first_selected_dataset_preparation.py
           scripts/run_first_selected_dataset_preparation_v2.py
           scripts/run_first_selected_dataset_preparation_v3.py
+          scripts/run_first_selected_dataset_preparation_v4.py
           scripts/verify_first_selected_dataset_preparation.py
           scripts/verify_first_selected_dataset_preparation_v2.py
       - name: Apply approved immutable acquisition and preprocessing boundary
-        run: python scripts/run_first_selected_dataset_preparation_v3.py
+        run: python scripts/run_first_selected_dataset_preparation_v4.py
       - name: Independently read back and verify the prepared training data
         run: python scripts/verify_first_selected_dataset_preparation_v2.py
       - name: Upload preparation proof
