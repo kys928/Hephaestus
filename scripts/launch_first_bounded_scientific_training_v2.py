@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run the existing bounded RunPod launcher with a PEP-668-safe Pod bootstrap."""
+"""Run the existing bounded RunPod launcher with current GPU enums and a PEP-668-safe Pod bootstrap."""
 from __future__ import annotations
 
 import importlib.util
 import sys
 from pathlib import Path
+from typing import Any
 
 SOURCE = Path(__file__).with_name("launch_first_bounded_scientific_training.py")
 spec = importlib.util.spec_from_file_location("hephaestus_first_training_launcher_v1", SOURCE)
@@ -61,7 +62,35 @@ PYCHECK
 '''
 
 
+def _create_pod(execution: Any, run_id: str, repo_sha: str) -> dict[str, Any]:
+    # Values below are taken directly from the live RunPod REST schema returned
+    # on 2026-09-04. Avoid legacy aliases because one invalid enum rejects the
+    # whole gpuTypeIds array before any Pod is created.
+    gpu_type_ids = [
+        "NVIDIA GeForce RTX 3070",
+        "NVIDIA GeForce RTX 3080",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA L4",
+        "NVIDIA GeForce RTX 4090",
+    ]
+    return execution.create_bounded_gpu_pod(
+        name=f"hephaestus-{run_id}"[:180],
+        image_name=module.IMAGE,
+        gpu_type_ids=gpu_type_ids,
+        docker_start_cmd=["bash", "-lc", _pod_shell()],
+        env={
+            "HEPHAESTUS_RUN_ID": run_id,
+            "HEPHAESTUS_REPO_SHA": repo_sha,
+            "HEPHAESTUS_OPERATOR_APPROVAL_REF": module.APPROVAL_REF,
+            "HEPHAESTUS_MAX_WALL_SECONDS": "1200",
+        },
+        container_disk_in_gb=20,
+        interruptible=False,
+    )
+
+
 module.pod_shell = _pod_shell
+module.create_pod = _create_pod
 
 if __name__ == "__main__":
     raise SystemExit(module.main())
