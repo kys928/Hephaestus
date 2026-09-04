@@ -1,0 +1,66 @@
+name: First selected dataset preparation
+
+on:
+  push:
+    branches:
+      - integration/first-selected-dataset-acquisition
+    paths:
+      - scripts/run_first_selected_dataset_preparation.py
+      - scripts/verify_first_selected_dataset_preparation.py
+      - .github/workflows/first-selected-dataset-preparation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+  RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+  RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+  RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+  RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+
+jobs:
+  acquire-preprocess-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded data dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -e .
+          'pytest>=8,<9'
+          'boto3>=1.35,<2'
+          'tokenizers>=0.20,<1'
+      - name: Verify acquisition and preprocessing boundaries
+        run: >-
+          pytest -q
+          tests/test_instruction_pair_normalization.py
+          tests/test_production_data_acquisition.py
+          tests/test_huggingface_dataset_acquisition.py
+          tests/test_remote_data_preprocessing_bridge.py
+          tests/test_autonomous_data_factory.py
+      - name: Compile preparation and independent verifier
+        run: >-
+          python -m py_compile
+          scripts/run_first_selected_dataset_preparation.py
+          scripts/verify_first_selected_dataset_preparation.py
+      - name: Apply approved immutable acquisition and preprocessing boundary
+        run: python scripts/run_first_selected_dataset_preparation.py
+      - name: Independently read back and verify the prepared training data
+        run: python scripts/verify_first_selected_dataset_preparation.py
+      - name: Upload preparation proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-selected-dataset-preparation
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            first_selected_dataset_preparation.json
+            first_selected_dataset_preparation_verification.json
+            first_selected_dataset_approval.json
+            first_selected_dataset_acquisition_receipt.json
+            first_selected_dataset_trainable_data_contract.json
