@@ -9,10 +9,13 @@ on:
       - scripts/run_second_controlled_training_v2.py
       - scripts/launch_second_controlled_training.py
       - scripts/launch_second_controlled_training_v2.py
+      - scripts/launch_second_controlled_training_v3.py
       - scripts/run_second_controlled_semantic_evaluation.py
       - scripts/run_second_controlled_semantic_evaluation_v2.py
       - scripts/launch_second_controlled_semantic_evaluation.py
       - scripts/launch_second_controlled_semantic_evaluation_v2.py
+      - scripts/launch_second_controlled_semantic_evaluation_v3.py
+      - scripts/runpod_capacity_selection.py
       - docs/integration_notes/integration-second-controlled-experiment.md
   workflow_dispatch:
 
@@ -57,18 +60,21 @@ jobs:
             tests/test_generation_hardening.py
       - name: Compile controlled experiment drivers
         run: |
+          python -m py_compile scripts/runpod_capacity_selection.py
           python -m py_compile scripts/run_second_controlled_training.py
           python -m py_compile scripts/run_second_controlled_training_v2.py
           python -m py_compile scripts/launch_second_controlled_training.py
           python -m py_compile scripts/launch_second_controlled_training_v2.py
+          python -m py_compile scripts/launch_second_controlled_training_v3.py
           python -m py_compile scripts/run_second_controlled_semantic_evaluation.py
           python -m py_compile scripts/run_second_controlled_semantic_evaluation_v2.py
           python -m py_compile scripts/launch_second_controlled_semantic_evaluation.py
           python -m py_compile scripts/launch_second_controlled_semantic_evaluation_v2.py
+          python -m py_compile scripts/launch_second_controlled_semantic_evaluation_v3.py
       - name: Launch controlled 100-step training, verify checkpoint, and tear down Pod
-        run: python scripts/launch_second_controlled_training_v2.py
+        run: python scripts/launch_second_controlled_training_v3.py
       - name: Run frozen semantic comparison and Judge, verify evidence, and tear down Pod
-        run: python scripts/launch_second_controlled_semantic_evaluation_v2.py
+        run: python scripts/launch_second_controlled_semantic_evaluation_v3.py
       - name: Upload complete second controlled experiment evidence
         if: always()
         uses: actions/upload-artifact@v4
