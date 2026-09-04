@@ -1,0 +1,57 @@
+name: Freeze second controlled evidence
+
+on:
+  push:
+    branches: [integration/second-controlled-experiment]
+    paths:
+      - .github/workflows/freeze-second-controlled-evidence.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  freeze:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[freeze-second-controlled-evidence]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration/second-controlled-experiment
+          fetch-depth: 0
+      - name: Download exact successful workflow artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: second-controlled-experiment
+          path: /tmp/second-controlled-experiment
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 33889959923
+      - name: Verify and stage verbatim evidence
+        run: |
+          set -Eeuo pipefail
+          DEST=docs/evidence/second-controlled-experiment-001-33889959923
+          test -f "$DEST/SHA256SUMS"
+          cd /tmp/second-controlled-experiment
+          test "$(find . -maxdepth 1 -type f -name '*.json' | wc -l)" -eq 4
+          cp "$GITHUB_WORKSPACE/$DEST/SHA256SUMS" SHA256SUMS
+          sha256sum -c SHA256SUMS
+          cp second_controlled_training_launcher.json "$GITHUB_WORKSPACE/$DEST/"
+          cp second_controlled_training_verification.json "$GITHUB_WORKSPACE/$DEST/"
+          cp second_controlled_semantic_evaluation_launcher.json "$GITHUB_WORKSPACE/$DEST/"
+          cp second_controlled_semantic_evaluation_verification.json "$GITHUB_WORKSPACE/$DEST/"
+          cd "$GITHUB_WORKSPACE/$DEST"
+          sha256sum -c SHA256SUMS
+      - name: Commit frozen evidence to integration branch
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/evidence/second-controlled-experiment-001-33889959923/*.json
+          if git diff --cached --quiet; then
+            echo 'Evidence already frozen; nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'Freeze verified second controlled experiment JSON evidence'
+          git push origin HEAD:integration/second-controlled-experiment
