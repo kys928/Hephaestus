@@ -1,0 +1,60 @@
+name: First bounded scientific training
+
+on:
+  push:
+    branches: [feature/first-bounded-scientific-training]
+    paths:
+      - .github/workflows/first-bounded-scientific-training.yml
+      - scripts/run_first_bounded_scientific_training.py
+      - scripts/launch_first_bounded_scientific_training.py
+      - src/hephaestus/providers/runpod/execution.py
+      - tests/test_runpod_gpu_execution.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-bounded-scientific-training-cviwpryzao
+  cancel-in-progress: false
+
+jobs:
+  train:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-first-scientific-training]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher and test dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Verify bounded GPU execution adapter
+        run: python -m pytest -q tests/test_runpod_provider.py tests/test_runpod_gpu_execution.py
+      - name: Compile scientific execution drivers
+        run: |
+          python -m py_compile scripts/run_first_bounded_scientific_training.py
+          python -m py_compile scripts/launch_first_bounded_scientific_training.py
+      - name: Launch, monitor, verify, and tear down bounded GPU run
+        run: python scripts/launch_first_bounded_scientific_training.py
+      - name: Upload scientific execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-bounded-scientific-training
+          path: |
+            first_bounded_scientific_training_launcher.json
+            first_bounded_scientific_training_verification.json
+          if-no-files-found: warn
+          retention-days: 30
