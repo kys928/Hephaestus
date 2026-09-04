@@ -6,7 +6,9 @@ on:
     paths:
       - .github/workflows/first-bounded-scientific-training.yml
       - scripts/run_first_bounded_scientific_training.py
+      - scripts/run_first_bounded_scientific_training_v2.py
       - scripts/launch_first_bounded_scientific_training.py
+      - scripts/launch_first_bounded_scientific_training_v2.py
       - scripts/run_launch_first_bounded_scientific_training.py
       - src/hephaestus/providers/runpod/execution.py
       - tests/test_runpod_gpu_execution.py
@@ -46,10 +48,12 @@ jobs:
       - name: Compile scientific execution drivers
         run: |
           python -m py_compile scripts/run_first_bounded_scientific_training.py
+          python -m py_compile scripts/run_first_bounded_scientific_training_v2.py
           python -m py_compile scripts/launch_first_bounded_scientific_training.py
+          python -m py_compile scripts/launch_first_bounded_scientific_training_v2.py
           python -m py_compile scripts/run_launch_first_bounded_scientific_training.py
       - name: Launch, monitor, verify, and tear down bounded GPU run
-        run: python scripts/run_launch_first_bounded_scientific_training.py
+        run: python scripts/launch_first_bounded_scientific_training_v2.py
       - name: Upload scientific execution evidence
         if: always()
         uses: actions/upload-artifact@v4
