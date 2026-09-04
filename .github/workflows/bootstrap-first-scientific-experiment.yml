@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/bootstrap-first-scientific-experiment.yml
       - scripts/bootstrap_first_scientific_experiment.py
+      - scripts/run_bootstrap_first_scientific_experiment.py
       - src/hephaestus/data/**
       - src/hephaestus/providers/datasets/**
       - src/hephaestus/providers/models/**
@@ -45,9 +46,11 @@ jobs:
           python -m pip install 'boto3>=1.35,<2' 'pyarrow>=17' 'tokenizers>=0.20,<1' 'transformers>=4.46,<6' 'safetensors>=0.4,<1'
           python -m pip install 'torch>=2.5,<3' --index-url https://download.pytorch.org/whl/cpu
       - name: Compile bootstrap runner
-        run: python -m py_compile scripts/bootstrap_first_scientific_experiment.py
+        run: |
+          python -m py_compile scripts/bootstrap_first_scientific_experiment.py
+          python -m py_compile scripts/run_bootstrap_first_scientific_experiment.py
       - name: Bootstrap real scientific inputs and typed chain
-        run: python scripts/bootstrap_first_scientific_experiment.py
+        run: python scripts/run_bootstrap_first_scientific_experiment.py
       - name: Upload bootstrap evidence
         uses: actions/upload-artifact@v4
         with:
