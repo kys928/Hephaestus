@@ -101,6 +101,55 @@ class RunPodExecutionAdapter:
             "dockerStartCmd": ["bash", "-lc", "sleep 300"],
             "interruptible": False,
         }
+        return self._create_pod(body)
+
+    def create_bounded_gpu_pod(
+        self,
+        *,
+        name: str,
+        image_name: str,
+        gpu_type_ids: list[str],
+        docker_start_cmd: list[str],
+        env: dict[str, str] | None = None,
+        container_disk_in_gb: int = 20,
+        interruptible: bool = False,
+    ) -> dict[str, Any]:
+        """Create one GPU Pod pinned to this config's datacenter and Network Volume.
+
+        The caller supplies only the bounded runtime command/environment and an
+        ordered GPU allowlist. Volume identity, mount point, Secure Cloud, and
+        single-GPU shape remain fixed by this adapter.
+        """
+
+        normalized_gpu_ids = [str(item).strip() for item in gpu_type_ids if str(item).strip()]
+        if not normalized_gpu_ids:
+            raise ValueError("at least one GPU type must be provided")
+        if not docker_start_cmd or not all(str(item).strip() for item in docker_start_cmd):
+            raise ValueError("docker_start_cmd must contain non-empty arguments")
+        if container_disk_in_gb < 10:
+            raise ValueError("container_disk_in_gb must be at least 10")
+
+        body: dict[str, object] = {
+            "name": name,
+            "computeType": "GPU",
+            "gpuCount": 1,
+            "gpuTypeIds": normalized_gpu_ids,
+            "gpuTypePriority": "custom",
+            "cloudType": "SECURE",
+            "dataCenterIds": [self.config.datacenter_id],
+            "dataCenterPriority": "custom",
+            "imageName": image_name,
+            "containerDiskInGb": container_disk_in_gb,
+            "networkVolumeId": self.config.network_volume_id,
+            "volumeMountPath": "/workspace",
+            "dockerStartCmd": list(docker_start_cmd),
+            "interruptible": bool(interruptible),
+        }
+        if env:
+            body["env"] = {str(key): str(value) for key, value in env.items()}
+        return self._create_pod(body)
+
+    def _create_pod(self, body: dict[str, object]) -> dict[str, Any]:
         status, payload = self._request("POST", "pods", body)
         if status != 201 or not isinstance(payload, dict):
             raise RunPodApiError(f"unexpected create-Pod response status: {status}")
