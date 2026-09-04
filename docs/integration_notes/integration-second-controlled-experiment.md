@@ -46,6 +46,12 @@ The candidate uses the same bounded v2 recipe as the first run:
 
 The larger lifecycle byte/row guards only accommodate the already-verified prepared artifact; they are execution-capacity bounds, not scientific recipe variables.
 
+## Execution recovery boundaries
+
+The first real candidate-training Pod reached a healthy RTX 4090/CUDA runtime but failed before optimizer step 1 because the generic worker tokenization guard was `max_total_tokens=20_000_000`, while the immutable prepared dataset declares 32,325,317 tokens. No checkpoint or non-zero optimizer-step evidence existed. The failed run directory is therefore eligible for audited archival before retry, and the admission-only token ceiling is raised to 40,000,000. This does not alter the fixed first 100 sequential batches, model initialization, optimizer, or any other scientific variable.
+
+The Network Volume execution sentinel is also attempt-aware. Before retry, stale `executions/<run-id>/driver_result.json` and `pod_runtime.log` are copied to a content-addressed failed-attempt archive and round-trip verified before the canonical stale keys are removed. During monitoring, a terminal record is accepted only when its `repo_sha` equals the exact current workflow commit. This prevents a prior failed attempt from being mistaken for the current launch.
+
 ## Evaluation contract
 
 After successful training and independent checkpoint verification, a separate GPU evaluation Pod generates the same 18 frozen semantic task/seed outputs for each of:
