@@ -9,6 +9,7 @@ from .acquisition_models import (
     RemoteAcquisitionPlan,
     RemoteAcquisitionResult,
 )
+from .materialization import validate_remote_acquisition_for_preprocessing
 from .preprocessing import (
     AutonomousDataPreprocessor,
     DataFactoryResult,
@@ -33,4 +34,5 @@ __all__ = [
     "RemoteAcquisitionPlan",
     "RemoteAcquisitionResult",
     "RemoteDatasetAcquisitionService",
+    "validate_remote_acquisition_for_preprocessing",
 ]
