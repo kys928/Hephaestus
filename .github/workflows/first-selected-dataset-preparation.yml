@@ -6,6 +6,7 @@ on:
       - integration/first-selected-dataset-acquisition
     paths:
       - scripts/run_first_selected_dataset_preparation.py
+      - scripts/run_first_selected_dataset_preparation_v2.py
       - scripts/verify_first_selected_dataset_preparation.py
       - .github/workflows/first-selected-dataset-preparation.yml
   workflow_dispatch:
@@ -47,9 +48,10 @@ jobs:
         run: >-
           python -m py_compile
           scripts/run_first_selected_dataset_preparation.py
+          scripts/run_first_selected_dataset_preparation_v2.py
           scripts/verify_first_selected_dataset_preparation.py
       - name: Apply approved immutable acquisition and preprocessing boundary
-        run: python scripts/run_first_selected_dataset_preparation.py
+        run: python scripts/run_first_selected_dataset_preparation_v2.py
       - name: Independently read back and verify the prepared training data
         run: python scripts/verify_first_selected_dataset_preparation.py
       - name: Upload preparation proof
