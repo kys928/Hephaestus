@@ -29,10 +29,15 @@ jobs:
         run: >-
           pytest -q
           tests/test_targeted_post_failure_probes.py
+          tests/test_resolved_evidence_planner.py
           tests/test_evidence_based_diagnosis.py
           tests/test_closed_loop_planner.py
       - name: Compile diagnostic bridge
-        run: python -m py_compile src/hephaestus/diagnosis/probes.py scripts/run_first_targeted_post_failure_diagnostics.py
+        run: >-
+          python -m py_compile
+          src/hephaestus/diagnosis/probes.py
+          src/hephaestus/planning/resolved.py
+          scripts/run_first_targeted_post_failure_diagnostics.py
       - name: Collect targeted evidence, diagnose, and plan
         run: python scripts/run_first_targeted_post_failure_diagnostics.py
       - name: Upload targeted diagnostic proof
