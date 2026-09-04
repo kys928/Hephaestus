@@ -70,7 +70,6 @@ def main() -> int:
     if not isinstance(judge, dict):
         raise RuntimeError("Judge-exit evidence missing")
 
-    # Prove this diagnosis is attached to the exact preceding chain.
     assertions = {
         "training_verification_status": training.get("status") == "verified",
         "training_completed": training_terminal.get("status") == "completed",
@@ -95,9 +94,9 @@ def main() -> int:
     metrics = training_terminal.get("metrics_summary") if isinstance(training_terminal.get("metrics_summary"), dict) else {}
     normalized = training_terminal.get("normalized_training_config") if isinstance(training_terminal.get("normalized_training_config"), dict) else {}
 
-    # Diagnostic projection: only facts explicitly established by frozen evidence.
+    # Only facts explicitly established by frozen evidence are projected.
     # No causal signal such as undertraining_detected, scheduler_misconfigured,
-    # overfitting_detected, or model_family_limitation_detected is invented here.
+    # overfitting_detected, or model_family_limitation_detected is invented.
     observed = [
         {
             "evidence_kind": "eval_report",
@@ -164,7 +163,6 @@ def main() -> int:
         lineage_id=LINEAGE,
         stage_name="smoke_test",
         observed_failures=observed,
-        evidence_refs=[str(training_path.relative_to(ROOT)), str(eval_path.relative_to(ROOT))],
         requested_by="judge_exit_post_failure_handoff",
     )
     report = EvidenceBasedDiagnosisService().diagnose(request)
@@ -178,6 +176,8 @@ def main() -> int:
         raise RuntimeError("diagnosis incorrectly claimed causation")
     if report.metadata.get("recommendations_executed") is not False:
         raise RuntimeError("diagnosis executed a recommendation")
+    if report.issues:
+        raise RuntimeError(f"diagnosis emitted unexpected issues: {[issue.code for issue in report.issues]}")
 
     chain = {
         "chain_version": "first-post-failure-diagnosis-chain.v1",
@@ -197,6 +197,7 @@ def main() -> int:
         "diagnosis_leading_domain": leading.failure_domain,
         "diagnosis_confidence": report.confidence,
         "diagnosis_missing_evidence": report.missing_evidence,
+        "diagnosis_issues": [],
         "chain_assertions": assertions,
         "causal_signal_invented": False,
         "recommendation_executed": False,
@@ -224,6 +225,7 @@ def main() -> int:
         "leading_domain": leading.failure_domain,
         "confidence": report.confidence,
         "missing_evidence": report.missing_evidence,
+        "issues": [],
         "judge_next_action": judge.get("next_action"),
         "causation_claimed": leading.metadata.get("causation_claimed"),
         "recommendations_executed": report.metadata.get("recommendations_executed"),
