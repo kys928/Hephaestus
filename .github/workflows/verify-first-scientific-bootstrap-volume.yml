@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/verify-first-scientific-bootstrap-volume.yml
       - scripts/verify_first_scientific_bootstrap_volume.py
+      - scripts/run_verify_first_scientific_bootstrap_volume.py
   workflow_dispatch:
 
 permissions:
@@ -36,9 +37,11 @@ jobs:
       - name: Install read-only verifier dependency
         run: python -m pip install 'boto3>=1.35,<2'
       - name: Compile verifier
-        run: python -m py_compile scripts/verify_first_scientific_bootstrap_volume.py
+        run: |
+          python -m py_compile scripts/verify_first_scientific_bootstrap_volume.py
+          python -m py_compile scripts/run_verify_first_scientific_bootstrap_volume.py
       - name: Re-read and verify paid-volume scientific state
-        run: python scripts/verify_first_scientific_bootstrap_volume.py
+        run: python scripts/run_verify_first_scientific_bootstrap_volume.py
       - name: Upload independent verification evidence
         uses: actions/upload-artifact@v4
         with:
