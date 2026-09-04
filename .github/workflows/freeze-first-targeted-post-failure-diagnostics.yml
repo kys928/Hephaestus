@@ -1,0 +1,82 @@
+name: Freeze first targeted post-failure diagnostics
+
+on:
+  push:
+    branches:
+      - integration/targeted-post-failure-diagnostics
+    paths:
+      - .github/workflows/freeze-first-targeted-post-failure-diagnostics.yml
+
+permissions:
+  contents: write
+
+jobs:
+  freeze:
+    runs-on: ubuntu-latest
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -e . 'boto3>=1.35,<2'
+      - name: Reproduce exact proof
+        run: python scripts/run_first_targeted_post_failure_diagnostics.py
+      - name: Verify exact artifact bytes
+        run: |
+          echo '11cb67960df8c9f60a861e57b4f74145ad64cd25f5b52bb3835c754cde74f086  first_targeted_post_failure_diagnosis.json' | sha256sum -c -
+          echo '5d14b98087783fcb6b87264ec66ad8c60e0f6db6bd3e8443bfffbb6b3337cf00  first_targeted_post_failure_diagnostics.json' | sha256sum -c -
+          echo '52e6db0f5c4f9297e763ed11581f98a6e7c92af45e45ca5e6922504e8f9b3325  first_targeted_post_failure_planner.json' | sha256sum -c -
+          echo 'c943334f2f6e7162380be74748506d26dd13542fece21d42672d35f3abbfc2e9  first_targeted_post_failure_probe.json' | sha256sum -c -
+      - name: Freeze evidence bytes
+        run: |
+          set -euo pipefail
+          dest=docs/evidence/first-targeted-post-failure-diagnostics-001-33874832481
+          mkdir -p "$dest"
+          cp first_targeted_post_failure_diagnostics.json "$dest/diagnostics.json"
+          cp first_targeted_post_failure_probe.json "$dest/probe.json"
+          cp first_targeted_post_failure_diagnosis.json "$dest/diagnosis.json"
+          cp first_targeted_post_failure_planner.json "$dest/planner.json"
+          cat > "$dest/SHA256SUMS" <<'EOF'
+          5d14b98087783fcb6b87264ec66ad8c60e0f6db6bd3e8443bfffbb6b3337cf00  diagnostics.json
+          c943334f2f6e7162380be74748506d26dd13542fece21d42672d35f3abbfc2e9  probe.json
+          11cb67960df8c9f60a861e57b4f74145ad64cd25f5b52bb3835c754cde74f086  diagnosis.json
+          52e6db0f5c4f9297e763ed11581f98a6e7c92af45e45ca5e6922504e8f9b3325  planner.json
+          15566ca3c6adb9818ffba361ebc4ddbe064deec67eb191ed63674f161888a206  original-github-actions-artifact.zip
+          EOF
+          cat > "$dest/README.md" <<'EOF'
+          # First targeted post-failure diagnostic proof
+
+          This directory freezes the exact deterministic outputs from GitHub Actions run `33874832481`.
+
+          Upstream chain:
+          - training: `first-bounded-scientific-training-001-33866198758`
+          - semantic evaluation: `first-semantic-evaluation-001-33869352751`
+          - first post-failure diagnosis: `diag-49904c2b7fa6cd1a` (`inconclusive`)
+
+          Targeted result:
+          - diagnosis status: `completed`
+          - leading domain: `data_coverage`
+          - confidence: `0.825`
+          - undertraining signal: not supported by the measured loss tail
+          - optimizer/scheduler pathology: not supported; recorded schedule conformed
+          - processed rows scanned: `54,878`
+          - prompt/target rows: `0`
+          - structured target rows: `0`
+          - Planner next intervention: `replace_or_mix_dataset`
+          - one primary variable: `dataset_mixture`
+          - next contract boundary: `dataset_discovery_and_selection`
+
+          No training, model mutation, promotion, Judge action, dataset mutation, or Planner action was executed by this diagnostic run.
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$dest"
+          git commit -m 'Freeze first targeted post-failure diagnostic proof'
+          git push
