@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capacity-aware wrapper for the second controlled semantic-evaluation launcher."""
+"""Availability-priority wrapper for the second controlled semantic-evaluation launcher."""
 from __future__ import annotations
 
 import json
@@ -16,20 +16,29 @@ def _create_capacity_aware(execution, eval_run_id, repo_sha, candidate_checkpoin
     global _capacity_observations
 
     def create_once(gpu_ids):
-        return execution.create_bounded_gpu_pod(
-            name=f"hephaestus-{eval_run_id}"[:180],
-            image_name=base.IMAGE,
-            gpu_type_ids=list(gpu_ids),
-            docker_start_cmd=["bash", "-lc", base.pod_shell()],
-            env={
+        body = {
+            "name": f"hephaestus-{eval_run_id}"[:180],
+            "computeType": "GPU",
+            "gpuCount": 1,
+            "gpuTypeIds": list(gpu_ids),
+            "gpuTypePriority": "availability",
+            "cloudType": "SECURE",
+            "dataCenterIds": [base.DATACENTER_ID],
+            "dataCenterPriority": "custom",
+            "imageName": base.IMAGE,
+            "containerDiskInGb": 20,
+            "networkVolumeId": base.VOLUME_ID,
+            "volumeMountPath": "/workspace",
+            "dockerStartCmd": ["bash", "-lc", base.pod_shell()],
+            "interruptible": False,
+            "env": {
                 "HEPHAESTUS_EVAL_RUN_ID": eval_run_id,
                 "HEPHAESTUS_REPO_SHA": repo_sha,
                 "HEPHAESTUS_CANDIDATE_CHECKPOINT_HASH": candidate_checkpoint_hash,
                 "HEPHAESTUS_OPERATOR_APPROVAL_REF": base.APPROVAL_REF,
             },
-            container_disk_in_gb=20,
-            interruptible=False,
-        )
+        }
+        return execution._create_pod(body)  # integration-only scheduler projection
 
     pod, observations = create_with_capacity_retries(create_once)
     _capacity_observations = observations
