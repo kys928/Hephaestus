@@ -1,0 +1,108 @@
+{
+  "acquisition_receipt_id": "dataset-acquisition-receipt-619ad6d414bca190e6bc3984",
+  "approval_ref": "approval://operator/chat-2026-09-04-selected-dataset-preparation",
+  "candidate_id": "dataset-fb91684d87fe5f28",
+  "dataset_id": "sail/symbolic-instruction-tuning",
+  "experiment_executed": false,
+  "manifest": {
+    "manifest_id": "manifest-planned-run-b8e558e54effac85",
+    "sha256": "sha256:0495018a0cc7c70494d5a00bc51a471568e850d8e3fa11cb0696c9674c71cc76"
+  },
+  "model_mutated": false,
+  "processed": {
+    "byte_size": 157151627,
+    "prompt_target_record_count": 35774,
+    "record_count": 171295,
+    "sha256": "sha256:bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac"
+  },
+  "raw_shard": {
+    "byte_size": 300298688,
+    "durable_key": "hephaestus/scientific/v1/objects/sha256/63/6312f82b31237031557a621cbf1728159048e1830908088727eb05c407e2cd26",
+    "relative_path": "train/sql.json",
+    "sha256": "sha256:6312f82b31237031557a621cbf1728159048e1830908088727eb05c407e2cd26"
+  },
+  "resolved_revision": "c0b1111933a7b87bef0e5b3221d8e5f76b5ac27c",
+  "runtime_materializations": {
+    "acquisition_receipt": {
+      "byte_size": 2642,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/acquisition_receipt.json",
+      "sha256": "sha256:c66bdc6f9d46c425e3ba88ab123de45be52061ea373963ca276c69ebfd2aed37",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "approval": {
+      "byte_size": 326,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/dataset_approval.json",
+      "sha256": "sha256:9c377cec52d831412f1a716ac756695e21a28a4c59bb6ba55c673733bee7d48e",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "dataset_manifest": {
+      "byte_size": 4706,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/dataset_manifest.json",
+      "sha256": "sha256:0495018a0cc7c70494d5a00bc51a471568e850d8e3fa11cb0696c9674c71cc76",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "preprocessing_report": {
+      "byte_size": 559,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/preprocessing_report.json",
+      "sha256": "sha256:4e748f40fd7170cf1a4725df17d8d41b8911d75aa69eae1b992fff772d885f4d",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "processed": {
+      "byte_size": 157151627,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/trainable.jsonl",
+      "sha256": "sha256:bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "processing_evidence": {
+      "byte_size": 4292,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/processing_evidence.json",
+      "sha256": "sha256:d78c9aef9d9522fa0befb77f275ae0b025df1c11dc8b43845098747a96deb0f6",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    },
+    "trainable_data_contract": {
+      "byte_size": 358,
+      "custom_metadata_sha256": null,
+      "key": "hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/trainable_data_contract.json",
+      "sha256": "sha256:ef273fe913f582289ffad2cd05a431e9d541091a51db97b0a649eb47579f2a5a",
+      "verification_basis": "full_get_object_sha256_and_exact_size"
+    }
+  },
+  "sample_validation": {
+    "malformed_rows": 0,
+    "rows_seen": 100000,
+    "status": "bounded_sample",
+    "truncated_at_max_rows": true,
+    "valid_rows": 100000
+  },
+  "selection_decision_id": "dataset-selection-fd8699f8cbd8b4957ca2",
+  "status": "verified",
+  "tokenizer_compatibility": {
+    "checker_id": "exact-frozen-bpe-unknown-token-check-v1",
+    "compatible": true,
+    "details": {
+      "criterion": "unknown-token fraction <= 0.01; over-context records remain explicit preprocessing evidence",
+      "maximum_tokenized_length": 1049,
+      "over_context_records": 126512,
+      "records_checked": 171295,
+      "tokens_checked": 62833833,
+      "unknown_token_count": 16427,
+      "unknown_token_fraction": 0.0002614355867801348
+    },
+    "status": "checked",
+    "tokenizer_ref": "sha256:123745ffe03aadf5d275c90bceb4e3bfb71678548a5ed936410ebe1e8c85e4ce"
+  },
+  "trainable_data_contract": {
+    "contract_id": "trainable-data-planned-run-b8e558e54effac85",
+    "manifest_id": "manifest-planned-run-b8e558e54effac85",
+    "processed_dataset_ref": "s3://cviwpryzao/hephaestus/scientific/v1/objects/sha256/ba/bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac",
+    "run_id": "planned-run-b8e558e54effac85",
+    "sha256": "sha256:ef273fe913f582289ffad2cd05a431e9d541091a51db97b0a649eb47579f2a5a"
+  },
+  "training_launched": false
+}
