@@ -1,0 +1,58 @@
+name: Resolve stronger immutable model candidates
+
+on:
+  push:
+    branches: [launch/stronger-immutable-candidate-wave]
+    paths:
+      - .github/workflows/resolve-stronger-immutable-candidates.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'huggingface_hub>=0.26,<2'
+      - name: Resolve immutable revisions, licenses, and weight sizes
+        run: |
+          python - <<'PY'
+          import json
+          from huggingface_hub import HfApi
+
+          candidates = [
+              'ibm-granite/granite-3.3-8b-instruct',
+              'mistralai/Mistral-7B-Instruct-v0.3',
+              'allenai/OLMo-2-1124-7B-Instruct',
+          ]
+          api = HfApi()
+          rows = []
+          for model_id in candidates:
+              info = api.model_info(model_id, files_metadata=True)
+              license_name = str(getattr(getattr(info, 'card_data', None), 'license', '') or '').lower()
+              files = []
+              weight_bytes = 0
+              for sibling in info.siblings or []:
+                  name = sibling.rfilename
+                  size = int(getattr(sibling, 'size', 0) or 0)
+                  if name.endswith('.safetensors') and not name.endswith('.index.json'):
+                      files.append({'name': name, 'size': size})
+                      weight_bytes += size
+              rows.append({
+                  'model_id': model_id,
+                  'revision': str(info.sha or ''),
+                  'license': license_name,
+                  'weight_bytes': weight_bytes,
+                  'weight_gib': round(weight_bytes / (1024**3), 3),
+                  'safetensors': files,
+              })
+          print(json.dumps(rows, indent=2, sort_keys=True))
+          for row in rows:
+              assert len(row['revision']) == 40 and all(c in '0123456789abcdef' for c in row['revision'])
+              assert row['license'] == 'apache-2.0', row
+              assert row['weight_bytes'] > 0, row
+          PY
