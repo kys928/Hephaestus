@@ -5,8 +5,8 @@ The prior 7B attempt proved two concrete blockers without changing the frozen
 semantic pack: Qwen2.5-7B-Instruct omitted the final period on the exact-match
 probe and the positive-proof adapter incorrectly serialized continuation tasks
 as user-chat turns. This adapter keeps the frozen pack/hash/decoding untouched,
-uses causal serialization only for ``continuation_prompts``, and upgrades the
-governed immutable Apache-2.0 candidate set.
+uses native assistant-prefill serialization for ``continuation_prompts``, and
+uses the governed immutable Apache-2.0 candidate set.
 """
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ PRIOR_REJECTION_EVIDENCE = (
     "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33957215257/cycles/cycle-02/cycle_summary.json",
     "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33959818398/cycles/cycle-01/cycle_summary.json",
     "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33959818398/cycles/cycle-02/cycle_summary.json",
+    "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33962003574/cycles/cycle-01/cycle_summary.json",
+    "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33962003574/cycles/cycle-02/cycle_summary.json",
 )
 
 proof.CANDIDATES = (
@@ -51,9 +53,10 @@ class TaskAwarePinnedBackend(proof.PinnedChatTemplateBackend):
     """Preserve frozen task text while honoring generation-vs-continuation mode.
 
     No expected answers, punctuation, stop strings, logit constraints, or frozen
-    task text are injected here. The only distinction comes from the already
-    frozen task_kind field: continuation prompts are causal prefixes; all other
-    tasks use the candidate tokenizer's native user-chat template.
+    task text are injected here. The distinction comes only from the already
+    frozen ``task_kind``. Continuation prompts are represented as an open final
+    assistant message using the tokenizer's native chat template; all other
+    tasks begin a new assistant response from the frozen user prompt.
     """
 
     backend_id = "pinned_task_aware_transformers"
@@ -88,8 +91,14 @@ class TaskAwarePinnedBackend(proof.PinnedChatTemplateBackend):
             torch.cuda.manual_seed_all(task.seed)
 
             if task.task_kind == "continuation_prompts":
-                rendered = task.prompt
-                serialization = "causal_prefix:frozen_continuation_prompt"
+                encoded = tokenizer.apply_chat_template(
+                    [{"role": "assistant", "content": task.prompt}],
+                    tokenize=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                    continue_final_message=True,
+                ).to("cuda")
+                serialization = "tokenizer_chat_template:assistant_prefill:continue_final_message"
             else:
                 chat_kwargs: dict[str, object] = {
                     "tokenize": False,
@@ -105,11 +114,11 @@ class TaskAwarePinnedBackend(proof.PinnedChatTemplateBackend):
                     [{"role": "user", "content": task.prompt}],
                     **chat_kwargs,
                 )
+                encoded = tokenizer(rendered, return_tensors="pt").to("cuda")
                 serialization = "tokenizer_chat_template:user_only"
                 if self.model_id == "Qwen/Qwen3-8B":
                     serialization += ":thinking_disabled"
 
-            encoded = tokenizer(rendered, return_tensors="pt").to("cuda")
             kwargs: dict[str, object] = {
                 "do_sample": do_sample,
                 "max_new_tokens": max_new_tokens,
