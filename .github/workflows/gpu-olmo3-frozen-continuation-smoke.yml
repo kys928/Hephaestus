@@ -1,0 +1,350 @@
+name: GPU OLMo3 frozen continuation smoke
+
+on:
+  push:
+    branches: [launch/stronger-immutable-candidate-wave]
+    paths:
+      - .github/workflows/gpu-olmo3-frozen-continuation-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-olmo3-frozen-continuation-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      PYTHONPATH: src:scripts
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher and tokenizer preflight dependencies
+        run: python -m pip install -e '.[s3]' 'transformers>=4.57,<6' 'huggingface_hub>=0.26,<2' 'jinja2>=3.1,<4'
+      - name: Guard frozen protocol and native assistant-prefill
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from transformers import AutoTokenizer
+          from hephaestus.evaluation.pack_loader import load_eval_pack
+
+          expected_hash = 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
+          model_id = 'allenai/Olmo-3-7B-Instruct'
+          revision = '6e5971d9eba42665f5bd5a0fcf047f299ce1dccc'
+          pack = load_eval_pack('semantic_behavior_v1', config_dir=Path('configs'))
+          assert pack['frozen'] is True and pack['content_hash_verified'] is True
+          assert pack['content_hash'] == expected_hash
+          normalized = pack['eval_pack']
+          assert normalized['decoding_config'] == {
+              'temperature': 0.0, 'top_p': 1.0, 'max_new_tokens': 96, 'seeds': [11, 29, 47]
+          }
+          task = normalized['continuation_prompts'][0]
+          assert task['task_id'] == 'observatory_continuation'
+          assert task['prompt'] == 'The observatory lost power just as the storm arrived.'
+          tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=False)
+          encoded = tokenizer.apply_chat_template(
+              [{'role': 'assistant', 'content': task['prompt']}],
+              tokenize=True,
+              return_dict=True,
+              continue_final_message=True,
+          )
+          rendered = tokenizer.decode(encoded['input_ids'], skip_special_tokens=False)
+          assert task['prompt'] in rendered and rendered.count(task['prompt']) == 1, rendered
+          assert not rendered.rstrip().endswith(getattr(tokenizer, 'eos_token', '') or '<never>'), rendered
+          print({
+              'model_id': model_id,
+              'revision': revision,
+              'frozen_eval_pack_hash': expected_hash,
+              'prompt_tokens': len(encoded['input_ids']),
+              'serialization': 'tokenizer_chat_template:assistant_prefill:continue_final_message',
+          })
+          PY
+      - name: Launch one-GPU OLMo3 frozen continuation smoke
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
+          import launch_positive_promotion_proof as launcher
+          import launch_positive_promotion_proof_v2  # noqa: F401
+
+          proof_run_id = f"olmo3-frozen-continuation-smoke-{os.environ['GITHUB_RUN_ID']}"
+          repo_sha = os.environ['GITHUB_SHA']
+          attempt = 1
+          frozen_hash = 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
+          model_id = 'allenai/Olmo-3-7B-Instruct'
+          revision = '6e5971d9eba42665f5bd5a0fcf047f299ce1dccc'
+
+          smoke_shell = r'''set -Eeuo pipefail
+          ATTEMPT_DIR="/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
+          mkdir -p "$ATTEMPT_DIR"
+          exec >"$ATTEMPT_DIR/pod_runtime.log" 2>&1
+          write_failure() {
+            code=$?
+            if [ "$code" -ne 0 ] && [ ! -f "$ATTEMPT_DIR/driver_result.json" ]; then
+              python - "$ATTEMPT_DIR/driver_result.json" "$code" <<'PYFAIL'
+          import json, os, sys
+          from datetime import datetime, timezone
+          path, code = sys.argv[1], int(sys.argv[2])
+          payload = {
+              'result_version': 'stronger-immutable-frozen-continuation-smoke.v1',
+              'created_at': datetime.now(timezone.utc).isoformat(),
+              'proof_run_id': os.environ.get('HEPHAESTUS_PROOF_RUN_ID', 'unknown'),
+              'attempt': os.environ.get('HEPHAESTUS_ATTEMPT', 'unknown'),
+              'status': 'pod_failed',
+              'exit_code': code,
+              'repo_sha': os.environ.get('HEPHAESTUS_REPO_SHA', 'unknown'),
+          }
+          with open(path + '.partial', 'w', encoding='utf-8') as stream:
+              json.dump(payload, stream, indent=2, sort_keys=True)
+          os.replace(path + '.partial', path)
+          PYFAIL
+            fi
+          }
+          trap write_failure EXIT
+          apt-get update >/dev/null
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv >/dev/null
+          rm -rf /opt/hephaestus-src /opt/hephaestus-venv
+          git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src >/dev/null
+          cd /opt/hephaestus-src
+          git checkout "$HEPHAESTUS_REPO_SHA" >/dev/null
+          python -m venv --system-site-packages /opt/hephaestus-venv
+          PY=/opt/hephaestus-venv/bin/python
+          export HF_HUB_DISABLE_XET=1
+          "$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.57,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'jinja2>=3.1,<4' >/dev/null
+          "$PY" - <<'PYSMOKE'
+          import hashlib
+          import json
+          import os
+          import random
+          import re
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          import torch
+          from huggingface_hub import HfApi, snapshot_download
+          from transformers import AutoModelForCausalLM, AutoTokenizer
+          from hephaestus.evaluation.pack_loader import load_eval_pack
+          from hephaestus.scoring.behavioral import evaluate_behavioral_sample
+
+          expected_hash = 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
+          model_id = 'allenai/Olmo-3-7B-Instruct'
+          revision = '6e5971d9eba42665f5bd5a0fcf047f299ce1dccc'
+          expected_license = 'apache-2.0'
+          assert torch.cuda.is_available(), 'CUDA unavailable'
+          assert re.fullmatch(r'[0-9a-f]{40}', revision)
+
+          info = HfApi().model_info(model_id, revision=revision, files_metadata=True)
+          assert str(info.sha or '') == revision, (info.sha, revision)
+          observed_license = str(getattr(getattr(info, 'card_data', None), 'license', '') or '').lower()
+          assert observed_license == expected_license, observed_license
+
+          shared_cache = Path('/workspace/hephaestus/scientific/v1/model_cache/huggingface')
+          snapshot = Path(snapshot_download(
+              repo_id=model_id,
+              revision=revision,
+              cache_dir=shared_cache,
+              local_files_only=False,
+              allow_patterns=[
+                  'config.json', 'generation_config.json',
+                  'model-*.safetensors', 'model.safetensors.index.json',
+                  'tokenizer.json', 'tokenizer_config.json', 'tokenizer.model',
+                  'special_tokens_map.json', 'added_tokens.json', 'vocab.json', 'merges.txt',
+              ],
+          )).resolve()
+          components = {}
+          byte_size = 0
+          for path in sorted(snapshot.rglob('*')):
+              if not path.is_file():
+                  continue
+              rel = path.relative_to(snapshot).as_posix()
+              h = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
+                      h.update(chunk)
+              components[rel] = 'sha256:' + h.hexdigest()
+              byte_size += path.stat().st_size
+          assert components and any(name.endswith('.safetensors') for name in components)
+          manifest_hash = 'sha256:' + hashlib.sha256(
+              json.dumps(components, sort_keys=True, separators=(',', ':')).encode('utf-8')
+          ).hexdigest()
+
+          pack = load_eval_pack('semantic_behavior_v1', config_dir=Path('configs'))
+          assert pack['frozen'] is True and pack['content_hash_verified'] is True
+          assert pack['content_hash'] == expected_hash
+          normalized = pack['eval_pack']
+          decoding = normalized['decoding_config']
+          assert decoding == {'temperature': 0.0, 'top_p': 1.0, 'max_new_tokens': 96, 'seeds': [11, 29, 47]}
+          task = normalized['continuation_prompts'][0]
+          assert task['task_id'] == 'observatory_continuation'
+          prompt = task['prompt']
+          assert prompt == 'The observatory lost power just as the storm arrived.'
+
+          tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True, trust_remote_code=False)
+          if tokenizer.pad_token_id is None:
+              tokenizer.pad_token_id = tokenizer.eos_token_id
+          tokenizer.padding_side = 'left'
+          model = AutoModelForCausalLM.from_pretrained(
+              str(snapshot), local_files_only=True, trust_remote_code=False, torch_dtype=torch.float16
+          )
+          model.to('cuda')
+          model.eval()
+
+          samples = []
+          for repeat in (1, 2, 3):
+              for seed in decoding['seeds']:
+                  random.seed(seed)
+                  torch.manual_seed(seed)
+                  torch.cuda.manual_seed_all(seed)
+                  encoded = tokenizer.apply_chat_template(
+                      [{'role': 'assistant', 'content': prompt}],
+                      tokenize=True,
+                      return_dict=True,
+                      return_tensors='pt',
+                      continue_final_message=True,
+                  )
+                  rendered = tokenizer.decode(encoded['input_ids'][0], skip_special_tokens=False)
+                  assert rendered.count(prompt) == 1, rendered
+                  encoded = {key: value.to('cuda') for key, value in encoded.items()}
+                  input_width = int(encoded['input_ids'].shape[1])
+                  with torch.inference_mode():
+                      generated = model.generate(
+                          **encoded,
+                          do_sample=False,
+                          max_new_tokens=int(decoding['max_new_tokens']),
+                          pad_token_id=tokenizer.pad_token_id,
+                          eos_token_id=tokenizer.eos_token_id,
+                      )
+                  continuation = generated[0, input_width:]
+                  output = tokenizer.decode(continuation, skip_special_tokens=True).strip()
+                  score = evaluate_behavioral_sample(task, output, seed)
+                  hard_checks = [check.to_dict() for check in score.checks if check.hard]
+                  samples.append({
+                      'repeat': repeat,
+                      'seed': seed,
+                      'output': output,
+                      'output_sha256': 'sha256:' + hashlib.sha256(output.encode('utf-8')).hexdigest(),
+                      'prompt_tokens': int(encoded['attention_mask'][0].sum().item()),
+                      'generated_tokens': int(continuation.shape[0]),
+                      'finish_reason': 'eos_or_stop' if int(continuation.shape[0]) < int(decoding['max_new_tokens']) else 'length',
+                      'deterministic_passed': score.deterministic_passed,
+                      'failed_hard_checks': score.failed_hard_checks,
+                      'hard_checks': hard_checks,
+                      'serialization': 'tokenizer_chat_template:assistant_prefill:continue_final_message',
+                      'frozen_prompt_unmodified': True,
+                  })
+
+          def gate(name):
+              return all(next(c for c in item['hard_checks'] if c['name'] == name)['passed'] for item in samples)
+          result = {
+              'result_version': 'stronger-immutable-frozen-continuation-smoke.v1',
+              'created_at': datetime.now(timezone.utc).isoformat(),
+              'proof_run_id': os.environ['HEPHAESTUS_PROOF_RUN_ID'],
+              'repo_sha': os.environ['HEPHAESTUS_REPO_SHA'],
+              'status': 'completed',
+              'gpu': torch.cuda.get_device_name(0),
+              'torch_version': torch.__version__,
+              'model_id': model_id,
+              'revision': revision,
+              'license': observed_license,
+              'snapshot_path': str(snapshot),
+              'snapshot_manifest_hash': manifest_hash,
+              'snapshot_byte_size': byte_size,
+              'snapshot_component_hashes': components,
+              'frozen_eval_pack_hash': expected_hash,
+              'decoding_config': decoding,
+              'task_id': task['task_id'],
+              'prompt': prompt,
+              'serialization': 'tokenizer_chat_template:assistant_prefill:continue_final_message',
+              'sample_count': len(samples),
+              'all_hard_gates_passed': all(item['deterministic_passed'] for item in samples),
+              'hard_gate_summary': {
+                  'continuation_not_echo': gate('continuation_not_echo'),
+                  'continuation_repetition': gate('continuation_repetition'),
+                  'continuation_termination': gate('continuation_termination'),
+              },
+              'samples': samples,
+          }
+          out = Path('/workspace/hephaestus/scientific/v1/executions') / os.environ['HEPHAESTUS_PROOF_RUN_ID'] / f"attempt-{os.environ['HEPHAESTUS_ATTEMPT']}" / 'driver_result.json'
+          tmp = out.with_suffix('.json.partial')
+          tmp.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          os.replace(tmp, out)
+          print(json.dumps({
+              'status': result['status'], 'gpu': result['gpu'], 'model_id': model_id,
+              'sample_count': result['sample_count'], 'all_hard_gates_passed': result['all_hard_gates_passed'],
+              'hard_gate_summary': result['hard_gate_summary'], 'snapshot_manifest_hash': manifest_hash,
+          }, sort_keys=True))
+          PYSMOKE
+          '''
+
+          launcher.pod_shell = lambda: smoke_shell
+          execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
+          client = launcher.base.s3_client()
+          client.head_bucket(Bucket=launcher.VOLUME_ID)
+          row = {'proof_run_id': proof_run_id, 'repo_sha': repo_sha, 'attempt': attempt, 'started_at': datetime.now(timezone.utc).isoformat()}
+          pod_id = None
+          try:
+              pod, capacity = launcher.create_pod(execution, proof_run_id=proof_run_id, repo_sha=repo_sha, attempt=attempt)
+              pod_id = str(pod['id'])
+              row['pod_id'] = pod_id
+              row['capacity_selection'] = capacity
+              result, observations = launcher.wait_for_result(client, execution, proof_run_id=proof_run_id, attempt=attempt, pod_id=pod_id)
+              row['observations'] = observations
+              key = f"{launcher.SCIENTIFIC_PREFIX}/executions/{proof_run_id}/attempt-{attempt}/driver_result.json"
+              raw = launcher.base.read_key(client, key)
+              observed = json.loads(raw.decode('utf-8'))
+              assert observed == result, 'independent S3 readback differs from waiter result'
+              assert result.get('status') == 'completed', result
+              assert result.get('model_id') == model_id and result.get('revision') == revision, result
+              assert result.get('license') == 'apache-2.0', result
+              assert result.get('frozen_eval_pack_hash') == frozen_hash, result
+              assert result.get('sample_count') == 9, result
+              assert result.get('snapshot_manifest_hash'), result
+              row['s3_key'] = key
+              row['s3_sha256'] = 'sha256:' + hashlib.sha256(raw).hexdigest()
+              row['result'] = result
+              row['verified_s3_readback'] = True
+              row['all_hard_gates_passed'] = bool(result.get('all_hard_gates_passed'))
+          finally:
+              if pod_id:
+                  row['teardown'] = launcher.base.delete_pod(execution, pod_id)
+              row['completed_at'] = datetime.now(timezone.utc).isoformat()
+              Path('olmo3_frozen_continuation_smoke.json').write_text(json.dumps(row, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+          print(json.dumps({
+              'proof_run_id': proof_run_id,
+              'verified_s3_readback': row.get('verified_s3_readback', False),
+              'all_hard_gates_passed': row.get('all_hard_gates_passed', False),
+              'hard_gate_summary': row.get('result', {}).get('hard_gate_summary'),
+              'gpu': row.get('result', {}).get('gpu'),
+          }, sort_keys=True))
+          if not row.get('all_hard_gates_passed'):
+              raise SystemExit('OLMo3 failed frozen continuation hard gates; do not launch full governed proof')
+          PY
+      - name: Upload OLMo3 smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: olmo3-frozen-continuation-smoke
+          path: olmo3_frozen_continuation_smoke.json
+          if-no-files-found: warn
+          retention-days: 30
