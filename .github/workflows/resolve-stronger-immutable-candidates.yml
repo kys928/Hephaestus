@@ -25,9 +25,9 @@ jobs:
           from huggingface_hub import HfApi
 
           candidates = [
+              'allenai/Olmo-3-7B-Instruct',
               'ibm-granite/granite-3.3-8b-instruct',
               'mistralai/Mistral-7B-Instruct-v0.3',
-              'allenai/OLMo-2-1124-7B-Instruct',
           ]
           api = HfApi()
           rows = []
@@ -36,10 +36,12 @@ jobs:
               license_name = str(getattr(getattr(info, 'card_data', None), 'license', '') or '').lower()
               files = []
               weight_bytes = 0
+              seen_names = set()
               for sibling in info.siblings or []:
                   name = sibling.rfilename
                   size = int(getattr(sibling, 'size', 0) or 0)
-                  if name.endswith('.safetensors') and not name.endswith('.index.json'):
+                  if name.startswith('model-') and name.endswith('.safetensors') and name not in seen_names:
+                      seen_names.add(name)
                       files.append({'name': name, 'size': size})
                       weight_bytes += size
               rows.append({
@@ -55,4 +57,5 @@ jobs:
               assert len(row['revision']) == 40 and all(c in '0123456789abcdef' for c in row['revision'])
               assert row['license'] == 'apache-2.0', row
               assert row['weight_bytes'] > 0, row
+              assert row['weight_gib'] < 20.0, row
           PY
