@@ -1,0 +1,62 @@
+name: Inspect live governed proof 33962003574
+
+on:
+  push:
+    branches: [launch/second-real-model-positive-wave]
+    paths:
+      - .github/workflows/inspect-live-proof-33962003574.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install boto3
+      - name: Read live proof evidence
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          client = boto3.client(
+              's3',
+              endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),
+              region_name=os.environ['RUNPOD_DATACENTER_ID'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+          )
+          proof_id = 'positive-real-model-promotion-001-33962003574'
+          prefix = f'hephaestus/scientific/v1/positive_promotion/{proof_id}/'
+          token = None
+          keys = []
+          while True:
+              kw = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
+              if token: kw['ContinuationToken'] = token
+              page = client.list_objects_v2(**kw)
+              keys += [o['Key'] for o in page.get('Contents', [])]
+              if not page.get('IsTruncated'): break
+              token = page['NextContinuationToken']
+          print('OBJECT_COUNT', len(keys))
+          for key in sorted(keys):
+              if key.endswith(('cycle_summary.json','proof_result.json','independent_verification.json','driver_result.json')):
+                  print('EVIDENCE_KEY', key)
+                  try:
+                      raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
+                      payload = json.loads(raw.decode('utf-8'))
+                      print(json.dumps(payload, indent=2, sort_keys=True)[:30000])
+                  except Exception as exc:
+                      print('READ_ERROR', type(exc).__name__, str(exc))
+          PY
