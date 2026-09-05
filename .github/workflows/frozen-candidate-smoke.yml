@@ -53,7 +53,7 @@ jobs:
           task = pack['eval_pack']['continuation_prompts'][0]
           assert task['task_id'] == 'observatory_continuation'
           assert task['prompt'] == 'The observatory lost power just as the storm arrived.'
-          print({'frozen_eval_pack_hash': expected, 'candidate': 'ibm-granite/granite-3.3-8b-instruct'})
+          print({'frozen_eval_pack_hash': expected, 'candidate': 'ibm-granite/granite-3.3-8b-instruct', 'storage_reclaimed_before_run': True})
           PY
           python -m py_compile scripts/run_frozen_candidate_smoke.py scripts/launch_frozen_candidate_smoke_v2.py
       - name: Launch bounded candidate smoke
