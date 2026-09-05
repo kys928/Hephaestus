@@ -20,6 +20,7 @@ ml = ["torch>=2.2", "transformers>=4.40", "tokenizers>=0.19"]
 test = ["pytest>=8,<9"]
 
 [project.scripts]
+hephaestus = "hephaestus.cli.main:main"
 hephaestus-infrastructure = "hephaestus.infrastructure.cli:main"
 
 [tool.setuptools.packages.find]

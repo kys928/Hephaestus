@@ -1,0 +1,78 @@
+name: Positive real-model promotion proof
+# Explicit operator-authorized real-compute launch workflow.
+
+on:
+  push:
+    branches: [feature/production-loop-v1]
+    paths:
+      - .github/workflows/positive-promotion-proof.yml
+      - scripts/run_positive_promotion_proof.py
+      - scripts/run_positive_promotion_proof_v2.py
+      - scripts/launch_positive_promotion_proof.py
+      - scripts/launch_positive_promotion_proof_v2.py
+      - scripts/runpod_capacity_selection.py
+      - src/hephaestus/control/semantic_judge.py
+      - src/hephaestus/production/**
+      - src/hephaestus/providers/models/huggingface.py
+      - tests/test_production_loop_v1.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: positive-real-model-promotion-cviwpryzao
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-positive-promotion]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher and test dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Verify production loop and governed promotion boundaries
+        run: |
+          python -m pytest -q \
+            tests/test_production_loop_v1.py \
+            tests/test_semantic_judge_integration.py \
+            tests/test_promotion_reject_rollback_branch_gates.py \
+            tests/test_runpod_provider.py \
+            tests/test_runpod_gpu_execution.py
+      - name: Compile positive promotion proof
+        run: |
+          python -m py_compile src/hephaestus/control/semantic_judge.py
+          python -m py_compile src/hephaestus/production/actions.py
+          python -m py_compile src/hephaestus/production/composition.py
+          python -m py_compile src/hephaestus/production/loop.py
+          python -m py_compile scripts/run_positive_promotion_proof.py
+          python -m py_compile scripts/run_positive_promotion_proof_v2.py
+          python -m py_compile scripts/launch_positive_promotion_proof.py
+          python -m py_compile scripts/launch_positive_promotion_proof_v2.py
+      - name: Launch real GPU promotion and certification chain
+        run: python scripts/launch_positive_promotion_proof_v2.py
+      - name: Upload positive-promotion proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: positive-real-model-promotion-proof
+          path: |
+            positive_promotion_launcher.json
+            positive_promotion_verification.json
+          if-no-files-found: warn
+          retention-days: 30
