@@ -69,7 +69,7 @@ jobs:
           python -m py_compile scripts/run_positive_promotion_proof_v2.py
           python -m py_compile scripts/launch_positive_promotion_proof.py
           python -m py_compile scripts/launch_positive_promotion_proof_v2.py
-      - name: Launch corrected real GPU promotion and certification chain
+      - name: Launch storage-recovered real GPU promotion and certification chain
         run: python scripts/launch_positive_promotion_proof_v2.py
       - name: Upload positive-promotion proof evidence
         if: always()
