@@ -52,13 +52,18 @@ cd /opt/hephaestus-src
 git checkout "$HEPHAESTUS_REPO_SHA"
 python -m venv --system-site-packages /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
-"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.51,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
+# RunPod's persistent volume has shown Xet reconstruction/writer failures under
+# large immutable snapshot downloads. Force the standard Hub HTTP path; this
+# changes transport only and leaves model revision/content verification intact.
+export HF_HUB_DISABLE_XET=1
+"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.51,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2'
 "$PY" - <<'PYCHECK'
-import torch, transformers
+import os, torch, transformers
+assert os.environ.get("HF_HUB_DISABLE_XET") == "1", "Xet transport must remain disabled"
 assert torch.cuda.is_available(), "CUDA unavailable after positive-proof bootstrap"
 major, minor = (int(part) for part in transformers.__version__.split('.')[:2])
 assert (major, minor) >= (4, 51), f"Qwen3 requires transformers>=4.51, got {transformers.__version__}"
-print({"torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.version.cuda, "gpu": torch.cuda.get_device_name(0)})
+print({"torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.version.cuda, "gpu": torch.cuda.get_device_name(0), "hf_xet_disabled": True})
 PYCHECK
 "$PY" -m py_compile scripts/run_positive_promotion_proof.py scripts/run_positive_promotion_proof_v2.py
 "$PY" scripts/run_positive_promotion_proof_v2.py
