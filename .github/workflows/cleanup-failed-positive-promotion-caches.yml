@@ -13,7 +13,7 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
@@ -81,24 +81,25 @@ jobs:
               proof_result = maybe_json(root + 'proof_result.json')
               verification = maybe_json(root + 'independent_verification.json')
 
-              if proof_result:
-                  if proof_result.get('status') == 'completed' or proof_result.get('certified_checkpoint_ref'):
-                      raise SystemExit(f'REFUSE cleanup: {proof_id} has completed/certified proof_result')
-              if verification:
-                  if verification.get('status') == 'verified' or verification.get('certified_checkpoint_ref'):
-                      raise SystemExit(f'REFUSE cleanup: {proof_id} has verified/certified independent verification')
+              if proof_result and (
+                  proof_result.get('status') == 'completed'
+                  or proof_result.get('certified_checkpoint_ref')
+              ):
+                  raise SystemExit(f'REFUSE cleanup: {proof_id} has completed/certified proof_result')
+              if verification and (
+                  verification.get('status') == 'verified'
+                  or verification.get('certified_checkpoint_ref')
+              ):
+                  raise SystemExit(f'REFUSE cleanup: {proof_id} has verified/certified independent verification')
 
               cache_prefix = root + 'hf_cache/'
               objects = list_keys(cache_prefix)
               size = sum(s for _, s in objects)
               print(f'ELIGIBLE {proof_id}: {len(objects)} cache objects, {size/(1024**3):.3f} GiB')
-              for start in range(0, len(objects), 1000):
-                  batch = objects[start:start+1000]
-                  if batch:
-                      client.delete_objects(
-                          Bucket=bucket,
-                          Delete={'Objects': [{'Key': key} for key, _ in batch], 'Quiet': True},
-                      )
+              for index, (key, _) in enumerate(objects, start=1):
+                  client.delete_object(Bucket=bucket, Key=key)
+                  if index % 20 == 0 or index == len(objects):
+                      print(f'DELETED {proof_id}: {index}/{len(objects)}')
               remaining = list_keys(cache_prefix)
               if remaining:
                   raise SystemExit(f'cleanup verification failed for {proof_id}: {len(remaining)} objects remain')
