@@ -26,6 +26,7 @@ from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.planning.service import ClosedLoopExperimentPlanner
 from hephaestus.providers.datasets.huggingface import HuggingFaceDatasetProvider
 from hephaestus.providers.models.catalog import CatalogModelProvider
+from hephaestus.providers.models.huggingface import HuggingFaceModelProvider
 from hephaestus.providers.models.selection import DeterministicModelSelectionService
 from hephaestus.recovery.service import BoundedRecoveryService
 from hephaestus.storage.filesystem import FileSystemArtifactStore
@@ -49,7 +50,9 @@ class ProductionCompositionSettings:
     database_path: Path | None = None
     model_catalog_path: Path | None = None
     enable_dataset_network: bool = False
+    enable_model_network: bool = False
     dataset_provider_allowlist: tuple[str, ...] = ("huggingface",)
+    model_provider_allowlist: tuple[str, ...] = ("huggingface", "local_catalog")
     maximum_training_steps: int = 100_000
     maximum_dataset_bytes: int = 512 * 1024 * 1024
     maximum_dataset_rows: int = 1_000_000
@@ -96,6 +99,7 @@ class ProductionRuntime:
             "dataset_selection": type(self.dataset_selector).__name__,
             "dataset_acquisition": type(self.dataset_acquisition).__name__,
             "preprocessing": type(self.data_preprocessor).__name__,
+            "model_discovery": ",".join(sorted(type(item).__name__ for item in self.model_providers.values())),
             "model_selection": type(self.model_selector).__name__,
             "training_lifecycle": type(self.training_lifecycle).__name__,
             "evaluator": type(self.evaluator).__name__,
@@ -146,8 +150,12 @@ class ProductionCompositionRoot:
             tokenizer_checker=self.tokenizer_checker,
         )
 
+        configured_model_providers = {item.casefold() for item in settings.model_provider_allowlist}
         model_providers: dict[str, object] = {}
-        if settings.model_catalog_path is not None:
+        if "huggingface" in configured_model_providers:
+            hf_model = HuggingFaceModelProvider(enable_network=settings.enable_model_network)
+            model_providers[hf_model.provider_id] = hf_model
+        if settings.model_catalog_path is not None and "local_catalog" in configured_model_providers:
             catalog = CatalogModelProvider.from_json(settings.model_catalog_path)
             model_providers[catalog.provider_id] = catalog
         model_selector = DeterministicModelSelectionService()
