@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install boto3
-      - name: Read live proof evidence
+      - name: Read live proof and execution evidence
         run: |
           python - <<'PY'
           import json, os
@@ -39,24 +39,40 @@ jobs:
               aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
           )
           proof_id = 'positive-real-model-promotion-001-33962003574'
-          prefix = f'hephaestus/scientific/v1/positive_promotion/{proof_id}/'
-          token = None
-          keys = []
-          while True:
-              kw = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
-              if token: kw['ContinuationToken'] = token
-              page = client.list_objects_v2(**kw)
-              keys += [o['Key'] for o in page.get('Contents', [])]
-              if not page.get('IsTruncated'): break
-              token = page['NextContinuationToken']
-          print('OBJECT_COUNT', len(keys))
-          for key in sorted(keys):
+
+          def list_keys(prefix):
+              token = None
+              keys = []
+              while True:
+                  kw = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
+                  if token: kw['ContinuationToken'] = token
+                  page = client.list_objects_v2(**kw)
+                  keys += [(o['Key'], int(o.get('Size', 0))) for o in page.get('Contents', [])]
+                  if not page.get('IsTruncated'): return keys
+                  token = page['NextContinuationToken']
+
+          proof_prefix = f'hephaestus/scientific/v1/positive_promotion/{proof_id}/'
+          proof_keys = list_keys(proof_prefix)
+          print('PROOF_OBJECT_COUNT', len(proof_keys))
+          print('PROOF_BYTES_GIB', round(sum(s for _, s in proof_keys)/(1024**3), 3))
+          for key, _ in sorted(proof_keys):
               if key.endswith(('cycle_summary.json','proof_result.json','independent_verification.json','driver_result.json')):
                   print('EVIDENCE_KEY', key)
+                  raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
                   try:
-                      raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
                       payload = json.loads(raw.decode('utf-8'))
                       print(json.dumps(payload, indent=2, sort_keys=True)[:30000])
-                  except Exception as exc:
-                      print('READ_ERROR', type(exc).__name__, str(exc))
+                  except Exception:
+                      print(raw.decode('utf-8', errors='replace')[-12000:])
+
+          exec_prefix = f'hephaestus/scientific/v1/executions/{proof_id}/'
+          exec_keys = list_keys(exec_prefix)
+          print('EXEC_OBJECT_COUNT', len(exec_keys))
+          for key, size in sorted(exec_keys):
+              print('EXEC_KEY', size, key)
+              if key.endswith(('pod_runtime.log','driver_result.json')):
+                  raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
+                  print('EXEC_TAIL_BEGIN', key)
+                  print(raw.decode('utf-8', errors='replace')[-16000:])
+                  print('EXEC_TAIL_END', key)
           PY
