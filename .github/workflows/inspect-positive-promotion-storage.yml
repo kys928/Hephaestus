@@ -1,0 +1,83 @@
+name: Inspect positive-promotion persistent storage
+
+on:
+  push:
+    branches: [launch/second-real-model-positive-wave]
+    paths:
+      - .github/workflows/inspect-positive-promotion-storage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install boto3
+      - name: Summarize persistent scientific storage
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from collections import defaultdict
+          import boto3
+
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          client = boto3.client(
+              's3',
+              endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),
+              region_name=os.environ['RUNPOD_DATACENTER_ID'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+          )
+          prefix = 'hephaestus/scientific/v1/'
+          totals = defaultdict(lambda: [0, 0])
+          proof_totals = defaultdict(lambda: [0, 0])
+          cache_totals = defaultdict(lambda: [0, 0])
+          token = None
+          while True:
+              kwargs = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
+              if token:
+                  kwargs['ContinuationToken'] = token
+              page = client.list_objects_v2(**kwargs)
+              for obj in page.get('Contents', []):
+                  key = obj['Key']
+                  size = int(obj.get('Size', 0))
+                  rel = key[len(prefix):]
+                  top = rel.split('/', 1)[0] if rel else '(root)'
+                  totals[top][0] += size
+                  totals[top][1] += 1
+                  marker = 'positive_promotion/'
+                  if rel.startswith(marker):
+                      rest = rel[len(marker):]
+                      proof_id = rest.split('/', 1)[0] if rest else '(root)'
+                      proof_totals[proof_id][0] += size
+                      proof_totals[proof_id][1] += 1
+                      if '/hf_cache/' in key:
+                          cache_totals[proof_id][0] += size
+                          cache_totals[proof_id][1] += 1
+              if not page.get('IsTruncated'):
+                  break
+              token = page.get('NextContinuationToken')
+
+          def gib(n): return n / (1024 ** 3)
+          print('SCIENTIFIC_TOP_LEVEL')
+          for name, (size, count) in sorted(totals.items(), key=lambda kv: kv[1][0], reverse=True):
+              print(f'{name}\t{gib(size):.3f} GiB\t{count} objects')
+          print('POSITIVE_PROMOTION_PROOFS')
+          for name, (size, count) in sorted(proof_totals.items(), key=lambda kv: kv[1][0], reverse=True):
+              csize, ccount = cache_totals.get(name, (0, 0))
+              print(f'{name}\ttotal={gib(size):.3f} GiB/{count}\thf_cache={gib(csize):.3f} GiB/{ccount}')
+          print('POSITIVE_PROMOTION_CACHE_TOTAL_GIB', round(gib(sum(v[0] for v in cache_totals.values())), 3))
+          PY
