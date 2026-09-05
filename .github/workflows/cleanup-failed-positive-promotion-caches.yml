@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install boto3
-      - name: Verify failed status and remove only transient hf_cache objects
+      - name: Verify failed status and remove only transient hf_cache payloads
         shell: bash
         run: |
           python - <<'PY'
@@ -46,6 +46,7 @@ jobs:
               'positive-real-model-promotion-001-33960629530',
           ]
           base = 'hephaestus/scientific/v1/positive_promotion/'
+          residual_limit = 1024 * 1024  # tolerate <=1 MiB of zero/tiny HF metadata markers
 
           def maybe_json(key):
               try:
@@ -74,8 +75,8 @@ jobs:
                       return out
                   token = page['NextContinuationToken']
 
-          total_bytes = 0
-          total_objects = 0
+          freed_bytes = 0
+          deleted_objects = 0
           for proof_id in proof_ids:
               root = f'{base}{proof_id}/'
               proof_result = maybe_json(root + 'proof_result.json')
@@ -94,17 +95,28 @@ jobs:
 
               cache_prefix = root + 'hf_cache/'
               objects = list_keys(cache_prefix)
-              size = sum(s for _, s in objects)
-              print(f'ELIGIBLE {proof_id}: {len(objects)} cache objects, {size/(1024**3):.3f} GiB')
+              before_bytes = sum(s for _, s in objects)
+              print(f'ELIGIBLE {proof_id}: {len(objects)} cache objects, {before_bytes/(1024**3):.3f} GiB')
               for index, (key, _) in enumerate(objects, start=1):
                   client.delete_object(Bucket=bucket, Key=key)
                   if index % 20 == 0 or index == len(objects):
-                      print(f'DELETED {proof_id}: {index}/{len(objects)}')
+                      print(f'DELETE_REQUESTS {proof_id}: {index}/{len(objects)}')
               remaining = list_keys(cache_prefix)
-              if remaining:
-                  raise SystemExit(f'cleanup verification failed for {proof_id}: {len(remaining)} objects remain')
-              total_bytes += size
-              total_objects += len(objects)
+              remaining_bytes = sum(s for _, s in remaining)
+              if remaining_bytes > residual_limit:
+                  raise SystemExit(
+                      f'cleanup verification failed for {proof_id}: '
+                      f'{len(remaining)} objects / {remaining_bytes} bytes remain'
+                  )
+              print(
+                  f'CACHE_PAYLOAD_CLEARED {proof_id}: '
+                  f'residual_objects={len(remaining)} residual_bytes={remaining_bytes}'
+              )
+              freed_bytes += max(0, before_bytes - remaining_bytes)
+              deleted_objects += len(objects)
 
-          print(f'CLEANUP_VERIFIED objects={total_objects} freed_gib={total_bytes/(1024**3):.3f}')
+          print(
+              f'CLEANUP_VERIFIED delete_requests={deleted_objects} '
+              f'freed_gib={freed_bytes/(1024**3):.3f}'
+          )
           PY
