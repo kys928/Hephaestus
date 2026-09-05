@@ -27,9 +27,9 @@ def _stable_id(*values: object) -> str:
 
 @dataclass(slots=True)
 class GovernedActionExecutor:
-    """Apply finite Judge actions only after action-registry/promotion authorization.
+    """Apply finite Judge actions only after their own governance gate authorizes them.
 
-    The executor mutates compact lineage truth, never checkpoint bytes.  Every
+    The executor mutates compact lineage truth, never checkpoint bytes. Every
     attempt is append-only and keyed by a stable execution ID so process retries
     cannot apply the same transition twice.
     """
@@ -51,21 +51,25 @@ class GovernedActionExecutor:
         approval_status: str = "not_required",
         approval_ref: str | None = None,
         promotion_allowed: bool = False,
+        rollback_allowed: bool = False,
+        branch_allowed: bool = False,
+        restart_allowed: bool = False,
         certification_state: str | None = None,
         confidence: float = 0.0,
         child_lineage_id: str | None = None,
     ) -> dict[str, object]:
         canonical = canonical_action_name(requested_action)
         boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
-        protected = {
-            "promote_checkpoint",
-            "rollback_to_checkpoint",
-            "branch_new_experiment",
-            "restart_lineage",
-        }
         if not boundary["allowed"]:
             raise PermissionError(f"action is not authorized: {canonical}: {boundary['reasons']}")
-        if canonical in protected and not promotion_allowed:
+
+        transition_gate = {
+            "promote_checkpoint": promotion_allowed,
+            "rollback_to_checkpoint": rollback_allowed,
+            "branch_new_experiment": branch_allowed,
+            "restart_lineage": restart_allowed,
+        }.get(canonical, True)
+        if not transition_gate:
             raise PermissionError(f"governed transition gate did not authorize {canonical}")
 
         execution_id = _stable_id(lineage_id, run_id, canonical, checkpoint_ref, approval_ref)
@@ -176,7 +180,12 @@ class GovernedActionExecutor:
             "checkpoint_ref": checkpoint_ref,
             "approval_status": approval_status,
             "approval_ref": approval_ref,
-            "promotion_allowed": promotion_allowed,
+            "transition_gates": {
+                "promotion_allowed": promotion_allowed,
+                "rollback_allowed": rollback_allowed,
+                "branch_allowed": branch_allowed,
+                "restart_allowed": restart_allowed,
+            },
             "certification_state": certification_state,
             "confidence": confidence,
             "applied_at": now,
@@ -202,7 +211,10 @@ class GovernedActionExecutor:
                 checkpoint_ref=checkpoint_ref,
                 approval_status=str(approval.get("approval_status", "not_required")),
                 approval_ref=str(approval.get("approval_ref", "")) or None,
-                promotion_allowed=bool(promotion.get("action_allowed", promotion.get("promotion_allowed", False))),
+                promotion_allowed=bool(promotion.get("promotion_allowed", False)),
+                rollback_allowed=bool(promotion.get("rollback_allowed", False)),
+                branch_allowed=bool(promotion.get("branch_allowed", False)),
+                restart_allowed=bool(promotion.get("restart_allowed", False)),
                 certification_state=str(promotion.get("certification_state", "")) or None,
                 confidence=float(verdict.get("confidence", 0.0) or 0.0),
             )
