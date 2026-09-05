@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from hephaestus.control.semantic_judge import SemanticComparisonJudgeAdapter
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.production.actions import GovernedActionExecutor
 from hephaestus.production.composition import ProductionCompositionRoot, ProductionCompositionSettings
 from hephaestus.production.loop import ProductionCycleResult, ProductionLoopRunner
 from hephaestus.production.recovery import InfrastructureRecoveryController, RecoverableInfrastructureError
+from hephaestus.schemas.experiment_contract import ExperimentComparison
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
@@ -39,6 +40,7 @@ def test_production_composition_root_supplies_real_services(tmp_path: Path) -> N
         "dataset_selection",
         "dataset_acquisition",
         "preprocessing",
+        "model_discovery",
         "model_selection",
         "training_lifecycle",
         "evaluator",
@@ -47,6 +49,7 @@ def test_production_composition_root_supplies_real_services(tmp_path: Path) -> N
         "infrastructure_recovery",
         "action_executor",
     }
+    assert "HuggingFaceModelProvider" in inventory["model_discovery"]
     assert all(value and "Fake" not in value and "InMemory" not in value for value in inventory.values())
 
 
@@ -112,7 +115,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://old",
         approval_status="approved",
         approval_ref="approval://branch",
-        promotion_allowed=True,
+        branch_allowed=True,
     )
     child = branch["after"]["metadata"]["latest_child_lineage_id"]
     assert LineageStore(tmp_path).get_parent(child) == "lineage-main"
@@ -124,7 +127,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://stable",
         approval_status="approved",
         approval_ref="approval://rollback",
-        promotion_allowed=True,
+        rollback_allowed=True,
     )
     assert rollback["after"]["best_checkpoint_ref"] == "checkpoint://stable"
 
@@ -135,7 +138,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://stable",
         approval_status="approved",
         approval_ref="approval://restart",
-        promotion_allowed=True,
+        restart_allowed=True,
     )
     assert restart["after"]["status"] == "restarted"
 
@@ -164,6 +167,50 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         certification_state="certification_passed",
         confidence=0.95,
     )["execution_id"] == promoted["execution_id"]
+
+
+def test_semantic_judge_can_certify_only_after_explicit_review_and_three_runs() -> None:
+    comparison = ExperimentComparison(
+        comparison_id="comparison-reviewed",
+        experiment_id="experiment-reviewed",
+        baseline_run_id="baseline",
+        candidate_run_ids=["candidate-1", "candidate-2", "candidate-3"],
+        primary_outcome="improved",
+        effect_summary={
+            "missing_evidence": [],
+            "repeatability": {
+                "candidate_run_count": 3,
+                "direction_consistency": 1.0,
+                "variance_risk": "low",
+            },
+        },
+        deterministic_gate_status="passed",
+        variance_risk="low",
+        recommendation="consider_candidate_after_human_review",
+        confidence=0.75,
+    )
+    pending = SemanticComparisonJudgeAdapter().decide(
+        comparison,
+        run_id="candidate-3",
+        lineage_id="lineage",
+        candidate_checkpoint_ref="checkpoint://candidate",
+        certification_requested=True,
+    )
+    assert pending.next_action.value == "continue_from_checkpoint"
+
+    approved = SemanticComparisonJudgeAdapter().decide(
+        comparison,
+        run_id="candidate-3",
+        lineage_id="lineage",
+        candidate_checkpoint_ref="checkpoint://candidate",
+        human_review_approved=True,
+        human_review_approval_ref="approval://review",
+        independent_review_confidence=0.96,
+        certification_requested=True,
+    )
+    assert approved.next_action.value == "promote_checkpoint"
+    assert approved.confidence == pytest.approx(0.96)
+    assert "certification_state=certification_passed" in approved.reasons
 
 
 @dataclass
