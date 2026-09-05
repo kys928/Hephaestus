@@ -1,0 +1,135 @@
+name: Cleanup rejected candidate model caches
+
+on:
+  push:
+    branches: [launch/stronger-immutable-candidate-wave]
+    paths:
+      - .github/workflows/cleanup-rejected-candidate-caches.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install boto3
+      - name: Prove rejection/non-certification then remove only model cache payloads
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          client = boto3.client(
+              's3',
+              endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),
+              region_name=os.environ['RUNPOD_DATACENTER_ID'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+          )
+          residual_limit = 1024 * 1024
+
+          def maybe_json(key):
+              try:
+                  raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
+              except Exception as exc:
+                  code = getattr(exc, 'response', {}).get('Error', {}).get('Code')
+                  if code in {'NoSuchKey', '404'}:
+                      return None
+                  raise
+              try:
+                  value = json.loads(raw.decode('utf-8'))
+              except Exception:
+                  return None
+              return value if isinstance(value, dict) else None
+
+          def require_json(key):
+              value = maybe_json(key)
+              if value is None:
+                  raise SystemExit(f'REFUSE cleanup: required evidence missing/unreadable: {key}')
+              return value
+
+          def list_keys(prefix):
+              token = None
+              out = []
+              while True:
+                  kwargs = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
+                  if token:
+                      kwargs['ContinuationToken'] = token
+                  page = client.list_objects_v2(**kwargs)
+                  out.extend((o['Key'], int(o.get('Size', 0))) for o in page.get('Contents', []))
+                  if not page.get('IsTruncated'):
+                      return out
+                  token = page['NextContinuationToken']
+
+          def clear_prefix(label, prefix):
+              objects = list_keys(prefix)
+              before = sum(size for _, size in objects)
+              print(f'ELIGIBLE {label}: objects={len(objects)} bytes={before} gib={before/(1024**3):.3f}')
+              for index, (key, _) in enumerate(objects, start=1):
+                  client.delete_object(Bucket=bucket, Key=key)
+                  if index % 20 == 0 or index == len(objects):
+                      print(f'DELETE_REQUESTS {label}: {index}/{len(objects)}')
+              remaining = list_keys(prefix)
+              remaining_bytes = sum(size for _, size in remaining)
+              if remaining_bytes > residual_limit:
+                  raise SystemExit(f'cleanup verification failed for {label}: {remaining_bytes} bytes remain')
+              print(f'CACHE_PAYLOAD_CLEARED {label}: residual_bytes={remaining_bytes}')
+              return max(0, before - remaining_bytes)
+
+          freed = 0
+
+          # Qwen3-8B proof 33962003574 was deterministically rejected. Preserve all
+          # proof/cycle/manifest/lineage evidence; delete only its transient hf_cache.
+          qroot = 'hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33962003574/'
+          qproof = maybe_json(qroot + 'proof_result.json')
+          qverify = maybe_json(qroot + 'independent_verification.json')
+          if qproof and qproof.get('certified_checkpoint_ref'):
+              raise SystemExit('REFUSE cleanup: Qwen proof has a certified checkpoint ref')
+          if qverify and (qverify.get('status') == 'verified' or qverify.get('certified_checkpoint_ref')):
+              raise SystemExit('REFUSE cleanup: Qwen proof has verified/certified independent verification')
+          qcycle = require_json(qroot + 'cycles/cycle-02/cycle_summary.json')
+          promotion = qcycle.get('promotion') if isinstance(qcycle.get('promotion'), dict) else {}
+          certification = qcycle.get('certification') if isinstance(qcycle.get('certification'), dict) else {}
+          if promotion.get('decision') not in {'rejected', 'reject'} and promotion.get('status') not in {'rejected', 'blocked'}:
+              # Accept the persisted top-level summary spelling observed by the proof,
+              # but never infer rejection from absence alone.
+              text = json.dumps(qcycle, sort_keys=True).lower()
+              if 'rejected' not in text or 'certification_blocked_by_regression' not in text:
+                  raise SystemExit('REFUSE cleanup: Qwen cycle does not prove rejection/blocking')
+          if 'certification_passed' in json.dumps(certification, sort_keys=True).lower():
+              raise SystemExit('REFUSE cleanup: Qwen cycle claims certification_passed')
+          freed += clear_prefix('qwen3-rejected-proof-cache', qroot + 'hf_cache/')
+
+          # OLMo-3 smoke completed semantically and failed the frozen termination gate.
+          # Preserve the exact 9-sample driver_result; delete only its shared model cache.
+          okey = 'hephaestus/scientific/v1/executions/candidate-frozen-continuation-smoke-33998149761/attempt-1/driver_result.json'
+          olmo = require_json(okey)
+          if olmo.get('status') != 'completed':
+              raise SystemExit('REFUSE cleanup: OLMo smoke did not complete')
+          if olmo.get('model_id') != 'allenai/Olmo-3-7B-Instruct' or olmo.get('revision') != '6e5971d9eba42665f5bd5a0fcf047f299ce1dccc':
+              raise SystemExit('REFUSE cleanup: OLMo smoke identity mismatch')
+          if olmo.get('all_hard_gates_passed') is not False:
+              raise SystemExit('REFUSE cleanup: OLMo smoke is not a persisted frozen-gate rejection')
+          gates = olmo.get('hard_gate_summary') if isinstance(olmo.get('hard_gate_summary'), dict) else {}
+          if gates.get('continuation_termination') is not False:
+              raise SystemExit('REFUSE cleanup: OLMo termination rejection not established')
+          freed += clear_prefix(
+              'olmo3-rejected-shared-cache',
+              'hephaestus/scientific/v1/model_cache/huggingface/models--allenai--Olmo-3-7B-Instruct/'
+          )
+
+          print(f'CLEANUP_VERIFIED freed_bytes={freed} freed_gib={freed/(1024**3):.3f}')
+          PY
