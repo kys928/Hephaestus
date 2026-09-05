@@ -43,6 +43,22 @@ jobs:
             tests/test_promotion_reject_rollback_branch_gates.py \
             tests/test_runpod_provider.py \
             tests/test_runpod_gpu_execution.py
+      - name: Guard frozen evaluation protocol
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from hephaestus.evaluation.pack_loader import load_eval_pack
+          expected = 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
+          pack = load_eval_pack('semantic_behavior_v1', config_dir=Path('configs'))
+          assert pack['frozen'] is True
+          assert pack['content_hash_verified'] is True
+          assert pack['content_hash'] == expected
+          normalized = pack['eval_pack']
+          assert normalized['decoding_config'] == {
+              'temperature': 0.0, 'top_p': 1.0, 'max_new_tokens': 96, 'seeds': [11, 29, 47]
+          }
+          print({'frozen_eval_pack_hash': pack['content_hash'], 'decoding_config': normalized['decoding_config']})
+          PY
       - name: Compile positive promotion proof
         run: |
           python -m py_compile src/hephaestus/control/semantic_judge.py
@@ -53,7 +69,7 @@ jobs:
           python -m py_compile scripts/run_positive_promotion_proof_v2.py
           python -m py_compile scripts/launch_positive_promotion_proof.py
           python -m py_compile scripts/launch_positive_promotion_proof_v2.py
-      - name: Launch real GPU promotion and certification chain
+      - name: Launch corrected real GPU promotion and certification chain
         run: python scripts/launch_positive_promotion_proof_v2.py
       - name: Upload positive-promotion proof evidence
         if: always()
