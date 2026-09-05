@@ -1,5 +1,5 @@
 name: Positive real-model promotion proof
-# Explicit operator-authorized real-compute launch marker: 2026-09-05.
+# Explicit operator-authorized real-compute launch workflow.
 
 on:
   push:
@@ -7,7 +7,9 @@ on:
     paths:
       - .github/workflows/positive-promotion-proof.yml
       - scripts/run_positive_promotion_proof.py
+      - scripts/run_positive_promotion_proof_v2.py
       - scripts/launch_positive_promotion_proof.py
+      - scripts/launch_positive_promotion_proof_v2.py
       - scripts/runpod_capacity_selection.py
       - src/hephaestus/control/semantic_judge.py
       - src/hephaestus/production/**
@@ -59,9 +61,11 @@ jobs:
           python -m py_compile src/hephaestus/production/composition.py
           python -m py_compile src/hephaestus/production/loop.py
           python -m py_compile scripts/run_positive_promotion_proof.py
+          python -m py_compile scripts/run_positive_promotion_proof_v2.py
           python -m py_compile scripts/launch_positive_promotion_proof.py
+          python -m py_compile scripts/launch_positive_promotion_proof_v2.py
       - name: Launch real GPU promotion and certification chain
-        run: python scripts/launch_positive_promotion_proof.py
+        run: python scripts/launch_positive_promotion_proof_v2.py
       - name: Upload positive-promotion proof evidence
         if: always()
         uses: actions/upload-artifact@v4
