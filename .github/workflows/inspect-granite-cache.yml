@@ -1,0 +1,43 @@
+name: Inspect Granite immutable cache after failed smoke
+
+on:
+  push:
+    branches: [launch/stronger-immutable-candidate-wave]
+    paths: [.github/workflows/inspect-granite-cache.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install boto3
+      - name: Inspect exact Granite cache prefix
+        run: |
+          python - <<'PY'
+          import os, boto3
+          c = boto3.client('s3', endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'), region_name=os.environ['RUNPOD_DATACENTER_ID'], aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'])
+          b = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          prefix = 'hephaestus/scientific/v1/model_cache/huggingface/models--ibm-granite--granite-3.3-8b-instruct/'
+          paginator = c.get_paginator('list_objects_v2')
+          rows=[]
+          total=0
+          for page in paginator.paginate(Bucket=b, Prefix=prefix):
+              for obj in page.get('Contents', []):
+                  key=obj['Key']; size=int(obj.get('Size',0)); total += size; rows.append((key,size))
+          print('OBJECT_COUNT', len(rows))
+          print('TOTAL_BYTES', total)
+          print('TOTAL_GIB', round(total/(1024**3),3))
+          for key,size in sorted(rows):
+              print(size, key)
+          PY
