@@ -28,7 +28,7 @@ jobs:
           import os, boto3
           client = boto3.client('s3', endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'), region_name=os.environ['RUNPOD_DATACENTER_ID'], aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'])
           bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
-          prefix = 'hephaestus/scientific/v1/executions/candidate-frozen-continuation-smoke-33998283122/'
+          prefix = 'hephaestus/scientific/v1/executions/candidate-frozen-continuation-smoke-33998584619/'
           for obj in client.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=100).get('Contents', []):
               key = obj['Key']; print('KEY', obj.get('Size', 0), key)
               if key.endswith('driver_result.json') or key.endswith('pod_runtime.log'):
