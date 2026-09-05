@@ -1,7 +1,7 @@
 """Persistent multi-experiment production loop.
 
 The loop owns continuation, recovery and final action application; scientific
-phase implementations remain behind a cycle-driver boundary.  A cycle is not
+phase implementations remain behind a cycle-driver boundary. A cycle is not
 accepted unless evidence exists for every mandatory control-spine phase.
 """
 from __future__ import annotations
@@ -26,6 +26,9 @@ class ProductionCycleResult:
     checkpoint_ref: str | None = None
     confidence: float = 0.0
     promotion_allowed: bool = False
+    rollback_allowed: bool = False
+    branch_allowed: bool = False
+    restart_allowed: bool = False
     certification_state: str | None = None
     approval_status: str = "not_required"
     approval_ref: str | None = None
@@ -138,6 +141,9 @@ class ProductionLoopRunner:
                 approval_status=result.approval_status,
                 approval_ref=result.approval_ref,
                 promotion_allowed=result.promotion_allowed,
+                rollback_allowed=result.rollback_allowed,
+                branch_allowed=result.branch_allowed,
+                restart_allowed=result.restart_allowed,
                 certification_state=result.certification_state,
                 confidence=result.confidence,
             )
