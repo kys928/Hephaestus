@@ -1,27 +1,34 @@
 #!/usr/bin/env python3
-"""Second real-model promotion wave using stronger 7B Apache-2.0 candidates.
+"""Second paid real-model promotion wave with task-aware frozen-pack execution.
 
-The first wave durably rejected Qwen2.5-0.5B-Instruct and 1.5B-Instruct on
-unchanged hard semantic gates. This adapter reuses the exact production-loop
-proof implementation while changing only the governed model-candidate set and
-making snapshot acquisition weight-format selective.
+The prior 7B attempt proved two concrete blockers without changing the frozen
+semantic pack: Qwen2.5-7B-Instruct omitted the final period on the exact-match
+probe and the positive-proof adapter incorrectly serialized continuation tasks
+as user-chat turns. This adapter keeps the frozen pack/hash/decoding untouched,
+uses causal serialization only for ``continuation_prompts``, and upgrades the
+governed immutable Apache-2.0 candidate set.
 """
 from __future__ import annotations
 
+import random
 import re
 from pathlib import Path
+from typing import Sequence
 
 import run_positive_promotion_proof as proof
+from hephaestus.generation.models import GeneratedText, GenerationTask
 
 PRIOR_REJECTION_EVIDENCE = (
     "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33957215257/cycles/cycle-01/cycle_summary.json",
     "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33957215257/cycles/cycle-02/cycle_summary.json",
+    "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33959818398/cycles/cycle-01/cycle_summary.json",
+    "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-33959818398/cycles/cycle-02/cycle_summary.json",
 )
 
 proof.CANDIDATES = (
     {
-        "model_id": "Qwen/Qwen2.5-7B-Instruct",
-        "revision": "ddb6b63a3f61ac6c557eb55619b0a5e125129302",
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+        "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
         "license": "apache-2.0",
         "judge_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
         "judge_revision": "582efe62d7cfafd242bffca71ecbde1bcecc1bcc",
@@ -29,8 +36,8 @@ proof.CANDIDATES = (
         "prior_rejection_evidence": list(PRIOR_REJECTION_EVIDENCE),
     },
     {
-        "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
-        "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+        "model_id": "Qwen/Qwen3-8B",
+        "revision": "b968826d9c46dd6066d109eabc6255188de91218",
         "license": "apache-2.0",
         "judge_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
         "judge_revision": "582efe62d7cfafd242bffca71ecbde1bcecc1bcc",
@@ -38,6 +45,105 @@ proof.CANDIDATES = (
         "prior_rejection_evidence": list(PRIOR_REJECTION_EVIDENCE),
     },
 )
+
+
+class TaskAwarePinnedBackend(proof.PinnedChatTemplateBackend):
+    """Preserve frozen task text while honoring generation-vs-continuation mode.
+
+    No expected answers, punctuation, stop strings, logit constraints, or frozen
+    task text are injected here. The only distinction comes from the already
+    frozen task_kind field: continuation prompts are causal prefixes; all other
+    tasks use the candidate tokenizer's native user-chat template.
+    """
+
+    backend_id = "pinned_task_aware_transformers"
+
+    def generate_batch(
+        self,
+        tasks: Sequence[GenerationTask],
+        *,
+        run_id: str,
+        loading_instructions: dict[str, object],
+        decoding_config: dict[str, object],
+    ) -> list[GeneratedText]:
+        del run_id, loading_instructions
+        self._load()
+        import torch
+
+        tokenizer = self._tokenizer
+        model = self._model
+        assert tokenizer is not None and model is not None
+
+        temperature = float(decoding_config.get("temperature", 0.0))
+        top_p = float(decoding_config.get("top_p", 1.0))
+        max_new_tokens = int(decoding_config.get("max_new_tokens", 0))
+        if max_new_tokens <= 0:
+            raise RuntimeError("frozen max_new_tokens must be positive")
+        do_sample = temperature > 0.0
+
+        outputs: list[GeneratedText] = []
+        for task in tasks:
+            random.seed(task.seed)
+            torch.manual_seed(task.seed)
+            torch.cuda.manual_seed_all(task.seed)
+
+            if task.task_kind == "continuation_prompts":
+                rendered = task.prompt
+                serialization = "causal_prefix:frozen_continuation_prompt"
+            else:
+                chat_kwargs: dict[str, object] = {
+                    "tokenize": False,
+                    "add_generation_prompt": True,
+                }
+                # Qwen3-8B defaults to reasoning mode. The frozen decoding pack is
+                # greedy and the benchmark scores the answer surface, so use the
+                # model's documented non-thinking chat mode without changing the
+                # user prompt itself.
+                if self.model_id == "Qwen/Qwen3-8B":
+                    chat_kwargs["enable_thinking"] = False
+                rendered = tokenizer.apply_chat_template(
+                    [{"role": "user", "content": task.prompt}],
+                    **chat_kwargs,
+                )
+                serialization = "tokenizer_chat_template:user_only"
+                if self.model_id == "Qwen/Qwen3-8B":
+                    serialization += ":thinking_disabled"
+
+            encoded = tokenizer(rendered, return_tensors="pt").to("cuda")
+            kwargs: dict[str, object] = {
+                "do_sample": do_sample,
+                "max_new_tokens": max_new_tokens,
+                "pad_token_id": tokenizer.pad_token_id,
+                "eos_token_id": tokenizer.eos_token_id,
+            }
+            if do_sample:
+                kwargs["temperature"] = temperature
+                kwargs["top_p"] = top_p
+            with torch.inference_mode():
+                generated = model.generate(**encoded, **kwargs)
+            input_width = int(encoded["input_ids"].shape[1])
+            continuation = generated[0, input_width:]
+            text = tokenizer.decode(continuation, skip_special_tokens=True).strip()
+            if not text:
+                text = "[empty generation]"
+            outputs.append(
+                GeneratedText(
+                    output=text,
+                    finish_reason="completed",
+                    prompt_tokens=int(encoded["attention_mask"][0].sum().item()),
+                    generated_tokens=int(continuation.shape[0]),
+                    metadata={
+                        "model_id": self.model_id,
+                        "revision": self.revision,
+                        "snapshot_manifest_hash": self.manifest_hash,
+                        "prompt_serialization": serialization,
+                        "seed": task.seed,
+                        "task_kind": task.task_kind,
+                        "frozen_prompt_unmodified": True,
+                    },
+                )
+            )
+        return outputs
 
 
 def materialize_model_minimal(
@@ -125,6 +231,7 @@ def materialize_model_minimal(
     return manifest_payload
 
 
+proof.PinnedChatTemplateBackend = TaskAwarePinnedBackend
 proof.materialize_model = materialize_model_minimal
 
 if __name__ == "__main__":
