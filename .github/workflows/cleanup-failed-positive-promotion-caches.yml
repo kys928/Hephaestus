@@ -1,0 +1,109 @@
+name: Cleanup failed positive-promotion model caches
+
+on:
+  push:
+    branches: [launch/second-real-model-positive-wave]
+    paths:
+      - .github/workflows/cleanup-failed-positive-promotion-caches.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install boto3
+      - name: Verify failed status and remove only transient hf_cache objects
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          client = boto3.client(
+              's3',
+              endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),
+              region_name=os.environ['RUNPOD_DATACENTER_ID'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+          )
+          proof_ids = [
+              'positive-real-model-promotion-001-33957215257',
+              'positive-real-model-promotion-001-33959818398',
+              'positive-real-model-promotion-001-33960629530',
+          ]
+          base = 'hephaestus/scientific/v1/positive_promotion/'
+
+          def maybe_json(key):
+              try:
+                  raw = client.get_object(Bucket=bucket, Key=key)['Body'].read()
+              except Exception as exc:
+                  code = getattr(exc, 'response', {}).get('Error', {}).get('Code')
+                  if code in {'NoSuchKey', '404'}:
+                      return None
+                  raise
+              try:
+                  value = json.loads(raw.decode('utf-8'))
+              except Exception:
+                  return None
+              return value if isinstance(value, dict) else None
+
+          def list_keys(prefix):
+              token = None
+              out = []
+              while True:
+                  kwargs = {'Bucket': bucket, 'Prefix': prefix, 'MaxKeys': 1000}
+                  if token:
+                      kwargs['ContinuationToken'] = token
+                  page = client.list_objects_v2(**kwargs)
+                  out.extend((o['Key'], int(o.get('Size', 0))) for o in page.get('Contents', []))
+                  if not page.get('IsTruncated'):
+                      return out
+                  token = page['NextContinuationToken']
+
+          total_bytes = 0
+          total_objects = 0
+          for proof_id in proof_ids:
+              root = f'{base}{proof_id}/'
+              proof_result = maybe_json(root + 'proof_result.json')
+              verification = maybe_json(root + 'independent_verification.json')
+
+              if proof_result:
+                  if proof_result.get('status') == 'completed' or proof_result.get('certified_checkpoint_ref'):
+                      raise SystemExit(f'REFUSE cleanup: {proof_id} has completed/certified proof_result')
+              if verification:
+                  if verification.get('status') == 'verified' or verification.get('certified_checkpoint_ref'):
+                      raise SystemExit(f'REFUSE cleanup: {proof_id} has verified/certified independent verification')
+
+              cache_prefix = root + 'hf_cache/'
+              objects = list_keys(cache_prefix)
+              size = sum(s for _, s in objects)
+              print(f'ELIGIBLE {proof_id}: {len(objects)} cache objects, {size/(1024**3):.3f} GiB')
+              for start in range(0, len(objects), 1000):
+                  batch = objects[start:start+1000]
+                  if batch:
+                      client.delete_objects(
+                          Bucket=bucket,
+                          Delete={'Objects': [{'Key': key} for key, _ in batch], 'Quiet': True},
+                      )
+              remaining = list_keys(cache_prefix)
+              if remaining:
+                  raise SystemExit(f'cleanup verification failed for {proof_id}: {len(remaining)} objects remain')
+              total_bytes += size
+              total_objects += len(objects)
+
+          print(f'CLEANUP_VERIFIED objects={total_objects} freed_gib={total_bytes/(1024**3):.3f}')
+          PY
