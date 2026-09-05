@@ -55,9 +55,9 @@ jobs:
           assert task['prompt'] == 'The observatory lost power just as the storm arrived.'
           print({'frozen_eval_pack_hash': expected, 'candidate': 'ibm-granite/granite-3.3-8b-instruct'})
           PY
-          python -m py_compile scripts/run_frozen_candidate_smoke.py scripts/launch_frozen_candidate_smoke.py
+          python -m py_compile scripts/run_frozen_candidate_smoke.py scripts/launch_frozen_candidate_smoke_v2.py
       - name: Launch bounded candidate smoke
-        run: python scripts/launch_frozen_candidate_smoke.py
+        run: python scripts/launch_frozen_candidate_smoke_v2.py
       - name: Upload candidate smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
