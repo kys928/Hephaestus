@@ -26,8 +26,8 @@ jobs:
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
-      HEPHAESTUS_CANDIDATE_MODEL_ID: allenai/Olmo-3-7B-Instruct
-      HEPHAESTUS_CANDIDATE_REVISION: 6e5971d9eba42665f5bd5a0fcf047f299ce1dccc
+      HEPHAESTUS_CANDIDATE_MODEL_ID: ibm-granite/granite-3.3-8b-instruct
+      HEPHAESTUS_CANDIDATE_REVISION: 51dd4bc2ade4059a6bd87649d68aa11e4fb2529b
       HEPHAESTUS_CANDIDATE_LICENSE: apache-2.0
       PYTHONPATH: src:scripts
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
@@ -53,7 +53,7 @@ jobs:
           task = pack['eval_pack']['continuation_prompts'][0]
           assert task['task_id'] == 'observatory_continuation'
           assert task['prompt'] == 'The observatory lost power just as the storm arrived.'
-          print({'frozen_eval_pack_hash': expected, 'candidate': 'allenai/Olmo-3-7B-Instruct'})
+          print({'frozen_eval_pack_hash': expected, 'candidate': 'ibm-granite/granite-3.3-8b-instruct'})
           PY
           python -m py_compile scripts/run_frozen_candidate_smoke.py scripts/launch_frozen_candidate_smoke.py
       - name: Launch bounded candidate smoke
