@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RunPod launcher adapter for the stronger 7B positive-promotion wave."""
+"""RunPod launcher adapter for the governed second paid positive-promotion wave."""
 from __future__ import annotations
 
 import hashlib
@@ -9,8 +9,8 @@ from typing import Any
 import launch_positive_promotion_proof as launcher
 
 ALLOWED_REVISIONS = {
-    "ddb6b63a3f61ac6c557eb55619b0a5e125129302",
-    "c170c708c41dac9275d15a8fff4eca08d52bab71",
+    "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "b968826d9c46dd6066d109eabc6255188de91218",
 }
 
 
@@ -52,11 +52,13 @@ cd /opt/hephaestus-src
 git checkout "$HEPHAESTUS_REPO_SHA"
 python -m venv --system-site-packages /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
-"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.46,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
+"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.51,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
 "$PY" - <<'PYCHECK'
-import torch
+import torch, transformers
 assert torch.cuda.is_available(), "CUDA unavailable after positive-proof bootstrap"
-print({"torch": torch.__version__, "cuda": torch.version.cuda, "gpu": torch.cuda.get_device_name(0)})
+major, minor = (int(part) for part in transformers.__version__.split('.')[:2])
+assert (major, minor) >= (4, 51), f"Qwen3 requires transformers>=4.51, got {transformers.__version__}"
+print({"torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.version.cuda, "gpu": torch.cuda.get_device_name(0)})
 PYCHECK
 "$PY" -m py_compile scripts/run_positive_promotion_proof.py scripts/run_positive_promotion_proof_v2.py
 "$PY" scripts/run_positive_promotion_proof_v2.py
