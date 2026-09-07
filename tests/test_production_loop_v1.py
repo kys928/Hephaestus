@@ -34,6 +34,9 @@ def test_production_composition_root_supplies_real_services(tmp_path: Path) -> N
         "state_repository",
         "artifact_store",
         "secrets_provider",
+        "execution_backend",
+        "runtime_monitor",
+        "approval_governance",
         "diagnosis",
         "planner",
         "dataset_discovery",
@@ -49,6 +52,11 @@ def test_production_composition_root_supplies_real_services(tmp_path: Path) -> N
         "infrastructure_recovery",
         "action_executor",
     }
+    assert inventory["execution_backend"] == "DryRunBackend"
+    assert inventory["runtime_monitor"] == "RuntimeMonitorRole"
+    assert inventory["approval_governance"] == "ApprovalPolicy"
+    assert runtime.action_executor.approval_policy is runtime.approval_policy
+    assert runtime.runtime_monitor.backend is runtime.execution_backend
     assert "HuggingFaceModelProvider" in inventory["model_discovery"]
     assert all(value and "Fake" not in value and "InMemory" not in value for value in inventory.values())
 
@@ -108,6 +116,8 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert reject["effective_action"] == "reject_candidate"
     assert "bad-run" in LineageStore(tmp_path).get_current("lineage-main")["recent_failures"]
 
+    # These actions are authorized by their own action/approval boundary. The
+    # old promotion-gate lineage flags are intentionally false and ignored.
     branch = executor.apply(
         lineage_id="lineage-main",
         run_id="branch-run",
@@ -115,10 +125,11 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://old",
         approval_status="approved",
         approval_ref="approval://branch",
-        branch_allowed=True,
+        branch_allowed=False,
     )
     child = branch["after"]["metadata"]["latest_child_lineage_id"]
     assert LineageStore(tmp_path).get_parent(child) == "lineage-main"
+    assert branch["governance"]["promotion_gate_applied"] is False
 
     rollback = executor.apply(
         lineage_id="lineage-main",
@@ -127,9 +138,10 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://stable",
         approval_status="approved",
         approval_ref="approval://rollback",
-        rollback_allowed=True,
+        rollback_allowed=False,
     )
     assert rollback["after"]["best_checkpoint_ref"] == "checkpoint://stable"
+    assert rollback["governance"]["promotion_gate_applied"] is False
 
     restart = executor.apply(
         lineage_id="lineage-main",
@@ -138,9 +150,10 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         checkpoint_ref="checkpoint://stable",
         approval_status="approved",
         approval_ref="approval://restart",
-        restart_allowed=True,
+        restart_allowed=False,
     )
     assert restart["after"]["status"] == "restarted"
+    assert restart["governance"]["promotion_gate_applied"] is False
 
     promoted = executor.apply(
         lineage_id="lineage-main",
@@ -156,6 +169,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert promoted["after"]["best_checkpoint_ref"] == "checkpoint://good"
     assert promoted["after"]["certified_stable_checkpoint_ref"] == "checkpoint://good"
     assert promoted["after"]["status"] == "stable"
+    assert promoted["governance"]["promotion_gate_applied"] is True
     assert executor.apply(
         lineage_id="lineage-main",
         run_id="good-run",
@@ -167,6 +181,57 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         certification_state="certification_passed",
         confidence=0.95,
     )["execution_id"] == promoted["execution_id"]
+
+
+def test_promotion_gate_cannot_authorize_unrelated_lineage_actions(tmp_path: Path) -> None:
+    repository = SQLiteStateRepository(tmp_path / "state.sqlite3")
+    LineageStore(tmp_path).set_current(
+        LineageState(
+            lineage_id="lineage-main",
+            stage_name="smoke_test",
+            status="active",
+            best_checkpoint_ref="checkpoint://old",
+            last_stable_checkpoint_ref="checkpoint://stable",
+        ).to_dict()
+    )
+    executor = GovernedActionExecutor(tmp_path, repository)
+
+    for action, legacy_flag in (
+        ("rollback_to_checkpoint", {"rollback_allowed": True}),
+        ("branch_new_experiment", {"branch_allowed": True}),
+        ("restart_lineage", {"restart_allowed": True}),
+    ):
+        with pytest.raises(PermissionError, match="action registry did not authorize"):
+            executor.apply(
+                lineage_id="lineage-main",
+                run_id=f"unauthorized-{action}",
+                requested_action=action,
+                checkpoint_ref="checkpoint://stable",
+                promotion_allowed=True,
+                **legacy_flag,
+            )
+
+
+def test_approved_lineage_action_requires_durable_approval_reference(tmp_path: Path) -> None:
+    repository = SQLiteStateRepository(tmp_path / "state.sqlite3")
+    LineageStore(tmp_path).set_current(
+        LineageState(
+            lineage_id="lineage-main",
+            stage_name="smoke_test",
+            status="active",
+            best_checkpoint_ref="checkpoint://old",
+            last_stable_checkpoint_ref="checkpoint://stable",
+        ).to_dict()
+    )
+    executor = GovernedActionExecutor(tmp_path, repository)
+    with pytest.raises(PermissionError, match="missing durable approval reference"):
+        executor.apply(
+            lineage_id="lineage-main",
+            run_id="rollback-no-ref",
+            requested_action="rollback_to_checkpoint",
+            checkpoint_ref="checkpoint://stable",
+            approval_status="approved",
+        )
 
 
 def test_semantic_judge_can_certify_only_after_explicit_review_and_three_runs() -> None:
