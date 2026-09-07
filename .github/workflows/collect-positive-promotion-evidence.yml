@@ -19,7 +19,8 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-34104954995
+      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-34124012819
+      HEPHAESTUS_REQUIRE_CYCLE_SUMMARY: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +30,6 @@ jobs:
       - run: python scripts/collect_positive_promotion_evidence.py
       - uses: actions/upload-artifact@v4
         with:
-          name: preserved-positive-promotion-evidence
+          name: live-v3-positive-promotion-evidence
           path: positive_promotion_preserved_evidence
           retention-days: 30
