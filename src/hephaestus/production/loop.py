@@ -26,6 +26,8 @@ class ProductionCycleResult:
     checkpoint_ref: str | None = None
     confidence: float = 0.0
     promotion_allowed: bool = False
+    # Compatibility-only fields. The action executor deliberately ignores these
+    # for authorization; rollback/branch/restart have their own governance gates.
     rollback_allowed: bool = False
     branch_allowed: bool = False
     restart_allowed: bool = False
@@ -107,20 +109,65 @@ class ProductionLoopRunner:
             operation_id = f"{program_id}:cycle:{cycle_index}"
             store.event(program_id, "cycle_started", {"cycle_index": cycle_index, "operation_id": operation_id})
 
+            def execute_attempt(attempt: int) -> ProductionCycleResult:
+                # Expose the infrastructure attempt to real drivers without
+                # changing the scientific cycle-driver protocol. The attempt
+                # number is operational evidence, never a scientific variable.
+                state.metadata["infrastructure_attempt"] = attempt
+                state.metadata["infrastructure_operation_id"] = operation_id
+                store.event(
+                    program_id,
+                    "infrastructure_attempt_started",
+                    {
+                        "cycle_index": cycle_index,
+                        "operation_id": operation_id,
+                        "attempt": attempt,
+                        "scientific_variables_changed": False,
+                    },
+                )
+                store.save(state)
+                return self.driver.execute_cycle(
+                    runtime=self.runtime,
+                    state=state,
+                    cycle_index=cycle_index,
+                )
+
+            def on_retry(exc: RecoverableInfrastructureError, next_attempt: int) -> None:
+                state.recovery_attempts += 1
+                store.event(
+                    program_id,
+                    "infrastructure_retry_planned",
+                    {
+                        "cycle_index": cycle_index,
+                        "operation_id": operation_id,
+                        "failure_code": exc.code,
+                        "next_attempt": next_attempt,
+                        "optimizer_steps": exc.optimizer_steps,
+                        "checkpoint_created": exc.checkpoint_created,
+                        "scientific_variables_changed": False,
+                        "details": dict(exc.details),
+                    },
+                )
+                store.save(state)
+
             try:
                 result = self.runtime.infrastructure_recovery.run(
                     operation_id,
-                    lambda _attempt: self.driver.execute_cycle(
-                        runtime=self.runtime,
-                        state=state,
-                        cycle_index=cycle_index,
-                    ),
+                    execute_attempt,
+                    on_retry=on_retry,
                 )
             except RecoverableInfrastructureError as exc:
                 state.status = "blocked"
                 state.stop_reason = f"infrastructure_recovery_exhausted:{exc.code}"
-                state.recovery_attempts += 1
-                store.event(program_id, "cycle_blocked", {"cycle_index": cycle_index, "failure_code": exc.code})
+                store.event(
+                    program_id,
+                    "cycle_blocked",
+                    {
+                        "cycle_index": cycle_index,
+                        "failure_code": exc.code,
+                        "scientific_variables_changed": False,
+                    },
+                )
                 store.save(state)
                 return state
 
@@ -141,9 +188,6 @@ class ProductionLoopRunner:
                 approval_status=result.approval_status,
                 approval_ref=result.approval_ref,
                 promotion_allowed=result.promotion_allowed,
-                rollback_allowed=result.rollback_allowed,
-                branch_allowed=result.branch_allowed,
-                restart_allowed=result.restart_allowed,
                 certification_state=result.certification_state,
                 confidence=result.confidence,
             )
