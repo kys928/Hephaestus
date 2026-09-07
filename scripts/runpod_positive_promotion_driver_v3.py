@@ -15,6 +15,7 @@ import runpod_positive_promotion_driver as base  # noqa: E402
 
 # Reuse the already live-proven generic recovery implementation, but swap only
 # the scientific Pod shell and independent verifier to V3.
+# Launch marker: V3 preflight passed before this audited real-compute commit.
 base.launcher_v2 = launcher_v3
 
 
