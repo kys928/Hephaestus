@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +22,29 @@ def _load_json(path: str | Path) -> dict[str, Any]:
 
 def _driver(reference: str, config: dict[str, object]):
     if ":" not in reference:
-        raise ValueError("driver must be an installed module:function reference")
+        raise ValueError("driver must be a module:function or path.py:function reference")
     module_name, function_name = reference.split(":", 1)
-    factory = getattr(importlib.import_module(module_name), function_name)
+    module_name = module_name.strip()
+    function_name = function_name.strip()
+    if not module_name or not function_name:
+        raise ValueError("driver reference must include both module/path and factory function")
+
+    if module_name.endswith(".py") or "/" in module_name or "\\" in module_name:
+        path = Path(module_name).expanduser().resolve()
+        if not path.is_file():
+            raise ValueError(f"driver file does not exist: {path}")
+        spec = importlib.util.spec_from_file_location(f"_hephaestus_driver_{path.stem}", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load driver file: {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    else:
+        module = importlib.import_module(module_name)
+
+    factory = getattr(module, function_name, None)
+    if not callable(factory):
+        raise ValueError(f"driver factory is missing or not callable: {reference}")
     return factory(config)
 
 
@@ -60,7 +82,7 @@ def run_program(path: str | Path, *, resume: bool = True) -> dict[str, object]:
     runtime = root.build()
     driver_ref = str(payload.get("driver", "")).strip()
     if not driver_ref:
-        raise ValueError("program config requires driver=module:function")
+        raise ValueError("program config requires driver=module:function or path.py:function")
     raw_driver_config = payload.get("driver_config", {})
     driver_config = dict(raw_driver_config) if isinstance(raw_driver_config, dict) else {}
     driver = _driver(driver_ref, driver_config)
