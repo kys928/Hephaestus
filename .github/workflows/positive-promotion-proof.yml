@@ -18,7 +18,10 @@ on:
       - src/hephaestus/control/semantic_judge.py
       - src/hephaestus/production/**
       - src/hephaestus/providers/models/huggingface.py
+      - src/hephaestus/providers/runpod/**
       - tests/test_production_loop_v1.py
+      - tests/test_runpod_provider.py
+      - tests/test_runpod_gpu_execution.py
   workflow_dispatch:
 
 permissions:
@@ -56,6 +59,7 @@ jobs:
           python -m py_compile src/hephaestus/production/actions.py
           python -m py_compile src/hephaestus/production/composition.py
           python -m py_compile src/hephaestus/production/loop.py
+          python -m py_compile src/hephaestus/providers/runpod/execution.py
           python -m py_compile scripts/runpod_positive_promotion_driver.py
           python -m py_compile scripts/run_positive_promotion_proof.py
           python -m py_compile scripts/run_positive_promotion_proof_v2.py
