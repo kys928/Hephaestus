@@ -1,5 +1,5 @@
 name: Positive real-model promotion proof
-# Explicit operator-authorized real-compute launch workflow.
+# Explicit operator-authorized real-compute launch workflow; launch commits are intentionally auditable.
 
 on:
   push:
@@ -63,7 +63,6 @@ jobs:
       - name: Verify V2 routing and immutable revision boundary
         run: |
           python - <<'PY'
-          import importlib.util
           import sys
           from pathlib import Path
 
