@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Collect the decision-critical positive-promotion proof evidence from RunPod storage.
+"""Collect decision-critical positive-promotion proof evidence from RunPod storage.
 
-The collector is intentionally targeted: candidate cycle summaries contain the
-comparison, independent review, semantic Judge, certification and promotion-gate
-records needed to diagnose a failed bounded candidate wave. This avoids slowly
-walking unrelated model/evaluation JSON trees on the Network Volume.
+By default a completed/rejected wave must contain at least one cycle summary.
+Operational monitoring may set HEPHAESTUS_REQUIRE_CYCLE_SUMMARY=false to collect
+whatever immutable/partially-written execution evidence is already visible
+without changing or interrupting the running scientific program.
 """
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ PROOF_RUN_ID = os.environ.get(
     "HEPHAESTUS_PROOF_RUN_ID",
     "positive-real-model-promotion-001-33957215257",
 )
+REQUIRE_CYCLE_SUMMARY = os.environ.get("HEPHAESTUS_REQUIRE_CYCLE_SUMMARY", "true").strip().lower() not in {
+    "0", "false", "no"
+}
 BUCKET = os.environ["RUNPOD_NETWORK_VOLUME_ID"]
 ENDPOINT = os.environ["RUNPOD_S3_ENDPOINT_URL"]
 SCIENTIFIC_PREFIX = "hephaestus/scientific/v1"
@@ -87,9 +90,15 @@ def main() -> int:
         path.write_bytes(raw)
         manifest.append({"key": key, "bytes": len(raw)})
 
+    has_cycle_summary = any(str(item["key"]).endswith("cycle_summary.json") for item in manifest)
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"proof_run_id": PROOF_RUN_ID, "files": len(manifest)}, sort_keys=True))
-    if not any(str(item["key"]).endswith("cycle_summary.json") for item in manifest):
+    print(json.dumps({
+        "proof_run_id": PROOF_RUN_ID,
+        "files": len(manifest),
+        "has_cycle_summary": has_cycle_summary,
+        "require_cycle_summary": REQUIRE_CYCLE_SUMMARY,
+    }, sort_keys=True))
+    if REQUIRE_CYCLE_SUMMARY and not has_cycle_summary:
         raise RuntimeError("no positive-promotion cycle summaries were found")
     return 0
 
