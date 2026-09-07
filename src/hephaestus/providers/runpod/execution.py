@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -62,6 +63,20 @@ class RunPodExecutionAdapter:
     secrets: SecretsProvider = field(repr=False)
     transport: RunPodHttpTransport = field(default_factory=UrllibRunPodTransport, repr=False)
 
+    @staticmethod
+    def _user_agent() -> str:
+        """Identify the integration as an API client rather than urllib's browser signature.
+
+        RunPod's official Python SDK also sends an explicit product User-Agent.
+        The repository adapter keeps its own identity so requests remain auditable
+        and do not claim to be the official SDK.
+        """
+        return (
+            "Hephaestus-RunPod-Adapter/0.1 "
+            f"({platform.system()} {platform.release()}; {platform.machine()}) "
+            f"Language/Python {platform.python_version()} Integration/GitHub-Actions"
+        )
+
     def _request(
         self,
         method: str,
@@ -69,7 +84,11 @@ class RunPodExecutionAdapter:
         body: dict[str, object] | None = None,
     ) -> tuple[int, dict[str, Any] | None]:
         api_key = self.secrets.resolve(self.config.api_key_ref)
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "User-Agent": self._user_agent(),
+        }
         if body is not None:
             headers["Content-Type"] = "application/json"
         return self.transport.request(
