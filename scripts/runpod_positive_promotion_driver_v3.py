@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,67 @@ if str(SCRIPTS_DIR) not in sys.path:
 import launch_positive_promotion_proof_v3 as launcher_v3  # noqa: E402
 import runpod_positive_promotion_driver as base  # noqa: E402
 
+# The proof loader places one FP16 model wholly on one CUDA device. V3's ~14B
+# candidates therefore require a >=48GB-class scheduler allowlist; 24GB cards
+# that are valid for V1/V2 would turn model loading into an infrastructure OOM.
+# This is execution routing only and does not change scientific variables.
+V3_GPU_IDS = (
+    "NVIDIA A40",
+    "NVIDIA L40",
+    "NVIDIA L40S",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA H100 PCIe",
+    "NVIDIA H100 80GB HBM3",
+    "NVIDIA H100 NVL",
+    "NVIDIA H200",
+)
+
+
+def _v3_create_with_capacity_retries(create_once, *, attempts: int = 6, delay_seconds: float = 10.0):
+    observations: list[dict[str, object]] = []
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        observation: dict[str, object] = {
+            "attempt": attempt,
+            "selection_source": "v3_fp16_single_gpu_high_memory_allowlist",
+            "minimum_gpu_memory_class_gb": 48,
+            "datacenter_id": base.launcher.DATACENTER_ID,
+            "cloud_type": "SECURE",
+            "gpu_count": 1,
+            "gpu_type_priority": "availability",
+            "ordered_gpu_type_ids": list(V3_GPU_IDS),
+        }
+        observations.append(observation)
+        try:
+            pod = create_once(list(V3_GPU_IDS))
+            observation["create_status"] = "created"
+            observation["created_pod_id"] = pod.get("id") if isinstance(pod, dict) else None
+            if isinstance(pod, dict):
+                gpu = pod.get("gpu")
+                if isinstance(gpu, dict):
+                    observation["allocated_gpu"] = {
+                        "id": gpu.get("id"),
+                        "displayName": gpu.get("displayName"),
+                        "count": gpu.get("count"),
+                    }
+            return pod, observations
+        except BaseException as exc:
+            last_error = exc
+            observation["create_status"] = "failed"
+            observation["create_error"] = f"{type(exc).__name__}: {exc}"
+            lowered = str(exc).lower()
+            if "402" in lowered or "insufficient" in lowered:
+                raise
+        if attempt < attempts:
+            time.sleep(delay_seconds)
+    raise RuntimeError(f"RunPod V3 high-memory Pod creation exhausted retries: {last_error}") from last_error
+
+
 # Reuse the already live-proven generic recovery implementation, but swap only
-# the scientific Pod shell and independent verifier to V3.
-# Launch marker: V3 preflight passed before this audited real-compute commit.
+# the scientific Pod shell/verifier and the operational GPU capacity allowlist.
 base.launcher_v2 = launcher_v3
+base.launcher.create_with_capacity_retries = _v3_create_with_capacity_retries
 
 
 class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
@@ -36,6 +94,8 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
                 "proof_driver": "scripts/run_positive_promotion_proof_v3.py",
                 "allowed_candidate_revisions": sorted(launcher_v3.ALLOWED_REVISIONS),
                 "allowed_revision_licenses": dict(sorted(launcher_v3.ALLOWED_REVISION_LICENSES.items())),
+                "gpu_memory_floor_gb": 48,
+                "gpu_type_ids": list(V3_GPU_IDS),
                 "attempts": self.attempt_rows,
                 "error": self.last_error,
                 "status": "verified" if self.verification is not None else "running",
@@ -47,6 +107,8 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
         result.evidence["proof_driver"] = "scripts/run_positive_promotion_proof_v3.py"
         result.evidence["allowed_candidate_revisions"] = sorted(launcher_v3.ALLOWED_REVISIONS)
         result.evidence["allowed_revision_licenses"] = dict(sorted(launcher_v3.ALLOWED_REVISION_LICENSES.items()))
+        result.evidence["gpu_memory_floor_gb"] = 48
+        result.evidence["gpu_type_ids"] = list(V3_GPU_IDS)
         return result
 
 
