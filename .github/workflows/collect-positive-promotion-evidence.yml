@@ -19,7 +19,7 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-33957215257
+      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-34104954995
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
