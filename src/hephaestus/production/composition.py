@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from hephaestus.backends.base import ExecutionBackend
+from hephaestus.backends.registry import resolve_backend, resolve_backend_from_system
 from hephaestus.control.autonomous_experiment import (
     ApprovalAwareDatasetSelectionService,
     GuardedTrainingLifecycleService,
@@ -24,11 +26,14 @@ from hephaestus.diagnosis.service import EvidenceBasedDiagnosisService
 from hephaestus.evaluation.experiment_service import ExperimentEvaluationService
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.planning.service import ClosedLoopExperimentPlanner
+from hephaestus.policy.approval_policy import ApprovalPolicy
+from hephaestus.policy.runtime_policy import RuntimePolicy
 from hephaestus.providers.datasets.huggingface import HuggingFaceDatasetProvider
 from hephaestus.providers.models.catalog import CatalogModelProvider
 from hephaestus.providers.models.huggingface import HuggingFaceModelProvider
 from hephaestus.providers.models.selection import DeterministicModelSelectionService
 from hephaestus.recovery.service import BoundedRecoveryService
+from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
@@ -49,6 +54,8 @@ class ProductionCompositionSettings:
     cache_root: Path | None = None
     database_path: Path | None = None
     model_catalog_path: Path | None = None
+    config_dir: Path = Path("configs")
+    execution_backend_name: str | None = None
     enable_dataset_network: bool = False
     enable_model_network: bool = False
     dataset_provider_allowlist: tuple[str, ...] = ("huggingface",)
@@ -71,6 +78,10 @@ class ProductionRuntime:
     state_repository: SQLiteStateRepository
     artifact_store: FileSystemArtifactStore
     secrets_provider: EnvironmentSecretsProvider
+    execution_backend: ExecutionBackend
+    runtime_policy: RuntimePolicy
+    runtime_monitor: RuntimeMonitorRole
+    approval_policy: ApprovalPolicy
     diagnosis_service: IntegratedDiagnosisService
     planner: ClosedLoopExperimentPlanner
     dataset_registry: DatasetProviderRegistry
@@ -93,6 +104,9 @@ class ProductionRuntime:
             "state_repository": type(self.state_repository).__name__,
             "artifact_store": type(self.artifact_store).__name__,
             "secrets_provider": type(self.secrets_provider).__name__,
+            "execution_backend": type(self.execution_backend).__name__,
+            "runtime_monitor": type(self.runtime_monitor).__name__,
+            "approval_governance": type(self.approval_policy).__name__,
             "diagnosis": type(self.diagnosis_service).__name__,
             "planner": type(self.planner).__name__,
             "dataset_discovery": type(self.dataset_registry).__name__,
@@ -125,6 +139,15 @@ class ProductionCompositionRoot:
         artifacts = FileSystemArtifactStore(settings.artifact_root)
         secrets = EnvironmentSecretsProvider()
         record_sink = RepositoryIntegrationRecordSink(state)
+
+        execution_backend = (
+            resolve_backend(settings.execution_backend_name, config_dir=settings.config_dir)
+            if settings.execution_backend_name
+            else resolve_backend_from_system(config_dir=settings.config_dir)
+        )
+        runtime_policy = RuntimePolicy()
+        runtime_monitor = RuntimeMonitorRole(execution_backend, runtime_policy)
+        approval_policy = ApprovalPolicy(config_dir=settings.config_dir)
 
         diagnosis = IntegratedDiagnosisService(EvidenceBasedDiagnosisService())
         planner = ClosedLoopExperimentPlanner()
@@ -176,7 +199,7 @@ class ProductionCompositionRoot:
             state,
             maximum_attempts=settings.maximum_infrastructure_attempts,
         )
-        action_executor = GovernedActionExecutor(settings.state_root, state)
+        action_executor = GovernedActionExecutor(settings.state_root, state, approval_policy=approval_policy)
         loop_state = ProductionLoopStateStore(state)
 
         coordinator = ProductionAutonomyCoordinator(
@@ -197,6 +220,10 @@ class ProductionCompositionRoot:
             state_repository=state,
             artifact_store=artifacts,
             secrets_provider=secrets,
+            execution_backend=execution_backend,
+            runtime_policy=runtime_policy,
+            runtime_monitor=runtime_monitor,
+            approval_policy=approval_policy,
             diagnosis_service=diagnosis,
             planner=planner,
             dataset_registry=registry,
