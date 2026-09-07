@@ -1,5 +1,6 @@
 name: Positive real-model promotion proof
 # Explicit operator-authorized real-compute launch workflow; launch commits are intentionally auditable.
+# Generic V2 launch marker is applied only after the repository-local driver preflight succeeds.
 
 on:
   push:
