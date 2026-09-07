@@ -38,8 +38,14 @@ def _composition(payload: dict[str, Any]) -> ProductionCompositionRoot:
         cache_root=Path(str(raw["cache_root"])) if raw.get("cache_root") else None,
         database_path=Path(str(raw["database_path"])) if raw.get("database_path") else None,
         model_catalog_path=Path(str(raw["model_catalog_path"])) if raw.get("model_catalog_path") else None,
+        config_dir=Path(str(raw.get("config_dir", "configs"))),
+        execution_backend_name=str(raw["execution_backend_name"]) if raw.get("execution_backend_name") else None,
         enable_dataset_network=bool(raw.get("enable_dataset_network", False)),
+        enable_model_network=bool(raw.get("enable_model_network", False)),
         dataset_provider_allowlist=tuple(str(item) for item in raw.get("dataset_provider_allowlist", ["huggingface"])),
+        model_provider_allowlist=tuple(
+            str(item) for item in raw.get("model_provider_allowlist", ["huggingface", "local_catalog"])
+        ),
         maximum_training_steps=int(raw.get("maximum_training_steps", 100_000)),
         maximum_dataset_bytes=int(raw.get("maximum_dataset_bytes", 512 * 1024 * 1024)),
         maximum_dataset_rows=int(raw.get("maximum_dataset_rows", 1_000_000)),
