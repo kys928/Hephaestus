@@ -13,6 +13,7 @@ from hephaestus.control.staged_state import (
     StagedOutputRecord,
 )
 from hephaestus.policy.action_registry import canonical_action_name, evaluate_action_boundary
+from hephaestus.policy.approval_policy import ApprovalPolicy
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.storage.base import StateRepository
@@ -25,9 +26,23 @@ def _stable_id(*values: object) -> str:
     return "action-" + hashlib.sha256(raw).hexdigest()[:20]
 
 
+def _approval_required_by_policy(outcome: str) -> bool:
+    return outcome in {
+        "approval_required",
+        "approval_required_high_risk",
+        "override_not_allowed",
+    }
+
+
 @dataclass(slots=True)
 class GovernedActionExecutor:
     """Apply finite Judge actions only after their own governance gate authorizes them.
+
+    Promotion eligibility is deliberately *not* a generic lineage-action gate.
+    Only ``promote_checkpoint`` consumes ``promotion_allowed``. Rollback, branch,
+    and restart are authorized independently by the central action registry and
+    ApprovalPolicy, plus their own lineage preconditions. Legacy transition flags
+    remain accepted for compatibility but have no authorization effect.
 
     The executor mutates compact lineage truth, never checkpoint bytes. Every
     attempt is append-only and keyed by a stable execution ID so process retries
@@ -36,6 +51,7 @@ class GovernedActionExecutor:
 
     state_root: Path
     repository: StateRepository
+    approval_policy: ApprovalPolicy | None = None
 
     @property
     def lineage_store(self) -> LineageStore:
@@ -59,23 +75,6 @@ class GovernedActionExecutor:
         child_lineage_id: str | None = None,
     ) -> dict[str, object]:
         canonical = canonical_action_name(requested_action)
-        boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
-        if not boundary["allowed"]:
-            raise PermissionError(f"action is not authorized: {canonical}: {boundary['reasons']}")
-
-        transition_gate = {
-            "promote_checkpoint": promotion_allowed,
-            "rollback_to_checkpoint": rollback_allowed,
-            "branch_new_experiment": branch_allowed,
-            "restart_lineage": restart_allowed,
-        }.get(canonical, True)
-        if not transition_gate:
-            raise PermissionError(f"governed transition gate did not authorize {canonical}")
-
-        execution_id = _stable_id(lineage_id, run_id, canonical, checkpoint_ref, approval_ref)
-        previous = self.repository.get_latest(ACTION_EXECUTIONS, "execution_id", execution_id)
-        if previous is not None and previous.get("status") == "applied":
-            return dict(previous)
 
         current_payload = self.lineage_store.get_current(lineage_id)
         if current_payload is None:
@@ -83,8 +82,37 @@ class GovernedActionExecutor:
         else:
             current = LineageState.from_dict(current_payload)
         before = current.to_dict()
-        now = datetime.now(timezone.utc).isoformat()
 
+        boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
+        if not boundary["allowed"]:
+            raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
+
+        policy = self.approval_policy or ApprovalPolicy()
+        policy_decision = policy.decide(canonical, current.stage_name, current.trust_level)
+        operator_approved = approval_status in {"approved", "override_approved"}
+        policy_requires_approval = _approval_required_by_policy(policy_decision.outcome)
+        registry_requires_approval = bool(boundary.get("requires_approval", False))
+
+        if policy_decision.outcome == "override_not_allowed" and approval_status == "override_approved":
+            raise PermissionError(f"approval policy forbids override for {canonical}")
+        if policy_requires_approval and not operator_approved:
+            raise PermissionError(
+                f"approval policy did not authorize {canonical}: {policy_decision.reason}"
+            )
+        if (registry_requires_approval or policy_requires_approval) and not approval_ref:
+            raise PermissionError(f"approved action is missing durable approval reference: {canonical}")
+
+        # Promotion certification is a promotion-only boundary. It must never
+        # authorize rollback, branch, restart, or any other lineage mutation.
+        if canonical == "promote_checkpoint" and not promotion_allowed:
+            raise PermissionError("promotion gate did not authorize promote_checkpoint")
+
+        execution_id = _stable_id(lineage_id, run_id, canonical, checkpoint_ref, approval_ref)
+        previous = self.repository.get_latest(ACTION_EXECUTIONS, "execution_id", execution_id)
+        if previous is not None and previous.get("status") == "applied":
+            return dict(previous)
+
+        now = datetime.now(timezone.utc).isoformat()
         current.latest_run_id = run_id
         current.last_requested_action = requested_action
         current.last_effective_action = canonical
@@ -180,11 +208,23 @@ class GovernedActionExecutor:
             "checkpoint_ref": checkpoint_ref,
             "approval_status": approval_status,
             "approval_ref": approval_ref,
+            "governance": {
+                "action_registry": boundary,
+                "approval_policy": {
+                    "outcome": policy_decision.outcome,
+                    "risk_level": policy_decision.risk_level,
+                    "required_approval_type": policy_decision.required_approval_type,
+                    "reason": policy_decision.reason,
+                },
+                "promotion_gate_applied": canonical == "promote_checkpoint",
+            },
             "transition_gates": {
-                "promotion_allowed": promotion_allowed,
-                "rollback_allowed": rollback_allowed,
-                "branch_allowed": branch_allowed,
-                "restart_allowed": restart_allowed,
+                "promotion_allowed": promotion_allowed if canonical == "promote_checkpoint" else None,
+                "legacy_transition_hints_ignored": {
+                    "rollback_allowed": rollback_allowed,
+                    "branch_allowed": branch_allowed,
+                    "restart_allowed": restart_allowed,
+                },
             },
             "certification_state": certification_state,
             "confidence": confidence,
@@ -212,9 +252,6 @@ class GovernedActionExecutor:
                 approval_status=str(approval.get("approval_status", "not_required")),
                 approval_ref=str(approval.get("approval_ref", "")) or None,
                 promotion_allowed=bool(promotion.get("promotion_allowed", False)),
-                rollback_allowed=bool(promotion.get("rollback_allowed", False)),
-                branch_allowed=bool(promotion.get("branch_allowed", False)),
-                restart_allowed=bool(promotion.get("restart_allowed", False)),
                 certification_state=str(promotion.get("certification_state", "")) or None,
                 confidence=float(verdict.get("confidence", 0.0) or 0.0),
             )
