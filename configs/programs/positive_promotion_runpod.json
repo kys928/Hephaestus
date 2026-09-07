@@ -2,9 +2,9 @@
   "program_id": "program-positive-promotion-runpod-live",
   "lineage_id": "lineage-positive-promotion-runpod-live",
   "stage_name": "stabilization",
-  "driver": "scripts/runpod_positive_promotion_driver.py:build_driver",
+  "driver": "scripts/runpod_positive_promotion_driver_v3.py:build_driver",
   "driver_config": {
-    "prove_bootstrap_recovery_once": true
+    "prove_bootstrap_recovery_once": false
   },
   "maximum_cycles": 1,
   "stop_on_promotion": true,
