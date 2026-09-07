@@ -23,6 +23,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import launch_positive_promotion_proof as launcher  # noqa: E402
+import launch_positive_promotion_proof_v2 as launcher_v2  # noqa: E402
 
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider  # noqa: E402
 from hephaestus.production.loop import ProductionCycleResult  # noqa: E402
@@ -50,7 +51,7 @@ ATTEMPT_DIR="/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_PROOF_R
 mkdir -p "$ATTEMPT_DIR"
 cat > "$ATTEMPT_DIR/driver_result.json" <<EOF
 {
-  "result_version": "positive-real-model-promotion-proof.v1",
+  "result_version": "positive-real-model-promotion-proof.v2",
   "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "proof_run_id": "${HEPHAESTUS_PROOF_RUN_ID}",
   "attempt": "${HEPHAESTUS_ATTEMPT}",
@@ -76,7 +77,7 @@ def _create_pod(
     attempt: int,
     controlled_bootstrap_failure: bool,
 ) -> tuple[dict[str, Any], list[dict[str, object]]]:
-    shell = _controlled_bootstrap_failure_shell() if controlled_bootstrap_failure else launcher.pod_shell()
+    shell = _controlled_bootstrap_failure_shell() if controlled_bootstrap_failure else launcher_v2.pod_shell_v2()
 
     def create_once(gpu_ids: list[str]) -> dict[str, Any]:
         body: dict[str, object] = {
@@ -167,7 +168,7 @@ class RunPodPositivePromotionDriver:
         launcher.atomic_json(
             Path("positive_promotion_launcher.json"),
             {
-                "launcher_version": "positive-real-model-promotion-generic-loop.v1",
+                "launcher_version": "positive-real-model-promotion-generic-loop.v2",
                 "created_at": _now(),
                 "repo_sha": self.repo_sha,
                 "proof_run_id": self.proof_run_id,
@@ -176,6 +177,8 @@ class RunPodPositivePromotionDriver:
                 "generic_cli": "hephaestus run",
                 "generic_recovery_owned": True,
                 "scientific_variables_changed_on_retry": False,
+                "proof_driver": "scripts/run_positive_promotion_proof_v2.py",
+                "allowed_candidate_revisions": sorted(launcher_v2.ALLOWED_REVISIONS),
                 "attempts": self.attempt_rows,
                 "error": self.last_error,
                 "status": "verified" if self.verification is not None else "running",
@@ -262,7 +265,7 @@ class RunPodPositivePromotionDriver:
                     raise recoverable from remote_error
                 raise remote_error
 
-            verification = launcher.verify_proof(client, self.proof_run_id, result)
+            verification = launcher_v2.verify_proof_v2(client, self.proof_run_id, result)
             launcher.atomic_json(Path("positive_promotion_verification.json"), verification)
             self.verification = verification
             row["verified"] = True
@@ -297,6 +300,8 @@ class RunPodPositivePromotionDriver:
                     "certified_model_manifest": verification.get("certified_model_manifest"),
                     "generic_recovery_owned": True,
                     "scientific_variables_changed_on_retry": False,
+                    "proof_driver": "scripts/run_positive_promotion_proof_v2.py",
+                    "allowed_candidate_revisions": sorted(launcher_v2.ALLOWED_REVISIONS),
                 },
             )
         except RecoverableInfrastructureError as exc:
