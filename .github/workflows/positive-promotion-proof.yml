@@ -6,11 +6,14 @@ on:
     branches: [feature/production-loop-v1]
     paths:
       - .github/workflows/positive-promotion-proof.yml
+      - configs/programs/positive_promotion_runpod.json
+      - scripts/runpod_positive_promotion_driver.py
       - scripts/run_positive_promotion_proof.py
       - scripts/run_positive_promotion_proof_v2.py
       - scripts/launch_positive_promotion_proof.py
       - scripts/launch_positive_promotion_proof_v2.py
       - scripts/runpod_capacity_selection.py
+      - src/hephaestus/cli/main.py
       - src/hephaestus/control/semantic_judge.py
       - src/hephaestus/production/**
       - src/hephaestus/providers/models/huggingface.py
@@ -28,7 +31,7 @@ jobs:
   prove:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-positive-promotion]')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
@@ -56,16 +59,51 @@ jobs:
             tests/test_runpod_gpu_execution.py
       - name: Compile positive promotion proof
         run: |
+          python -m py_compile src/hephaestus/cli/main.py
           python -m py_compile src/hephaestus/control/semantic_judge.py
           python -m py_compile src/hephaestus/production/actions.py
           python -m py_compile src/hephaestus/production/composition.py
           python -m py_compile src/hephaestus/production/loop.py
+          python -m py_compile scripts/runpod_positive_promotion_driver.py
           python -m py_compile scripts/run_positive_promotion_proof.py
           python -m py_compile scripts/run_positive_promotion_proof_v2.py
           python -m py_compile scripts/launch_positive_promotion_proof.py
           python -m py_compile scripts/launch_positive_promotion_proof_v2.py
-      - name: Launch real GPU promotion and certification chain
-        run: python scripts/launch_positive_promotion_proof_v2.py
+      - name: Launch real GPU proof through generic production loop
+        run: |
+          hephaestus run --config configs/programs/positive_promotion_runpod.json --fresh > positive_promotion_generic_run.json
+          hephaestus status --config configs/programs/positive_promotion_runpod.json > positive_promotion_generic_status.json
+      - name: Verify generic recovery and promotion evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          launcher = json.loads(Path('positive_promotion_launcher.json').read_text())
+          verification = json.loads(Path('positive_promotion_verification.json').read_text())
+          status = json.loads(Path('positive_promotion_generic_status.json').read_text())
+
+          assert launcher['status'] == 'verified', launcher
+          attempts = launcher['attempts']
+          assert len(attempts) >= 2, attempts
+          first = attempts[0]
+          assert first['controlled_bootstrap_failure'] is True, first
+          assert first['recoverable'] is True, first
+          assert first['failure_code'] == 'pod_bootstrap_failed', first
+          assert first['scientific_variables_changed'] is False, first
+          assert first['optimizer_steps'] == 0, first
+          assert first['checkpoint_created'] is False, first
+          assert attempts[-1].get('verified') is True, attempts[-1]
+
+          program = status['program']
+          assert program['status'] == 'completed', program
+          assert program['stop_reason'] == 'candidate_promoted', program
+          assert program['recovery_attempts'] >= 1, program
+          assert status['services']['runtime_monitor'] == 'RuntimeMonitorRole', status['services']
+          assert status['services']['approval_governance'] == 'ApprovalPolicy', status['services']
+          assert verification['status'] == 'verified', verification
+          assert verification['terminal_result']['status'] == 'completed', verification
+          PY
       - name: Upload positive-promotion proof evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,5 +112,9 @@ jobs:
           path: |
             positive_promotion_launcher.json
             positive_promotion_verification.json
+            positive_promotion_generic_run.json
+            positive_promotion_generic_status.json
+            state/positive-promotion-runpod-live/
+            artifacts/positive-promotion-runpod-live/
           if-no-files-found: warn
           retention-days: 30
