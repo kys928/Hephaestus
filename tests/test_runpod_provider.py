@@ -115,6 +115,11 @@ def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it() -> None:
     create = transport.calls[0]
     assert create["url"] == "https://rest.runpod.io/v1/pods"
     assert create["headers"]["Authorization"] == "Bearer api-test"
+    assert create["headers"]["Accept"] == "application/json"
+    assert create["headers"]["Content-Type"] == "application/json"
+    assert create["headers"]["User-Agent"].startswith("Hephaestus-RunPod-Adapter/0.1 ")
+    assert "Language/Python " in create["headers"]["User-Agent"]
+    assert "Integration/GitHub-Actions" in create["headers"]["User-Agent"]
     body = create["json_body"]
     assert body["computeType"] == "CPU"
     assert body["cpuFlavorIds"] == ["cpu3c"]
@@ -125,3 +130,5 @@ def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it() -> None:
     execution.delete_pod("pod-test")
     assert transport.calls[1]["method"] == "DELETE"
     assert transport.calls[1]["url"] == "https://rest.runpod.io/v1/pods/pod-test"
+    assert transport.calls[1]["headers"]["Accept"] == "application/json"
+    assert transport.calls[1]["headers"]["User-Agent"].startswith("Hephaestus-RunPod-Adapter/0.1 ")
