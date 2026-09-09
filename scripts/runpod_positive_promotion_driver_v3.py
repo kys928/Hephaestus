@@ -31,7 +31,12 @@ V3_GPU_IDS = (
 )
 
 
-def _v3_create_with_capacity_retries(create_once, *, attempts: int = 6, delay_seconds: float = 10.0):
+# Capacity in the volume's datacenter is transient. Keep the scheduler request
+# alive for ~10 minutes per infrastructure cycle instead of giving up after
+# roughly one minute. The generic production loop still owns the outer recovery
+# budget, so this changes only operational capacity acquisition, never scientific
+# variables, candidate order, model precision, or the >=48 GB memory floor.
+def _v3_create_with_capacity_retries(create_once, *, attempts: int = 60, delay_seconds: float = 10.0):
     observations: list[dict[str, object]] = []
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
