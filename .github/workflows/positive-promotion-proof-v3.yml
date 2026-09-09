@@ -69,7 +69,7 @@ jobs:
           python -m py_compile scripts/run_positive_promotion_proof_v3.py
           python -m py_compile scripts/launch_positive_promotion_proof.py
           python -m py_compile scripts/launch_positive_promotion_proof_v3.py
-      - name: Verify V3 routing, immutable revisions, and licenses
+      - name: Verify V3 routing, immutable revisions, licenses, and GPU memory floor
         run: |
           python - <<'PY'
           import json
@@ -86,11 +86,24 @@ jobs:
               '2db69c1c3e91a05d2c64a3185acfbaf36f744e25': 'mit',
               'cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8': 'apache-2.0',
           }
+          expected_gpu_ids = (
+              'NVIDIA A40',
+              'NVIDIA L40',
+              'NVIDIA L40S',
+              'NVIDIA A100 80GB PCIe',
+              'NVIDIA A100-SXM4-80GB',
+              'NVIDIA H100 PCIe',
+              'NVIDIA H100 80GB HBM3',
+              'NVIDIA H100 NVL',
+              'NVIDIA H200',
+          )
           candidates = proof_v3.proof.CANDIDATES
           assert {item['revision']: item['license'] for item in candidates} == expected
           assert launcher_v3.ALLOWED_REVISION_LICENSES == expected
           assert 'run_positive_promotion_proof_v3.py' in launcher_v3.pod_shell_v3()
           assert generic_driver_v3.base.launcher_v2 is launcher_v3
+          assert generic_driver_v3.V3_GPU_IDS == expected_gpu_ids
+          assert not any('4090' in gpu or 'A5000' in gpu or '3090' in gpu for gpu in generic_driver_v3.V3_GPU_IDS)
           program = json.loads(Path('configs/programs/positive_promotion_runpod.json').read_text())
           assert program['driver'] == 'scripts/runpod_positive_promotion_driver_v3.py:build_driver'
           assert program['driver_config']['prove_bootstrap_recovery_once'] is False
@@ -139,6 +152,7 @@ jobs:
           assert launcher['status'] == 'verified', launcher
           assert launcher['proof_driver'] == 'scripts/run_positive_promotion_proof_v3.py', launcher
           assert launcher['allowed_revision_licenses'] == expected, launcher
+          assert launcher['gpu_memory_floor_gb'] == 48, launcher
           attempts = launcher['attempts']
           assert len(attempts) >= 1, attempts
           assert all(item['scientific_variables_changed'] is False for item in attempts), attempts
