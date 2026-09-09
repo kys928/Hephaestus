@@ -1,7 +1,7 @@
 name: Positive real-model promotion proof V3
 # Evidence-selected real-compute wave. GPU execution is allowed only by an
 # explicit [launch-positive-promotion] commit or workflow_dispatch.
-# Preflight asserts the >=48GB-class V3 GPU allowlist before every real launch.
+# Preflight asserts the >=48GB-class V3 GPU allowlist and recoverable capacity mapping before every real launch.
 
 on:
   push:
