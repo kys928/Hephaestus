@@ -128,7 +128,7 @@ class InfrastructureRecoveryController:
         """Normalize common provider/runtime messages into safe retry classes."""
         text = str(message).casefold()
         mapping = (
-            (("capacity", "no available", "stock"), "capacity_unavailable"),
+            (("capacity", "no available", "stock", "could not find any pods", "required specifications"), "capacity_unavailable"),
             (("rate limit", "429"), "provider_rate_limited"),
             (("timeout", "connection reset", "temporarily unavailable"), "transport_interrupted"),
             (("stale sentinel", "repo_sha mismatch"), "stale_execution_sentinel"),
