@@ -25,7 +25,7 @@ V3_PER_GPU_MEMORY_GB = 24
 V3_AGGREGATE_GPU_MEMORY_GB = V3_GPU_COUNT * V3_PER_GPU_MEMORY_GB
 V3_MAX_MEMORY_GIB_PER_GPU = 22
 V3_MODEL_PARALLELISM = "transformers_device_map_balanced_fp16"
-V3_CONTAINER_DISK_GB = 100
+V3_CONTAINER_DISK_GB = 200
 
 
 def _v3_create_with_capacity_retries(create_once, *, attempts: int = 60, delay_seconds: float = 10.0):
