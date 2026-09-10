@@ -24,6 +24,7 @@ V3_PER_GPU_MEMORY_GB = 24
 V3_AGGREGATE_GPU_MEMORY_GB = V3_GPU_COUNT * V3_PER_GPU_MEMORY_GB
 V3_MAX_MEMORY_GIB_PER_GPU = 22
 V3_MODEL_PARALLELISM = "transformers_device_map_balanced_fp16"
+V3_CONTAINER_DISK_GB = 100
 
 
 def _v3_create_with_capacity_retries(create_once, *, attempts: int = 60, delay_seconds: float = 10.0):
@@ -96,7 +97,7 @@ def _v3_create_pod(
             "dataCenterIds": [base.launcher.DATACENTER_ID],
             "dataCenterPriority": "custom",
             "imageName": base.launcher.IMAGE,
-            "containerDiskInGb": 24,
+            "containerDiskInGb": V3_CONTAINER_DISK_GB,
             "networkVolumeId": base.launcher.VOLUME_ID,
             "volumeMountPath": "/workspace",
             "dockerStartCmd": ["bash", "-lc", shell],
@@ -143,6 +144,7 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
                 "max_memory_gib_per_gpu": V3_MAX_MEMORY_GIB_PER_GPU,
                 "model_parallelism": V3_MODEL_PARALLELISM,
                 "gpu_type_ids": list(V3_GPU_IDS),
+                "container_disk_gb": V3_CONTAINER_DISK_GB,
                 "attempts": self.attempt_rows,
                 "error": self.last_error,
                 "status": "verified" if self.verification is not None else "running",
@@ -160,6 +162,7 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
         result.evidence["max_memory_gib_per_gpu"] = V3_MAX_MEMORY_GIB_PER_GPU
         result.evidence["model_parallelism"] = V3_MODEL_PARALLELISM
         result.evidence["gpu_type_ids"] = list(V3_GPU_IDS)
+        result.evidence["container_disk_gb"] = V3_CONTAINER_DISK_GB
         return result
 
 
