@@ -13,6 +13,11 @@ ALLOWED_REVISION_LICENSES = {
     "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8": "apache-2.0",
 }
 ALLOWED_REVISIONS = set(ALLOWED_REVISION_LICENSES)
+V3_MAX_SECONDS = 6000
+
+# Dual-3090 inference can be slower than the original single high-memory GPU path.
+# This extends only the infrastructure wait budget; scientific evaluation stays fixed.
+launcher.MAX_SECONDS = V3_MAX_SECONDS
 
 
 def pod_shell_v3() -> str:
@@ -53,11 +58,22 @@ cd /opt/hephaestus-src
 git checkout "$HEPHAESTUS_REPO_SHA"
 python -m venv --system-site-packages /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
-"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.47,<6' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
+"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.47,<6' 'accelerate>=1,<2' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
 "$PY" - <<'PYCHECK'
+import json
 import torch
+
 assert torch.cuda.is_available(), "CUDA unavailable after positive-proof bootstrap"
-print({"torch": torch.__version__, "cuda": torch.version.cuda, "gpu": torch.cuda.get_device_name(0)})
+count = torch.cuda.device_count()
+assert count >= 2, f"V3 dual-GPU proof requires at least 2 CUDA devices; found {count}"
+gpus = []
+for index in range(2):
+    name = torch.cuda.get_device_name(index)
+    total_gib = torch.cuda.get_device_properties(index).total_memory / (1024 ** 3)
+    assert "3090" in name, f"V3 expected RTX 3090 at cuda:{index}; found {name}"
+    assert total_gib >= 23.0, f"V3 expected ~24GB VRAM at cuda:{index}; found {total_gib:.2f} GiB"
+    gpus.append({"index": index, "name": name, "total_memory_gib": round(total_gib, 2)})
+print(json.dumps({"torch": torch.__version__, "cuda": torch.version.cuda, "gpu_count": count, "gpus": gpus}))
 PYCHECK
 "$PY" -m py_compile scripts/run_positive_promotion_proof.py scripts/run_positive_promotion_proof_v2.py scripts/run_positive_promotion_proof_v3.py
 "$PY" scripts/run_positive_promotion_proof_v3.py

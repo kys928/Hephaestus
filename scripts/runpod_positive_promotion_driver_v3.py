@@ -14,39 +14,33 @@ if str(SCRIPTS_DIR) not in sys.path:
 import launch_positive_promotion_proof_v3 as launcher_v3  # noqa: E402
 import runpod_positive_promotion_driver as base  # noqa: E402
 
-# The proof loader places one FP16 model wholly on one CUDA device. V3's ~14B
-# candidates therefore require a >=48GB-class scheduler allowlist; 24GB cards
-# that are valid for V1/V2 would turn model loading into an infrastructure OOM.
-# This is execution routing only and does not change scientific variables.
-V3_GPU_IDS = (
-    "NVIDIA A40",
-    "NVIDIA L40",
-    "NVIDIA L40S",
-    "NVIDIA A100 80GB PCIe",
-    "NVIDIA A100-SXM4-80GB",
-    "NVIDIA H100 PCIe",
-    "NVIDIA H100 80GB HBM3",
-    "NVIDIA H100 NVL",
-    "NVIDIA H200",
-)
+# V3 keeps the exact FP16 scientific candidates and frozen evaluation, but
+# changes execution topology to two 24GB RTX 3090s. Transformers/Accelerate
+# shards each 14B candidate across both devices; no quantization or CPU/disk
+# offload is permitted.
+V3_GPU_IDS = ("NVIDIA GeForce RTX 3090",)
+V3_GPU_COUNT = 2
+V3_PER_GPU_MEMORY_GB = 24
+V3_AGGREGATE_GPU_MEMORY_GB = V3_GPU_COUNT * V3_PER_GPU_MEMORY_GB
+V3_MAX_MEMORY_GIB_PER_GPU = 22
+V3_MODEL_PARALLELISM = "transformers_device_map_balanced_fp16"
 
 
-# Capacity in the volume's datacenter is transient. Keep the scheduler request
-# alive for ~10 minutes per infrastructure cycle instead of giving up after
-# roughly one minute. The generic production loop still owns the outer recovery
-# budget, so this changes only operational capacity acquisition, never scientific
-# variables, candidate order, model precision, or the >=48 GB memory floor.
 def _v3_create_with_capacity_retries(create_once, *, attempts: int = 60, delay_seconds: float = 10.0):
+    """Persistently acquire the exact two-3090 topology without changing science."""
     observations: list[dict[str, object]] = []
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
         observation: dict[str, object] = {
             "attempt": attempt,
-            "selection_source": "v3_fp16_single_gpu_high_memory_allowlist",
-            "minimum_gpu_memory_class_gb": 48,
+            "selection_source": "v3_fp16_dual_3090_sharded",
+            "per_gpu_memory_class_gb": V3_PER_GPU_MEMORY_GB,
+            "aggregate_gpu_memory_gb": V3_AGGREGATE_GPU_MEMORY_GB,
+            "max_memory_gib_per_gpu": V3_MAX_MEMORY_GIB_PER_GPU,
+            "model_parallelism": V3_MODEL_PARALLELISM,
             "datacenter_id": base.launcher.DATACENTER_ID,
             "cloud_type": "SECURE",
-            "gpu_count": 1,
+            "gpu_count": V3_GPU_COUNT,
             "gpu_type_priority": "availability",
             "ordered_gpu_type_ids": list(V3_GPU_IDS),
         }
@@ -73,13 +67,57 @@ def _v3_create_with_capacity_retries(create_once, *, attempts: int = 60, delay_s
                 raise
         if attempt < attempts:
             time.sleep(delay_seconds)
-    raise RuntimeError(f"RunPod V3 high-memory Pod creation exhausted retries: {last_error}") from last_error
+    raise RuntimeError(f"RunPod V3 dual-3090 Pod creation exhausted retries: {last_error}") from last_error
 
 
-# Reuse the already live-proven generic recovery implementation, but swap only
-# the scientific Pod shell/verifier and the operational GPU capacity allowlist.
+def _v3_create_pod(
+    execution: Any,
+    *,
+    proof_run_id: str,
+    repo_sha: str,
+    attempt: int,
+    controlled_bootstrap_failure: bool,
+) -> tuple[dict[str, Any], list[dict[str, object]]]:
+    """Create exactly one Secure Pod exposing two RTX 3090 CUDA devices."""
+    shell = (
+        base._controlled_bootstrap_failure_shell()
+        if controlled_bootstrap_failure
+        else launcher_v3.pod_shell_v3()
+    )
+
+    def create_once(gpu_ids: list[str]) -> dict[str, Any]:
+        body: dict[str, object] = {
+            "name": f"hephaestus-positive-promotion-{proof_run_id}-a{attempt}"[:180],
+            "computeType": "GPU",
+            "gpuCount": V3_GPU_COUNT,
+            "gpuTypeIds": list(gpu_ids),
+            "gpuTypePriority": "availability",
+            "cloudType": "SECURE",
+            "dataCenterIds": [base.launcher.DATACENTER_ID],
+            "dataCenterPriority": "custom",
+            "imageName": base.launcher.IMAGE,
+            "containerDiskInGb": 24,
+            "networkVolumeId": base.launcher.VOLUME_ID,
+            "volumeMountPath": "/workspace",
+            "dockerStartCmd": ["bash", "-lc", shell],
+            "interruptible": False,
+            "env": {
+                "HEPHAESTUS_PROOF_RUN_ID": proof_run_id,
+                "HEPHAESTUS_REPO_SHA": repo_sha,
+                "HEPHAESTUS_ATTEMPT": str(attempt),
+                "HEPHAESTUS_OPERATOR_APPROVAL_REF": base.launcher.APPROVAL_REF,
+            },
+        }
+        return execution._create_pod(body)
+
+    return base.launcher.create_with_capacity_retries(create_once)
+
+
+# Reuse the already live-proven generic recovery implementation, while swapping
+# only V3's scientific shell/verifier, capacity policy, and Pod topology.
 base.launcher_v2 = launcher_v3
 base.launcher.create_with_capacity_retries = _v3_create_with_capacity_retries
+base._create_pod = _v3_create_pod
 
 
 class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
@@ -99,7 +137,11 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
                 "proof_driver": "scripts/run_positive_promotion_proof_v3.py",
                 "allowed_candidate_revisions": sorted(launcher_v3.ALLOWED_REVISIONS),
                 "allowed_revision_licenses": dict(sorted(launcher_v3.ALLOWED_REVISION_LICENSES.items())),
-                "gpu_memory_floor_gb": 48,
+                "gpu_count": V3_GPU_COUNT,
+                "gpu_memory_floor_gb": V3_PER_GPU_MEMORY_GB,
+                "aggregate_gpu_memory_floor_gb": V3_AGGREGATE_GPU_MEMORY_GB,
+                "max_memory_gib_per_gpu": V3_MAX_MEMORY_GIB_PER_GPU,
+                "model_parallelism": V3_MODEL_PARALLELISM,
                 "gpu_type_ids": list(V3_GPU_IDS),
                 "attempts": self.attempt_rows,
                 "error": self.last_error,
@@ -112,7 +154,11 @@ class RunPodPositivePromotionDriverV3(base.RunPodPositivePromotionDriver):
         result.evidence["proof_driver"] = "scripts/run_positive_promotion_proof_v3.py"
         result.evidence["allowed_candidate_revisions"] = sorted(launcher_v3.ALLOWED_REVISIONS)
         result.evidence["allowed_revision_licenses"] = dict(sorted(launcher_v3.ALLOWED_REVISION_LICENSES.items()))
-        result.evidence["gpu_memory_floor_gb"] = 48
+        result.evidence["gpu_count"] = V3_GPU_COUNT
+        result.evidence["gpu_memory_floor_gb"] = V3_PER_GPU_MEMORY_GB
+        result.evidence["aggregate_gpu_memory_floor_gb"] = V3_AGGREGATE_GPU_MEMORY_GB
+        result.evidence["max_memory_gib_per_gpu"] = V3_MAX_MEMORY_GIB_PER_GPU
+        result.evidence["model_parallelism"] = V3_MODEL_PARALLELISM
         result.evidence["gpu_type_ids"] = list(V3_GPU_IDS)
         return result
 
