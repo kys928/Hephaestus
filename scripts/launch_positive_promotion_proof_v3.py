@@ -24,6 +24,15 @@ def pod_shell_v3() -> str:
     return r'''set -Eeuo pipefail
 ATTEMPT_DIR="/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
 mkdir -p "$ATTEMPT_DIR"
+# Keep immutable model downloads and Xet reconstruction scratch on the mounted
+# network volume. This avoids the Pod container filesystem quota while preserving
+# the exact FP16 GPU-resident execution topology (this is cache storage, not
+# CPU/disk model offload).
+export HF_HOME="/workspace/hephaestus/cache/huggingface"
+export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
+export XDG_CACHE_HOME="/workspace/hephaestus/cache/xdg"
+export TMPDIR="/workspace/hephaestus/tmp/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
 exec >"$ATTEMPT_DIR/pod_runtime.log" 2>&1
 write_bootstrap_failure() {
   code=$?
