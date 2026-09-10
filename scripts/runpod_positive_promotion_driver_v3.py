@@ -17,8 +17,8 @@ import runpod_positive_promotion_driver as base  # noqa: E402
 # V3 keeps the exact FP16 scientific candidates and frozen evaluation, but
 # changes execution topology to two 24GB RTX 3090s. Transformers/Accelerate
 # shards each 14B candidate across both devices; no quantization or CPU/disk
-# offload is permitted. The container disk only stores immutable model files
-# and runtime dependencies; increasing it does not alter model execution.
+# offload is permitted. The 200GB container disk only stores immutable model
+# files and runtime dependencies; increasing it does not alter model execution.
 V3_GPU_IDS = ("NVIDIA GeForce RTX 3090",)
 V3_GPU_COUNT = 2
 V3_PER_GPU_MEMORY_GB = 24
