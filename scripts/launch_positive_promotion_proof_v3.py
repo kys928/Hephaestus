@@ -15,6 +15,7 @@ ALLOWED_REVISION_LICENSES = {
 ALLOWED_REVISIONS = set(ALLOWED_REVISION_LICENSES)
 V3_MAX_SECONDS = 6000
 
+# Launch marker refresh after disabling Xet reconstruction; scientific inputs unchanged.
 # Dual-3090 inference can be slower than the original single high-memory GPU path.
 # This extends only the infrastructure wait budget; scientific evaluation stays fixed.
 launcher.MAX_SECONDS = V3_MAX_SECONDS
