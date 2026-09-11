@@ -38,6 +38,7 @@ V3_SHARD_GPU_COUNT = 2
 V3_MAX_MEMORY_GIB_PER_GPU = 22
 V3_MATERIALIZATION_ROOT = Path("/opt/hephaestus-model-materialization")
 
+# Relaunch marker: storage transport fix is active; scientific variables remain frozen.
 
 # The scientific proof root lives on the persistent RunPod network volume. The
 # original materializer explicitly placed the Hugging Face cache beneath that
