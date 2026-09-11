@@ -1,7 +1,7 @@
 name: Positive real-model promotion proof V3
 # Evidence-selected real-compute wave. GPU execution is allowed only by an
 # explicit [launch-positive-promotion] commit or workflow_dispatch.
-# Launch-marker refresh after cache relocation; no scientific or topology variables changed.
+# Launch-marker refresh after forced direct HF transport; no scientific or topology variables changed.
 # V3 uses two 24GB RTX 3090 GPUs with balanced FP16 model sharding. The
 # scientific candidates, frozen eval, decoding, Judge, and promotion gates stay fixed.
 
