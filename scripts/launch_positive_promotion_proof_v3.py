@@ -74,6 +74,16 @@ git checkout "$HEPHAESTUS_REPO_SHA"
 python -m venv --system-site-packages /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
 "$PY" -m pip install --no-cache-dir --disable-pip-version-check -e . 'transformers>=4.47,<6' 'accelerate>=1,<2' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2'
+# HF_HUB_DISABLE_XET should force the compatibility HTTP path, but the prior
+# allocated dual-3090 Pod still entered Xet file reconstruction and hit EDQUOT.
+# Remove the optional transport package entirely so this retry cannot enter the
+# quota-heavy Xet reconstruction path. Model bits/revisions and FP16 execution
+# are unchanged; this is an infrastructure-only download transport fix.
+"$PY" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+"$PY" - <<'PYNOXET'
+import importlib.util
+assert importlib.util.find_spec("hf_xet") is None, "hf_xet remained importable after forced removal"
+PYNOXET
 "$PY" - <<'PYCHECK'
 import json
 import torch
