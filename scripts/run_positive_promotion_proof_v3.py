@@ -14,6 +14,8 @@ so the proof can run in a datacenter where a single >=48GB GPU is unavailable.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import run_positive_promotion_proof_v2 as wave2
 
 proof = wave2.proof
@@ -34,6 +36,53 @@ JUDGE_REVISION = "582efe62d7cfafd242bffca71ecbde1bcecc1bcc"
 
 V3_SHARD_GPU_COUNT = 2
 V3_MAX_MEMORY_GIB_PER_GPU = 22
+V3_MATERIALIZATION_ROOT = Path("/opt/hephaestus-model-materialization")
+
+
+# The scientific proof root lives on the persistent RunPod network volume. The
+# original materializer explicitly placed the Hugging Face cache beneath that
+# root, which bypassed HF_HOME and exhausted the volume quota while reconstructing
+# large immutable 14B snapshots. V3 materializes immutable model bytes on the
+# Pod's 400GB ephemeral container disk instead, then persists only the small
+# byte-level manifest into the governed proof root. This changes storage
+# transport only: model IDs/revisions, FP16 weights, evaluation, decoding,
+# Judge, certification, and promotion policy are unchanged, and model execution
+# still forbids CPU/disk offload.
+_original_materialize_model = proof.materialize_model
+
+
+def _materialize_model_v3(
+    *,
+    proof_root: Path,
+    model_id: str,
+    revision: str,
+    expected_license: str,
+) -> dict[str, object]:
+    materialized = _original_materialize_model(
+        proof_root=V3_MATERIALIZATION_ROOT,
+        model_id=model_id,
+        revision=revision,
+        expected_license=expected_license,
+    )
+
+    persistent_manifest = (
+        proof_root
+        / "model_manifests"
+        / proof.slug(model_id)
+        / revision
+        / "snapshot_manifest.json"
+    )
+    manifest_payload = {
+        key: value
+        for key, value in materialized.items()
+        if key != "manifest_ref"
+    }
+    proof.atomic_json(persistent_manifest, manifest_payload)
+    materialized["manifest_ref"] = str(persistent_manifest)
+    return materialized
+
+
+proof.materialize_model = _materialize_model_v3
 
 
 class ShardedV3ChatTemplateBackend(proof.PinnedChatTemplateBackend):
