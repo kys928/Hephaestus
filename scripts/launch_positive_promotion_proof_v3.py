@@ -24,15 +24,16 @@ def pod_shell_v3() -> str:
     return r'''set -Eeuo pipefail
 ATTEMPT_DIR="/workspace/hephaestus/scientific/v1/executions/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
 mkdir -p "$ATTEMPT_DIR"
-# Keep immutable model downloads and Xet reconstruction scratch on the mounted
-# network volume. This avoids the Pod container filesystem quota while preserving
-# the exact FP16 GPU-resident execution topology (this is cache storage, not
-# CPU/disk model offload).
-export HF_HOME="/workspace/hephaestus/cache/huggingface"
+# Keep immutable model downloads and Xet reconstruction scratch on the Pod's
+# enlarged ephemeral container disk. The mounted network volume is reserved for
+# proof evidence/state, avoiding its persistent storage quota. This remains cache
+# storage only: the FP16 model itself is still sharded exclusively across 2 GPUs.
+export HF_HOME="/opt/hephaestus-cache/huggingface"
 export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
-export XDG_CACHE_HOME="/workspace/hephaestus/cache/xdg"
-export TMPDIR="/workspace/hephaestus/tmp/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
-mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+export HF_XET_CACHE="$HF_HOME/xet"
+export XDG_CACHE_HOME="/opt/hephaestus-cache/xdg"
+export TMPDIR="/opt/hephaestus-tmp/${HEPHAESTUS_PROOF_RUN_ID}/attempt-${HEPHAESTUS_ATTEMPT}"
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$HF_XET_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
 exec >"$ATTEMPT_DIR/pod_runtime.log" 2>&1
 write_bootstrap_failure() {
   code=$?
@@ -61,13 +62,14 @@ PYFAIL
 trap write_bootstrap_failure EXIT
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv
+rm -rf /var/lib/apt/lists/*
 rm -rf /opt/hephaestus-src /opt/hephaestus-venv
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
 cd /opt/hephaestus-src
 git checkout "$HEPHAESTUS_REPO_SHA"
 python -m venv --system-site-packages /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
-"$PY" -m pip install --disable-pip-version-check -e . 'transformers>=4.47,<6' 'accelerate>=1,<2' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
+"$PY" -m pip install --no-cache-dir --disable-pip-version-check -e . 'transformers>=4.47,<6' 'accelerate>=1,<2' 'tokenizers>=0.20,<1' 'safetensors>=0.4,<1' 'huggingface_hub>=0.26,<2' 'hf_xet>=1,<2'
 "$PY" - <<'PYCHECK'
 import json
 import torch
