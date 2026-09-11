@@ -244,3 +244,68 @@ jobs:
             artifacts/positive-promotion-runpod-live/
           if-no-files-found: warn
           retention-days: 30
+
+  retrieve_v3_cycle_evidence:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[retrieve-v3-evidence]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      PROOF_RUN_ID: positive-real-model-promotion-001-34561911749
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install S3 client
+        run: python -m pip install 'boto3>=1.35,<2'
+      - name: Retrieve exact persisted V3 proof evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import boto3
+          from botocore.config import Config
+
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          endpoint = os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/')
+          region = os.environ['RUNPOD_DATACENTER_ID']
+          proof_run_id = os.environ['PROOF_RUN_ID']
+          client = boto3.client(
+              's3', endpoint_url=endpoint, region_name=region,
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+              config=Config(retries={'mode':'standard','max_attempts':10}),
+          )
+          client.head_bucket(Bucket=bucket)
+          matches = []
+          paginator = client.get_paginator('list_objects_v2')
+          for page in paginator.paginate(Bucket=bucket, PaginationConfig={'PageSize':1000}):
+              for obj in page.get('Contents', []) or []:
+                  key = str(obj.get('Key',''))
+                  if proof_run_id in key:
+                      matches.append({'key': key, 'size': int(obj.get('Size',0)), 'etag': str(obj.get('ETag','')).strip('"')})
+          if not matches:
+              raise SystemExit(f'No S3 objects found containing {proof_run_id}')
+          root = Path('retrieved-v3-cycle-evidence')
+          root.mkdir(parents=True, exist_ok=True)
+          for row in matches:
+              target = root / row['key']
+              target.parent.mkdir(parents=True, exist_ok=True)
+              client.download_file(bucket, row['key'], str(target))
+          (root / 'object_index.json').write_text(json.dumps({'proof_run_id': proof_run_id, 'objects': matches}, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps({'proof_run_id': proof_run_id, 'objects': len(matches), 'bytes': sum(x['size'] for x in matches)}, sort_keys=True))
+          for row in matches:
+              print(json.dumps(row, sort_keys=True))
+          PY
+      - name: Upload detailed V3 cycle evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-detailed-cycle-evidence
+          path: retrieved-v3-cycle-evidence/
+          if-no-files-found: error
+          retention-days: 7
