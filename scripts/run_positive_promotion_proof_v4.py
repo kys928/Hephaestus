@@ -17,6 +17,8 @@ use, and quantization plus CPU/disk model offload remain forbidden.
 """
 from __future__ import annotations
 
+from hephaestus.generation.backends import GenerationBackendError
+
 import run_positive_promotion_proof_v3 as wave3
 
 proof = wave3.proof
@@ -77,13 +79,18 @@ class AdaptiveV4ChatTemplateBackend(proof.PinnedChatTemplateBackend):
             tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
 
+        # Accelerate treats max_memory as the complete set of placement targets.
+        # Supplying a synthetic "cpu": "0GiB" target can fail device-map
+        # inference before any candidate sample is produced. Keep the budget GPU-
+        # only and retain the strict post-load verification below so CPU/disk
+        # offload remains forbidden rather than merely discouraged.
         model = AutoModelForCausalLM.from_pretrained(
             str(self.snapshot_path),
             local_files_only=True,
             trust_remote_code=False,
             torch_dtype=torch.float16,
             device_map="balanced",
-            max_memory={0: f"{V4_MAX_MEMORY_GIB_PER_GPU}GiB", "cpu": "0GiB"},
+            max_memory={0: f"{V4_MAX_MEMORY_GIB_PER_GPU}GiB"},
         )
 
         device_map = getattr(model, "hf_device_map", None)
@@ -124,6 +131,20 @@ class AdaptiveV4ChatTemplateBackend(proof.PinnedChatTemplateBackend):
         model.eval()
         self._tokenizer = tokenizer
         self._model = model
+
+    def generate_batch(self, *args, **kwargs):
+        """Preserve the exact V4 runtime exception in persisted generation evidence."""
+        try:
+            return super().generate_batch(*args, **kwargs)
+        except GenerationBackendError:
+            raise
+        except Exception as exc:
+            detail = str(exc) or repr(exc)
+            raise GenerationBackendError(
+                "v4_generation_backend_failed",
+                f"V4 candidate generation backend failed: {type(exc).__name__}: {detail}",
+                retryable=True,
+            ) from exc
 
 
 proof.PinnedChatTemplateBackend = AdaptiveV4ChatTemplateBackend
