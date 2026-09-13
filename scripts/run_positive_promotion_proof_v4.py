@@ -147,7 +147,34 @@ class AdaptiveV4ChatTemplateBackend(proof.PinnedChatTemplateBackend):
             ) from exc
 
 
+class StrictV4EvaluationGenerationService(proof.EvaluationGenerationService):
+    """Fail closed when required generation evidence is incomplete.
+
+    The shared generation service intentionally returns partial evidence on a
+    provider/runtime failure. That is useful generally, but a promotion proof
+    must not feed a zero/partial-sample candidate into comparison, Judge,
+    certification, or promotion gates and accidentally turn missing evidence
+    into a scientific rejection.
+    """
+
+    def generate(self, *args, **kwargs):
+        result = super().generate(*args, **kwargs)
+        expected = len(self.plan().tasks)
+        observed = len(result.report.samples)
+        if not result.report.completed or observed != expected:
+            issues = "; ".join(
+                f"{issue.code}: {issue.message}" for issue in result.report.issues
+            ) or "no issue detail"
+            raise RuntimeError(
+                f"V4 generation incomplete for run {result.report.run_id}: "
+                f"expected {expected} samples, got {observed}; "
+                f"completion_status={result.report.completion_status}; {issues}"
+            )
+        return result
+
+
 proof.PinnedChatTemplateBackend = AdaptiveV4ChatTemplateBackend
+proof.EvaluationGenerationService = StrictV4EvaluationGenerationService
 
 proof.CANDIDATES = (
     {
