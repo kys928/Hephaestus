@@ -155,7 +155,7 @@ jobs:
           assert captured['gpuTypePriority'] == 'availability'
           assert captured['cloudType'] == 'SECURE'
           assert captured['imageName'] == driver_v4.V4_IMAGE
-          assert captured['minCudaVersion'] == '13.0'
+          assert 'minCudaVersion' not in captured
           assert captured['containerDiskInGb'] == 400
           assert captured['dataCenterIds'] == [driver_v4.base.launcher.DATACENTER_ID]
           assert captured['networkVolumeId'] == driver_v4.base.launcher.VOLUME_ID
