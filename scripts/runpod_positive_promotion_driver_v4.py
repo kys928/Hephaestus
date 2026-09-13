@@ -44,6 +44,9 @@ V4_MAX_MEMORY_GIB_PER_GPU = 44
 V4_MODEL_PARALLELISM = "transformers_device_map_balanced_fp16"
 V4_CONTAINER_DISK_GB = 400
 V4_IMAGE = "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime"
+# RunPod's current pod-create schema does not accept a minCudaVersion request
+# field. Keep the desired CUDA floor as evidence only; compatibility is enforced
+# by the pinned CUDA-13 container and the in-pod CUDA/GPU bootstrap checks.
 V4_MIN_CUDA_VERSION = "13.0"
 
 
@@ -102,6 +105,10 @@ def _v4_create_with_capacity_retries(
                 )
             ):
                 raise
+            # Schema-validation failures are deterministic configuration errors,
+            # not capacity races. Fail immediately instead of wasting retries.
+            if "extra input keys provided in request body" in lowered or "not in input schema" in lowered:
+                raise
         if attempt < attempts:
             time.sleep(delay_seconds)
     raise RuntimeError(
@@ -135,7 +142,6 @@ def _v4_create_pod(
             "dataCenterIds": [base.launcher.DATACENTER_ID],
             "dataCenterPriority": "custom",
             "imageName": V4_IMAGE,
-            "minCudaVersion": V4_MIN_CUDA_VERSION,
             "containerDiskInGb": V4_CONTAINER_DISK_GB,
             "networkVolumeId": base.launcher.VOLUME_ID,
             "volumeMountPath": "/workspace",
