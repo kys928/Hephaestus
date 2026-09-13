@@ -100,3 +100,5 @@ jobs:
           path: v4_remote_cycles/
           if-no-files-found: error
           retention-days: 30
+
+# autonomous evidence-pull trigger: 2026-09-13T18:39:00+02:00
