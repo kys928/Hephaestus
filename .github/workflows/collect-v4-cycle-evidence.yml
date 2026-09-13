@@ -19,7 +19,7 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-34765826521
+      HEPHAESTUS_PROOF_RUN_ID: positive-real-model-promotion-001-34772003742
       PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +110,7 @@ jobs:
       - name: Upload complete V4 cycle evidence
         uses: actions/upload-artifact@v4
         with:
-          name: v4-remote-cycle-evidence-34765826521
+          name: v4-remote-cycle-evidence-34772003742
           path: v4_remote_cycles/
           if-no-files-found: error
           retention-days: 30
