@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
       - name: Install S3 client
         run: python -m pip install 'boto3>=1.35,<2'
-      - name: Pull complete V4 cycle directories from Network Volume
+      - name: Pull V4 cycle and candidate-generation evidence from Network Volume
         run: |
           python - <<'PY'
           import hashlib
@@ -57,7 +57,25 @@ jobs:
               f'hephaestus/scientific/v1/positive_promotion/{run_id}/cycles/cycle-02/',
               f'hephaestus/scientific/v1/executions/{run_id}/attempt-1/',
           ]
+          report_keys = []
+          settings = 'generation-settings-2ba1dd1322d04d4925c36ac4'
+          for candidate in (1, 2):
+              for repeat in (1, 2, 3):
+                  report_keys.append(
+                      f'hephaestus/scientific/v1/positive_promotion/{run_id}/evaluations/'
+                      f'{run_id}-candidate-{candidate}-repeat-{repeat}/semantic_generation/'
+                      f'{settings}/generation_report.json'
+                  )
+
           manifest = []
+
+          def persist(key, raw):
+              rel = key.removeprefix('hephaestus/scientific/v1/')
+              path = out / rel
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(raw)
+              manifest.append({'key': key, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()})
+
           for prefix in prefixes:
               token = None
               while True:
@@ -67,31 +85,27 @@ jobs:
                   resp = s3.list_objects_v2(**kwargs)
                   for item in resp.get('Contents', []):
                       key = item['Key']
-                      raw = s3.get_object(Bucket=bucket, Key=key)['Body'].read()
-                      rel = key.removeprefix('hephaestus/scientific/v1/')
-                      path = out / rel
-                      path.parent.mkdir(parents=True, exist_ok=True)
-                      path.write_bytes(raw)
-                      manifest.append({
-                          'key': key,
-                          'bytes': len(raw),
-                          'sha256': hashlib.sha256(raw).hexdigest(),
-                      })
+                      persist(key, s3.get_object(Bucket=bucket, Key=key)['Body'].read())
                   if not resp.get('IsTruncated'):
                       break
                   token = resp.get('NextContinuationToken')
 
+          for key in report_keys:
+              persist(key, s3.get_object(Bucket=bucket, Key=key)['Body'].read())
+
           (out / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
           cycle1 = [x for x in manifest if '/cycle-01/' in x['key']]
           cycle2 = [x for x in manifest if '/cycle-02/' in x['key']]
+          reports = [x for x in manifest if x['key'] in report_keys]
           print(json.dumps({
               'run_id': run_id,
               'files': len(manifest),
               'cycle_01_files': len(cycle1),
               'cycle_02_files': len(cycle2),
+              'candidate_generation_reports': len(reports),
           }, sort_keys=True))
-          if not cycle1 or not cycle2:
-              raise RuntimeError('both persisted V4 cycle directories were not found')
+          if not cycle1 or not cycle2 or len(reports) != 6:
+              raise RuntimeError('expected both cycles and all six candidate generation reports')
           PY
       - name: Upload complete V4 cycle evidence
         uses: actions/upload-artifact@v4
@@ -101,4 +115,4 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-# autonomous evidence-pull trigger: 2026-09-13T18:39:00+02:00
+# autonomous evidence-pull expansion: exact candidate generation reports only
