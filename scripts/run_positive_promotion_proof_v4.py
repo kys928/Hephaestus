@@ -94,35 +94,65 @@ class AdaptiveV4ChatTemplateBackend(proof.PinnedChatTemplateBackend):
         )
 
         device_map = getattr(model, "hf_device_map", None)
-        if not isinstance(device_map, dict) or not device_map:
-            raise RuntimeError("V4 FP16 model load produced no hf_device_map")
+        if isinstance(device_map, dict) and device_map:
+            forbidden_devices: set[str] = set()
+            cuda_indices: set[int] = set()
+            unknown_devices: set[str] = set()
+            for placement in device_map.values():
+                if isinstance(placement, int):
+                    cuda_indices.add(placement)
+                    continue
+                value = str(placement)
+                if value == "cuda":
+                    cuda_indices.add(0)
+                elif value.startswith("cuda:"):
+                    cuda_indices.add(int(value.split(":", 1)[1]))
+                elif value in {"cpu", "disk"}:
+                    forbidden_devices.add(value)
+                else:
+                    unknown_devices.add(value)
 
-        forbidden_devices: set[str] = set()
-        cuda_indices: set[int] = set()
-        for placement in device_map.values():
-            if isinstance(placement, int):
-                cuda_indices.add(placement)
-                continue
-            value = str(placement)
-            if value == "cuda":
-                cuda_indices.add(0)
-            elif value.startswith("cuda:"):
-                cuda_indices.add(int(value.split(":", 1)[1]))
-            elif value in {"cpu", "disk"}:
-                forbidden_devices.add(value)
-
-        if forbidden_devices:
-            raise RuntimeError(
-                f"V4 FP16 load attempted forbidden offload: {sorted(forbidden_devices)}"
-            )
-        if cuda_indices != {0}:
-            raise RuntimeError(
-                "V4 single-GPU FP16 load must remain entirely on cuda:0; "
-                f"observed CUDA placements {sorted(cuda_indices)}"
-            )
+            if forbidden_devices:
+                raise RuntimeError(
+                    f"V4 FP16 load attempted forbidden offload: {sorted(forbidden_devices)}"
+                )
+            if unknown_devices:
+                raise RuntimeError(
+                    "V4 FP16 load produced unsupported device-map placements: "
+                    f"{sorted(unknown_devices)}"
+                )
+            if cuda_indices != {0}:
+                raise RuntimeError(
+                    "V4 single-GPU FP16 load must remain entirely on cuda:0; "
+                    f"observed CUDA placements {sorted(cuda_indices)}"
+                )
+        else:
+            # Transformers/Accelerate may collapse a balanced map to a single
+            # CUDA device without retaining hf_device_map when the whole model
+            # fits. In that case verify residency from the loaded tensors
+            # themselves instead of rejecting valid single-GPU placement.
+            observed_devices = {
+                str(tensor.device)
+                for tensor in (*model.parameters(), *model.buffers())
+            }
+            forbidden_devices = {
+                device
+                for device in observed_devices
+                if not (device == "cuda" or device == "cuda:0")
+            }
+            if forbidden_devices:
+                raise RuntimeError(
+                    "V4 FP16 load without hf_device_map must have every parameter/buffer "
+                    "resident on cuda:0; observed forbidden placements "
+                    f"{sorted(forbidden_devices)}"
+                )
+            if not observed_devices:
+                raise RuntimeError(
+                    "V4 FP16 model load produced neither hf_device_map nor inspectable model tensors"
+                )
 
         embedding_device = model.get_input_embeddings().weight.device
-        if embedding_device.type != "cuda" or embedding_device.index != 0:
+        if embedding_device.type != "cuda" or embedding_device.index not in {None, 0}:
             raise RuntimeError(
                 "V4 model input embeddings must remain on cuda:0 because the frozen generation "
                 f"backend places inputs there; got {embedding_device}"
