@@ -20,16 +20,40 @@ launcher.MAX_SECONDS = V4_MAX_SECONDS
 
 
 def pod_shell_v4() -> str:
-    """Reuse the proven dual-3090 bootstrap while executing the V4 proof."""
+    """Reuse the proven V3 bootstrap with an availability-adaptive V4 GPU check."""
     shell = wave3.pod_shell_v3()
+
+    old_gpu_check = '''assert torch.cuda.is_available(), "CUDA unavailable after positive-proof bootstrap"
+count = torch.cuda.device_count()
+assert count >= 2, f"V3 dual-GPU proof requires at least 2 CUDA devices; found {count}"
+gpus = []
+for index in range(2):
+    name = torch.cuda.get_device_name(index)
+    total_gib = torch.cuda.get_device_properties(index).total_memory / (1024 ** 3)
+    assert "3090" in name, f"V3 expected RTX 3090 at cuda:{index}; found {name}"
+    assert total_gib >= 23.0, f"V3 expected ~24GB VRAM at cuda:{index}; found {total_gib:.2f} GiB"
+    gpus.append({"index": index, "name": name, "total_memory_gib": round(total_gib, 2)})
+print(json.dumps({"torch": torch.__version__, "cuda": torch.version.cuda, "gpu_count": count, "gpus": gpus}))'''
+    new_gpu_check = '''assert torch.cuda.is_available(), "CUDA unavailable after positive-proof bootstrap"
+count = torch.cuda.device_count()
+assert count >= 1, f"V4 proof requires at least 1 CUDA device; found {count}"
+name = torch.cuda.get_device_name(0)
+total_gib = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+assert total_gib >= 44.0, f"V4 requires a >=48GB-class GPU; found {name} with {total_gib:.2f} GiB"
+gpus = [{"index": 0, "name": name, "total_memory_gib": round(total_gib, 2)}]
+print(json.dumps({"torch": torch.__version__, "cuda": torch.version.cuda, "gpu_count": count, "gpus": gpus}))'''
+    if old_gpu_check not in shell:
+        raise RuntimeError("V4 bootstrap patch could not locate the frozen V3 GPU validation block")
+    shell = shell.replace(old_gpu_check, new_gpu_check)
+
     shell = shell.replace(
         '"$PY" -m py_compile scripts/run_positive_promotion_proof.py scripts/run_positive_promotion_proof_v2.py scripts/run_positive_promotion_proof_v3.py\n"$PY" scripts/run_positive_promotion_proof_v3.py',
         '"$PY" -m py_compile scripts/run_positive_promotion_proof.py scripts/run_positive_promotion_proof_v2.py scripts/run_positive_promotion_proof_v3.py scripts/run_positive_promotion_proof_v4.py\n"$PY" scripts/run_positive_promotion_proof_v4.py',
     )
     shell = shell.replace("positive-real-model-promotion-proof.v3", "positive-real-model-promotion-proof.v4")
-    shell = shell.replace("V3 dual-GPU proof", "V4 dual-GPU proof")
-    shell = shell.replace("V3 expected RTX 3090", "V4 expected RTX 3090")
-    shell = shell.replace("V3 expected ~24GB VRAM", "V4 expected ~24GB VRAM")
+    shell = shell.replace("V3 dual-GPU proof", "V4 availability-adaptive proof")
+    shell = shell.replace("same two RTX 3090 GPUs", "one scheduler-selected >=48GB CUDA GPU")
+    shell = shell.replace("dual-3090 Pod", "V4 GPU Pod")
     return shell
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,17 +14,99 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 import launch_positive_promotion_proof_v4 as launcher_v4  # noqa: E402
 import runpod_positive_promotion_driver as base  # noqa: E402
-import runpod_positive_promotion_driver_v3 as topology  # noqa: E402
 
-# V4 deliberately preserves the exact execution topology proven in V3 so
-# candidate-model identity is the only scientific variable changed.
-V4_GPU_IDS = topology.V3_GPU_IDS
-V4_GPU_COUNT = topology.V3_GPU_COUNT
-V4_PER_GPU_MEMORY_GB = topology.V3_PER_GPU_MEMORY_GB
-V4_AGGREGATE_GPU_MEMORY_GB = topology.V3_AGGREGATE_GPU_MEMORY_GB
-V4_MAX_MEMORY_GIB_PER_GPU = topology.V3_MAX_MEMORY_GIB_PER_GPU
-V4_MODEL_PARALLELISM = topology.V3_MODEL_PARALLELISM
-V4_CONTAINER_DISK_GB = topology.V3_CONTAINER_DISK_GB
+# The V4 scientific protocol is frozen. Execution routing is infrastructure-only.
+# The former exact 2x RTX 3090 topology repeatedly had zero stock in EU-CZ-1,
+# so V4 now asks RunPod's live scheduler for one currently available >=48GB GPU.
+# One such GPU comfortably fits Granite 8B and OLMo 13B in FP16 without
+# quantization or CPU/disk model offload. Blackwell RTX PRO 6000 is included
+# first because it is currently stocked in EU-CZ-1; additional >=48GB types are
+# safe infrastructure fallbacks if availability changes between checks.
+V4_GPU_IDS = (
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "NVIDIA RTX 6000 Ada Generation",
+    "NVIDIA L40S",
+    "NVIDIA L40",
+    "NVIDIA A40",
+    "NVIDIA RTX A6000",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA H100 PCIe",
+    "NVIDIA H100 80GB HBM3",
+    "NVIDIA H100 NVL",
+    "NVIDIA H200",
+)
+V4_GPU_COUNT = 1
+V4_PER_GPU_MEMORY_GB = 48
+V4_AGGREGATE_GPU_MEMORY_GB = V4_PER_GPU_MEMORY_GB
+V4_MAX_MEMORY_GIB_PER_GPU = 44
+V4_MODEL_PARALLELISM = "transformers_device_map_balanced_fp16"
+V4_CONTAINER_DISK_GB = 400
+V4_IMAGE = "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime"
+V4_MIN_CUDA_VERSION = "13.0"
+
+
+def _v4_create_with_capacity_retries(
+    create_once,
+    *,
+    attempts: int = 12,
+    delay_seconds: float = 10.0,
+):
+    """Acquire any live EU-CZ-1 GPU that satisfies V4's >=48GB FP16 envelope."""
+    observations: list[dict[str, object]] = []
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        observation: dict[str, object] = {
+            "attempt": attempt,
+            "queried_at": datetime.now(timezone.utc).isoformat(),
+            "selection_source": "runpod_live_scheduler_v4_single_gpu_48gb_plus",
+            "datacenter_id": base.launcher.DATACENTER_ID,
+            "cloud_type": "SECURE",
+            "gpu_count": V4_GPU_COUNT,
+            "gpu_type_priority": "availability",
+            "minimum_gpu_memory_gb": V4_PER_GPU_MEMORY_GB,
+            "max_memory_gib_per_gpu": V4_MAX_MEMORY_GIB_PER_GPU,
+            "model_parallelism": V4_MODEL_PARALLELISM,
+            "ordered_gpu_type_ids": list(V4_GPU_IDS),
+            "image": V4_IMAGE,
+            "min_cuda_version": V4_MIN_CUDA_VERSION,
+        }
+        observations.append(observation)
+        try:
+            pod = create_once(list(V4_GPU_IDS))
+            observation["create_status"] = "created"
+            observation["created_pod_id"] = pod.get("id") if isinstance(pod, dict) else None
+            if isinstance(pod, dict):
+                gpu = pod.get("gpu")
+                if isinstance(gpu, dict):
+                    observation["allocated_gpu"] = {
+                        "id": gpu.get("id"),
+                        "displayName": gpu.get("displayName"),
+                        "count": gpu.get("count"),
+                    }
+            return pod, observations
+        except BaseException as exc:
+            last_error = exc
+            observation["create_status"] = "failed"
+            observation["create_error"] = f"{type(exc).__name__}: {exc}"
+            lowered = str(exc).lower()
+            if any(
+                phrase in lowered
+                for phrase in (
+                    "402",
+                    "insufficient funds",
+                    "insufficient credit",
+                    "insufficient balance",
+                    "account balance is too low",
+                )
+            ):
+                raise
+        if attempt < attempts:
+            time.sleep(delay_seconds)
+    raise RuntimeError(
+        f"RunPod V4 >=48GB availability-priority Pod creation exhausted retries: {last_error}"
+    ) from last_error
 
 
 def _v4_create_pod(
@@ -33,7 +117,7 @@ def _v4_create_pod(
     attempt: int,
     controlled_bootstrap_failure: bool,
 ) -> tuple[dict[str, Any], list[dict[str, object]]]:
-    """Create exactly one Secure Pod exposing two RTX 3090 CUDA devices."""
+    """Create one Secure Pod on any live >=48GB GPU in EU-CZ-1."""
     shell = (
         base._controlled_bootstrap_failure_shell()
         if controlled_bootstrap_failure
@@ -50,7 +134,8 @@ def _v4_create_pod(
             "cloudType": "SECURE",
             "dataCenterIds": [base.launcher.DATACENTER_ID],
             "dataCenterPriority": "custom",
-            "imageName": base.launcher.IMAGE,
+            "imageName": V4_IMAGE,
+            "minCudaVersion": V4_MIN_CUDA_VERSION,
             "containerDiskInGb": V4_CONTAINER_DISK_GB,
             "networkVolumeId": base.launcher.VOLUME_ID,
             "volumeMountPath": "/workspace",
@@ -68,9 +153,10 @@ def _v4_create_pod(
     return base.launcher.create_with_capacity_retries(create_once)
 
 
-# Reuse the already proven recovery policy and dual-3090 acquisition behavior.
+# Reuse the proven production-loop recovery policy while swapping only V4's
+# shell/verifier and infrastructure routing. Scientific inputs remain frozen.
 base.launcher_v2 = launcher_v4
-base.launcher.create_with_capacity_retries = topology._v3_create_with_capacity_retries
+base.launcher.create_with_capacity_retries = _v4_create_with_capacity_retries
 base._create_pod = _v4_create_pod
 
 
@@ -97,6 +183,8 @@ class RunPodPositivePromotionDriverV4(base.RunPodPositivePromotionDriver):
                 "max_memory_gib_per_gpu": V4_MAX_MEMORY_GIB_PER_GPU,
                 "model_parallelism": V4_MODEL_PARALLELISM,
                 "gpu_type_ids": list(V4_GPU_IDS),
+                "container_image": V4_IMAGE,
+                "min_cuda_version": V4_MIN_CUDA_VERSION,
                 "container_disk_gb": V4_CONTAINER_DISK_GB,
                 "attempts": self.attempt_rows,
                 "error": self.last_error,
@@ -120,6 +208,8 @@ class RunPodPositivePromotionDriverV4(base.RunPodPositivePromotionDriver):
         result.evidence["max_memory_gib_per_gpu"] = V4_MAX_MEMORY_GIB_PER_GPU
         result.evidence["model_parallelism"] = V4_MODEL_PARALLELISM
         result.evidence["gpu_type_ids"] = list(V4_GPU_IDS)
+        result.evidence["container_image"] = V4_IMAGE
+        result.evidence["min_cuda_version"] = V4_MIN_CUDA_VERSION
         result.evidence["container_disk_gb"] = V4_CONTAINER_DISK_GB
         return result
 

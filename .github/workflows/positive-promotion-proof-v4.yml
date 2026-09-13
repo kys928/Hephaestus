@@ -1,8 +1,9 @@
 name: Positive real-model promotion proof V4
-# Evidence-selected wave after exact V3 per-gate retrieval. Only candidate
-# model identity changes: Granite 3.3 8B first, OLMo 2 13B second. Frozen eval,
-# decoding, reviewer, Judge, certification, promotion gates, and the proven
-# two-RTX-3090 balanced-FP16 execution topology remain unchanged.
+# Evidence-selected wave after exact V3 per-gate retrieval. Granite 3.3 8B is
+# evaluated first and OLMo 2 13B second if needed. Frozen eval, decoding,
+# reviewer, Judge, certification, and promotion gates remain unchanged.
+# Execution routing is availability-adaptive: one live >=48GB Secure Cloud GPU
+# in EU-CZ-1, FP16, Transformers balanced placement, no quantization/offload.
 
 on:
   push:
@@ -66,7 +67,7 @@ jobs:
           python -m py_compile scripts/launch_positive_promotion_proof.py
           python -m py_compile scripts/launch_positive_promotion_proof_v3.py
           python -m py_compile scripts/launch_positive_promotion_proof_v4.py
-      - name: Verify V4 candidates, frozen science, dual-GPU topology, and routing
+      - name: Verify V4 candidates, frozen science, availability routing, and no-offload envelope
         run: |
           python - <<'PY'
           import json
@@ -91,26 +92,31 @@ jobs:
           assert [(x['model_id'], x['revision'], x['license']) for x in candidates] == expected_candidates
           assert launcher_v4.ALLOWED_REVISION_LICENSES == expected
 
-          # Frozen scientific protocol inherited unchanged from the proven proof.
+          # Frozen scientific protocol remains unchanged.
           assert proof_v4.proof.EVAL_PACK_HASH == 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
           assert proof_v4.JUDGE_MODEL_ID == 'Qwen/Qwen2.5-1.5B-Instruct'
           assert proof_v4.JUDGE_REVISION == '582efe62d7cfafd242bffca71ecbde1bcecc1bcc'
 
-          # Exact approved execution topology is unchanged from V3.
-          assert driver_v4.V4_GPU_IDS == ('NVIDIA GeForce RTX 3090',)
-          assert driver_v4.V4_GPU_COUNT == 2
-          assert driver_v4.V4_PER_GPU_MEMORY_GB == 24
+          # Infrastructure routing is now live-availability based across GPUs
+          # that can run both candidates in FP16 without CPU/disk offload.
+          assert driver_v4.V4_GPU_COUNT == 1
+          assert driver_v4.V4_PER_GPU_MEMORY_GB == 48
           assert driver_v4.V4_AGGREGATE_GPU_MEMORY_GB == 48
-          assert driver_v4.V4_MAX_MEMORY_GIB_PER_GPU == 22
+          assert driver_v4.V4_MAX_MEMORY_GIB_PER_GPU == 44
           assert driver_v4.V4_MODEL_PARALLELISM == 'transformers_device_map_balanced_fp16'
           assert driver_v4.V4_CONTAINER_DISK_GB == 400
-          assert proof_v4.proof.PinnedChatTemplateBackend.__name__ == 'ShardedV3ChatTemplateBackend'
+          assert driver_v4.V4_IMAGE == 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime'
+          assert driver_v4.V4_MIN_CUDA_VERSION == '13.0'
+          assert 'NVIDIA RTX PRO 6000 Blackwell Server Edition' in driver_v4.V4_GPU_IDS
+          assert 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition' in driver_v4.V4_GPU_IDS
+          assert 'NVIDIA GeForce RTX 3090' not in driver_v4.V4_GPU_IDS
+          assert proof_v4.proof.PinnedChatTemplateBackend.__name__ == 'AdaptiveV4ChatTemplateBackend'
 
           shell = launcher_v4.pod_shell_v4()
           assert 'run_positive_promotion_proof_v4.py' in shell
           assert "'accelerate>=1,<2'" in shell
           assert 'torch.cuda.device_count()' in shell
-          assert '3090' in shell
+          assert '>=48GB-class GPU' in shell
           assert 'HF_HUB_DISABLE_XET=1' in shell
 
           captured = {}
@@ -124,7 +130,14 @@ jobs:
               class FakeExecution:
                   def _create_pod(self, body):
                       captured.update(body)
-                      return {'id': 'dry-run-v4-dual-3090'}
+                      return {
+                          'id': 'dry-run-v4-availability-adaptive',
+                          'gpu': {
+                              'id': 'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+                              'displayName': 'RTX PRO 6000',
+                              'count': 1,
+                          },
+                      }
 
               pod, _ = driver_v4._v4_create_pod(
                   FakeExecution(),
@@ -133,13 +146,16 @@ jobs:
                   attempt=1,
                   controlled_bootstrap_failure=False,
               )
-              assert pod['id'] == 'dry-run-v4-dual-3090'
+              assert pod['id'] == 'dry-run-v4-availability-adaptive'
           finally:
               driver_v4.base.launcher.create_with_capacity_retries = original_retry
 
-          assert captured['gpuCount'] == 2
-          assert captured['gpuTypeIds'] == ['NVIDIA GeForce RTX 3090']
+          assert captured['gpuCount'] == 1
+          assert captured['gpuTypeIds'] == list(driver_v4.V4_GPU_IDS)
+          assert captured['gpuTypePriority'] == 'availability'
           assert captured['cloudType'] == 'SECURE'
+          assert captured['imageName'] == driver_v4.V4_IMAGE
+          assert captured['minCudaVersion'] == '13.0'
           assert captured['containerDiskInGb'] == 400
           assert captured['dataCenterIds'] == [driver_v4.base.launcher.DATACENTER_ID]
           assert captured['networkVolumeId'] == driver_v4.base.launcher.VOLUME_ID
@@ -194,12 +210,14 @@ jobs:
           assert launcher['status'] == 'verified', launcher
           assert launcher['proof_driver'] == 'scripts/run_positive_promotion_proof_v4.py', launcher
           assert launcher['allowed_revision_licenses'] == expected, launcher
-          assert launcher['gpu_count'] == 2, launcher
-          assert launcher['gpu_memory_floor_gb'] == 24, launcher
+          assert launcher['gpu_count'] == 1, launcher
+          assert launcher['gpu_memory_floor_gb'] == 48, launcher
           assert launcher['aggregate_gpu_memory_floor_gb'] == 48, launcher
-          assert launcher['max_memory_gib_per_gpu'] == 22, launcher
+          assert launcher['max_memory_gib_per_gpu'] == 44, launcher
           assert launcher['model_parallelism'] == 'transformers_device_map_balanced_fp16', launcher
-          assert launcher['gpu_type_ids'] == ['NVIDIA GeForce RTX 3090'], launcher
+          assert launcher['container_image'] == 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime', launcher
+          assert launcher['min_cuda_version'] == '13.0', launcher
+          assert 'NVIDIA GeForce RTX 3090' not in launcher['gpu_type_ids'], launcher
           attempts = launcher['attempts']
           assert len(attempts) >= 1, attempts
           assert all(item['scientific_variables_changed'] is False for item in attempts), attempts

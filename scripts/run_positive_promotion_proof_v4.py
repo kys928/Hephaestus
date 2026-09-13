@@ -5,11 +5,15 @@ V3 showed both 14B candidates were materially better than the random-init
 baseline, perfectly repeatable, and low-variance, but were rejected by strict
 hard deterministic formatting/termination gates. Phi-4 failed continuation
 termination and strict JSON; Qwen2.5-14B failed exact punctuation and strict
-JSON typing/wrapping. V4 therefore changes only candidate-model identity to
-models selected specifically for instruction-following and structured-output
-behavior while retaining the frozen eval pack, decoding, baseline, fixed
-independent reviewer, Judge, certification, promotion policy, and the proven
-2x RTX 3090 balanced-FP16 execution topology.
+JSON typing/wrapping. V4 therefore changes candidate-model identity to models
+selected specifically for instruction-following and structured-output behavior
+while retaining the frozen eval pack, decoding, baseline, fixed independent
+reviewer, Judge, certification, and promotion policy.
+
+Execution routing is infrastructure-only. The original 2x RTX 3090 topology
+proved unavailable in EU-CZ-1, so V4 may run on one live >=48GB CUDA GPU. The
+candidate weights remain FP16, Transformers device_map="balanced" remains in
+use, and quantization plus CPU/disk model offload remain forbidden.
 """
 from __future__ import annotations
 
@@ -36,6 +40,94 @@ JUDGE_REVISION = wave3.JUDGE_REVISION
 GRANITE_REVISION = "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b"
 OLMO_REVISION = "3a5c85baefbb1896a54d56fe2e76c0395627ddf4"
 
+V4_GPU_COUNT = 1
+V4_MAX_MEMORY_GIB_PER_GPU = 44
+
+
+class AdaptiveV4ChatTemplateBackend(proof.PinnedChatTemplateBackend):
+    """Load V4 candidate weights in FP16 on one >=48GB CUDA GPU."""
+
+    def _load(self) -> None:
+        if self._model is not None:
+            return
+
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is required for real candidate generation")
+        if torch.cuda.device_count() < V4_GPU_COUNT:
+            raise RuntimeError(
+                f"V4 FP16 generation requires {V4_GPU_COUNT} CUDA GPU; "
+                f"found {torch.cuda.device_count()}"
+            )
+
+        total_gib = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        if total_gib < 44.0:
+            raise RuntimeError(
+                f"V4 single-GPU FP16 execution requires a >=48GB class GPU; found {total_gib:.2f} GiB"
+            )
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            str(self.snapshot_path), local_files_only=True, trust_remote_code=False
+        )
+        if not getattr(tokenizer, "chat_template", None):
+            raise RuntimeError(f"candidate tokenizer has no chat template: {self.model_id}")
+        if tokenizer.pad_token_id is None:
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            str(self.snapshot_path),
+            local_files_only=True,
+            trust_remote_code=False,
+            torch_dtype=torch.float16,
+            device_map="balanced",
+            max_memory={0: f"{V4_MAX_MEMORY_GIB_PER_GPU}GiB", "cpu": "0GiB"},
+        )
+
+        device_map = getattr(model, "hf_device_map", None)
+        if not isinstance(device_map, dict) or not device_map:
+            raise RuntimeError("V4 FP16 model load produced no hf_device_map")
+
+        forbidden_devices: set[str] = set()
+        cuda_indices: set[int] = set()
+        for placement in device_map.values():
+            if isinstance(placement, int):
+                cuda_indices.add(placement)
+                continue
+            value = str(placement)
+            if value == "cuda":
+                cuda_indices.add(0)
+            elif value.startswith("cuda:"):
+                cuda_indices.add(int(value.split(":", 1)[1]))
+            elif value in {"cpu", "disk"}:
+                forbidden_devices.add(value)
+
+        if forbidden_devices:
+            raise RuntimeError(
+                f"V4 FP16 load attempted forbidden offload: {sorted(forbidden_devices)}"
+            )
+        if cuda_indices != {0}:
+            raise RuntimeError(
+                "V4 single-GPU FP16 load must remain entirely on cuda:0; "
+                f"observed CUDA placements {sorted(cuda_indices)}"
+            )
+
+        embedding_device = model.get_input_embeddings().weight.device
+        if embedding_device.type != "cuda" or embedding_device.index != 0:
+            raise RuntimeError(
+                "V4 model input embeddings must remain on cuda:0 because the frozen generation "
+                f"backend places inputs there; got {embedding_device}"
+            )
+
+        model.eval()
+        self._tokenizer = tokenizer
+        self._model = model
+
+
+proof.PinnedChatTemplateBackend = AdaptiveV4ChatTemplateBackend
+
 proof.CANDIDATES = (
     {
         "model_id": "ibm-granite/granite-3.3-8b-instruct",
@@ -48,7 +140,7 @@ proof.CANDIDATES = (
         "selection_reason": (
             "V3 failures were strict exact-format/termination failures rather than broad capability failures; "
             "Granite 3.3 is selected for instruction-following and structured-output behavior while fitting "
-            "comfortably inside the unchanged dual-3090 FP16 topology"
+            "comfortably inside the approved FP16 no-offload execution envelope"
         ),
     },
     {
@@ -62,7 +154,7 @@ proof.CANDIDATES = (
         "selection_reason": (
             "OLMo 2 13B Instruct is post-trained with Tulu-3/DPO/RLVR and selected as an independent model "
             "family aimed at strong instruction following, including IFEval-like behavior, while remaining "
-            "within the unchanged dual-3090 FP16 execution envelope"
+            "within the approved FP16 no-offload execution envelope"
         ),
     },
 )
