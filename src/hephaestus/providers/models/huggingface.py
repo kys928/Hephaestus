@@ -7,6 +7,7 @@ must expose an immutable commit SHA.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -48,7 +49,7 @@ class HuggingFaceModelProvider:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"Hugging Face model metadata unavailable for {model_id}: {type(exc).__name__}") from exc
+            raise RuntimeError(f"Hugging Face model metadata unavailable for {model_id}: {type(exc).__name__}: {exc}") from exc
         if not isinstance(payload, dict):
             raise RuntimeError("Hugging Face model response is not an object")
         revision = str(payload.get("sha") or "").strip()
@@ -90,9 +91,10 @@ class HuggingFaceModelProvider:
             capabilities=sorted(set([item for item in (pipeline, "causal_lm") if item])),
             runtime_requirements={"supported_backends": ["transformers_causal_lm"]},
             compatibility={
-                "immutable_revision": len(revision) in {40, 64},
-                "remote_code_required": False,
-                "smoke_test": True,
+                "immutable_revision": bool(re.fullmatch(r"[0-9a-f]{40}", revision)),
+                # Metadata discovery has not loaded code or executed a model.
+                "remote_code_required": None,
+                "smoke_test": None,
             },
             artifact_ref=f"hf://models/{model_id}@{revision}" if revision else None,
             evidence_refs=[f"{self.endpoint.rstrip('/')}/api/models/{model_id}/revision/{revision or requested_revision}"],

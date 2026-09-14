@@ -1,0 +1,11 @@
+# Model selection V5 integration
+
+V4 run 34772003742 produced 54 samples per candidate across three repeats. The full cycle and six generation reports were retrieved from the RunPod Network Volume by runs 34773242936 and 34875964225. Granite scored 0.7944444444 and failed exact punctuation, brief length and continuation termination. OLMo scored 0.85 and failed continuation termination and numeric JSON typing. Both had zero repeat spread; neither was certified. V4 is not being rerun.
+
+The curated candidate funnel is in `configs/models/promotion_wave_v5.json`. Research on 2026-09-14 selected Qwen3-4B-Instruct-2507 and Ministral-3-14B-Instruct-2512-BF16. Their official cards emphasize instruction following and tool/JSON behavior. These claims motivate evaluation, not certification. Qwen3.5 defaults to thinking and is deferred for this fixed 96-token, user-only wave. Liquid LFM2.5 declares a license outside the current allowlist. Olmo 3 7B Instruct remains a documented reserve.
+
+Admission uses the existing ModelCandidate, ModelSearchRequest and ModelSelectionDecision contracts. The new provider helper verifies an immutable Hub SHA, license, architecture, unquantized source dtype, parameter/memory estimates, native configuration/tokenizer/loader compatibility and metadata hashes before GPU allocation. It records runtime execution as pending. The Hugging Face metadata provider no longer claims an unperformed smoke test or unverified remote-code compatibility.
+
+The CPU preflight checks prior V4 evidence hashes and saves admission records plus exact runtime package versions on the governed Network Volume, with byte-for-byte S3 readback. Generated evidence remains outside git. GPU execution must use those exact packages and pass native runtime preflight, the original frozen semantic protocol, three repeats, fixed independent review, Judge, certification and promotion. Neither candidate is currently certified.
+
+Frozen: semantic_behavior_v1 hash ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad, original baseline, greedy decoding, top_p 1, 96 tokens, seeds 11/29/47, prompts, evaluator, reviewer revision, Judge and all existing gates. Candidate identity is the scientific variable. Loader compatibility, exact dependency locking, metadata-only preflight and evidence inspection are documented infrastructure changes.
