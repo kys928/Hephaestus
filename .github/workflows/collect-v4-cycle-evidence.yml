@@ -107,6 +107,29 @@ jobs:
           if not cycle1 or not cycle2 or len(reports) != 6:
               raise RuntimeError('expected both cycles and all six candidate generation reports')
           PY
+      - name: Inspect persisted V4 scientific records
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('v4_remote_cycles')
+          for path in sorted(root.rglob('*.json')):
+              relative = path.relative_to(root).as_posix()
+              if not ('/cycles/' in relative or relative.endswith('/generation_report.json')):
+                  continue
+              raw = path.read_bytes()
+              if len(raw) > 2_000_000:
+                  raise RuntimeError(f'oversized scientific record: {relative}')
+              payload = json.loads(raw)
+              print('V4_EVIDENCE_JSON ' + json.dumps({
+                  'path': relative,
+                  'bytes': len(raw),
+                  'sha256': hashlib.sha256(raw).hexdigest(),
+                  'record': payload,
+              }, sort_keys=True))
+          PY
       - name: Upload complete V4 cycle evidence
         uses: actions/upload-artifact@v4
         with:
