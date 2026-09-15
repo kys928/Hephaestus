@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import launch_first_bounded_scientific_training as base
+from runpod_capacity_selection import VERIFIED_GPU_IDS, create_with_capacity_retries
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 
@@ -18,14 +19,6 @@ DATACENTER_ID = "EU-CZ-1"
 IMAGE = "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
 MAX_SECONDS = 3600
 POLL_SECONDS = 5
-GPU_TYPE_IDS = [
-    "NVIDIA GeForce RTX 3070",
-    "NVIDIA GeForce RTX 3080",
-    "NVIDIA GeForce RTX 3090",
-    "NVIDIA L4",
-    "NVIDIA GeForce RTX 4090",
-    "NVIDIA A40",
-]
 PROTECTED_RUN_ID = "adaptation-elasticity-v1-34961824753"
 
 
@@ -66,30 +59,34 @@ def main() -> int:
         "protected_run_id": PROTECTED_RUN_ID,
         "volume_id": VOLUME_ID,
         "datacenter_id": DATACENTER_ID,
-        "gpu_type_ids": GPU_TYPE_IDS,
+        "gpu_type_ids": list(VERIFIED_GPU_IDS),
     }
     try:
-        pod = execution._create_pod({
-            "name": f"hephaestus-{cleanup_run_id}"[:180],
-            "computeType": "GPU",
-            "gpuCount": 1,
-            "gpuTypeIds": GPU_TYPE_IDS,
-            "gpuTypePriority": "availability",
-            "cloudType": "SECURE",
-            "dataCenterIds": [DATACENTER_ID],
-            "dataCenterPriority": "custom",
-            "imageName": IMAGE,
-            "containerDiskInGb": 20,
-            "networkVolumeId": VOLUME_ID,
-            "volumeMountPath": "/workspace",
-            "dockerStartCmd": ["bash", "-lc", pod_shell()],
-            "interruptible": False,
-            "env": {
-                "HEPHAESTUS_CLEANUP_RUN_ID": cleanup_run_id,
-                "HEPHAESTUS_PROTECTED_RUN_ID": PROTECTED_RUN_ID,
-                "HEPHAESTUS_REPO_SHA": repo_sha,
-            },
-        })
+        def create_once(gpu_ids: list[str]) -> dict[str, Any]:
+            return execution._create_pod({
+                "name": f"hephaestus-{cleanup_run_id}"[:180],
+                "computeType": "GPU",
+                "gpuCount": 1,
+                "gpuTypeIds": gpu_ids,
+                "gpuTypePriority": "availability",
+                "cloudType": "SECURE",
+                "dataCenterIds": [DATACENTER_ID],
+                "dataCenterPriority": "custom",
+                "imageName": IMAGE,
+                "containerDiskInGb": 20,
+                "networkVolumeId": VOLUME_ID,
+                "volumeMountPath": "/workspace",
+                "dockerStartCmd": ["bash", "-lc", pod_shell()],
+                "interruptible": False,
+                "env": {
+                    "HEPHAESTUS_CLEANUP_RUN_ID": cleanup_run_id,
+                    "HEPHAESTUS_PROTECTED_RUN_ID": PROTECTED_RUN_ID,
+                    "HEPHAESTUS_REPO_SHA": repo_sha,
+                },
+            })
+
+        pod, capacity = create_with_capacity_retries(create_once, attempts=12, delay_seconds=10.0)
+        launcher["capacity_selection"] = capacity
         pod_id = str(pod["id"])
         launcher["pod_id"] = pod_id
         launcher["gpu"] = pod.get("gpu")
