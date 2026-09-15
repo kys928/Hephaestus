@@ -1,7 +1,7 @@
 name: Hephaestus adaptation elasticity V1
 
-# Resume launch marker after validated preflight run 35002981299; scientific protocol,
-# dataset, model identities, and training dose remain frozen.
+# Runtime-hardened resume launch after validated preflight run 35004954818;
+# scientific protocol, dataset, model identities, and training dose remain frozen.
 on:
   push:
     branches: [feature/production-loop-v1]
