@@ -1,0 +1,81 @@
+{
+  "protocol_id": "hephaestus_adaptation_elasticity_v1",
+  "protocol_version": 1,
+  "purpose": "Measure how efficiently each admitted model improves on each Hephaestus cognitive role under the same low-dose LoRA adaptation budget.",
+  "scientific_variable": "base_model_identity_under_fixed_role_lora_dose",
+  "baseline": {
+    "run_id": "cognitive-topology-v1-34953477882",
+    "protocol_id": "hephaestus_cognitive_topology_v1",
+    "protocol_sha256": "007fdf739d1ebbf0e92a5fd41d45aa1b1543586431766de453a0854dec7119d0",
+    "repo_sha": "36b462dc33f2c43613db4d7479557aaf2490c86f"
+  },
+  "roles": ["diagnosis", "planner", "evaluator", "judge", "controller"],
+  "dataset": {
+    "generator_id": "hephaestus_role_repair_synthetic_v1",
+    "examples_per_role": 48,
+    "source": "deterministic_synthetic_governance_cases",
+    "approval_source": "user_directive_2026-09-15_adaptation_elasticity",
+    "contamination_reference": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "max_normalized_token_jaccard": 0.42,
+    "max_sequence_similarity": 0.62,
+    "forbid_eval_case_ids_and_evidence_refs": true
+  },
+  "training": {
+    "method": "lora",
+    "peft_version": "0.20.0",
+    "precision": "bfloat16",
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "bias": "none",
+    "target_module_suffixes": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    "learning_rate": 0.00005,
+    "weight_decay": 0.0,
+    "epochs": 2,
+    "micro_batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "max_seq_length": 1024,
+    "warmup_ratio": 0.1,
+    "max_grad_norm": 1.0,
+    "optimizer": "adamw_torch",
+    "shuffle_seed": 314159,
+    "model_seed": 271828,
+    "gradient_checkpointing": true,
+    "train_only_assistant_tokens": true,
+    "dose_checkpoints": [1, 2]
+  },
+  "evaluation": {
+    "frozen_protocol_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "roles_are_evaluated_only_with_matching_role_adapter": true,
+    "reuse_frozen_prompts_and_scoring_without_edits": true,
+    "repetitions": 3,
+    "seeds": [11, 29, 47],
+    "max_new_tokens": 256,
+    "temperature": 0.0,
+    "do_sample": false
+  },
+  "metrics": [
+    "baseline_quality_100",
+    "adapted_quality_100",
+    "delta_quality_points",
+    "delta_per_gpu_hour",
+    "delta_per_million_trainable_parameters",
+    "delta_per_million_training_tokens",
+    "schema_compliance_delta",
+    "evidence_grounding_delta",
+    "confidence_calibration_delta",
+    "training_seconds",
+    "training_tokens",
+    "trainable_parameters",
+    "adapter_bytes",
+    "peak_vram_bytes"
+  ],
+  "governance": {
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false,
+    "dataset_must_pass_contamination_gate": true,
+    "all_model_revisions_must_match_topology_v1": true,
+    "training_is_experimentally_approved": true
+  }
+}
