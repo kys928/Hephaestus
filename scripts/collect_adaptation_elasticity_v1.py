@@ -25,9 +25,11 @@ def main() -> int:
     s3 = launcher.base.s3_client()
     execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
 
-    status, pods = execution._request("GET", "pods")
-    if status != 200 or not isinstance(pods, list):
-        raise RuntimeError(f"cannot verify RunPod inventory: HTTP {status}")
+    inventory_observations: list[dict[str, object]] = []
+    pods = elasticity_launcher.list_pods_with_retries(
+        execution,
+        observations=inventory_observations,
+    )
     inventory = [{"id": pod.get("id"), "name": pod.get("name"), "desiredStatus": pod.get("desiredStatus"), "networkVolumeId": pod.get("networkVolumeId"), "gpu": pod.get("gpu", {}).get("displayName") if isinstance(pod.get("gpu"), dict) else None} for pod in pods]
     print("ELASTICITY_POD_INVENTORY_JSON " + json.dumps(inventory, sort_keys=True))
     if args.inventory_only:
@@ -37,12 +39,18 @@ def main() -> int:
     cleanup = []
     for pod in inventory:
         if str(pod.get("name", "")).startswith(pod_prefix):
-            cleanup.append({"pod_id": pod["id"], **launcher.base.delete_pod(execution, pod["id"])})
-    status, remaining = execution._request("GET", "pods")
-    if status != 200 or not isinstance(remaining, list):
-        raise RuntimeError("cannot verify final RunPod inventory")
+            cleanup.append(
+                {
+                    "pod_id": pod["id"],
+                    **elasticity_launcher.delete_pod_with_retries(execution, pod["id"]),
+                }
+            )
+    remaining = elasticity_launcher.list_pods_with_retries(
+        execution,
+        observations=inventory_observations,
+    )
     dangling = [pod.get("id") for pod in remaining if str(pod.get("name", "")).startswith(pod_prefix)]
-    cleanup_record = {"run_id": run_id, "cleanup": cleanup, "dangling_elasticity_pods": dangling, "remaining_pods": [{"id": pod.get("id"), "name": pod.get("name"), "desiredStatus": pod.get("desiredStatus")} for pod in remaining]}
+    cleanup_record = {"run_id": run_id, "cleanup": cleanup, "dangling_elasticity_pods": dangling, "remaining_pods": [{"id": pod.get("id"), "name": pod.get("name"), "desiredStatus": pod.get("desiredStatus")} for pod in remaining], "inventory_observations": inventory_observations}
     (out / "cleanup.json").write_text(json.dumps(cleanup_record, indent=2), encoding="utf-8")
     print("ELASTICITY_POD_CLEANUP_JSON " + json.dumps(cleanup_record, sort_keys=True))
 
@@ -54,12 +62,24 @@ def main() -> int:
     manifest = []
     terminal_results: list[dict[str, object]] = []
     for prefix in prefixes:
-        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=launcher.VOLUME_ID, Prefix=prefix):
+        pages = elasticity_launcher.retry_transient(
+            lambda selected_prefix=prefix: list(
+                s3.get_paginator("list_objects_v2").paginate(
+                    Bucket=launcher.VOLUME_ID,
+                    Prefix=selected_prefix,
+                )
+            ),
+            label=f"collect_list:{prefix}",
+        )
+        for page in pages:
             for item in page.get("Contents", []):
                 key, size = item["Key"], int(item["Size"])
                 if size > 32 * 1024 * 1024 or not key.endswith((".json", ".jsonl", ".txt", ".log")):
                     continue
-                raw = s3.get_object(Bucket=launcher.VOLUME_ID, Key=key)["Body"].read()
+                raw = elasticity_launcher.retry_transient(
+                    lambda selected_key=key: launcher.base.read_key(s3, selected_key),
+                    label=f"collect_read:{key}",
+                )
                 target = out / key
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(raw)
@@ -88,8 +108,15 @@ def main() -> int:
     raw = (json.dumps(record, indent=2, sort_keys=True) + "\n").encode()
     (out / "collection_manifest.json").write_bytes(raw)
     key = f"{launcher.SCIENTIFIC_PREFIX}/adaptation_elasticity/{run_id}/collections/github-run-{os.environ['GITHUB_RUN_ID']}/collection_manifest.json"
-    s3.put_object(Bucket=launcher.VOLUME_ID, Key=key, Body=raw)
-    if s3.get_object(Bucket=launcher.VOLUME_ID, Key=key)["Body"].read() != raw:
+    elasticity_launcher.retry_transient(
+        lambda: s3.put_object(Bucket=launcher.VOLUME_ID, Key=key, Body=raw),
+        label="write_collection_manifest",
+    )
+    readback = elasticity_launcher.retry_transient(
+        lambda: launcher.base.read_key(s3, key),
+        label="readback_collection_manifest",
+    )
+    if readback != raw:
         raise RuntimeError("elasticity collection manifest S3 readback mismatch")
     print("ELASTICITY_COLLECTION_MANIFEST_JSON " + json.dumps(record, sort_keys=True))
     if dangling:

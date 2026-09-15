@@ -350,6 +350,184 @@ def test_workflow_propagates_launcher_failure_through_tee(tmp_path: Path) -> Non
     assert completed.returncode == 17
 
 
+def test_terminal_poll_retries_transient_s3_credential_service_failure(monkeypatch) -> None:
+    if importlib.util.find_spec("boto3") is None:
+        return
+    launcher = _load_script(
+        "elasticity_launcher_transient_s3",
+        "scripts/launch_adaptation_elasticity_v1.py",
+    )
+    calls = 0
+
+    def maybe_read_key(_client, _key):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError(
+                "AccessDenied: failed to fetch user keys: unexpected status 503"
+            )
+        return json.dumps({"status": "completed"}).encode()
+
+    monkeypatch.setattr(launcher.launcher.base, "maybe_read_key", maybe_read_key)
+    result, observations = launcher.wait_for_elasticity_result(
+        object(),
+        object(),
+        proof_run_id="run-1",
+        attempt=2,
+        pod_id="pod-1",
+        max_seconds=1,
+        poll_seconds=0,
+        sleep_fn=lambda _seconds: None,
+    )
+    assert result == {"status": "completed"}
+    assert calls == 2
+    assert observations[0]["status"] == "retryable_error"
+
+
+def test_terminal_poll_does_not_mask_nontransient_s3_auth_failure(monkeypatch) -> None:
+    if importlib.util.find_spec("boto3") is None:
+        return
+    launcher = _load_script(
+        "elasticity_launcher_nontransient_s3",
+        "scripts/launch_adaptation_elasticity_v1.py",
+    )
+
+    def maybe_read_key(_client, _key):
+        raise RuntimeError("AccessDenied: invalid access key")
+
+    monkeypatch.setattr(launcher.launcher.base, "maybe_read_key", maybe_read_key)
+    with pytest.raises(RuntimeError, match="invalid access key"):
+        launcher.wait_for_elasticity_result(
+            object(),
+            object(),
+            proof_run_id="run-1",
+            attempt=2,
+            pod_id="pod-1",
+            max_seconds=1,
+            poll_seconds=0,
+            sleep_fn=lambda _seconds: None,
+        )
+
+
+def test_pod_teardown_retries_transient_delete_and_verifies_absence() -> None:
+    if importlib.util.find_spec("boto3") is None:
+        return
+    launcher = _load_script(
+        "elasticity_launcher_teardown_retry",
+        "scripts/launch_adaptation_elasticity_v1.py",
+    )
+
+    class Execution:
+        def __init__(self) -> None:
+            self.delete_calls = 0
+            self.inventory_calls = 0
+
+        def delete_pod(self, pod_id: str) -> None:
+            assert pod_id == "pod-1"
+            self.delete_calls += 1
+            if self.delete_calls == 1:
+                raise RuntimeError(
+                    "RunPod API request failed with HTTP 500: "
+                    '{"error":"delete pod: unexpected end of JSON input"}'
+                )
+
+        def _request(self, method: str, path: str):
+            assert (method, path) == ("GET", "pods")
+            self.inventory_calls += 1
+            if self.inventory_calls == 1:
+                return 200, [
+                    {"id": "pod-1", "name": "hephaestus-run-1", "desiredStatus": "RUNNING"}
+                ]
+            return 200, []
+
+    execution = Execution()
+    record = launcher.delete_pod_with_retries(
+        execution,
+        "pod-1",
+        attempts=3,
+        delay_seconds=0,
+        sleep_fn=lambda _seconds: None,
+    )
+    assert record["deleted"] is True
+    assert record["verified_absent"] is True
+    assert record["attempts"] == 2
+    assert execution.delete_calls == 2
+
+
+def test_prelaunch_cleanup_deletes_only_matching_experiment_pods(monkeypatch) -> None:
+    if importlib.util.find_spec("boto3") is None:
+        return
+    launcher = _load_script(
+        "elasticity_launcher_scoped_cleanup",
+        "scripts/launch_adaptation_elasticity_v1.py",
+    )
+    inventories = [
+        [
+            {"id": "target", "name": "hephaestus-run-1", "desiredStatus": "RUNNING"},
+            {"id": "other", "name": "unrelated-pod", "desiredStatus": "RUNNING"},
+        ],
+        [{"id": "other", "name": "unrelated-pod", "desiredStatus": "RUNNING"}],
+    ]
+    deleted: list[str] = []
+
+    monkeypatch.setattr(
+        launcher,
+        "list_pods_with_retries",
+        lambda _execution, **_kwargs: inventories.pop(0),
+    )
+
+    def delete(_execution, pod_id: str):
+        deleted.append(pod_id)
+        return {"deleted": True, "verified_absent": True}
+
+    monkeypatch.setattr(launcher, "delete_pod_with_retries", delete)
+    record = launcher.cleanup_experiment_pods(object(), "hephaestus-run-1")
+    assert deleted == ["target"]
+    assert record["matched_pods"] == ["target"]
+    assert record["dangling_pods"] == []
+
+
+def test_existing_completed_attempt_is_reused_only_after_full_verification(monkeypatch) -> None:
+    if importlib.util.find_spec("boto3") is None:
+        return
+    launcher = _load_script(
+        "elasticity_launcher_existing_terminal",
+        "scripts/launch_adaptation_elasticity_v1.py",
+    )
+    reads: list[str] = []
+
+    def maybe_read_key(_client, key: str):
+        reads.append(key)
+        if key.endswith("adaptation_elasticity/run-1/elasticity_result.json"):
+            return None
+        if key.endswith("attempt-2/driver_result.json"):
+            return json.dumps({"status": "completed", "marker": "attempt-2"}).encode()
+        return json.dumps({"status": "failed"}).encode()
+
+    def verify(payload: dict, _protocol: dict):
+        if payload.get("status") != "completed":
+            raise RuntimeError("not complete")
+        return {"role_rankings": {"judge": []}}
+
+    monkeypatch.setattr(launcher.launcher.base, "maybe_read_key", maybe_read_key)
+    monkeypatch.setattr(launcher, "_verify", verify)
+    observations: list[dict] = []
+    found = launcher._find_completed_result(
+        object(),
+        proof_run_id="run-1",
+        next_attempt=3,
+        protocol={},
+        observations=observations,
+    )
+    assert found is not None
+    payload, verification, key = found
+    assert payload["marker"] == "attempt-2"
+    assert verification == {"role_rankings": {"judge": []}}
+    assert key.endswith("attempt-2/driver_result.json")
+    assert len(reads) == 2
+    assert observations[-1]["status"] == "verified"
+
+
 def test_complete_role_is_detected_and_skipped(tmp_path: Path) -> None:
     resume_module, _, selection, *_ = _inspect_fixture(tmp_path, (1, 2))
     assert selection["state"] == "complete"
