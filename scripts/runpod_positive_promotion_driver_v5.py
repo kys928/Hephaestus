@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+# The generic Hephaestus CLI loads driver files with importlib from their path.
+# That execution mode does not automatically add the sibling scripts directory
+# to sys.path, while the historical launcher adapters intentionally import one
+# another by module name. Establish that local script boundary explicitly before
+# importing V4/V5 siblings so CLI loading behaves like direct script execution.
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 import runpod_positive_promotion_driver_v4 as routing
 import launch_positive_promotion_proof_v5 as wave
 
