@@ -19,16 +19,11 @@ IMAGE = "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
 MAX_SECONDS = 3600
 POLL_SECONDS = 5
 GPU_TYPE_IDS = [
-    "Tesla T4",
-    "NVIDIA RTX A2000",
-    "NVIDIA RTX 2000 Ada Generation",
-    "NVIDIA RTX A4000",
     "NVIDIA GeForce RTX 3070",
     "NVIDIA GeForce RTX 3080",
     "NVIDIA GeForce RTX 3090",
     "NVIDIA L4",
     "NVIDIA GeForce RTX 4090",
-    "NVIDIA RTX A6000",
     "NVIDIA A40",
 ]
 PROTECTED_RUN_ID = "adaptation-elasticity-v1-34961824753"
