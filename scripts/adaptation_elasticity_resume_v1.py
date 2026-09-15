@@ -132,6 +132,45 @@ def _require_equal(errors: list[str], label: str, observed: object, expected: ob
         errors.append(f"{label} mismatch: observed={observed!r} expected={expected!r}")
 
 
+def _validate_configured_targets(
+    configured_targets: object,
+    expected_suffixes: list[str],
+    errors: list[str],
+) -> None:
+    """Validate PEFT's lossless path compression against the suffix allowlist.
+
+    PEFT may serialize resolved targets as architecture-qualified patterns such
+    as ``self_attn.q_proj`` even when the governed selector is ``q_proj``.  The
+    terminal module name is the frozen scientific variable; the manifest keeps
+    the exact resolved-module count and hash.  Visual/multimodal paths remain
+    forbidden exactly as they are in the training-time selector.
+    """
+
+    if not isinstance(configured_targets, list):
+        errors.append("adapter_config target_modules must be a list")
+        return
+    blocked = ("vision", "visual", "image", "pixel", "projector", "multi_modal", "multimodal")
+    paths: list[str] = []
+    suffixes: list[str] = []
+    for index, target in enumerate(configured_targets):
+        if not isinstance(target, str) or not target.strip():
+            errors.append(f"adapter_config target_modules[{index}] must be a non-empty string")
+            continue
+        path = target.strip()
+        paths.append(path)
+        if any(token in path.casefold() for token in blocked):
+            errors.append(f"adapter_config target module enters a forbidden visual path: {path!r}")
+        suffixes.append(path.rsplit(".", 1)[-1])
+    if len(paths) != len(set(paths)):
+        errors.append("adapter_config target_modules contains duplicate paths")
+    _require_equal(
+        errors,
+        "adapter_config target module suffixes",
+        sorted(set(suffixes)),
+        sorted(set(expected_suffixes)),
+    )
+
+
 def _validate_adapter(
     adapter_dir: Path,
     manifest: dict[str, Any],
@@ -205,16 +244,11 @@ def _validate_adapter(
     }
     for key, expected in config_expectations.items():
         _require_equal(errors, f"adapter_config {key}", adapter_config.get(key), expected)
-    configured_targets = adapter_config.get("target_modules")
-    if not isinstance(configured_targets, list):
-        errors.append("adapter_config target_modules must be a list")
-    else:
-        _require_equal(
-            errors,
-            "adapter_config target_modules",
-            sorted(configured_targets),
-            sorted(train["target_module_suffixes"]),
-        )
+    _validate_configured_targets(
+        adapter_config.get("target_modules"),
+        list(train["target_module_suffixes"]),
+        errors,
+    )
     base_path = str(adapter_config.get("base_model_name_or_path") or "")
     if revision not in base_path:
         errors.append("adapter_config does not identify the immutable base revision")

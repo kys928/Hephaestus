@@ -590,6 +590,42 @@ def test_protocol_mismatch_rejects_persisted_evidence(tmp_path: Path) -> None:
     )
 
 
+def test_peft_qualified_language_targets_normalize_to_frozen_suffixes(tmp_path: Path) -> None:
+    resume_module = _load_script(
+        f"elasticity_resume_qualified_targets_{tmp_path.name}",
+        "scripts/adaptation_elasticity_resume_v1.py",
+    )
+    errors: list[str] = []
+    resume_module._validate_configured_targets(
+        [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+            "mlp.gate_proj",
+            "mlp.up_proj",
+            "mlp.down_proj",
+        ],
+        ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        errors,
+    )
+    assert errors == []
+
+
+def test_peft_qualified_visual_target_is_still_rejected(tmp_path: Path) -> None:
+    resume_module = _load_script(
+        f"elasticity_resume_visual_targets_{tmp_path.name}",
+        "scripts/adaptation_elasticity_resume_v1.py",
+    )
+    errors: list[str] = []
+    resume_module._validate_configured_targets(
+        ["vision_tower.self_attn.q_proj", "language_model.self_attn.k_proj"],
+        ["q_proj", "k_proj"],
+        errors,
+    )
+    assert any("forbidden visual path" in error for error in errors)
+
+
 def test_qwen_judge_partial_recovery_uses_separate_reconstruction(tmp_path: Path) -> None:
     resume_module, location, selection, *_ = _inspect_fixture(tmp_path, (1,))
     action = resume_module.role_action(selection)
