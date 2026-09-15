@@ -21,6 +21,10 @@ from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 
 SPEC_PATH = Path(__file__).resolve().parents[1] / "configs/eval_packs/hephaestus_cognitive_topology_v1.json"
 CONTAINER_DISK_GB = 400
+# The topology cohort performs 360 measured decisions across four model loads.
+# This is a runtime envelope only; it does not alter any scientific variable.
+COHORT_MAX_SECONDS = 7200
+launcher.MAX_SECONDS = COHORT_MAX_SECONDS
 
 
 def _now() -> str:
@@ -91,6 +95,7 @@ def main() -> int:
         "protocol_id": spec["protocol_id"], "candidate_order": [row["model_id"] for row in spec["candidates"]],
         "container_image": routing.V4_IMAGE, "container_disk_gb": CONTAINER_DISK_GB,
         "gpu_type_ids": list(routing.V4_GPU_IDS), "gpu_count": 1,
+        "result_wait_timeout_seconds": COHORT_MAX_SECONDS,
         "scientific_variables_changed_on_retry": False, "non_mutating": True
     }
     try:
