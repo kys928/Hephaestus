@@ -2,6 +2,7 @@
 """Launch the governed adaptation-elasticity V1 experiment on one >=80GB RunPod GPU."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -20,9 +21,15 @@ from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 
 PROTOCOL_PATH = Path(__file__).resolve().parents[1] / "configs/experiments/hephaestus_adaptation_elasticity_v1.json"
+TOPOLOGY_PATH = Path(__file__).resolve().parents[1] / "configs/eval_packs/hephaestus_cognitive_topology_v1.json"
 CONTAINER_DISK_GB = 400
-ELASTICITY_MAX_SECONDS = 14400
+# The first uninterrupted attempt completed 27/40 dose cells in four hours.
+# Five hours and fifteen minutes is a bounded recovery window with room for the
+# remaining 13 cells, immutable model downloads, evidence re-hashing, and
+# teardown/collection inside GitHub-hosted runners' six-hour job ceiling.
+ELASTICITY_MAX_SECONDS = 18900
 launcher.MAX_SECONDS = ELASTICITY_MAX_SECONDS
+DEFAULT_RESUME_RUN_ID = "adaptation-elasticity-v1-34961824753"
 GPU_IDS_80GB_PLUS = [
     "NVIDIA RTX PRO 6000 Blackwell Server Edition",
     "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
@@ -46,6 +53,23 @@ def _required(name: str) -> str:
     return value
 
 
+def _next_attempt(client: Any, proof_run_id: str) -> int:
+    prefix = f"{launcher.SCIENTIFIC_PREFIX}/executions/{proof_run_id}/attempt-"
+    attempts: set[int] = set()
+    for page in client.get_paginator("list_objects_v2").paginate(
+        Bucket=launcher.VOLUME_ID,
+        Prefix=prefix,
+    ):
+        for item in page.get("Contents", []):
+            suffix = str(item.get("Key", ""))[len(prefix) :]
+            head = suffix.split("/", 1)[0]
+            try:
+                attempts.add(int(head))
+            except ValueError:
+                continue
+    return max(attempts, default=0) + 1
+
+
 def pod_shell_elasticity() -> str:
     shell = v5.pod_shell_v5()
     shell = shell.replace(
@@ -57,13 +81,32 @@ def pod_shell_elasticity() -> str:
 
 
 def _verify(result: dict[str, Any], protocol: dict[str, Any]) -> dict[str, Any]:
+    from build_adaptation_elasticity_dataset_v1 import build_dataset
+
     if result.get("status") != "completed" or result.get("disposition") != "scientific_elasticity_complete":
         raise RuntimeError(f"remote elasticity experiment did not complete: {result.get('status')}: {result.get('disposition')}")
     if result.get("protocol_id") != protocol["protocol_id"]:
         raise RuntimeError("remote elasticity protocol id mismatch")
+    protocol_sha = hashlib.sha256(PROTOCOL_PATH.read_bytes()).hexdigest()
+    topology_raw = TOPOLOGY_PATH.read_bytes()
+    topology_sha = hashlib.sha256(topology_raw).hexdigest()
+    topology = json.loads(topology_raw)
+    if result.get("protocol_sha256") != protocol_sha or result.get("topology_protocol_sha256") != topology_sha:
+        raise RuntimeError("remote elasticity protocol hashes mismatch")
+    dataset_raw = "".join(
+        json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n"
+        for row in build_dataset()
+    ).encode()
+    dataset_sha = hashlib.sha256(dataset_raw).hexdigest()
+    if result.get("dataset_sha256") != dataset_sha or result.get("contamination_status") != "passed":
+        raise RuntimeError("remote elasticity dataset/contamination identity mismatch")
     models = result.get("model_results")
     if not isinstance(models, list) or len(models) != 4:
         raise RuntimeError("remote elasticity result lacks all four models")
+    expected_models = [(row["model_id"], row["revision"]) for row in topology["candidates"]]
+    observed_models = [(row.get("model_id"), row.get("revision")) for row in models]
+    if observed_models != expected_models:
+        raise RuntimeError("remote elasticity candidate identities or order mismatch")
     expected_roles = list(protocol["roles"])
     for model in models:
         if model.get("status") != "complete" or list(model.get("roles", {}).keys()) != expected_roles:
@@ -80,6 +123,8 @@ def _verify(result: dict[str, Any], protocol: dict[str, Any]) -> dict[str, Any]:
         "protocol_id": result["protocol_id"],
         "protocol_sha256": result["protocol_sha256"],
         "topology_protocol_sha256": result["topology_protocol_sha256"],
+        "dataset_sha256": result["dataset_sha256"],
+        "contamination_status": result["contamination_status"],
         "baseline_run_id": result["baseline_run_id"],
         "model_count": len(models),
         "role_count": len(expected_roles),
@@ -94,18 +139,21 @@ def main() -> int:
     _required("RUNPOD_API_KEY")
     repo_sha = _required("GITHUB_SHA")
     github_run_id = _required("GITHUB_RUN_ID")
-    proof_run_id = f"adaptation-elasticity-v1-{github_run_id}"
-    attempt = 1
+    proof_run_id = os.environ.get("HEPHAESTUS_ELASTICITY_RUN_ID", "").strip() or DEFAULT_RESUME_RUN_ID
     protocol = json.loads(PROTOCOL_PATH.read_text(encoding="utf-8"))
     execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
     client = launcher.base.s3_client()
+    attempt = _next_attempt(client, proof_run_id)
     pod_id: str | None = None
     record: dict[str, Any] = {
         "launcher_version": "adaptation-elasticity-runpod.v1",
         "started_at": _now(),
         "proof_run_id": proof_run_id,
+        "github_workflow_run_id": github_run_id,
         "repo_sha": repo_sha,
         "attempt": attempt,
+        "resume_mode": True,
+        "resume_source_run_id": proof_run_id,
         "protocol_id": protocol["protocol_id"],
         "container_image": routing.V4_IMAGE,
         "container_disk_gb": CONTAINER_DISK_GB,

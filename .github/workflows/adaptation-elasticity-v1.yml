@@ -10,6 +10,7 @@ on:
       - scripts/build_adaptation_elasticity_dataset_v1.py
       - scripts/preflight_adaptation_elasticity_v1.py
       - scripts/run_adaptation_elasticity_v1.py
+      - scripts/adaptation_elasticity_resume_v1.py
       - scripts/launch_adaptation_elasticity_v1.py
       - scripts/collect_adaptation_elasticity_v1.py
       - tests/test_adaptation_elasticity_v1.py
@@ -49,7 +50,7 @@ jobs:
       - name: Test frozen elasticity protocol and contamination boundary
         run: python -m pytest -q tests/test_adaptation_elasticity_v1.py tests/test_model_admission.py tests/test_autonomy_boundary_policy.py
       - name: Compile elasticity adapters
-        run: python -m compileall -q scripts/build_adaptation_elasticity_dataset_v1.py scripts/preflight_adaptation_elasticity_v1.py scripts/run_adaptation_elasticity_v1.py scripts/launch_adaptation_elasticity_v1.py scripts/collect_adaptation_elasticity_v1.py
+        run: python -m compileall -q scripts/build_adaptation_elasticity_dataset_v1.py scripts/preflight_adaptation_elasticity_v1.py scripts/adaptation_elasticity_resume_v1.py scripts/run_adaptation_elasticity_v1.py scripts/launch_adaptation_elasticity_v1.py scripts/collect_adaptation_elasticity_v1.py
       - name: Admit dataset and all four immutable model identities
         run: python scripts/preflight_adaptation_elasticity_v1.py
       - name: Preserve elasticity admission evidence
@@ -70,7 +71,7 @@ jobs:
     needs: preflight
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-adaptation-elasticity-v1]')
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 360
     env:
       PYTHONPATH: src
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
@@ -80,6 +81,7 @@ jobs:
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      HEPHAESTUS_ELASTICITY_RUN_ID: adaptation-elasticity-v1-34961824753
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +93,9 @@ jobs:
       - name: Inspect existing Pod inventory
         run: python scripts/collect_adaptation_elasticity_v1.py --inventory-only
       - name: Execute frozen four-model adaptation elasticity cohort
-        run: python scripts/launch_adaptation_elasticity_v1.py | tee adaptation_elasticity_run.log
+        run: |
+          set -o pipefail
+          python scripts/launch_adaptation_elasticity_v1.py | tee adaptation_elasticity_run.log
       - name: Retrieve Network Volume evidence and independently verify teardown
         if: always()
         run: python scripts/collect_adaptation_elasticity_v1.py

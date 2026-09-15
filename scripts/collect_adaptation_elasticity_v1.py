@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import launch_positive_promotion_proof as launcher
+import launch_adaptation_elasticity_v1 as elasticity_launcher
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 
@@ -17,7 +18,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inventory-only", action="store_true")
     args = parser.parse_args()
-    run_id = "adaptation-elasticity-v1-" + os.environ["GITHUB_RUN_ID"]
+    run_id = os.environ.get("HEPHAESTUS_ELASTICITY_RUN_ID", "").strip() or elasticity_launcher.DEFAULT_RESUME_RUN_ID
     pod_prefix = f"hephaestus-{run_id}"
     out = Path("adaptation_elasticity_evidence")
     out.mkdir(exist_ok=True)
@@ -51,6 +52,7 @@ def main() -> int:
         f"{launcher.SCIENTIFIC_PREFIX}/adaptation_elasticity/model_admission/{os.environ['GITHUB_SHA']}/",
     ]
     manifest = []
+    terminal_results: list[dict[str, object]] = []
     for prefix in prefixes:
         for page in s3.get_paginator("list_objects_v2").paginate(Bucket=launcher.VOLUME_ID, Prefix=prefix):
             for item in page.get("Contents", []):
@@ -64,7 +66,9 @@ def main() -> int:
                 row = {"key": key, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
                 manifest.append(row)
                 if key.endswith(("elasticity_result.json", "driver_result.json")):
-                    print("ELASTICITY_RESULT_EVIDENCE_JSON " + json.dumps({**row, "record": json.loads(raw)}, sort_keys=True))
+                    parsed = json.loads(raw)
+                    terminal_results.append({"key": key, "record": parsed})
+                    print("ELASTICITY_RESULT_EVIDENCE_JSON " + json.dumps({**row, "record": parsed}, sort_keys=True))
                 elif "/model_results/" in key and key.endswith(".json"):
                     record = json.loads(raw)
                     print("ELASTICITY_MODEL_RESULT_JSON " + json.dumps({**row, "model_id": record.get("model_id"), "mean_final_delta_quality_points": record.get("mean_final_delta_quality_points"), "mean_final_adapted_quality_100": record.get("mean_final_adapted_quality_100"), "mean_delta_per_gpu_hour": record.get("mean_delta_per_gpu_hour")}, sort_keys=True))
@@ -72,16 +76,26 @@ def main() -> int:
                     lines = raw.decode("utf-8", "replace").splitlines()
                     print("ELASTICITY_RUNTIME_TAIL " + json.dumps(lines[-100:]))
 
-    record = {"run_id": run_id, "repo_sha": os.environ["GITHUB_SHA"], "files": manifest, "cleanup": cleanup_record}
+    protocol = json.loads(elasticity_launcher.PROTOCOL_PATH.read_text(encoding="utf-8"))
+    completed = []
+    for row in terminal_results:
+        try:
+            elasticity_launcher._verify(row["record"], protocol)
+        except Exception:
+            continue
+        completed.append(row)
+    record = {"run_id": run_id, "repo_sha": os.environ["GITHUB_SHA"], "github_workflow_run_id": os.environ["GITHUB_RUN_ID"], "files": manifest, "cleanup": cleanup_record, "validated_completed_results": [row["key"] for row in completed]}
     raw = (json.dumps(record, indent=2, sort_keys=True) + "\n").encode()
     (out / "collection_manifest.json").write_bytes(raw)
-    key = f"{launcher.SCIENTIFIC_PREFIX}/adaptation_elasticity/{run_id}/collection_manifest.json"
+    key = f"{launcher.SCIENTIFIC_PREFIX}/adaptation_elasticity/{run_id}/collections/github-run-{os.environ['GITHUB_RUN_ID']}/collection_manifest.json"
     s3.put_object(Bucket=launcher.VOLUME_ID, Key=key, Body=raw)
     if s3.get_object(Bucket=launcher.VOLUME_ID, Key=key)["Body"].read() != raw:
         raise RuntimeError("elasticity collection manifest S3 readback mismatch")
     print("ELASTICITY_COLLECTION_MANIFEST_JSON " + json.dumps(record, sort_keys=True))
     if dangling:
         raise RuntimeError("temporary adaptation-elasticity Pods remain after cleanup")
+    if not completed:
+        raise RuntimeError("no validated scientific_elasticity_complete terminal result was collected")
     return 0
 
 
