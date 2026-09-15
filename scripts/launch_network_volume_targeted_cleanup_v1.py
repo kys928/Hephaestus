@@ -10,16 +10,28 @@ from pathlib import Path
 from typing import Any
 
 import launch_first_bounded_scientific_training as base
-from runpod_capacity_selection import VERIFIED_GPU_IDS, create_with_capacity_retries
+from runpod_capacity_selection import VERIFIED_GPU_IDS
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 
 VOLUME_ID = "cviwpryzao"
 DATACENTER_ID = "EU-CZ-1"
-IMAGE = "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
+# Cleanup uses no CUDA functionality, so do not exclude Blackwell or other GPUs
+# merely because a science image is pinned to an older CUDA runtime.
+IMAGE = "ubuntu:24.04"
 MANIFEST_PATH = Path("configs/maintenance/network_volume_targeted_cleanup_v1.json")
 MAX_SECONDS = 3600
 POLL_SECONDS = 5
+
+# The first entry is known-valid because the live elasticity run was allocated
+# on this exact GPU type.  The remaining extra routes were already approved for
+# Hephaestus' >=48GB runtime envelope; the schema-verified legacy pool follows.
+MAINTENANCE_EXTRA_GPU_IDS = (
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "NVIDIA RTX 6000 Ada Generation",
+    "NVIDIA RTX A6000",
+)
 
 
 def _required(name: str) -> str:
@@ -56,14 +68,46 @@ def _prefix_state(client: Any, prefix: str) -> dict[str, int]:
 def _pod_shell() -> str:
     return r'''set -Eeuo pipefail
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates coreutils
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates coreutils python3
 rm -rf /opt/hephaestus-src
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
 cd /opt/hephaestus-src
 git checkout "$HEPHAESTUS_REPO_SHA"
-python -m py_compile scripts/run_network_volume_targeted_cleanup_v1.py
-python scripts/run_network_volume_targeted_cleanup_v1.py
+python3 -m py_compile scripts/run_network_volume_targeted_cleanup_v1.py
+python3 scripts/run_network_volume_targeted_cleanup_v1.py
 '''
+
+
+def _create_with_maintenance_capacity(execution: RunPodExecutionAdapter, body_factory) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Try Blackwell/Ada/A6000 routes plus the schema-verified legacy pool."""
+    routes: list[list[str]] = [[gpu] for gpu in MAINTENANCE_EXTRA_GPU_IDS]
+    routes.append(list(VERIFIED_GPU_IDS))
+    observations: list[dict[str, Any]] = []
+    last_error: BaseException | None = None
+    for round_index in range(1, 13):
+        for gpu_ids in routes:
+            observation: dict[str, Any] = {
+                "round": round_index,
+                "gpu_type_ids": gpu_ids,
+                "queried_at": _now(),
+            }
+            observations.append(observation)
+            try:
+                pod = execution._create_pod(body_factory(gpu_ids))
+                observation["status"] = "created"
+                observation["pod_id"] = pod.get("id")
+                observation["gpu"] = pod.get("gpu")
+                return pod, observations
+            except BaseException as exc:
+                last_error = exc
+                observation["status"] = "failed"
+                observation["error"] = f"{type(exc).__name__}: {exc}"
+                lowered = str(exc).lower()
+                if "402" in lowered or "insufficient funds" in lowered or "insufficient balance" in lowered:
+                    raise
+        if round_index < 12:
+            time.sleep(10)
+    raise RuntimeError(f"RunPod maintenance Pod capacity exhausted across all routes: {last_error}") from last_error
 
 
 def main() -> int:
@@ -88,7 +132,7 @@ def main() -> int:
     client.head_bucket(Bucket=VOLUME_ID)
     pod_id: str | None = None
     launcher: dict[str, Any] = {
-        "launcher_version": "network-volume-targeted-cleanup-launcher.v1",
+        "launcher_version": "network-volume-targeted-cleanup-launcher.v2",
         "started_at": _now(),
         "cleanup_run_id": cleanup_run_id,
         "repo_sha": repo_sha,
@@ -97,7 +141,9 @@ def main() -> int:
         "protected_active_run_id": manifest["protected_active_run_id"],
         "inventory_basis": manifest["basis"],
         "target_prefixes": sorted(expected_prefixes),
-        "gpu_type_ids": list(VERIFIED_GPU_IDS),
+        "maintenance_extra_gpu_type_ids": list(MAINTENANCE_EXTRA_GPU_IDS),
+        "schema_verified_fallback_gpu_type_ids": list(VERIFIED_GPU_IDS),
+        "container_image": IMAGE,
     }
     try:
         launcher["s3_before"] = {prefix: _prefix_state(client, prefix) for prefix in sorted(expected_prefixes)}
@@ -109,8 +155,8 @@ def main() -> int:
                     f"S3 target changed since reviewed inventory: {row['s3_prefix']} observed={observed} expected={expected}"
                 )
 
-        def create_once(gpu_ids: list[str]) -> dict[str, Any]:
-            return execution._create_pod({
+        def body_factory(gpu_ids: list[str]) -> dict[str, Any]:
+            return {
                 "name": f"hephaestus-{cleanup_run_id}"[:180],
                 "computeType": "GPU",
                 "gpuCount": 1,
@@ -129,9 +175,9 @@ def main() -> int:
                     "HEPHAESTUS_TARGETED_CLEANUP_RUN_ID": cleanup_run_id,
                     "HEPHAESTUS_REPO_SHA": repo_sha,
                 },
-            })
+            }
 
-        pod, capacity = create_with_capacity_retries(create_once, attempts=12, delay_seconds=10.0)
+        pod, capacity = _create_with_maintenance_capacity(execution, body_factory)
         launcher["capacity_selection"] = capacity
         pod_id = str(pod["id"])
         launcher["pod_id"] = pod_id
@@ -152,7 +198,6 @@ def main() -> int:
         if report.get("status") != "completed" or report.get("deleted_target_count") != 2:
             raise RuntimeError(f"targeted cleanup worker did not delete both reviewed targets: {report.get('status')}")
 
-        # Independently verify through S3, retrying briefly for the Network Volume gateway.
         s3_after: dict[str, dict[str, int]] = {}
         verify_deadline = time.monotonic() + 180
         while True:
