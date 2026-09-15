@@ -22,6 +22,8 @@ base = routing.base
 base.launcher_v2 = wave
 base.launcher.MAX_SECONDS = 3000
 
+# Relaunch marker: import/dependency boundaries are validated; scientific variables remain frozen.
+
 
 def create_pod(execution, *, proof_run_id, repo_sha, attempt, controlled_bootstrap_failure):
     if controlled_bootstrap_failure:
