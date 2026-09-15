@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Collect cognitive-topology evidence from the S3-backed Network Volume and verify teardown."""
+# Launch marker only: scientific cohort inputs and scoring remain unchanged.
 from __future__ import annotations
 
 import argparse
