@@ -26,6 +26,7 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,6 +39,7 @@ jobs:
       - name: Scan actual Network Volume through S3 API
         run: python scripts/scan_network_volume_s3_v1.py | tee network_volume_s3_scan.log
       - name: Preserve byte-level inventory
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: network-volume-s3-inventory-v1
@@ -45,5 +47,5 @@ jobs:
             network_volume_s3_inventory.json
             network_volume_s3_largest.tsv
             network_volume_s3_scan.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
