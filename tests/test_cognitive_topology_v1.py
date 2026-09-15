@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from hephaestus.policy.action_registry import evaluate_action_boundary
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +20,13 @@ def _load(path: Path, name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _require_launcher_dependencies() -> None:
+    # Generic CI intentionally installs only the dependency-free test surface.
+    # Launcher assertions execute in the dedicated topology preflight, which
+    # installs Hephaestus' governed S3 extra.
+    pytest.importorskip("boto3")
 
 
 def test_protocol_is_bounded_balanced_and_candidate_identity_only():
@@ -40,7 +49,7 @@ def test_protocol_is_bounded_balanced_and_candidate_identity_only():
     assert counts == {role: 6 for role in spec["roles"]}
     assert len(spec["cases"]) == 30
     assert spec["generation"]["repetitions"] == len(spec["generation"]["seeds"]) == 3
-    assert sum(spec["scoring"].values()) == 1.0
+    assert sum(spec["scoring"].values()) == pytest.approx(1.0)
 
 
 def test_every_case_has_a_perfect_machine_checkable_response():
@@ -59,7 +68,7 @@ def test_every_case_has_a_perfect_machine_checkable_response():
         })
         score = runner.score_response(spec, case, response)
         assert score["schema_compliant"] is True, case["case_id"]
-        assert score["quality"] == 1.0, case["case_id"]
+        assert score["quality"] == pytest.approx(1.0), case["case_id"]
         assert score["hallucination_rate"] == 0.0
 
 
@@ -99,6 +108,7 @@ def test_controller_ground_truth_matches_action_registry_v1():
 
 
 def test_launcher_shell_uses_topology_admission_and_runner():
+    _require_launcher_dependencies()
     launcher = _load(LAUNCHER_PATH, "cognitive_topology_launcher_test")
     shell = launcher.pod_shell_topology()
     assert "cognitive_topology/model_admission/$HEPHAESTUS_REPO_SHA" in shell
@@ -107,6 +117,7 @@ def test_launcher_shell_uses_topology_admission_and_runner():
 
 
 def test_launcher_verifier_refuses_partial_or_mutating_result():
+    _require_launcher_dependencies()
     launcher = _load(LAUNCHER_PATH, "cognitive_topology_launcher_verify_test")
     spec = json.loads(SPEC_PATH.read_text())
     complete = {
