@@ -20,11 +20,11 @@
     {
       "path": "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34104954995/hf_cache",
       "s3_prefix": "hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34104954995/hf_cache/",
-      "s3_observed_bytes": 29742200000,
+      "s3_observed_bytes": 29741590413,
       "reason": "reconstructable Hugging Face download cache from completed old promotion proof; surrounding generation/cycle/result/manifests remain preserved"
     }
   ],
-  "expected_reclaim_bytes_approx": 46088712582,
+  "expected_reclaim_bytes": 46088102995,
   "safety": {
     "delete_only_exact_allowlist": true,
     "target_root_must_not_be_symlink": true,
