@@ -5,8 +5,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-import torch
-
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "configs/experiments/hephaestus_adaptation_elasticity_v1.json"
 TOPOLOGY_PATH = ROOT / "configs/eval_packs/hephaestus_cognitive_topology_v1.json"
@@ -79,6 +77,10 @@ def test_controller_training_examples_follow_registry_semantics() -> None:
 
 
 def test_lora_target_selector_excludes_visual_modules() -> None:
+    if importlib.util.find_spec("torch") is None:
+        return
+    import torch
+
     runner = _load_script("elasticity_runner", "scripts/run_adaptation_elasticity_v1.py")
 
     class Tiny(torch.nn.Module):
