@@ -45,10 +45,14 @@ jobs:
           python -m py_compile scripts/launch_network_volume_targeted_cleanup_v1.py
           python -m py_compile scripts/scan_network_volume_s3_v1.py
       - name: Execute S3-reviewed exact-prefix cleanup on mounted Network Volume
-        run: python scripts/launch_network_volume_targeted_cleanup_v1.py | tee targeted_cleanup_run.log
+        run: |
+          set -o pipefail
+          python scripts/launch_network_volume_targeted_cleanup_v1.py | tee targeted_cleanup_run.log
       - name: Rescan actual Network Volume through S3 after deletion
         if: always()
-        run: python scripts/scan_network_volume_s3_v1.py | tee network_volume_post_cleanup_s3_scan.log
+        run: |
+          set -o pipefail
+          python scripts/scan_network_volume_s3_v1.py | tee network_volume_post_cleanup_s3_scan.log
       - name: Preserve targeted cleanup audit evidence
         if: always()
         uses: actions/upload-artifact@v4
