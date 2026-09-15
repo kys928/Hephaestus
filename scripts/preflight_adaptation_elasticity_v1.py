@@ -43,7 +43,7 @@ def _validate_protocol(protocol: dict[str, Any], topology: dict[str, Any], topol
     if protocol["roles"] != topology["roles"]:
         raise ValueError("adaptation roles drifted from topology V1")
     train = protocol["training"]
-    required = {"method": "lora", "peft_version": "0.20.0", "precision": "bfloat16", "rank": 8, "alpha": 16, "dropout": 0.0, "learning_rate": 0.00005, "epochs": 2, "micro_batch_size": 1, "gradient_accumulation_steps": 4, "max_seq_length": 768, "dose_checkpoints": [1, 2]}
+    required = {"method": "lora", "peft_version": "0.20.0", "precision": "bfloat16", "rank": 8, "alpha": 16, "dropout": 0.0, "learning_rate": 0.00005, "epochs": 2, "micro_batch_size": 1, "gradient_accumulation_steps": 4, "max_seq_length": 1024, "dose_checkpoints": [1, 2]}
     for key, expected in required.items():
         if train.get(key) != expected:
             raise ValueError(f"frozen low-dose training variable drifted: {key}")
