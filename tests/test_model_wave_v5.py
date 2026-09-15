@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from hephaestus.providers.models.generation_observation import GenerationObserver, token_termination
 
@@ -37,6 +40,12 @@ def test_passive_observer_returns_identical_tensor_and_decoding_arguments():
 
 
 def test_v5_bootstrap_frozen_protocol_and_native_router():
+    # This bootstrap intentionally crosses the optional S3 execution boundary.
+    # Generic/core CI does not install that extra; the dedicated V5 preflight
+    # installs .[s3,test] and therefore executes this assertion in full.
+    if importlib.util.find_spec("boto3") is None:
+        pytest.skip("V5 bootstrap integration requires the optional s3 extra")
+
     # Script wrappers mutate their historical module globals, so isolate imports.
     code = """
 import json, sys
@@ -55,8 +64,8 @@ assert len(plan.tasks) == 18
 assert len(run.proof.CANDIDATES) == 2
 assert all(c["judge_revision"] == "582efe62d7cfafd242bffca71ecbde1bcecc1bcc" for c in run.proof.CANDIDATES)
 shell = launch.pod_shell_v5()
-assert '"$PY" scripts/run_positive_promotion_proof_v5.py' in shell
-assert '"$PY" scripts/run_positive_promotion_proof_v4.py' not in shell
+assert '\"$PY\" scripts/run_positive_promotion_proof_v5.py' in shell
+assert '\"$PY\" scripts/run_positive_promotion_proof_v4.py' not in shell
 assert 'requirements_sha256' in shell
 assert "-r " in shell
 assert "transformers>=" not in shell
