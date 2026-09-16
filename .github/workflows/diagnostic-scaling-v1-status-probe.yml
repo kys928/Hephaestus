@@ -17,6 +17,11 @@ jobs:
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       TARGET_RUN_ID: diagnostic-scaling-v1-35131969313
     steps:
       - name: Read current Diagnostic Scaling Pods
@@ -31,7 +36,7 @@ jobs:
               headers={
                   'Authorization': 'Bearer ' + key,
                   'Accept': 'application/json',
-                  'User-Agent': 'Hephaestus-Diagnostic-Scaling-Status-Probe/1.0',
+                  'User-Agent': 'Hephaestus-Diagnostic-Scaling-Status-Probe/1.1',
               },
               method='GET',
           )
@@ -57,24 +62,120 @@ jobs:
                   'name': name,
                   'desiredStatus': pod.get('desiredStatus'),
                   'lastStatusChange': pod.get('lastStatusChange'),
-                  'gpu': {
-                      'id': gpu.get('id'),
-                      'displayName': gpu.get('displayName'),
-                      'count': gpu.get('count'),
-                  },
-                  'machine': {
-                      'dataCenterId': machine.get('dataCenterId'),
-                      'id': machine.get('id'),
-                  },
+                  'gpu': {'id': gpu.get('id'), 'displayName': gpu.get('displayName'), 'count': gpu.get('count')},
+                  'machine': {'dataCenterId': machine.get('dataCenterId'), 'id': machine.get('id')},
               })
           out = {'target_run_id': target, 'matching_pods': matches, 'count': len(matches)}
           with open('diagnostic_scaling_status_probe.json', 'w', encoding='utf-8') as f:
               json.dump(out, f, indent=2, sort_keys=True)
           print('RUNPOD_STATUS_JSON ' + json.dumps(out, sort_keys=True))
           PY
+
+      - name: Install read-only S3 probe dependency
+        run: python -m pip install --quiet 'boto3>=1.35,<2'
+
+      - name: Read terminal scientific summaries from S3
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+          from botocore.config import Config
+
+          run_id = os.environ['TARGET_RUN_ID']
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          client = boto3.client(
+              's3',
+              endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),
+              region_name=os.environ['RUNPOD_DATACENTER_ID'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+              config=Config(retries={'mode': 'standard', 'max_attempts': 5}),
+          )
+          prefix = f'hephaestus/scientific/v1/executions/{run_id}-'
+          keys = []
+          paginator = client.get_paginator('list_objects_v2')
+          for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+              for item in page.get('Contents', []):
+                  key = str(item.get('Key', ''))
+                  if key.endswith('/driver_result.json'):
+                      keys.append(key)
+
+          def get_json(key):
+              response = client.get_object(Bucket=bucket, Key=key)
+              body = response['Body']
+              try:
+                  return json.loads(body.read())
+              finally:
+                  body.close()
+
+          def point_at(curve, step):
+              if step is None:
+                  return None
+              for p in curve.get('points', []):
+                  if int(p.get('optimizer_steps', -1)) == int(step):
+                      return p
+              return None
+
+          summaries = []
+          for key in sorted(keys):
+              result = get_json(key)
+              row = {
+                  'key': key,
+                  'status': result.get('status'),
+                  'disposition': result.get('disposition'),
+                  'model_id': result.get('model_id'),
+                  'attempt': result.get('attempt'),
+                  'error': result.get('error'),
+                  'training_performed': result.get('training_performed'),
+              }
+              if result.get('status') == 'completed':
+                  roles = {}
+                  for role, curve in (result.get('roles') or {}).items():
+                      points = curve.get('points') or []
+                      baseline = point_at(curve, 0)
+                      selections = curve.get('selections') or {}
+                      raw_step = selections.get('raw_peak_steps')
+                      strict_step = selections.get('strict_safe_peak_steps')
+                      bounded_step = selections.get('bounded_safe_peak_steps')
+                      raw = point_at(curve, raw_step)
+                      strict = point_at(curve, strict_step)
+                      bounded = point_at(curve, bounded_step)
+                      roles[role] = {
+                          'baseline_quality_100': None if baseline is None else baseline.get('role', {}).get('quality_100'),
+                          'raw_peak_steps': raw_step,
+                          'raw_peak_quality_100': None if raw is None else raw.get('role', {}).get('quality_100'),
+                          'strict_safe_peak_steps': strict_step,
+                          'strict_safe_peak_quality_100': None if strict is None else strict.get('role', {}).get('quality_100'),
+                          'bounded_safe_peak_steps': bounded_step,
+                          'bounded_safe_peak_quality_100': None if bounded is None else bounded.get('role', {}).get('quality_100'),
+                          'threshold_distances': curve.get('threshold_distances'),
+                          'full_seed_confirmations': curve.get('full_seed_confirmations'),
+                          'dose_points': [
+                              {
+                                  'steps': p.get('optimizer_steps'),
+                                  'quality_100': p.get('role', {}).get('quality_100'),
+                                  'strict_safe': p.get('safety', {}).get('strict_safe'),
+                                  'bounded_safe': p.get('safety', {}).get('bounded_safe'),
+                                  'semantic_delta': p.get('safety', {}).get('semantic_score_delta'),
+                              }
+                              for p in points
+                          ],
+                      }
+                  row['roles'] = roles
+                  row['exported_file_count'] = result.get('exported_file_count')
+                  row['exported_bytes'] = result.get('exported_bytes')
+              summaries.append(row)
+          out = {'target_run_id': run_id, 'terminal_records': summaries, 'count': len(summaries)}
+          with open('diagnostic_scaling_scientific_status.json', 'w', encoding='utf-8') as f:
+              json.dump(out, f, indent=2, sort_keys=True)
+          print('DIAGNOSTIC_SCIENTIFIC_STATUS_JSON ' + json.dumps(out, sort_keys=True))
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: diagnostic-scaling-v1-runpod-status
-          path: diagnostic_scaling_status_probe.json
+          path: |
+            diagnostic_scaling_status_probe.json
+            diagnostic_scaling_scientific_status.json
           if-no-files-found: error
           retention-days: 7
