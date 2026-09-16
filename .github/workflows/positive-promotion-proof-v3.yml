@@ -1,0 +1,311 @@
+name: Positive real-model promotion proof V3
+# Evidence-selected real-compute wave. GPU execution is allowed only by an
+# explicit [launch-positive-promotion] commit or workflow_dispatch.
+# Launch-marker refresh after forced direct HF transport; no scientific or topology variables changed.
+# V3 uses two 24GB RTX 3090 GPUs with balanced FP16 model sharding. The
+# scientific candidates, frozen eval, decoding, Judge, and promotion gates stay fixed.
+
+on:
+  push:
+    branches: [feature/production-loop-v1]
+    paths:
+      - .github/workflows/positive-promotion-proof-v3.yml
+      - configs/programs/positive_promotion_runpod.json
+      - scripts/runpod_positive_promotion_driver_v3.py
+      - scripts/runpod_positive_promotion_driver.py
+      - scripts/run_positive_promotion_proof.py
+      - scripts/run_positive_promotion_proof_v2.py
+      - scripts/run_positive_promotion_proof_v3.py
+      - scripts/launch_positive_promotion_proof.py
+      - scripts/launch_positive_promotion_proof_v2.py
+      - scripts/launch_positive_promotion_proof_v3.py
+      - scripts/runpod_capacity_selection.py
+      - src/hephaestus/cli/main.py
+      - src/hephaestus/control/semantic_judge.py
+      - src/hephaestus/production/**
+      - src/hephaestus/providers/runpod/**
+      - tests/test_production_loop_v1.py
+      - tests/test_runpod_provider.py
+      - tests/test_runpod_gpu_execution.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: positive-real-model-promotion-cviwpryzao
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install preflight dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Verify production loop and governed promotion boundaries
+        run: |
+          python -m pytest -q \
+            tests/test_production_loop_v1.py \
+            tests/test_semantic_judge_integration.py \
+            tests/test_promotion_reject_rollback_branch_gates.py \
+            tests/test_runpod_provider.py \
+            tests/test_runpod_gpu_execution.py
+      - name: Compile V3 generic promotion path
+        run: |
+          python -m py_compile src/hephaestus/cli/main.py
+          python -m py_compile src/hephaestus/control/semantic_judge.py
+          python -m py_compile src/hephaestus/production/actions.py
+          python -m py_compile src/hephaestus/production/composition.py
+          python -m py_compile src/hephaestus/production/loop.py
+          python -m py_compile src/hephaestus/production/recovery.py
+          python -m py_compile src/hephaestus/providers/runpod/execution.py
+          python -m py_compile scripts/runpod_positive_promotion_driver.py
+          python -m py_compile scripts/runpod_positive_promotion_driver_v3.py
+          python -m py_compile scripts/run_positive_promotion_proof.py
+          python -m py_compile scripts/run_positive_promotion_proof_v2.py
+          python -m py_compile scripts/run_positive_promotion_proof_v3.py
+          python -m py_compile scripts/launch_positive_promotion_proof.py
+          python -m py_compile scripts/launch_positive_promotion_proof_v3.py
+      - name: Verify V3 routing, immutable revisions, licenses, dual-GPU sharding, and recovery
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          from hephaestus.production.recovery import InfrastructureRecoveryController
+
+          scripts = Path('scripts').resolve()
+          sys.path.insert(0, str(scripts))
+          import launch_positive_promotion_proof_v3 as launcher_v3
+          import run_positive_promotion_proof_v3 as proof_v3
+          import runpod_positive_promotion_driver_v3 as generic_driver_v3
+
+          expected = {
+              '2db69c1c3e91a05d2c64a3185acfbaf36f744e25': 'mit',
+              'cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8': 'apache-2.0',
+          }
+          expected_candidates = [
+              ('microsoft/phi-4', '2db69c1c3e91a05d2c64a3185acfbaf36f744e25', 'mit'),
+              ('Qwen/Qwen2.5-14B-Instruct', 'cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8', 'apache-2.0'),
+          ]
+          candidates = proof_v3.proof.CANDIDATES
+          assert [(item['model_id'], item['revision'], item['license']) for item in candidates] == expected_candidates
+          assert {item['revision']: item['license'] for item in candidates} == expected
+          assert launcher_v3.ALLOWED_REVISION_LICENSES == expected
+          assert launcher_v3.V3_MAX_SECONDS == 6000
+          assert generic_driver_v3.base.launcher_v2 is launcher_v3
+
+          assert generic_driver_v3.V3_GPU_IDS == ('NVIDIA GeForce RTX 3090',)
+          assert generic_driver_v3.V3_GPU_COUNT == 2
+          assert generic_driver_v3.V3_PER_GPU_MEMORY_GB == 24
+          assert generic_driver_v3.V3_AGGREGATE_GPU_MEMORY_GB == 48
+          assert generic_driver_v3.V3_MAX_MEMORY_GIB_PER_GPU == 22
+          assert generic_driver_v3.V3_MODEL_PARALLELISM == 'transformers_device_map_balanced_fp16'
+          assert generic_driver_v3.base._create_pod is generic_driver_v3._v3_create_pod
+          assert proof_v3.proof.PinnedChatTemplateBackend is proof_v3.ShardedV3ChatTemplateBackend
+          assert proof_v3.V3_SHARD_GPU_COUNT == 2
+          assert proof_v3.V3_MAX_MEMORY_GIB_PER_GPU == 22
+
+          shell = launcher_v3.pod_shell_v3()
+          assert 'run_positive_promotion_proof_v3.py' in shell
+          assert "'accelerate>=1,<2'" in shell
+          assert 'torch.cuda.device_count()' in shell
+          assert '3090' in shell
+
+          captured = {}
+          original_retry = generic_driver_v3.base.launcher.create_with_capacity_retries
+          try:
+              def one_shot(create_once):
+                  pod = create_once(list(generic_driver_v3.V3_GPU_IDS))
+                  return pod, []
+              generic_driver_v3.base.launcher.create_with_capacity_retries = one_shot
+
+              class FakeExecution:
+                  def _create_pod(self, body):
+                      captured.update(body)
+                      return {'id': 'dry-run-dual-3090'}
+
+              pod, _ = generic_driver_v3._v3_create_pod(
+                  FakeExecution(),
+                  proof_run_id='preflight',
+                  repo_sha='0' * 40,
+                  attempt=1,
+                  controlled_bootstrap_failure=False,
+              )
+              assert pod['id'] == 'dry-run-dual-3090'
+          finally:
+              generic_driver_v3.base.launcher.create_with_capacity_retries = original_retry
+
+          assert captured['gpuCount'] == 2
+          assert captured['gpuTypeIds'] == ['NVIDIA GeForce RTX 3090']
+          assert captured['cloudType'] == 'SECURE'
+          assert captured['dataCenterIds'] == [generic_driver_v3.base.launcher.DATACENTER_ID]
+          assert captured['networkVolumeId'] == generic_driver_v3.base.launcher.VOLUME_ID
+
+          capacity = InfrastructureRecoveryController.classify_message(
+              'RunPod API request failed with HTTP 500: '
+              '{"error":"create pod: could not find any pods with required specifications","status":500}'
+          )
+          assert capacity is not None
+          assert capacity.code == 'capacity_unavailable'
+          assert capacity.optimizer_steps == 0
+          assert capacity.checkpoint_created is False
+
+          program = json.loads(Path('configs/programs/positive_promotion_runpod.json').read_text())
+          assert program['driver'] == 'scripts/runpod_positive_promotion_driver_v3.py:build_driver'
+          assert program['driver_config']['prove_bootstrap_recovery_once'] is False
+          PY
+
+  prove:
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-positive-promotion]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Launch V3 real GPU proof through generic production loop
+        run: |
+          hephaestus run --config configs/programs/positive_promotion_runpod.json --fresh > positive_promotion_generic_run.json
+          hephaestus status --config configs/programs/positive_promotion_runpod.json > positive_promotion_generic_status.json
+      - name: Verify V3 promotion evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          launcher = json.loads(Path('positive_promotion_launcher.json').read_text())
+          verification = json.loads(Path('positive_promotion_verification.json').read_text())
+          status = json.loads(Path('positive_promotion_generic_status.json').read_text())
+
+          expected = {
+              '2db69c1c3e91a05d2c64a3185acfbaf36f744e25': 'mit',
+              'cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8': 'apache-2.0',
+          }
+          assert launcher['status'] == 'verified', launcher
+          assert launcher['proof_driver'] == 'scripts/run_positive_promotion_proof_v3.py', launcher
+          assert launcher['allowed_revision_licenses'] == expected, launcher
+          assert launcher['gpu_count'] == 2, launcher
+          assert launcher['gpu_memory_floor_gb'] == 24, launcher
+          assert launcher['aggregate_gpu_memory_floor_gb'] == 48, launcher
+          assert launcher['max_memory_gib_per_gpu'] == 22, launcher
+          assert launcher['model_parallelism'] == 'transformers_device_map_balanced_fp16', launcher
+          assert launcher['gpu_type_ids'] == ['NVIDIA GeForce RTX 3090'], launcher
+          attempts = launcher['attempts']
+          assert len(attempts) >= 1, attempts
+          assert all(item['scientific_variables_changed'] is False for item in attempts), attempts
+          assert attempts[-1].get('verified') is True, attempts[-1]
+
+          program = status['program']
+          assert program['status'] == 'completed', program
+          assert program['stop_reason'] == 'candidate_promoted', program
+          assert status['services']['runtime_monitor'] == 'RuntimeMonitorRole', status['services']
+          assert status['services']['approval_governance'] == 'ApprovalPolicy', status['services']
+          assert verification['status'] == 'verified', verification
+          assert verification['verification_version'] == 'positive-real-model-promotion-launcher-verification.v3', verification
+          manifest = verification['certified_model_manifest']
+          assert manifest['revision'] in expected, manifest
+          assert manifest['license'].lower() == expected[manifest['revision']], manifest
+          assert verification['terminal_result']['status'] == 'completed', verification
+          PY
+      - name: Upload V3 positive-promotion proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: positive-real-model-promotion-proof-v3
+          path: |
+            positive_promotion_launcher.json
+            positive_promotion_verification.json
+            positive_promotion_generic_run.json
+            positive_promotion_generic_status.json
+            state/positive-promotion-runpod-live/
+            artifacts/positive-promotion-runpod-live/
+          if-no-files-found: warn
+          retention-days: 30
+
+  retrieve_v3_cycle_evidence:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[retrieve-v3-evidence]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      PROOF_RUN_ID: positive-real-model-promotion-001-34561911749
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install S3 client
+        run: python -m pip install 'boto3>=1.35,<2'
+      - name: Retrieve exact persisted V3 proof evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import boto3
+          from botocore.config import Config
+
+          bucket = os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          endpoint = os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/')
+          region = os.environ['RUNPOD_DATACENTER_ID']
+          proof_run_id = os.environ['PROOF_RUN_ID']
+          client = boto3.client(
+              's3', endpoint_url=endpoint, region_name=region,
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+              config=Config(retries={'mode':'standard','max_attempts':10}),
+          )
+          client.head_bucket(Bucket=bucket)
+          matches = []
+          paginator = client.get_paginator('list_objects_v2')
+          for page in paginator.paginate(Bucket=bucket, PaginationConfig={'PageSize':1000}):
+              for obj in page.get('Contents', []) or []:
+                  key = str(obj.get('Key',''))
+                  if proof_run_id in key:
+                      matches.append({'key': key, 'size': int(obj.get('Size',0)), 'etag': str(obj.get('ETag','')).strip('"')})
+          if not matches:
+              raise SystemExit(f'No S3 objects found containing {proof_run_id}')
+          root = Path('retrieved-v3-cycle-evidence')
+          root.mkdir(parents=True, exist_ok=True)
+          for row in matches:
+              target = root / row['key']
+              target.parent.mkdir(parents=True, exist_ok=True)
+              client.download_file(bucket, row['key'], str(target))
+          (root / 'object_index.json').write_text(json.dumps({'proof_run_id': proof_run_id, 'objects': matches}, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps({'proof_run_id': proof_run_id, 'objects': len(matches), 'bytes': sum(x['size'] for x in matches)}, sort_keys=True))
+          for row in matches:
+              print(json.dumps(row, sort_keys=True))
+          PY
+      - name: Upload detailed V3 cycle evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-detailed-cycle-evidence
+          path: retrieved-v3-cycle-evidence/
+          if-no-files-found: error
+          retention-days: 7
