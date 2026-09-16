@@ -1,6 +1,6 @@
 name: Hephaestus adaptation elasticity V1
 
-# Runtime-hardened resume launch after validated preflight run 35004954818;
+# Resume launch after validated PEFT target-path normalization at ed0b543;
 # scientific protocol, dataset, model identities, and training dose remain frozen.
 on:
   push:
