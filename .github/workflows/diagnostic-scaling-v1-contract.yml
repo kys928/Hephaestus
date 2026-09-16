@@ -1,0 +1,46 @@
+name: Diagnostic Scaling V1 contract validation
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-v1-contract.yml
+      - configs/experiments/hephaestus_diagnostic_scaling_v1.json
+      - configs/experiments/hephaestus_distance_to_role_v1.json
+      - configs/eval_packs/hephaestus_cognitive_topology_v1.json
+      - configs/eval_packs/semantic_behavior_v1.yaml
+      - scripts/validate_diagnostic_scaling_v1_contract.py
+      - tests/test_diagnostic_scaling_v1_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostic-scaling-v1-contract
+  cancel-in-progress: false
+
+jobs:
+  validate-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_XET: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install contract validation dependencies
+        run: python -m pip install 'pytest>=8,<9' 'huggingface-hub==1.31.0'
+      - name: Run contract invariant tests
+        run: python -m pytest -q tests/test_diagnostic_scaling_v1_contract.py
+      - name: Verify immutable remote model revisions and configs
+        run: python scripts/validate_diagnostic_scaling_v1_contract.py --remote
+      - name: Preserve contract-validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-v1-contract-validation
+          path: diagnostic_scaling_contract_validation.json
+          if-no-files-found: error
+          retention-days: 90
