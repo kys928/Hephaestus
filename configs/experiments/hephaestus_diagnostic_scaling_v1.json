@@ -77,13 +77,37 @@
     "expected_optimizer_steps_per_epoch": 12,
     "dose_optimizer_steps": [3, 6, 12, 24, 36, 48],
     "target_policy": {
-      "qwen3": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-      "qwen2": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-      "qwen3_moe": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "gate_up_proj"],
-      "glm4_moe_lite": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "gate_up_proj"]
+      "qwen3": {
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_parameters": [],
+        "expert_rank": null,
+        "expert_count": null
+      },
+      "qwen2": {
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_parameters": [],
+        "expert_rank": null,
+        "expert_count": null
+      },
+      "qwen3_moe": {
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "expert_rank": 1,
+        "expert_count": 128
+      },
+      "glm4_moe_lite": {
+        "target_modules": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "expert_rank": 1,
+        "expert_count": 64
+      }
     },
+    "expert_parameter_budget_policy": "For fused 3-D routed-expert parameters, use PEFT target_parameters and expert rank max(1, floor(base_rank / expert_count)); keep routers frozen.",
+    "router_trainable": false,
     "record_exact_target_module_names": true,
+    "record_exact_target_parameter_names": true,
     "record_target_module_count": true,
+    "record_target_parameter_count": true,
     "record_trainable_parameter_count": true
   },
   "evaluation": {
@@ -112,6 +136,13 @@
     "network_volume_attached": false,
     "persistent_model_cache_allowed": false,
     "max_parallel_pods": 1,
+    "runtime_dependencies": {
+      "transformers": "5.17.0",
+      "accelerate": "1.15.0",
+      "safetensors": "0.8.0",
+      "huggingface_hub": "1.31.0",
+      "peft": "0.20.0"
+    },
     "evidence_persistence": "upload_compact_evidence_and_selected_adapters_to_S3_then_verify_readback_before_teardown",
     "checkpoint_retention": "retain_selected_adapters_and_compact_scientific_evidence_only_after_verified_S3_export"
   },
