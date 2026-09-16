@@ -1,5 +1,6 @@
 name: Recover distance to role V1 run 35091821250
 
+# Recovery launch marker: validated precision bridge, original pods terminal, resume missing evidence only.
 # One-off, auditable recovery for the original Test 3 run after the FP16->BF16
 # dose-zero guard classified an intentional precision bridge as unexplained drift.
 # GPU recovery still requires an explicit [recover-distance-to-role-v1] marker.
