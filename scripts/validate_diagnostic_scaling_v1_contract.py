@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import inspect
 import json
 import re
 from pathlib import Path
@@ -25,6 +26,27 @@ FIXED_TRAINING_KEYS = [
     "model_seed", "gradient_checkpointing", "train_only_assistant_tokens",
     "examples_per_role", "max_epochs", "expected_optimizer_steps_per_epoch", "dose_optimizer_steps",
 ]
+EXPECTED_RUNTIME_DEPENDENCIES = {
+    "transformers": "5.17.0",
+    "accelerate": "1.15.0",
+    "safetensors": "0.8.0",
+    "huggingface_hub": "1.31.0",
+    "peft": "0.20.0",
+}
+EXPECTED_MOE_POLICIES = {
+    "qwen3_moe": {
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "expert_rank": 1,
+        "expert_count": 128,
+    },
+    "glm4_moe_lite": {
+        "target_modules": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "expert_rank": 1,
+        "expert_count": 64,
+    },
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -67,10 +89,31 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         raise ValueError(f"fixed Test-3 training geometry drifted: {drift}")
     if train.get("dose_optimizer_steps") != [3, 6, 12, 24, 36, 48]:
         raise ValueError("dose ladder drifted")
+
     source_targets = source_train["target_module_suffixes"]
+    policies = train.get("target_policy")
+    if not isinstance(policies, dict):
+        raise ValueError("target policy must be an object")
     for family in ("qwen3", "qwen2"):
-        if train["target_policy"].get(family) != source_targets:
+        policy = policies.get(family)
+        if not isinstance(policy, dict):
+            raise ValueError(f"missing target policy for {family}")
+        if policy.get("target_modules") != source_targets or policy.get("target_parameters") != []:
             raise ValueError(f"{family} target surface must match Test-3 exactly")
+        if policy.get("expert_rank") is not None or policy.get("expert_count") is not None:
+            raise ValueError(f"{family} must not declare an MoE expert budget")
+    for family, expected in EXPECTED_MOE_POLICIES.items():
+        if policies.get(family) != expected:
+            raise ValueError(f"{family} MoE target geometry drifted")
+    if train.get("router_trainable") is not False:
+        raise ValueError("MoE routers must remain frozen")
+    if train.get("expert_parameter_budget_policy") != "For fused 3-D routed-expert parameters, use PEFT target_parameters and expert rank max(1, floor(base_rank / expert_count)); keep routers frozen.":
+        raise ValueError("MoE expert parameter budget policy drifted")
+    for family, policy in policies.items():
+        modules = policy.get("target_modules", [])
+        parameters = policy.get("target_parameters", [])
+        if not modules or len(modules) != len(set(modules)) or len(parameters) != len(set(parameters)):
+            raise ValueError(f"invalid or duplicate target surface for {family}")
 
     candidates = contract.get("candidates", [])
     observed = [(c.get("model_id"), c.get("revision"), c.get("model_type"), str(c.get("license", "")).lower()) for c in candidates]
@@ -79,9 +122,8 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
     if len({row[1] for row in observed}) != len(observed) or any(not re.fullmatch(r"[0-9a-f]{40}", row[1]) for row in observed):
         raise ValueError("every candidate must use a unique immutable 40-hex revision")
     for candidate in candidates:
-        targets = train["target_policy"].get(candidate["model_type"])
-        if not isinstance(targets, list) or not targets or len(set(targets)) != len(targets):
-            raise ValueError(f"invalid target policy for {candidate['model_id']}")
+        if candidate["model_type"] not in policies:
+            raise ValueError(f"candidate lacks target policy: {candidate['model_id']}")
 
     projection = contract["evaluation"]["reasoning_projection"]
     if projection != {
@@ -99,6 +141,8 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         raise ValueError("bounded one-model-per-pod execution drifted")
     if int(execution.get("container_disk_gb", 0)) < 250:
         raise ValueError("ephemeral disk budget is too small for the frozen cohort")
+    if execution.get("runtime_dependencies") != EXPECTED_RUNTIME_DEPENDENCIES:
+        raise ValueError("runtime dependency lock drifted")
 
     governance = contract["governance"]
     forbidden_true = ["promotion_allowed", "lineage_mutation_allowed", "frozen_eval_mutation_allowed", "source_dataset_mutation_allowed", "model_revision_substitution_allowed"]
@@ -114,12 +158,24 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         "roles": ["diagnosis", "controller"],
         "dose_optimizer_steps": train["dose_optimizer_steps"],
         "ephemeral_only": True,
+        "moe_target_parameters_required": True,
         "promotion_allowed": False,
     }
 
 
-def validate_remote_models(contract: dict[str, Any]) -> list[dict[str, Any]]:
+def validate_remote_models(contract: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    import peft
+    import transformers
     from huggingface_hub import HfApi, hf_hub_download
+    from peft import LoraConfig
+    from transformers import AutoConfig
+
+    if transformers.__version__ != contract["execution"]["runtime_dependencies"]["transformers"]:
+        raise RuntimeError(f"transformers runtime drift: {transformers.__version__}")
+    if peft.__version__ != contract["training"]["peft_version"]:
+        raise RuntimeError(f"PEFT runtime drift: {peft.__version__}")
+    if "target_parameters" not in inspect.signature(LoraConfig).parameters:
+        raise RuntimeError("pinned PEFT does not support LoRA target_parameters")
 
     api = HfApi()
     rows: list[dict[str, Any]] = []
@@ -130,21 +186,37 @@ def validate_remote_models(contract: dict[str, Any]) -> list[dict[str, Any]]:
         if info.sha != revision:
             raise RuntimeError(f"remote immutable revision mismatch for {model_id}: {info.sha}")
         config_path = Path(hf_hub_download(model_id, "config.json", revision=revision))
-        config = _load(config_path)
-        if config.get("model_type") != candidate["model_type"]:
-            raise RuntimeError(f"remote model_type mismatch for {model_id}: {config.get('model_type')}")
+        raw_config = _load(config_path)
+        if raw_config.get("model_type") != candidate["model_type"]:
+            raise RuntimeError(f"remote model_type mismatch for {model_id}: {raw_config.get('model_type')}")
+        loaded_config = AutoConfig.from_pretrained(model_id, revision=revision, trust_remote_code=False)
+        if loaded_config.model_type != candidate["model_type"]:
+            raise RuntimeError(f"transformers AutoConfig mismatch for {model_id}: {loaded_config.model_type}")
         card = getattr(info, "card_data", None)
         remote_license = str(getattr(card, "license", "") or "").lower()
         if remote_license and remote_license != candidate["license"].lower():
             raise RuntimeError(f"remote license mismatch for {model_id}: {remote_license}")
+        policy = contract["training"]["target_policy"][candidate["model_type"]]
+        expected_experts = policy.get("expert_count")
+        if expected_experts is not None:
+            observed_experts = raw_config.get("num_experts", raw_config.get("n_routed_experts"))
+            if int(observed_experts or 0) != int(expected_experts):
+                raise RuntimeError(f"expert-count mismatch for {model_id}: {observed_experts}")
         rows.append({
             "model_id": model_id,
             "revision": revision,
-            "model_type": config.get("model_type"),
+            "model_type": loaded_config.model_type,
             "license": remote_license or candidate["license"].lower(),
+            "expert_count": expected_experts,
             "remote_revision_verified": True,
+            "transformers_config_supported_without_remote_code": True,
         })
-    return rows
+    runtime = {
+        "transformers": transformers.__version__,
+        "peft": peft.__version__,
+        "peft_target_parameters_supported": True,
+    }
+    return rows, runtime
 
 
 def main() -> int:
@@ -154,7 +226,7 @@ def main() -> int:
     contract = _load(CONTRACT_PATH)
     evidence = validate_contract(contract)
     if args.remote:
-        evidence["remote_models"] = validate_remote_models(contract)
+        evidence["remote_models"], evidence["runtime_compatibility"] = validate_remote_models(contract)
         evidence["status"] = "contract_validated"
     OUT_PATH.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("DIAGNOSTIC_SCALING_CONTRACT_JSON " + json.dumps(evidence, sort_keys=True))
