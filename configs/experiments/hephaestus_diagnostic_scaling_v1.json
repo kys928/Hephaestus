@@ -130,12 +130,17 @@
   "execution": {
     "one_model_per_pod": true,
     "gpu_count_per_pod": 1,
+    "cloud_type": "SECURE",
+    "datacenter_id": "EU-CZ-1",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
     "preferred_gpu_for_14b": ["NVIDIA H100 80GB HBM3", "NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe", "NVIDIA H200"],
     "preferred_gpu_for_30b": ["NVIDIA H200"],
     "container_disk_gb": 300,
     "network_volume_attached": false,
     "persistent_model_cache_allowed": false,
     "max_parallel_pods": 1,
+    "launch_requires_execute_flag": true,
+    "launch_authorization_environment": "HEPHAESTUS_DIAGNOSTIC_SCALING_LAUNCH_AUTHORIZED=YES",
     "runtime_dependencies": {
       "transformers": "5.17.0",
       "accelerate": "1.15.0",
