@@ -1,0 +1,127 @@
+{
+  "protocol_id": "hephaestus_diagnostic_scaling_v1",
+  "protocol_version": 1,
+  "purpose": "Measure whether larger or reasoning-specialized open models reduce Hephaestus diagnosis-role adaptation distance under a frozen role-specialization geometry, while using controller as a calibration role and preserving semantic safety evidence.",
+  "scientific_variable": "candidate_model_identity_and_reasoning_family_under_fixed_lora_dose_geometry",
+  "sources": {
+    "base_distance_protocol_path": "configs/experiments/hephaestus_distance_to_role_v1.json",
+    "frozen_topology_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "frozen_semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
+    "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c",
+    "source_semantic_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad"
+  },
+  "roles": {
+    "primary": ["diagnosis"],
+    "calibration": ["controller"]
+  },
+  "candidates": [
+    {
+      "model_id": "Qwen/Qwen3-14B",
+      "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+      "license": "apache-2.0",
+      "model_type": "qwen3",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "hybrid_thinking",
+      "minimum_gpu_memory_gib": 75
+    },
+    {
+      "model_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+      "revision": "1df8507178afcc1bef68cd8c393f61a886323761",
+      "license": "mit",
+      "model_type": "qwen2",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "reasoning_distill",
+      "minimum_gpu_memory_gib": 75
+    },
+    {
+      "model_id": "zai-org/GLM-4.7-Flash",
+      "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+      "license": "mit",
+      "model_type": "glm4_moe_lite",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "reasoning_moe",
+      "minimum_gpu_memory_gib": 140
+    },
+    {
+      "model_id": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      "revision": "144afc2f379b542fdd4e85a1fcd5e1f79112d95d",
+      "license": "apache-2.0",
+      "model_type": "qwen3_moe",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "thinking_only",
+      "minimum_gpu_memory_gib": 140
+    }
+  ],
+  "training": {
+    "method": "lora",
+    "peft_version": "0.20.0",
+    "precision": "bfloat16",
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "bias": "none",
+    "learning_rate": 0.00005,
+    "weight_decay": 0.0,
+    "micro_batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "max_seq_length": 1024,
+    "warmup_ratio": 0.1,
+    "max_grad_norm": 1.0,
+    "optimizer": "adamw_torch",
+    "shuffle_seed": 314159,
+    "model_seed": 271828,
+    "gradient_checkpointing": true,
+    "train_only_assistant_tokens": true,
+    "examples_per_role": 48,
+    "max_epochs": 4,
+    "expected_optimizer_steps_per_epoch": 12,
+    "dose_optimizer_steps": [3, 6, 12, 24, 36, 48],
+    "target_policy": {
+      "qwen3": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+      "qwen2": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+      "qwen3_moe": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "gate_up_proj"],
+      "glm4_moe_lite": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "gate_up_proj"]
+    },
+    "record_exact_target_module_names": true,
+    "record_target_module_count": true,
+    "record_trainable_parameter_count": true
+  },
+  "evaluation": {
+    "frozen_topology_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "frozen_semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
+    "screening_seed": 11,
+    "full_confirmation_seeds": [11, 29, 47],
+    "quality_thresholds_100": [60, 70, 80, 90],
+    "schema_compliance_required": 1.0,
+    "hallucination_rate_required": 0.0,
+    "strict_semantic_delta_min": 0.0,
+    "bounded_semantic_delta_min": -0.03,
+    "reasoning_projection": {
+      "preserve_raw_generation": true,
+      "score_projection": "text_after_last_reasoning_close_delimiter_else_raw",
+      "reasoning_close_delimiters": ["</think>"],
+      "projection_applies_identically_to_baseline_and_all_doses": true
+    }
+  },
+  "execution": {
+    "one_model_per_pod": true,
+    "gpu_count_per_pod": 1,
+    "preferred_gpu_for_14b": ["NVIDIA H100 80GB HBM3", "NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe", "NVIDIA H200"],
+    "preferred_gpu_for_30b": ["NVIDIA H200"],
+    "container_disk_gb": 300,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed": false,
+    "max_parallel_pods": 1,
+    "evidence_persistence": "upload_compact_evidence_and_selected_adapters_to_S3_then_verify_readback_before_teardown",
+    "checkpoint_retention": "retain_selected_adapters_and_compact_scientific_evidence_only_after_verified_S3_export"
+  },
+  "governance": {
+    "training_is_experimentally_approved": true,
+    "approval_source": "user_directive_2026-09-16_diagnostic_scaling_v1",
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false,
+    "source_dataset_mutation_allowed": false,
+    "model_revision_substitution_allowed": false
+  }
+}
