@@ -26,6 +26,7 @@ def test_contract_matches_frozen_test3_geometry_and_governance():
     assert evidence["roles"] == ["diagnosis", "controller"]
     assert evidence["dose_optimizer_steps"] == [3, 6, 12, 24, 36, 48]
     assert evidence["ephemeral_only"] is True
+    assert evidence["placement_scope"] == "global_no_datacenter_filter"
     assert evidence["moe_target_parameters_required"] is True
     assert evidence["promotion_allowed"] is False
 
@@ -41,6 +42,20 @@ def test_network_volume_attachment_is_rejected():
     payload = copy.deepcopy(contract())
     payload["execution"]["network_volume_attached"] = True
     with pytest.raises(ValueError, match="ephemeral"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_datacenter_filter_is_rejected_by_contract():
+    payload = copy.deepcopy(contract())
+    payload["execution"]["datacenter_id"] = "EU-CZ-1"
+    with pytest.raises(ValueError, match="global Secure Cloud"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_large_gpu_allowlist_must_keep_h200_and_b200():
+    payload = copy.deepcopy(contract())
+    payload["execution"]["preferred_gpu_for_30b"] = ["NVIDIA H200"]
+    with pytest.raises(ValueError, match="30B GPU"):
         validator.validate_contract(payload, ROOT)
 
 
