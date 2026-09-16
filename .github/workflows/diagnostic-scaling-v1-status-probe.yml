@@ -1,0 +1,80 @@
+name: Diagnostic Scaling V1 RunPod status probe
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-v1-status-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      TARGET_RUN_ID: diagnostic-scaling-v1-35131969313
+    steps:
+      - name: Read current Diagnostic Scaling Pods
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          base = (os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          key = os.environ['RUNPOD_API_KEY']
+          target = os.environ['TARGET_RUN_ID']
+          req = urllib.request.Request(
+              base + '/pods',
+              headers={
+                  'Authorization': 'Bearer ' + key,
+                  'Accept': 'application/json',
+                  'User-Agent': 'Hephaestus-Diagnostic-Scaling-Status-Probe/1.0',
+              },
+              method='GET',
+          )
+          with urllib.request.urlopen(req, timeout=30) as response:
+              payload = json.load(response)
+          if isinstance(payload, dict):
+              rows = payload.get('pods') or payload.get('items') or payload.get('data') or []
+          else:
+              rows = payload
+          if not isinstance(rows, list):
+              rows = []
+          matches = []
+          for pod in rows:
+              if not isinstance(pod, dict):
+                  continue
+              name = str(pod.get('name') or '')
+              if target not in name:
+                  continue
+              gpu = pod.get('gpu') if isinstance(pod.get('gpu'), dict) else {}
+              machine = pod.get('machine') if isinstance(pod.get('machine'), dict) else {}
+              matches.append({
+                  'id': pod.get('id'),
+                  'name': name,
+                  'desiredStatus': pod.get('desiredStatus'),
+                  'lastStatusChange': pod.get('lastStatusChange'),
+                  'gpu': {
+                      'id': gpu.get('id'),
+                      'displayName': gpu.get('displayName'),
+                      'count': gpu.get('count'),
+                  },
+                  'machine': {
+                      'dataCenterId': machine.get('dataCenterId'),
+                      'id': machine.get('id'),
+                  },
+              })
+          out = {'target_run_id': target, 'matching_pods': matches, 'count': len(matches)}
+          with open('diagnostic_scaling_status_probe.json', 'w', encoding='utf-8') as f:
+              json.dump(out, f, indent=2, sort_keys=True)
+          print('RUNPOD_STATUS_JSON ' + json.dumps(out, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-v1-runpod-status
+          path: diagnostic_scaling_status_probe.json
+          if-no-files-found: error
+          retention-days: 7
