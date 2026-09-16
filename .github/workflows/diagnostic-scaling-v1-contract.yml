@@ -23,7 +23,7 @@ concurrency:
 jobs:
   validate-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       HF_HUB_DISABLE_XET: '1'
     steps:
@@ -31,11 +31,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install contract validation dependencies
-        run: python -m pip install 'pytest>=8,<9' 'huggingface-hub==1.31.0'
+      - name: Install contract and frozen runtime validation dependencies
+        run: |
+          python -m pip install 'pytest>=8,<9' \
+            'transformers==5.17.0' \
+            'accelerate==1.15.0' \
+            'safetensors==0.8.0' \
+            'huggingface-hub==1.31.0' \
+            'peft==0.20.0'
       - name: Run contract invariant tests
         run: python -m pytest -q tests/test_diagnostic_scaling_v1_contract.py
-      - name: Verify immutable remote model revisions and configs
+      - name: Verify immutable remote model revisions, configs, and PEFT MoE support
         run: python scripts/validate_diagnostic_scaling_v1_contract.py --remote
       - name: Preserve contract-validation evidence
         uses: actions/upload-artifact@v4
