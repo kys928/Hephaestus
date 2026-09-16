@@ -2,9 +2,12 @@
   "authorized": true,
   "protocol_id": "hephaestus_diagnostic_scaling_v1",
   "authorization_source": "user_directive",
-  "authorization_text": "start!🔥💯",
-  "authorized_at": "2026-09-16T17:33:00+02:00",
+  "authorization_text": "start!🔥💯; if needed use required GPU from any data center",
+  "authorized_at": "2026-09-16T19:55:00+02:00",
   "launch_scope": "full_frozen_four-model_diagnostic_scaling_v1_cohort",
+  "retry_reason": "EU-CZ-1 capacity exhausted before pod creation; retry with global Secure Cloud placement",
+  "placement_scope": "global_no_datacenter_filter",
+  "prior_failed_run_id": 35130059250,
   "promotion_allowed": false,
   "lineage_mutation_allowed": false
 }
