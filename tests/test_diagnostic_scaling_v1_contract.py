@@ -26,6 +26,7 @@ def test_contract_matches_frozen_test3_geometry_and_governance():
     assert evidence["roles"] == ["diagnosis", "controller"]
     assert evidence["dose_optimizer_steps"] == [3, 6, 12, 24, 36, 48]
     assert evidence["ephemeral_only"] is True
+    assert evidence["moe_target_parameters_required"] is True
     assert evidence["promotion_allowed"] is False
 
 
@@ -54,6 +55,27 @@ def test_reasoning_projection_must_preserve_raw_generation():
     payload = copy.deepcopy(contract())
     payload["evaluation"]["reasoning_projection"]["preserve_raw_generation"] = False
     with pytest.raises(ValueError, match="reasoning projection"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_moe_routed_experts_must_use_target_parameters():
+    payload = copy.deepcopy(contract())
+    payload["training"]["target_policy"]["qwen3_moe"]["target_parameters"] = []
+    with pytest.raises(ValueError, match="MoE target geometry"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_moe_expert_rank_budget_cannot_silently_expand():
+    payload = copy.deepcopy(contract())
+    payload["training"]["target_policy"]["glm4_moe_lite"]["expert_rank"] = 8
+    with pytest.raises(ValueError, match="MoE target geometry"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_router_must_stay_frozen():
+    payload = copy.deepcopy(contract())
+    payload["training"]["router_trainable"] = True
+    with pytest.raises(ValueError, match="routers"):
         validator.validate_contract(payload, ROOT)
 
 
