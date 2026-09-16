@@ -47,6 +47,18 @@ EXPECTED_MOE_POLICIES = {
         "expert_count": 64,
     },
 }
+EXPECTED_GPU_14B = [
+    "NVIDIA H100 80GB HBM3",
+    "NVIDIA H100 PCIe",
+    "NVIDIA H100 NVL",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA H200",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "NVIDIA B200",
+]
+EXPECTED_GPU_30B = ["NVIDIA H200", "NVIDIA B200"]
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -137,6 +149,14 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
     execution = contract["execution"]
     if execution.get("network_volume_attached") is not False or execution.get("persistent_model_cache_allowed") is not False:
         raise ValueError("Diagnostic Scaling must remain ephemeral with no persistent model cache")
+    if execution.get("placement_scope") != "global_no_datacenter_filter" or "datacenter_id" in execution:
+        raise ValueError("Diagnostic Scaling must search global Secure Cloud capacity without a datacenter filter")
+    if execution.get("cloud_type") != "SECURE":
+        raise ValueError("Diagnostic Scaling cloud boundary drifted")
+    if execution.get("preferred_gpu_for_14b") != EXPECTED_GPU_14B:
+        raise ValueError("14B GPU capacity allowlist drifted")
+    if execution.get("preferred_gpu_for_30b") != EXPECTED_GPU_30B:
+        raise ValueError("30B GPU capacity allowlist drifted")
     if execution.get("one_model_per_pod") is not True or int(execution.get("max_parallel_pods", 0)) != 1:
         raise ValueError("bounded one-model-per-pod execution drifted")
     if int(execution.get("container_disk_gb", 0)) < 250:
@@ -158,6 +178,7 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         "roles": ["diagnosis", "controller"],
         "dose_optimizer_steps": train["dose_optimizer_steps"],
         "ephemeral_only": True,
+        "placement_scope": execution["placement_scope"],
         "moe_target_parameters_required": True,
         "promotion_allowed": False,
     }
