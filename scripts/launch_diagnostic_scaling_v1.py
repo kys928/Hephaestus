@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "configs/experiments/hephaestus_diagnostic_scaling_v1.json"
 MAX_SECONDS = 20500
 POLL_SECONDS = 15
-CREATE_ATTEMPTS = 12
+CREATE_ATTEMPTS = 18
 CREATE_RETRY_SECONDS = 10
 AUTH_ENV = "HEPHAESTUS_DIAGNOSTIC_SCALING_LAUNCH_AUTHORIZED"
 
@@ -151,8 +151,6 @@ def build_pod_request(
         "gpuTypeIds": gpu_ids(contract, candidate),
         "gpuTypePriority": "availability",
         "cloudType": execution["cloud_type"],
-        "dataCenterIds": [execution["datacenter_id"]],
-        "dataCenterPriority": "custom",
         "imageName": execution["image"],
         "containerDiskInGb": int(execution["container_disk_gb"]),
         "dockerStartCmd": ["bash", "-lc", pod_shell(contract)],
@@ -167,8 +165,12 @@ def validate_pod_request(contract: dict[str, Any], candidate: dict[str, Any], bo
     execution = contract["execution"]
     if "networkVolumeId" in body or "volumeMountPath" in body:
         raise ValueError("ephemeral Diagnostic Scaling Pod request must not attach a Network Volume")
+    if "dataCenterIds" in body or "countryCodes" in body:
+        raise ValueError("global Diagnostic Scaling request must not contain a location filter")
     if execution.get("network_volume_attached") is not False:
         raise ValueError("contract no longer requires ephemeral execution")
+    if execution.get("placement_scope") != "global_no_datacenter_filter":
+        raise ValueError("contract no longer requires global RunPod placement")
     if body.get("containerDiskInGb") != execution["container_disk_gb"]:
         raise ValueError("Pod container disk differs from frozen contract")
     if body.get("imageName") != execution["image"]:
@@ -177,8 +179,6 @@ def validate_pod_request(contract: dict[str, Any], candidate: dict[str, Any], bo
         raise ValueError("Pod GPU allowlist differs from candidate contract")
     if body.get("gpuCount") != 1 or body.get("cloudType") != "SECURE":
         raise ValueError("Pod compute topology differs from frozen contract")
-    if body.get("dataCenterIds") != [execution["datacenter_id"]]:
-        raise ValueError("Pod datacenter differs from frozen contract")
     shell = str((body.get("dockerStartCmd") or ["", "", ""])[-1])
     if "git checkout --detach \"$HEPHAESTUS_REPO_SHA\"" not in shell:
         raise ValueError("Pod bootstrap does not checkout the immutable admitted repository SHA")
@@ -312,17 +312,31 @@ def create_with_retries(execution: RunPodExecutionAdapter, body: dict[str, objec
     for attempt in range(1, CREATE_ATTEMPTS + 1):
         try:
             pod = execution._create_pod(body)
-            observations.append({"attempt": attempt, "status": "created", "pod_id": pod.get("id"), "gpu": pod.get("gpu")})
+            observations.append({
+                "attempt": attempt,
+                "queried_at": now(),
+                "placement_scope": "global_no_datacenter_filter",
+                "status": "created",
+                "pod_id": pod.get("id"),
+                "gpu": pod.get("gpu"),
+                "machine": pod.get("machine"),
+            })
             return pod, observations
         except Exception as exc:
             last_error = exc
-            observations.append({"attempt": attempt, "status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+            observations.append({
+                "attempt": attempt,
+                "queried_at": now(),
+                "placement_scope": "global_no_datacenter_filter",
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            })
             lowered = str(exc).lower()
             if any(marker in lowered for marker in ("402", "insufficient funds", "insufficient credit", "insufficient balance")):
                 raise
             if attempt < CREATE_ATTEMPTS:
                 time.sleep(CREATE_RETRY_SECONDS)
-    raise RuntimeError(f"Diagnostic Scaling Pod creation exhausted retries: {last_error}") from last_error
+    raise RuntimeError(f"Diagnostic Scaling Pod creation exhausted global retries: {last_error}") from last_error
 
 
 def render_only(model_id: str, *, repo_sha: str | None = None, run_id: str | None = None) -> dict[str, Any]:
@@ -344,6 +358,7 @@ def render_only(model_id: str, *, repo_sha: str | None = None, run_id: str | Non
         "model_id": model_id,
         "revision": candidate["revision"],
         "protocol_sha256": sha(CONTRACT_PATH.read_bytes()),
+        "placement_scope": contract["execution"]["placement_scope"],
         "request": redacted_request(body),
     }
 
@@ -386,6 +401,7 @@ def main() -> int:
         "revision": candidate["revision"],
         "repo_sha": repo_sha,
         "status": "starting",
+        "placement_scope": contract["execution"]["placement_scope"],
         "network_volume_attached": False,
         "promotion_allowed": False,
         "lineage_mutation_allowed": False,
