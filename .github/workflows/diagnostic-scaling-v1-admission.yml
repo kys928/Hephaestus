@@ -5,6 +5,7 @@ on:
     branches: [experiment-diagnostic-scaling-v1]
     paths:
       - .github/workflows/diagnostic-scaling-v1-admission.yml
+      - .github/workflows/diagnostic-scaling-v1-launch.yml
       - configs/experiments/hephaestus_diagnostic_scaling_v1.json
       - scripts/preflight_diagnostic_scaling_v1.py
       - scripts/validate_diagnostic_scaling_v1_contract.py
