@@ -1,0 +1,10 @@
+{
+  "authorized": true,
+  "protocol_id": "hephaestus_diagnostic_scaling_v1",
+  "authorization_source": "user_directive",
+  "authorization_text": "start!🔥💯",
+  "authorized_at": "2026-09-16T17:33:00+02:00",
+  "launch_scope": "full_frozen_four-model_diagnostic_scaling_v1_cohort",
+  "promotion_allowed": false,
+  "lineage_mutation_allowed": false
+}
