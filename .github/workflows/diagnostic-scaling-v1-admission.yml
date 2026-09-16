@@ -8,8 +8,11 @@ on:
       - configs/experiments/hephaestus_diagnostic_scaling_v1.json
       - scripts/preflight_diagnostic_scaling_v1.py
       - scripts/validate_diagnostic_scaling_v1_contract.py
+      - scripts/run_diagnostic_scaling_v1.py
+      - scripts/launch_diagnostic_scaling_v1.py
       - tests/test_diagnostic_scaling_v1_contract.py
       - tests/test_diagnostic_scaling_v1_admission.py
+      - tests/test_diagnostic_scaling_v1_launcher.py
   workflow_dispatch:
 
 permissions:
@@ -22,7 +25,7 @@ concurrency:
 jobs:
   admit-launch-inputs:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       PYTHONPATH: src
       HF_HUB_DISABLE_XET: '1'
@@ -43,13 +46,21 @@ jobs:
             'safetensors==0.8.0' \
             'huggingface-hub==1.31.0' \
             'peft==0.20.0'
-      - name: Run contract and admission unit gates
-        run: python -m pytest -q tests/test_diagnostic_scaling_v1_contract.py tests/test_diagnostic_scaling_v1_admission.py
+      - name: Compile admission, launcher, and Pod driver
+        run: python -m py_compile scripts/validate_diagnostic_scaling_v1_contract.py scripts/preflight_diagnostic_scaling_v1.py scripts/launch_diagnostic_scaling_v1.py scripts/run_diagnostic_scaling_v1.py
+      - name: Run contract, admission, and launcher unit gates
+        run: python -m pytest -q tests/test_diagnostic_scaling_v1_contract.py tests/test_diagnostic_scaling_v1_admission.py tests/test_diagnostic_scaling_v1_launcher.py
       - name: Reverify immutable cohort and PEFT MoE support
         run: python scripts/validate_diagnostic_scaling_v1_contract.py --remote
       - name: Build and persist immutable launch admission
         run: python scripts/preflight_diagnostic_scaling_v1.py
-      - name: Preserve launch-admission evidence
+      - name: Render every exact Pod request without launching
+        run: |
+          python scripts/launch_diagnostic_scaling_v1.py --model-id 'Qwen/Qwen3-14B'
+          python scripts/launch_diagnostic_scaling_v1.py --model-id 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B'
+          python scripts/launch_diagnostic_scaling_v1.py --model-id 'zai-org/GLM-4.7-Flash'
+          python scripts/launch_diagnostic_scaling_v1.py --model-id 'Qwen/Qwen3-30B-A3B-Thinking-2507'
+      - name: Preserve launch-admission and rendered-request evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -57,5 +68,6 @@ jobs:
           path: |
             diagnostic_scaling_contract_validation.json
             diagnostic_scaling_admission/
+            diagnostic_scaling_launch_request_*.json
           if-no-files-found: error
           retention-days: 90
