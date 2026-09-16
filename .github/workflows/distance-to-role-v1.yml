@@ -2,6 +2,7 @@ name: Hephaestus distance to role V1
 
 # Test 3 implementation. GPU proof launches only from an explicit launch marker
 # after the exact commit has passed CPU/S3 admission and integration CI.
+# Launch marker: validated scientific tree 930248171af1cfb5b3fc673e9c37efa5bff7ae57.
 on:
   push:
     branches: [feature/production-loop-v1]
