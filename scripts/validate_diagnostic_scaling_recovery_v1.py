@@ -12,6 +12,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json"
 ORIGINAL_PATH = ROOT / "configs/experiments/hephaestus_diagnostic_scaling_v1.json"
+LAUNCH_MARKER_REL = Path("configs/experiments/diagnostic_scaling_recovery_v1.launch.json")
 OUT_PATH = ROOT / "diagnostic_scaling_recovery_validation.json"
 
 EXPECTED_CANDIDATES = [
@@ -163,8 +164,30 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         raise ValueError("silent container-start watchdog must be bounded between 5 and 30 minutes")
 
     governance = contract.get("governance", {})
-    if governance.get("paid_launch_allowed_now") is not False or governance.get("paid_launch_requires_new_explicit_user_go") is not True:
-        raise ValueError("paid launch must remain blocked before user go")
+    paid_allowed = governance.get("paid_launch_allowed_now")
+    if paid_allowed not in (True, False):
+        raise ValueError("paid launch state must be an explicit boolean")
+    if governance.get("paid_launch_requires_new_explicit_user_go") is not True:
+        raise ValueError("paid launch must always require explicit user go")
+    authorization_state = "blocked_pre_user_go"
+    if paid_allowed:
+        marker_path = root / LAUNCH_MARKER_REL
+        if not marker_path.is_file():
+            raise ValueError("paid launch requires committed authorization marker")
+        marker = load(marker_path)
+        if marker.get("authorized") is not True:
+            raise ValueError("paid launch authorization marker is not authorized")
+        if marker.get("protocol_id") != "hephaestus_diagnostic_scaling_recovery_v1":
+            raise ValueError("paid launch authorization marker protocol mismatch")
+        if marker.get("authorization_source") != "user_directive":
+            raise ValueError("paid launch authorization source drifted")
+        if not str(marker.get("authorization_text", "")).strip():
+            raise ValueError("paid launch authorization text is missing")
+        if marker.get("promotion_allowed") is not False or marker.get("lineage_mutation_allowed") is not False:
+            raise ValueError("paid launch marker may not authorize promotion or lineage mutation")
+        if governance.get("approval_source") != "user_directive_2026-09-17_paid_recovery_launch":
+            raise ValueError("paid launch approval source drifted")
+        authorization_state = "authorized_by_user"
     for key in ("promotion_allowed", "lineage_mutation_allowed", "frozen_eval_mutation_allowed", "source_dataset_mutation_allowed", "model_revision_substitution_allowed"):
         if governance.get(key) is not False:
             raise ValueError(f"governance boundary drifted: {key}")
@@ -177,7 +200,8 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         "candidate_count": len(observed),
         "fixed_non_thinking_eligible": [model_id for model_id, eligible in expected_fixed.items() if eligible],
         "reasoning_aware_eligible": [row[0] for row in observed],
-        "paid_launch_allowed_now": False,
+        "paid_launch_allowed_now": bool(paid_allowed),
+        "authorization_state": authorization_state,
         "frozen_eval_mutated": False,
     }
 
