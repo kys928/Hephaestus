@@ -33,6 +33,8 @@ def test_render_only_never_executes_paid_launch():
     assert "networkVolumeId" not in request
     assert "volumeMountPath" not in request
     assert request["gpuCount"] == 1
+    assert request["env"]["CUDA_VISIBLE_DEVICES"] == "0"
+    assert request["env"]["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
     shell = request["dockerStartCmd"][-1]
     assert "scripts/run_diagnostic_scaling_recovery_v1.py" in shell
     assert "git checkout --detach \"$HEPHAESTUS_REPO_SHA\"" in shell
@@ -85,6 +87,22 @@ def test_wait_terminal_fails_immediately_on_exited_pod(monkeypatch):
     with pytest.raises(launcher.PodExitedWithoutTerminal) as exc:
         launcher.wait_terminal(Client(), object(), execution_id="exec", attempt=1, pod_id="pod-x")
     assert exc.value.snapshot["desiredStatus"] == "EXITED"
+
+
+def test_wait_terminal_fails_after_bounded_missing_polls(monkeypatch):
+    class Client:
+        pass
+
+    monkeypatch.setattr(launcher.storage, "maybe_read_key", lambda *args, **kwargs: None)
+    monkeypatch.setattr(launcher.storage, "pod_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(launcher, "best_effort_log_snapshot", lambda *_: {"status": "captured", "bytes": 60, "tail": "pod not found"})
+    monkeypatch.setattr(launcher.time, "sleep", lambda _: None)
+    with pytest.raises(launcher.PodExitedWithoutTerminal) as exc:
+        launcher.wait_terminal(
+            Client(), object(), execution_id="exec", attempt=1, pod_id="pod-missing", silent_start_timeout_seconds=999999
+        )
+    assert exc.value.snapshot["desiredStatus"] == "MISSING"
+    assert exc.value.snapshot["consecutive_missing_polls"] == 3
 
 
 def test_wait_terminal_aborts_silent_running_pod(monkeypatch):

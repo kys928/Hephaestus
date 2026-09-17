@@ -366,8 +366,31 @@ def unload(model: Any | None = None, tokenizer: Any | None = None) -> None:
 def load_base(snapshot: Path, candidate: dict[str, Any], contract: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
     import torch
 
-    if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
-        raise RuntimeError("Diagnostic Scaling V1 requires exactly one visible CUDA GPU")
+    cuda_available = bool(torch.cuda.is_available())
+    device_count = int(torch.cuda.device_count())
+    if not cuda_available or device_count != 1:
+        diagnostic = {
+            "cuda_available": cuda_available,
+            "device_count": device_count,
+            "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            "NVIDIA_VISIBLE_DEVICES": os.environ.get("NVIDIA_VISIBLE_DEVICES"),
+        }
+        try:
+            import subprocess
+            probe = subprocess.run(
+                ["nvidia-smi", "--query-gpu=index,name,memory.total,uuid", "--format=csv,noheader"],
+                check=False, capture_output=True, text=True, timeout=20,
+            )
+            diagnostic["nvidia_smi_returncode"] = probe.returncode
+            diagnostic["nvidia_smi_stdout"] = probe.stdout.strip()
+            diagnostic["nvidia_smi_stderr"] = probe.stderr.strip()
+        except Exception as exc:
+            diagnostic["nvidia_smi_error"] = f"{type(exc).__name__}: {exc}"
+        raise RuntimeError(
+            "Diagnostic Scaling V1 requires exactly one visible CUDA GPU; observed="
+            + json.dumps(diagnostic, sort_keys=True)
+        )
+    torch.cuda.set_device(0)
     props = torch.cuda.get_device_properties(0)
     memory_gib = props.total_memory / (1024 ** 3)
     if memory_gib + 1e-9 < float(candidate["minimum_gpu_memory_gib"]):

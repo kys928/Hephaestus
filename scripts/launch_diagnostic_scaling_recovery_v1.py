@@ -103,6 +103,8 @@ export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
 export HF_HUB_DISABLE_XET=1
 export XDG_CACHE_HOME=/opt/hephaestus-cache/xdg
 export TMPDIR=/opt/hephaestus-tmp
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_VISIBLE_DEVICES=0
 mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv curl
@@ -137,6 +139,8 @@ def placeholder_environment(*, repo_sha: str, run_id: str, execution_id: str, at
         "RUNPOD_DATACENTER_ID": "<configured-region>",
         "RUNPOD_NETWORK_VOLUME_ID": "<s3-bucket-id-only-not-mounted>",
         "HF_HUB_DISABLE_XET": "1",
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "0",
         "PYTHONUNBUFFERED": "1",
     }
 
@@ -154,6 +158,8 @@ def pod_environment(*, repo_sha: str, run_id: str, execution_id: str, attempt: i
         "RUNPOD_DATACENTER_ID": required("RUNPOD_DATACENTER_ID"),
         "RUNPOD_NETWORK_VOLUME_ID": required("RUNPOD_NETWORK_VOLUME_ID"),
         "HF_HUB_DISABLE_XET": "1",
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "0",
         "PYTHONUNBUFFERED": "1",
     }
 
@@ -319,6 +325,7 @@ def wait_terminal(
     startup_output_verified = False
     observations: list[dict[str, Any]] = []
     last_status: str | None = None
+    missing_polls = 0
     while time.monotonic() < deadline:
         raw = storage.maybe_read_key(client, key)
         if raw is not None:
@@ -327,12 +334,26 @@ def wait_terminal(
                 raise RuntimeError("Recovery terminal record is not an object")
             return payload, observations
         snapshot = storage.pod_snapshot(execution, pod_id)
-        status = str((snapshot or {}).get("desiredStatus", "unknown")).upper()
+        if snapshot is None:
+            missing_polls += 1
+            status = "MISSING"
+        else:
+            missing_polls = 0
+            status = str(snapshot.get("desiredStatus", "unknown")).upper()
         if status != last_status:
             observations.append({"at": now(), "desired_status": status, "pod_snapshot": snapshot})
             last_status = status
         if status in TERMINAL_STATUSES:
             raise PodExitedWithoutTerminal(pod_id, snapshot)
+        if snapshot is None and missing_polls >= 3:
+            log_snapshot = best_effort_log_snapshot(pod_id)
+            missing = {
+                "desiredStatus": "MISSING",
+                "consecutive_missing_polls": missing_polls,
+                "runpod_v2_log_snapshot": log_snapshot,
+            }
+            observations.append({"at": now(), "pod_missing_watchdog": True, **missing})
+            raise PodExitedWithoutTerminal(pod_id, missing)
         if not startup_output_verified and time.monotonic() >= startup_probe_due:
             log_snapshot = best_effort_log_snapshot(pod_id)
             observations.append({
