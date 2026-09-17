@@ -2,10 +2,11 @@
   "authorized": true,
   "protocol_id": "hephaestus_diagnostic_scaling_recovery_v1",
   "authorization_source": "user_directive",
-  "authorization_text": "Launch it!🔥",
-  "authorized_at": "2026-09-17T17:09:00+02:00",
+  "authorization_text": "check really if something happened and fix it otherwise rerun the process again",
+  "authorized_at": "2026-09-17T18:14:00+02:00",
   "launch_scope": "full_recovery_four-model_cohort",
-  "retry_reason": "authorization-state tests updated after pre-launch assumptions blocked admission; scientific protocol unchanged",
+  "retry_reason": "previous recovery run was cancelled after Qwen failed CUDA visibility admission and DeepSeek Pod disappeared without a terminal record; fixed SHA masks to one visible CUDA device, records detailed GPU diagnostics, and fails boundedly after three missing-Pod polls",
+  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35239300657",
   "promotion_allowed": false,
   "lineage_mutation_allowed": false
 }
