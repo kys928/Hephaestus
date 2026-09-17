@@ -1,0 +1,107 @@
+name: Diagnostic Scaling Recovery V1 validation
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json
+      - scripts/validate_diagnostic_scaling_recovery_v1.py
+      - scripts/preflight_diagnostic_scaling_recovery_v1.py
+      - scripts/run_diagnostic_scaling_recovery_v1.py
+      - scripts/launch_diagnostic_scaling_recovery_v1.py
+      - tests/test_diagnostic_scaling_recovery_v1_contract.py
+      - tests/test_diagnostic_scaling_recovery_v1_runtime.py
+      - tests/test_diagnostic_scaling_recovery_v1_launcher.py
+      - tests/test_diagnostic_scaling_recovery_v1_preflight.py
+      - .github/workflows/diagnostic-scaling-recovery-v1-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate-without-paid-compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src
+      HF_HUB_DISABLE_XET: '1'
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned recovery validation dependencies
+        run: |
+          python -m pip install -e '.[s3,test]' \
+            'transformers==5.17.0' \
+            'accelerate==1.15.0' \
+            'safetensors==0.8.0' \
+            'huggingface-hub==1.31.0' \
+            'peft==0.20.0'
+
+      - name: Compile recovery implementation
+        run: |
+          python -m py_compile \
+            scripts/validate_diagnostic_scaling_recovery_v1.py \
+            scripts/preflight_diagnostic_scaling_recovery_v1.py \
+            scripts/run_diagnostic_scaling_recovery_v1.py \
+            scripts/launch_diagnostic_scaling_recovery_v1.py
+
+      - name: Run recovery and original-boundary tests
+        run: |
+          python -m pytest -q \
+            tests/test_diagnostic_scaling_v1_contract.py \
+            tests/test_diagnostic_scaling_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_contract.py \
+            tests/test_diagnostic_scaling_recovery_v1_runtime.py \
+            tests/test_diagnostic_scaling_recovery_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_preflight.py
+
+      - name: Verify immutable model revisions and native thinking switches
+        run: python scripts/validate_diagnostic_scaling_recovery_v1.py --remote
+
+      - name: Render every future paid request without launching
+        run: |
+          for model in \
+            'Qwen/Qwen3-14B' \
+            'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B' \
+            'zai-org/GLM-4.7-Flash' \
+            'Qwen/Qwen3-30B-A3B-Thinking-2507'
+          do
+            python scripts/launch_diagnostic_scaling_recovery_v1.py --model-id "$model"
+          done
+
+      - name: Re-hash existing Test-3 source bytes read-only
+        run: python scripts/preflight_diagnostic_scaling_recovery_v1.py --verify-source-s3
+
+      - name: Prove current contract refuses launchable admission
+        run: |
+          set +e
+          HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED=YES \
+            python scripts/preflight_diagnostic_scaling_recovery_v1.py --persist-launch-admission \
+            > /tmp/recovery-persist.out 2>&1
+          status=$?
+          set -e
+          cat /tmp/recovery-persist.out
+          if [ "$status" -eq 0 ]; then
+            echo 'ERROR: launch admission unexpectedly succeeded before new user go' >&2
+            exit 1
+          fi
+          grep -q 'paid_launch_allowed_now is false' /tmp/recovery-persist.out
+
+      - name: Preserve non-paid validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-recovery-v1-validation
+          path: |
+            diagnostic_scaling_recovery_validation.json
+            diagnostic_scaling_recovery_preflight/
+            diagnostic_scaling_recovery_launch_request_*.json
+          if-no-files-found: error
+          retention-days: 90
