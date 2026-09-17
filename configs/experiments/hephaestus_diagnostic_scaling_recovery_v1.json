@@ -1,0 +1,211 @@
+{
+  "protocol_id": "hephaestus_diagnostic_scaling_recovery_v1",
+  "protocol_version": 1,
+  "purpose": "Recover Diagnostic Scaling V1 after discovering that frozen 256-token greedy generation confounded reasoning-model capability with reasoning-budget truncation. Measure a frozen-budget native non-thinking lane separately from a reasoning-aware lane with adaptive test-time compute, while preserving the original training geometry, source data, eval content, model revisions, semantic safety gates, and no-promotion boundary.",
+  "recovery_of": {
+    "protocol_id": "hephaestus_diagnostic_scaling_v1",
+    "run_id": "diagnostic-scaling-v1-35131969313",
+    "observed_failure": "reasoning_budget_truncation_and_incomplete_structured_answer_scored_as_model_failure",
+    "original_evidence_is_immutable": true,
+    "reinterpret_original_scores_as_recovery_trigger_not_scaling_result": true
+  },
+  "scientific_variables": {
+    "training": "candidate_model_identity_and_reasoning_family_under_fixed_lora_dose_geometry",
+    "fixed_non_thinking_lane": "candidate_model_identity_under_frozen_non_thinking_generation_budget_for_models_with_documented_hard_non_thinking_mode",
+    "reasoning_aware_lane": "candidate_model_identity_under_pinned_native_reasoning_policy_with_adaptive_sufficient_test_time_compute"
+  },
+  "sources": {
+    "base_distance_protocol_path": "configs/experiments/hephaestus_distance_to_role_v1.json",
+    "original_scaling_protocol_path": "configs/experiments/hephaestus_diagnostic_scaling_v1.json",
+    "frozen_topology_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "frozen_semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
+    "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c",
+    "source_semantic_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad"
+  },
+  "roles": {
+    "primary": ["diagnosis"],
+    "calibration": ["controller"]
+  },
+  "evaluation_lanes": {
+    "fixed_non_thinking": {
+      "purpose": "Efficiency-controlled comparison using the original frozen output budgets with native reasoning disabled. Models without a documented hard non-thinking mode are not eligible and receive no score in this lane.",
+      "topology_max_new_tokens": 256,
+      "semantic_max_new_tokens": 96,
+      "do_sample": false,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "top_k": null,
+      "adaptive_budget": false,
+      "score_incomplete_final_answer": false,
+      "ineligible_policy": "not_applicable_not_zero",
+      "cross_lane_ranking_allowed": false
+    },
+    "reasoning_aware": {
+      "purpose": "Capability comparison using each candidate's pinned native reasoning policy and adaptive output budgets. Retry only when the final structured answer is incomplete or generation ends at the current token cap.",
+      "adaptive_budget": true,
+      "score_incomplete_final_answer": false,
+      "budget_exhaustion_policy": "inconclusive_reasoning_budget_exhausted_not_floor_score",
+      "preserve_raw_generation": true,
+      "score_projection": "text_after_last_reasoning_close_delimiter_else_raw",
+      "reasoning_close_delimiters": ["</think>"],
+      "same_seed_on_budget_retry": true,
+      "require_complete_schema_before_scoring_topology": true,
+      "cross_lane_ranking_allowed": false
+    }
+  },
+  "candidates": [
+    {
+      "model_id": "Qwen/Qwen3-14B",
+      "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+      "license": "apache-2.0",
+      "model_type": "qwen3",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "hybrid_thinking",
+      "minimum_gpu_memory_gib": 75,
+      "fixed_non_thinking": {
+        "eligible": true,
+        "chat_template_kwargs": {"enable_thinking": false}
+      },
+      "reasoning_aware": {
+        "eligible": true,
+        "chat_template_kwargs": {"enable_thinking": true},
+        "assistant_prefill": null,
+        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": 20},
+        "topology_token_ladder": [1024, 2048, 4096, 8192],
+        "semantic_token_ladder": [256, 512, 1024, 2048]
+      }
+    },
+    {
+      "model_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+      "revision": "1df8507178afcc1bef68cd8c393f61a886323761",
+      "license": "mit",
+      "model_type": "qwen2",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "reasoning_distill",
+      "minimum_gpu_memory_gib": 75,
+      "fixed_non_thinking": {
+        "eligible": false,
+        "reason": "No documented hard native non-thinking switch equivalent to enable_thinking=false; do not simulate one with prompting."
+      },
+      "reasoning_aware": {
+        "eligible": true,
+        "chat_template_kwargs": {},
+        "assistant_prefill": "<think>\n",
+        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": null},
+        "topology_token_ladder": [1024, 2048, 4096, 8192],
+        "semantic_token_ladder": [256, 512, 1024, 2048]
+      }
+    },
+    {
+      "model_id": "zai-org/GLM-4.7-Flash",
+      "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+      "license": "mit",
+      "model_type": "glm4_moe_lite",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "reasoning_moe",
+      "minimum_gpu_memory_gib": 140,
+      "fixed_non_thinking": {
+        "eligible": true,
+        "chat_template_kwargs": {"enable_thinking": false}
+      },
+      "reasoning_aware": {
+        "eligible": true,
+        "chat_template_kwargs": {"enable_thinking": true},
+        "assistant_prefill": null,
+        "decoding": {"do_sample": true, "temperature": 1.0, "top_p": 0.95, "top_k": null},
+        "topology_token_ladder": [2048, 4096, 8192, 16384, 32768],
+        "semantic_token_ladder": [512, 1024, 2048, 4096]
+      }
+    },
+    {
+      "model_id": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      "revision": "144afc2f379b542fdd4e85a1fcd5e1f79112d95d",
+      "license": "apache-2.0",
+      "model_type": "qwen3_moe",
+      "loader": "AutoModelForCausalLM",
+      "reasoning_mode": "thinking_only",
+      "minimum_gpu_memory_gib": 140,
+      "fixed_non_thinking": {
+        "eligible": false,
+        "reason": "Pinned model is thinking-only; assigning a synthetic non-thinking score would be scientifically invalid."
+      },
+      "reasoning_aware": {
+        "eligible": true,
+        "chat_template_kwargs": {},
+        "assistant_prefill": null,
+        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": 20},
+        "topology_token_ladder": [2048, 4096, 8192, 16384, 32768],
+        "semantic_token_ladder": [512, 1024, 2048, 4096]
+      }
+    }
+  ],
+  "training": {
+    "method": "lora",
+    "peft_version": "0.20.0",
+    "precision": "bfloat16",
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "bias": "none",
+    "learning_rate": 0.00005,
+    "weight_decay": 0.0,
+    "micro_batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "max_seq_length": 1024,
+    "warmup_ratio": 0.1,
+    "max_grad_norm": 1.0,
+    "optimizer": "adamw_torch",
+    "shuffle_seed": 314159,
+    "model_seed": 271828,
+    "gradient_checkpointing": true,
+    "train_only_assistant_tokens": true,
+    "examples_per_role": 48,
+    "max_epochs": 4,
+    "expected_optimizer_steps_per_epoch": 12,
+    "dose_optimizer_steps": [3, 6, 12, 24, 36, 48],
+    "target_policy": {
+      "qwen3": {"target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], "target_parameters": [], "expert_rank": null, "expert_count": null},
+      "qwen2": {"target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], "target_parameters": [], "expert_rank": null, "expert_count": null},
+      "qwen3_moe": {"target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"], "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"], "expert_rank": 1, "expert_count": 128},
+      "glm4_moe_lite": {"target_modules": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"], "expert_rank": 1, "expert_count": 64}
+    },
+    "router_trainable": false
+  },
+  "evaluation": {
+    "screening_seed": 11,
+    "full_confirmation_seeds": [11, 29, 47],
+    "quality_thresholds_100": [60, 70, 80, 90],
+    "schema_compliance_required": 1.0,
+    "hallucination_rate_required": 0.0,
+    "strict_semantic_delta_min": 0.0,
+    "bounded_semantic_delta_min": -0.03,
+    "incomplete_sample_blocks_threshold_claim": true,
+    "lane_results_must_be_reported_separately": true
+  },
+  "execution": {
+    "one_model_per_pod": true,
+    "gpu_count_per_pod": 1,
+    "cloud_type": "SECURE",
+    "placement_scope": "global_no_datacenter_filter",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "preferred_gpu_for_14b": ["NVIDIA H100 80GB HBM3", "NVIDIA H100 PCIe", "NVIDIA H100 NVL", "NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe", "NVIDIA H200", "NVIDIA RTX PRO 6000 Blackwell Server Edition", "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA B200"],
+    "preferred_gpu_for_30b": ["NVIDIA H200", "NVIDIA B200"],
+    "container_disk_gb": 300,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed": false,
+    "max_parallel_pods": 1,
+    "pod_exit_without_terminal_policy": "fail_immediately_preserve_pod_status_and_log_snapshot",
+    "runtime_dependencies": {"transformers": "5.17.0", "accelerate": "1.15.0", "safetensors": "0.8.0", "huggingface_hub": "1.31.0", "peft": "0.20.0"}
+  },
+  "governance": {
+    "training_is_experimentally_approved": true,
+    "approval_source": "user_directive_2026-09-17_recovery_protocol_design_only_before_paid_launch",
+    "paid_launch_allowed_now": false,
+    "paid_launch_requires_new_explicit_user_go": true,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false,
+    "source_dataset_mutation_allowed": false,
+    "model_revision_substitution_allowed": false
+  }
+}
