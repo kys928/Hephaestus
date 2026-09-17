@@ -5,6 +5,7 @@ on:
     branches: [experiment-diagnostic-scaling-v1]
     paths:
       - configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json
+      - configs/experiments/diagnostic_scaling_recovery_v1.launch.json
       - scripts/validate_diagnostic_scaling_recovery_v1.py
       - scripts/preflight_diagnostic_scaling_recovery_v1.py
       - scripts/run_diagnostic_scaling_recovery_v1.py
@@ -66,7 +67,7 @@ jobs:
       - name: Verify immutable model revisions and native thinking switches
         run: python scripts/validate_diagnostic_scaling_recovery_v1.py --remote
 
-      - name: Render every future paid request without launching
+      - name: Render every paid request without launching
         run: |
           for model in \
             'Qwen/Qwen3-14B' \
@@ -80,20 +81,28 @@ jobs:
       - name: Re-hash existing Test-3 source bytes read-only
         run: python scripts/preflight_diagnostic_scaling_recovery_v1.py --verify-source-s3
 
-      - name: Prove current contract refuses launchable admission
+      - name: Verify committed authorization state without persisting launch admission
         run: |
-          set +e
-          HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED=YES \
-            python scripts/preflight_diagnostic_scaling_recovery_v1.py --persist-launch-admission \
-            > /tmp/recovery-persist.out 2>&1
-          status=$?
-          set -e
-          cat /tmp/recovery-persist.out
-          if [ "$status" -eq 0 ]; then
-            echo 'ERROR: launch admission unexpectedly succeeded before new user go' >&2
-            exit 1
-          fi
-          grep -q 'paid_launch_allowed_now is false' /tmp/recovery-persist.out
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          contract = json.loads(Path('configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json').read_text(encoding='utf-8'))
+          paid = contract['governance']['paid_launch_allowed_now']
+          assert contract['governance']['paid_launch_requires_new_explicit_user_go'] is True
+          marker_path = Path('configs/experiments/diagnostic_scaling_recovery_v1.launch.json')
+          if paid:
+              assert marker_path.is_file(), 'authorized contract lacks launch marker'
+              marker = json.loads(marker_path.read_text(encoding='utf-8'))
+              assert marker.get('authorized') is True
+              assert marker.get('protocol_id') == 'hephaestus_diagnostic_scaling_recovery_v1'
+              assert marker.get('authorization_source') == 'user_directive'
+              assert marker.get('promotion_allowed') is False
+              assert marker.get('lineage_mutation_allowed') is False
+              assert contract['governance']['approval_source'] == 'user_directive_2026-09-17_paid_recovery_launch'
+              print('authorized paid-launch state is internally consistent; no paid action performed here')
+          else:
+              print('pre-launch state remains blocked; no paid action performed here')
+          PY
 
       - name: Preserve non-paid validation evidence
         uses: actions/upload-artifact@v4
@@ -105,5 +114,3 @@ jobs:
             diagnostic_scaling_recovery_launch_request_*.json
           if-no-files-found: error
           retention-days: 90
-
-# Exact-head validation sentinel: recovery hardening complete; paid launch remains blocked.
