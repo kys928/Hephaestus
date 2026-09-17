@@ -95,8 +95,12 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         raise ValueError("fixed non-thinking lane must preserve frozen output budgets")
     if fixed.get("do_sample") is not False or fixed.get("adaptive_budget") is not False:
         raise ValueError("fixed non-thinking lane must remain deterministic and fixed-budget")
-    if fixed.get("score_incomplete_final_answer") is not False or fixed.get("ineligible_policy") != "not_applicable_not_zero":
-        raise ValueError("fixed non-thinking incomplete/ineligible policy drifted")
+    if fixed.get("score_incomplete_final_answer") is not True:
+        raise ValueError("fixed lane must count truncation as a fixed-budget failure")
+    if fixed.get("incomplete_interpretation") != "fixed_budget_efficiency_failure_not_general_capability_failure":
+        raise ValueError("fixed lane truncation interpretation drifted")
+    if fixed.get("ineligible_policy") != "not_applicable_not_zero":
+        raise ValueError("fixed non-thinking ineligible policy drifted")
     if reasoning.get("adaptive_budget") is not True or reasoning.get("score_incomplete_final_answer") is not False:
         raise ValueError("reasoning-aware lane must retry incomplete answers rather than score them")
     if reasoning.get("budget_exhaustion_policy") != "inconclusive_reasoning_budget_exhausted_not_floor_score":
