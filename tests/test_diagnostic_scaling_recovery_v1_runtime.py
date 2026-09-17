@@ -114,9 +114,9 @@ def test_lane_points_exclude_nonclaimable_reasoning_results():
     assert runtime.lane_points(points, "reasoning_aware") == []
 
 
-def test_recovery_driver_refuses_current_paid_launch_contract(monkeypatch):
+def test_recovery_driver_retains_paid_launch_governance_guard():
     payload = contract()
-    assert payload["governance"]["paid_launch_allowed_now"] is False
     source = SCRIPT.read_text(encoding="utf-8")
     assert 'if contract["governance"].get("paid_launch_allowed_now") is not True:' in source
     assert "paid Diagnostic Scaling Recovery launch is not authorized" in source
+    assert payload["governance"]["paid_launch_requires_new_explicit_user_go"] is True
