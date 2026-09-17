@@ -36,7 +36,8 @@
       "top_p": 1.0,
       "top_k": null,
       "adaptive_budget": false,
-      "score_incomplete_final_answer": false,
+      "score_incomplete_final_answer": true,
+      "incomplete_interpretation": "fixed_budget_efficiency_failure_not_general_capability_failure",
       "ineligible_policy": "not_applicable_not_zero",
       "cross_lane_ranking_allowed": false
     },
