@@ -17,7 +17,7 @@ jobs:
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
-      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35239300657
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35246035168
     steps:
       - name: Read every current RunPod Pod
         run: |
