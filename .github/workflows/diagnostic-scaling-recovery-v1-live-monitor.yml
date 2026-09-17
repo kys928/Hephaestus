@@ -1,0 +1,217 @@
+name: Diagnostic Scaling Recovery V1 live monitor
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-live-monitor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35246035168
+      TARGET_EXECUTION_ID: diagnostic-scaling-recovery-v1-35246035168-deepseek-ai--DeepSeek-R1-Distill-Qwen-14B
+      TARGET_MODEL_ID: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+      SCIENTIFIC_PREFIX: hephaestus/scientific/v1
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install S3 client
+        run: python -m pip install --quiet boto3
+      - name: Snapshot RunPod and governed S3 evidence
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          from datetime import timezone
+          import boto3
+          from botocore.config import Config
+
+          def required(name):
+              value=(os.environ.get(name) or '').strip()
+              if not value:
+                  raise RuntimeError('missing '+name)
+              return value
+
+          # Live RunPod control-plane truth.
+          base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          headers={'Authorization':'Bearer '+required('RUNPOD_API_KEY'),'Accept':'application/json','User-Agent':'Hephaestus-Live-Monitor/1.0'}
+          def get_json(url):
+              req=urllib.request.Request(url,headers=headers,method='GET')
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  return json.load(r)
+          payload=get_json(base+'/pods')
+          rows=(payload.get('pods') or payload.get('items') or payload.get('data') or []) if isinstance(payload,dict) else payload
+          pods=[]
+          for p in rows:
+              if not isinstance(p,dict):
+                  continue
+              pid=str(p.get('id') or '')
+              detail={}
+              if pid:
+                  try: detail=get_json(base+'/pods/'+pid)
+                  except Exception as exc: detail={'detail_error':type(exc).__name__+': '+str(exc)}
+              pods.append({
+                  'id':pid,
+                  'name':p.get('name'),
+                  'desiredStatus':p.get('desiredStatus'),
+                  'lastStatusChange':p.get('lastStatusChange'),
+                  'costPerHr':detail.get('costPerHr') if isinstance(detail,dict) else None,
+                  'gpuCount':detail.get('gpuCount') if isinstance(detail,dict) else None,
+                  'machineId':detail.get('machineId') if isinstance(detail,dict) else None,
+                  'imageName':detail.get('imageName') if isinstance(detail,dict) else None,
+              })
+          target_run=required('TARGET_RUN_ID')
+          target_pods=[p for p in pods if target_run in str(p.get('name') or '')]
+
+          # Governed S3 truth. RUNPOD_NETWORK_VOLUME_ID is the S3 bucket identifier here;
+          # the recovery Pod itself has no Network Volume attachment.
+          bucket=required('RUNPOD_NETWORK_VOLUME_ID')
+          s3=boto3.client(
+              's3',
+              endpoint_url=required('RUNPOD_S3_ENDPOINT_URL').rstrip('/'),
+              region_name=required('RUNPOD_DATACENTER_ID'),
+              aws_access_key_id=required('RUNPOD_S3_ACCESS_KEY_ID'),
+              aws_secret_access_key=required('RUNPOD_S3_SECRET_ACCESS_KEY'),
+              config=Config(retries={'mode':'standard','max_attempts':8}),
+          )
+          prefix=required('SCIENTIFIC_PREFIX').rstrip('/')
+          execution_prefix=f"{prefix}/executions/{required('TARGET_EXECUTION_ID')}/"
+          model_slug=''.join(ch if ch.isalnum() or ch in '._-' else '--' for ch in required('TARGET_MODEL_ID')).strip('-.')
+          evidence_prefix=f"{prefix}/diagnostic_scaling_recovery/{target_run}/models/{model_slug}/"
+
+          def list_prefix(pfx):
+              out=[]
+              paginator=s3.get_paginator('list_objects_v2')
+              for page in paginator.paginate(Bucket=bucket,Prefix=pfx):
+                  for item in page.get('Contents',[]):
+                      lm=item.get('LastModified')
+                      out.append({
+                          'key':item.get('Key'),
+                          'bytes':int(item.get('Size') or 0),
+                          'last_modified':lm.astimezone(timezone.utc).isoformat() if lm else None,
+                          'etag':str(item.get('ETag') or '').strip('"'),
+                      })
+              return sorted(out,key=lambda x:(x.get('last_modified') or '',x.get('key') or ''))
+
+          execution_objects=list_prefix(execution_prefix)
+          evidence_objects=list_prefix(evidence_prefix)
+          terminal_objects=[o for o in execution_objects if str(o.get('key')).endswith('/driver_result.json')]
+
+          terminal=None
+          if terminal_objects:
+              key=terminal_objects[-1]['key']
+              raw=s3.get_object(Bucket=bucket,Key=key)['Body'].read()
+              terminal=json.loads(raw)
+              terminal={
+                  'key':key,
+                  'status':terminal.get('status'),
+                  'disposition':terminal.get('disposition'),
+                  'completed_at_unix':terminal.get('completed_at_unix'),
+                  'training_performed':terminal.get('training_performed'),
+                  'exported_file_count':terminal.get('exported_file_count'),
+                  'exported_bytes':terminal.get('exported_bytes'),
+                  'evidence_prefix':terminal.get('evidence_prefix'),
+                  'error':terminal.get('error'),
+                  'roles':list((terminal.get('roles') or {}).keys()),
+              }
+
+          manifest=None
+          manifest_key=evidence_prefix+'evidence_manifest.json'
+          if any(o['key']==manifest_key for o in evidence_objects):
+              raw=s3.get_object(Bucket=bucket,Key=manifest_key)['Body'].read()
+              value=json.loads(raw)
+              manifest={
+                  'key':manifest_key,
+                  'component_count':value.get('component_count'),
+                  'bytes':value.get('bytes'),
+                  'model_id':value.get('model_id'),
+                  'promotion_performed':value.get('promotion_performed'),
+                  'lineage_mutated':value.get('lineage_mutated'),
+              }
+
+          snapshot={
+              'target_run_id':target_run,
+              'target_execution_id':required('TARGET_EXECUTION_ID'),
+              'target_model_id':required('TARGET_MODEL_ID'),
+              'runpod':{'all_pods':pods,'target_pods':target_pods},
+              's3':{
+                  'bucket_id':bucket,
+                  'network_volume_attached':False,
+                  'execution_prefix':execution_prefix,
+                  'execution_object_count':len(execution_objects),
+                  'execution_total_bytes':sum(x['bytes'] for x in execution_objects),
+                  'execution_recent_objects':execution_objects[-20:],
+                  'terminal':terminal,
+                  'evidence_prefix':evidence_prefix,
+                  'evidence_object_count':len(evidence_objects),
+                  'evidence_total_bytes':sum(x['bytes'] for x in evidence_objects),
+                  'evidence_recent_objects':evidence_objects[-20:],
+                  'evidence_manifest':manifest,
+              },
+          }
+          print('HEPHAESTUS_LIVE_MONITOR_JSON '+json.dumps(snapshot,sort_keys=True))
+          with open('diagnostic_scaling_recovery_live_monitor.json','w',encoding='utf-8') as f:
+              json.dump(snapshot,f,indent=2,sort_keys=True)
+          with open('target_pod_ids.txt','w',encoding='utf-8') as f:
+              for p in target_pods:
+                  if p.get('id'): f.write(str(p['id'])+'\n')
+          PY
+      - name: Extract current scientific progress markers from live container logs
+        run: |
+          : > diagnostic_scaling_recovery_live_markers.txt
+          while IFS= read -r POD_ID; do
+            [ -z "$POD_ID" ] && continue
+            RAW="runpod_${POD_ID}_container.sse"
+            set +e
+            curl -sS -N --max-time 10 \
+              -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              -H 'Accept: text/event-stream' \
+              "https://api.runpod.io/v2/pods/${POD_ID}/logs?tail=5000&source=container" > "$RAW"
+            STATUS=$?
+            set -e
+            python - "$POD_ID" "$RAW" <<'PY'
+          import json, sys
+          pod_id,path=sys.argv[1:]
+          markers=[]
+          with open(path,encoding='utf-8',errors='replace') as f:
+              for raw in f:
+                  if not raw.startswith('data: '):
+                      continue
+                  try:
+                      event=json.loads(raw[6:])
+                  except Exception:
+                      continue
+                  line=str(event.get('line') or '')
+                  if 'DIAGNOSTIC_SCALING_RECOVERY_' in line:
+                      markers.append({'pod_id':pod_id,'ts':event.get('ts'),'line':line})
+          with open('diagnostic_scaling_recovery_live_markers.txt','a',encoding='utf-8') as out:
+              for row in markers[-80:]:
+                  out.write(json.dumps(row,sort_keys=True)+'\n')
+          print('LIVE_MARKERS pod='+pod_id+' count='+str(len(markers)))
+          for row in markers[-20:]: print(json.dumps(row,sort_keys=True))
+          PY
+            echo "RUNPOD_LOG_STREAM_STATUS pod=${POD_ID} status=${STATUS} bytes=$(wc -c < "$RAW")"
+          done < target_pod_ids.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-recovery-v1-live-monitor
+          path: |
+            diagnostic_scaling_recovery_live_monitor.json
+            diagnostic_scaling_recovery_live_markers.txt
+            runpod_*_container.sse
+          if-no-files-found: error
+          retention-days: 14
