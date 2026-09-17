@@ -19,11 +19,13 @@ def contract() -> dict:
     return json.loads((ROOT / "configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json").read_text(encoding="utf-8"))
 
 
-def test_recovery_contract_is_valid_and_paid_launch_is_blocked():
-    evidence = validator.validate_contract(contract(), ROOT)
+def test_recovery_contract_is_valid_in_current_authorization_state():
+    payload = contract()
+    evidence = validator.validate_contract(payload, ROOT)
     assert evidence["status"] == "recovery_contract_valid"
     assert evidence["candidate_count"] == 4
-    assert evidence["paid_launch_allowed_now"] is False
+    assert evidence["paid_launch_allowed_now"] is bool(payload["governance"]["paid_launch_allowed_now"])
+    assert evidence["authorization_state"] in {"blocked_pre_user_go", "authorized_by_user"}
     assert evidence["frozen_eval_mutated"] is False
     assert evidence["fixed_non_thinking_eligible"] == ["Qwen/Qwen3-14B", "zai-org/GLM-4.7-Flash"]
     assert len(evidence["reasoning_aware_eligible"]) == 4
@@ -74,10 +76,19 @@ def test_qwen30_reasoning_budget_cannot_regress_to_old_256_token_cap():
         validator.validate_contract(payload, ROOT)
 
 
-def test_paid_launch_cannot_be_enabled_in_recovery_contract():
+def test_paid_launch_always_requires_explicit_user_go_guard():
     payload = copy.deepcopy(contract())
-    payload["governance"]["paid_launch_allowed_now"] = True
-    with pytest.raises(ValueError, match="paid launch"):
+    payload["governance"]["paid_launch_requires_new_explicit_user_go"] = False
+    with pytest.raises(ValueError, match="explicit user go"):
+        validator.validate_contract(payload, ROOT)
+
+
+def test_authorized_paid_launch_requires_exact_user_provenance():
+    payload = copy.deepcopy(contract())
+    if payload["governance"]["paid_launch_allowed_now"] is not True:
+        pytest.skip("current contract is still pre-launch")
+    payload["governance"]["approval_source"] = "invalid"
+    with pytest.raises(ValueError, match="approval source"):
         validator.validate_contract(payload, ROOT)
 
 
