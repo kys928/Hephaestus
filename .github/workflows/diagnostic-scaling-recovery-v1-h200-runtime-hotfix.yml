@@ -1,0 +1,158 @@
+name: Diagnostic Scaling Recovery V1 H200 runtime hotfix
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-h200-runtime-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply H200 CUDA compatibility recovery
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          contract_path = Path('configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json')
+          contract = json.loads(contract_path.read_text(encoding='utf-8'))
+          execution = contract['execution']
+          assert execution['image'] == 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime'
+          execution['image'] = 'pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime'
+          execution['preferred_gpu_for_30b'] = ['NVIDIA H200']
+          execution['cuda_runtime_recovery'] = {
+              'reason': 'H200 attempts enumerated one GPU through NVML/nvidia-smi but torch CUDA initialization failed under the CUDA 13.0 image before model loading',
+              'failed_image': 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime',
+              'recovery_image': 'pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime',
+              'large_model_gpu_scope': ['NVIDIA H200'],
+              'fail_fast_cuda_preflight_before_model_download': True,
+              'scientific_geometry_changed': False,
+          }
+          contract_path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+          launcher_path = Path('scripts/launch_diagnostic_scaling_recovery_v1.py')
+          launcher = launcher_path.read_text(encoding='utf-8')
+          anchor = 'mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"\napt-get update'
+          assert launcher.count(anchor) == 1
+          preflight = '''mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+          python - <<'PYCUDA'
+          import json, os, subprocess, torch
+          smi = subprocess.run(
+              ['nvidia-smi', '--query-gpu=driver_version,name,memory.total,uuid', '--format=csv,noheader'],
+              check=False, capture_output=True, text=True,
+          )
+          probe = dict(
+              torch_version=str(torch.__version__),
+              torch_cuda_version=str(torch.version.cuda),
+              cuda_available=bool(torch.cuda.is_available()),
+              device_count=int(torch.cuda.device_count()),
+              cuda_visible_devices=os.environ.get('CUDA_VISIBLE_DEVICES'),
+              nvidia_visible_devices=os.environ.get('NVIDIA_VISIBLE_DEVICES'),
+              nvidia_smi_returncode=int(smi.returncode),
+              nvidia_smi_stdout=smi.stdout.strip(),
+              nvidia_smi_stderr=smi.stderr.strip(),
+          )
+          print('HEPHAESTUS_CUDA_PREFLIGHT_JSON ' + json.dumps(probe, sort_keys=True), flush=True)
+          if not probe['cuda_available'] or probe['device_count'] != 1:
+              raise SystemExit('CUDA preflight failed before dependency/model download')
+          x = torch.ones(1, device='cuda')
+          torch.cuda.synchronize()
+          print('HEPHAESTUS_CUDA_PREFLIGHT_OK ' + str(float(x.item())), flush=True)
+          PYCUDA
+          apt-get update'''
+          launcher = launcher.replace(anchor, preflight)
+          validate_anchor = '    if body.get("containerDiskInGb") != int(contract["execution"]["container_disk_gb"]):\n        raise ValueError("Recovery Pod container disk drifted")'
+          assert launcher.count(validate_anchor) == 1
+          validate_replacement = '''    if body.get("containerDiskInGb") != int(contract["execution"]["container_disk_gb"]):
+              raise ValueError("Recovery Pod container disk drifted")
+          if body.get("imageName") != contract["execution"]["image"]:
+              raise ValueError("Recovery Pod runtime image drifted")'''
+          launcher = launcher.replace(validate_anchor, validate_replacement)
+          launcher_path.write_text(launcher, encoding='utf-8')
+
+          validator_path = Path('scripts/validate_diagnostic_scaling_recovery_v1.py')
+          validator = validator_path.read_text(encoding='utf-8')
+          v_anchor = '    if execution.get("runtime_dependencies") != EXPECTED_RUNTIME:\n        raise ValueError("runtime dependency lock drifted")'
+          assert validator.count(v_anchor) == 1
+          v_replacement = '''    if execution.get("runtime_dependencies") != EXPECTED_RUNTIME:
+              raise ValueError("runtime dependency lock drifted")
+          if execution.get("image") != "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime":
+              raise ValueError("recovery CUDA runtime image drifted")
+          if execution.get("preferred_gpu_for_30b") != ["NVIDIA H200"]:
+              raise ValueError("large-model recovery GPU scope drifted")
+          cuda_recovery = execution.get("cuda_runtime_recovery", {})
+          if cuda_recovery.get("fail_fast_cuda_preflight_before_model_download") is not True:
+              raise ValueError("large-model CUDA fail-fast preflight is required")'''
+          validator = validator.replace(v_anchor, v_replacement)
+          validator_path.write_text(validator, encoding='utf-8')
+
+          launcher_test_path = Path('tests/test_diagnostic_scaling_recovery_v1_launcher.py')
+          test = launcher_test_path.read_text(encoding='utf-8')
+          old = '    assert launcher.gpu_ids(payload, row) == ["NVIDIA H200", "NVIDIA B200"]'
+          assert test.count(old) == 1
+          test = test.replace(old, '    assert launcher.gpu_ids(payload, row) == ["NVIDIA H200"]')
+          shell_anchor = '    shell = request["dockerStartCmd"][-1]\n    assert "scripts/run_diagnostic_scaling_recovery_v1.py" in shell'
+          assert test.count(shell_anchor) == 1
+          shell_replacement = '''    shell = request["dockerStartCmd"][-1]
+              assert request["imageName"] == "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
+              assert "HEPHAESTUS_CUDA_PREFLIGHT_JSON" in shell
+              assert "HEPHAESTUS_CUDA_PREFLIGHT_OK" in shell
+              assert shell.index("HEPHAESTUS_CUDA_PREFLIGHT_JSON") < shell.index("apt-get update")
+              assert "scripts/run_diagnostic_scaling_recovery_v1.py" in shell'''
+          test = test.replace(shell_anchor, shell_replacement)
+          launcher_test_path.write_text(test, encoding='utf-8')
+
+          contract_test_path = Path('tests/test_diagnostic_scaling_recovery_v1_contract.py')
+          ctest = contract_test_path.read_text(encoding='utf-8')
+          end_anchor = '    assert 300 <= payload["execution"]["silent_container_start_timeout_seconds"] <= 1800\n'
+          assert ctest.count(end_anchor) == 1
+          ctest = ctest.replace(end_anchor, end_anchor + '    assert payload["execution"]["image"] == "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"\n    assert payload["execution"]["preferred_gpu_for_30b"] == ["NVIDIA H200"]\n    assert payload["execution"]["cuda_runtime_recovery"]["fail_fast_cuda_preflight_before_model_download"] is True\n')
+          contract_test_path.write_text(ctest, encoding='utf-8')
+          PY
+
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install -e '.[s3,test]' \
+            'transformers==5.17.0' \
+            'accelerate==1.15.0' \
+            'safetensors==0.8.0' \
+            'huggingface-hub==1.31.0' \
+            'peft==0.20.0'
+
+      - name: Validate hotfix
+        run: |
+          python -m py_compile \
+            scripts/validate_diagnostic_scaling_recovery_v1.py \
+            scripts/preflight_diagnostic_scaling_recovery_v1.py \
+            scripts/run_diagnostic_scaling_recovery_v1.py \
+            scripts/launch_diagnostic_scaling_recovery_v1.py
+          python -m pytest -q \
+            tests/test_diagnostic_scaling_recovery_v1_contract.py \
+            tests/test_diagnostic_scaling_recovery_v1_runtime.py \
+            tests/test_diagnostic_scaling_recovery_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_preflight.py
+          python scripts/validate_diagnostic_scaling_recovery_v1.py
+
+      - name: Commit validated runtime fix
+        run: |
+          git config user.name 'hephaestus-runtime-bot'
+          git config user.email 'hephaestus-runtime-bot@users.noreply.github.com'
+          git add \
+            configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json \
+            scripts/launch_diagnostic_scaling_recovery_v1.py \
+            scripts/validate_diagnostic_scaling_recovery_v1.py \
+            tests/test_diagnostic_scaling_recovery_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_contract.py
+          git commit -m 'Fix H200 CUDA runtime compatibility for recovery lane'
+          git push origin HEAD:experiment-diagnostic-scaling-v1
