@@ -1,0 +1,192 @@
+name: Diagnostic Scaling Recovery V1 hardening
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-hardening.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-validate-without-paid-compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: src
+      HF_HUB_DISABLE_XET: '1'
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment-diagnostic-scaling-v1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Patch recovery protocol and runtime hardening
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          contract_path = Path('configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json')
+          contract = json.loads(contract_path.read_text(encoding='utf-8'))
+          by_id = {row['model_id']: row for row in contract['candidates']}
+          by_id['Qwen/Qwen3-14B']['reasoning_aware']['topology_token_ladder'] = [1024, 2048, 4096, 8192, 16384, 32768]
+          by_id['Qwen/Qwen3-14B']['reasoning_aware']['semantic_token_ladder'] = [256, 512, 1024, 2048, 4096, 8192]
+          by_id['deepseek-ai/DeepSeek-R1-Distill-Qwen-14B']['reasoning_aware']['topology_token_ladder'] = [1024, 2048, 4096, 8192, 16384, 32768]
+          by_id['deepseek-ai/DeepSeek-R1-Distill-Qwen-14B']['reasoning_aware']['semantic_token_ladder'] = [256, 512, 1024, 2048, 4096, 8192]
+          by_id['zai-org/GLM-4.7-Flash']['reasoning_aware']['semantic_token_ladder'] = [512, 1024, 2048, 4096, 8192]
+          by_id['Qwen/Qwen3-30B-A3B-Thinking-2507']['reasoning_aware']['semantic_token_ladder'] = [512, 1024, 2048, 4096, 8192]
+          contract['execution']['silent_container_start_timeout_seconds'] = 900
+          assert contract['governance']['paid_launch_allowed_now'] is False
+          assert contract['governance']['paid_launch_requires_new_explicit_user_go'] is True
+          contract_path.write_text(json.dumps(contract, indent=2, sort_keys=False) + '\n', encoding='utf-8')
+
+          validator_path = Path('scripts/validate_diagnostic_scaling_recovery_v1.py')
+          text = validator_path.read_text(encoding='utf-8')
+          old = '''    if candidates["Qwen/Qwen3-30B-A3B-Thinking-2507"]["reasoning_aware"]["topology_token_ladder"][-1] < 32768:\n        raise ValueError("Qwen3-30B thinking lane lacks sufficient terminal budget")\n\n    execution = contract.get("execution", {})\n'''
+          new = '''    for model_id, row in candidates.items():\n        aware = row["reasoning_aware"]\n        if aware["topology_token_ladder"][-1] < 32768:\n            raise ValueError(f"reasoning-aware topology lane lacks 32K terminal budget for {model_id}")\n        if aware["semantic_token_ladder"][-1] < 8192:\n            raise ValueError(f"reasoning-aware semantic lane lacks 8K terminal budget for {model_id}")\n\n    execution = contract.get("execution", {})\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''    if execution.get("pod_exit_without_terminal_policy") != "fail_immediately_preserve_pod_status_and_log_snapshot":\n        raise ValueError("silent pod-exit policy drifted")\n\n    governance = contract.get("governance", {})\n'''
+          new = '''    if execution.get("pod_exit_without_terminal_policy") != "fail_immediately_preserve_pod_status_and_log_snapshot":\n        raise ValueError("silent pod-exit policy drifted")\n    silent_timeout = int(execution.get("silent_container_start_timeout_seconds", 0))\n    if not 300 <= silent_timeout <= 1800:\n        raise ValueError("silent container-start watchdog must be bounded between 5 and 30 minutes")\n\n    governance = contract.get("governance", {})\n'''
+          assert old in text
+          validator_path.write_text(text.replace(old, new), encoding='utf-8')
+
+          runtime_path = Path('scripts/run_diagnostic_scaling_recovery_v1.py')
+          text = runtime_path.read_text(encoding='utf-8')
+          old = '''        needs_retry = generated["finish_reason"] == "max_tokens"\n'''
+          new = '''        needs_retry = (\n            generated["finish_reason"] == "max_tokens"\n            or (require_schema and not complete_schema)\n        )\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''        exhausted = bool(generated["finish_reason"] == "max_tokens" and index == len(token_ladder) - 1)\n'''
+          new = '''        exhausted = bool(needs_retry and index == len(token_ladder) - 1)\n'''
+          assert old in text
+          runtime_path.write_text(text.replace(old, new), encoding='utf-8')
+
+          runtime_test = Path('tests/test_diagnostic_scaling_recovery_v1_runtime.py')
+          text = runtime_test.read_text(encoding='utf-8')
+          old = '''def test_eos_malformed_json_is_real_model_failure_not_extra_compute(monkeypatch):\n    calls = []\n\n    def fake_generate(*args, max_new_tokens, **kwargs):\n        calls.append(max_new_tokens)\n        return {"output": "not json", "finish_reason": "eos", "generated_tokens": 14}\n\n    monkeypatch.setattr(runtime, "generate_once", fake_generate)\n    result = runtime.adaptive_generate(\n        object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,\n        token_ladder=[1024, 2048, 4096], contract=contract(), require_schema=True,\n    )\n    assert calls == [1024]\n    assert result["budget_retry_count"] == 0\n    assert result["budget_exhausted"] is False\n    assert result["final_schema_complete"] is False\n'''
+          new = '''def test_eos_malformed_json_retries_before_becoming_inconclusive(monkeypatch):\n    calls = []\n\n    def fake_generate(*args, max_new_tokens, **kwargs):\n        calls.append(max_new_tokens)\n        return {"output": "not json", "finish_reason": "eos", "generated_tokens": 14}\n\n    monkeypatch.setattr(runtime, "generate_once", fake_generate)\n    result = runtime.adaptive_generate(\n        object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,\n        token_ladder=[1024, 2048, 4096], contract=contract(), require_schema=True,\n    )\n    assert calls == [1024, 2048, 4096]\n    assert result["budget_retry_count"] == 2\n    assert result["budget_exhausted"] is True\n    assert result["final_schema_complete"] is False\n'''
+          assert old in text
+          runtime_test.write_text(text.replace(old, new), encoding='utf-8')
+
+          launcher_path = Path('scripts/launch_diagnostic_scaling_recovery_v1.py')
+          text = launcher_path.read_text(encoding='utf-8')
+          old = '''class PodExitedWithoutTerminal(RuntimeError):\n    def __init__(self, pod_id: str, snapshot: dict[str, Any] | None):\n        super().__init__(f"RunPod {pod_id} became terminal before writing the governed S3 terminal record")\n        self.pod_id = pod_id\n        self.snapshot = snapshot\n\n\n'''
+          new = old + '''class PodSilentStartup(RuntimeError):\n    def __init__(self, pod_id: str, snapshot: dict[str, Any] | None, log_snapshot: dict[str, Any]):\n        super().__init__(f"RunPod {pod_id} produced no container output before the bounded startup watchdog expired")\n        self.pod_id = pod_id\n        self.snapshot = snapshot\n        self.log_snapshot = log_snapshot\n\n\n'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          old = '''                f"https://api.runpod.io/v2/pods/{pod_id}/logs?tail=1000",\n'''
+          new = '''                f"https://api.runpod.io/v2/pods/{pod_id}/logs?tail=1000&source=container",\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''def wait_terminal(client: Any, execution: RunPodExecutionAdapter, *, execution_id: str, attempt: int, pod_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:\n    key = f"{storage.SCIENTIFIC_PREFIX}/executions/{execution_id}/attempt-{attempt}/driver_result.json"\n    deadline = time.monotonic() + MAX_SECONDS\n    observations: list[dict[str, Any]] = []\n    last_status: str | None = None\n'''
+          new = '''def wait_terminal(\n    client: Any,\n    execution: RunPodExecutionAdapter,\n    *,\n    execution_id: str,\n    attempt: int,\n    pod_id: str,\n    silent_start_timeout_seconds: int = 900,\n) -> tuple[dict[str, Any], list[dict[str, Any]]]:\n    key = f"{storage.SCIENTIFIC_PREFIX}/executions/{execution_id}/attempt-{attempt}/driver_result.json"\n    started = time.monotonic()\n    deadline = started + MAX_SECONDS\n    startup_probe_due = started + max(0, int(silent_start_timeout_seconds))\n    startup_output_verified = False\n    observations: list[dict[str, Any]] = []\n    last_status: str | None = None\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''        if status in TERMINAL_STATUSES:\n            raise PodExitedWithoutTerminal(pod_id, snapshot)\n        time.sleep(POLL_SECONDS)\n'''
+          new = '''        if status in TERMINAL_STATUSES:\n            raise PodExitedWithoutTerminal(pod_id, snapshot)\n        if not startup_output_verified and time.monotonic() >= startup_probe_due:\n            log_snapshot = best_effort_log_snapshot(pod_id)\n            observations.append({\n                "at": now(),\n                "startup_watchdog": True,\n                "container_log_status": log_snapshot.get("status"),\n                "container_log_bytes": int(log_snapshot.get("bytes", 0) or 0),\n            })\n            if log_snapshot.get("status") == "captured" and int(log_snapshot.get("bytes", 0) or 0) > 0:\n                startup_output_verified = True\n            else:\n                raise PodSilentStartup(pod_id, snapshot, log_snapshot)\n        time.sleep(POLL_SECONDS)\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''        terminal, observations = wait_terminal(client, execution, execution_id=execution_id, attempt=attempt, pod_id=pod_id)\n'''
+          new = '''        terminal, observations = wait_terminal(\n            client,\n            execution,\n            execution_id=execution_id,\n            attempt=attempt,\n            pod_id=pod_id,\n            silent_start_timeout_seconds=int(contract["execution"]["silent_container_start_timeout_seconds"]),\n        )\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old = '''    except PodExitedWithoutTerminal as exc:\n        record["status"] = "failed_pod_exited_without_terminal"\n        record["error"] = str(exc)\n        record["terminal_pod_snapshot"] = exc.snapshot\n        record["runpod_v2_log_snapshot"] = best_effort_log_snapshot(exc.pod_id)\n        raise\n    except Exception as exc:\n'''
+          new = '''    except PodExitedWithoutTerminal as exc:\n        record["status"] = "failed_pod_exited_without_terminal"\n        record["error"] = str(exc)\n        record["terminal_pod_snapshot"] = exc.snapshot\n        record["runpod_v2_log_snapshot"] = best_effort_log_snapshot(exc.pod_id)\n        raise\n    except PodSilentStartup as exc:\n        record["status"] = "failed_pod_silent_startup"\n        record["error"] = str(exc)\n        record["terminal_pod_snapshot"] = exc.snapshot\n        record["runpod_v2_log_snapshot"] = exc.log_snapshot\n        raise\n    except Exception as exc:\n'''
+          assert old in text
+          launcher_path.write_text(text.replace(old, new), encoding='utf-8')
+
+          launcher_test = Path('tests/test_diagnostic_scaling_recovery_v1_launcher.py')
+          text = launcher_test.read_text(encoding='utf-8')
+          marker = 'def test_terminal_verification_requires_no_cross_lane_ranking():'
+          assert marker in text
+          addition = '''def test_wait_terminal_aborts_silent_running_pod(monkeypatch):\n    class Client:\n        pass\n\n    monkeypatch.setattr(launcher.storage, "maybe_read_key", lambda *args, **kwargs: None)\n    monkeypatch.setattr(launcher.storage, "pod_snapshot", lambda *args, **kwargs: {"desiredStatus": "RUNNING", "id": "pod-silent"})\n    monkeypatch.setattr(launcher, "best_effort_log_snapshot", lambda *_: {"status": "empty", "bytes": 0})\n    monkeypatch.setattr(launcher.time, "sleep", lambda _: None)\n    with pytest.raises(launcher.PodSilentStartup):\n        launcher.wait_terminal(\n            Client(), object(), execution_id="exec", attempt=1, pod_id="pod-silent", silent_start_timeout_seconds=0\n        )\n\n\n'''
+          if 'test_wait_terminal_aborts_silent_running_pod' not in text:
+              text = text.replace(marker, addition + marker)
+          launcher_test.write_text(text, encoding='utf-8')
+
+          contract_test = Path('tests/test_diagnostic_scaling_recovery_v1_contract.py')
+          text = contract_test.read_text(encoding='utf-8')
+          addition = '''\n\ndef test_reasoning_lanes_have_sufficient_terminal_compute_and_startup_watchdog():\n    payload = contract()\n    for row in payload["candidates"]:\n        assert row["reasoning_aware"]["topology_token_ladder"][-1] >= 32768\n        assert row["reasoning_aware"]["semantic_token_ladder"][-1] >= 8192\n    assert 300 <= payload["execution"]["silent_container_start_timeout_seconds"] <= 1800\n'''
+          if 'test_reasoning_lanes_have_sufficient_terminal_compute_and_startup_watchdog' not in text:
+              text += addition
+          contract_test.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install pinned recovery validation dependencies
+        run: |
+          python -m pip install -e '.[s3,test]' \
+            'transformers==5.17.0' \
+            'accelerate==1.15.0' \
+            'safetensors==0.8.0' \
+            'huggingface-hub==1.31.0' \
+            'peft==0.20.0'
+
+      - name: Compile and test patched recovery implementation
+        run: |
+          python -m py_compile \
+            scripts/validate_diagnostic_scaling_recovery_v1.py \
+            scripts/preflight_diagnostic_scaling_recovery_v1.py \
+            scripts/run_diagnostic_scaling_recovery_v1.py \
+            scripts/launch_diagnostic_scaling_recovery_v1.py
+          python -m pytest -q \
+            tests/test_diagnostic_scaling_v1_contract.py \
+            tests/test_diagnostic_scaling_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_contract.py \
+            tests/test_diagnostic_scaling_recovery_v1_runtime.py \
+            tests/test_diagnostic_scaling_recovery_v1_launcher.py \
+            tests/test_diagnostic_scaling_recovery_v1_preflight.py
+
+      - name: Verify pinned models and native thinking interfaces remotely
+        run: python scripts/validate_diagnostic_scaling_recovery_v1.py --remote
+
+      - name: Render all Pod requests without executing
+        run: |
+          for model in \
+            'Qwen/Qwen3-14B' \
+            'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B' \
+            'zai-org/GLM-4.7-Flash' \
+            'Qwen/Qwen3-30B-A3B-Thinking-2507'
+          do
+            python scripts/launch_diagnostic_scaling_recovery_v1.py --model-id "$model"
+          done
+
+      - name: Verify source training bytes read-only and prove paid admission remains blocked
+        run: |
+          python scripts/preflight_diagnostic_scaling_recovery_v1.py --verify-source-s3
+          set +e
+          HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED=YES \
+            python scripts/preflight_diagnostic_scaling_recovery_v1.py --persist-launch-admission \
+            > /tmp/recovery-paid-gate.out 2>&1
+          status=$?
+          set -e
+          cat /tmp/recovery-paid-gate.out
+          test "$status" -ne 0
+          grep -q 'paid_launch_allowed_now is false' /tmp/recovery-paid-gate.out
+
+      - name: Commit validated hardening
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json \
+            scripts/validate_diagnostic_scaling_recovery_v1.py \
+            scripts/run_diagnostic_scaling_recovery_v1.py \
+            scripts/launch_diagnostic_scaling_recovery_v1.py \
+            tests/test_diagnostic_scaling_recovery_v1_contract.py \
+            tests/test_diagnostic_scaling_recovery_v1_runtime.py \
+            tests/test_diagnostic_scaling_recovery_v1_launcher.py
+          git diff --cached --check
+          git commit -m 'Harden reasoning-aware Diagnostic Scaling recovery'
+          git push origin HEAD:experiment-diagnostic-scaling-v1
