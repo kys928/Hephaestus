@@ -24,7 +24,7 @@ jobs:
           python - <<'PY'
           import json, os, urllib.request
           base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
-          headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'Accept':'application/json','User-Agent':'Hephaestus-Recovery-Probe/2.0'}
+          headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'Accept':'application/json','User-Agent':'Hephaestus-Recovery-Probe/3.0'}
           def get(url):
               req=urllib.request.Request(url,headers=headers,method='GET')
               with urllib.request.urlopen(req,timeout=30) as r: return json.load(r)
@@ -62,9 +62,38 @@ jobs:
           print('RUNPOD_ALL_PODS_JSON '+json.dumps(out,sort_keys=True))
           json.dump(out,open('diagnostic_scaling_recovery_status_probe.json','w'),indent=2,sort_keys=True)
           PY
+
+      - name: Snapshot live target container logs
+        run: |
+          python - <<'PY' > target_pod_ids.txt
+          import json
+          d=json.load(open('diagnostic_scaling_recovery_status_probe.json'))
+          for p in d.get('target_pods',[]):
+              if p.get('id'):
+                  print(p['id'])
+          PY
+          : > diagnostic_scaling_recovery_container_logs.txt
+          while IFS= read -r POD_ID; do
+            [ -z "$POD_ID" ] && continue
+            echo "===== POD ${POD_ID} =====" | tee -a diagnostic_scaling_recovery_container_logs.txt
+            set +e
+            curl -sS -N --max-time 12 \
+              -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              -H 'Accept: text/event-stream' \
+              "https://api.runpod.io/v2/pods/${POD_ID}/logs?tail=1200&source=container" \
+              >> diagnostic_scaling_recovery_container_logs.txt
+            STATUS=$?
+            set -e
+            echo "" >> diagnostic_scaling_recovery_container_logs.txt
+            echo "LOG_CURL_STATUS pod=${POD_ID} status=${STATUS} bytes=$(wc -c < diagnostic_scaling_recovery_container_logs.txt)"
+          done < target_pod_ids.txt
+          tail -n 320 diagnostic_scaling_recovery_container_logs.txt || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: diagnostic-scaling-recovery-v1-status-probe
-          path: diagnostic_scaling_recovery_status_probe.json
+          path: |
+            diagnostic_scaling_recovery_status_probe.json
+            diagnostic_scaling_recovery_container_logs.txt
           if-no-files-found: error
           retention-days: 7
