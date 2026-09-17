@@ -22,13 +22,11 @@ jobs:
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35239300657
-      QWEN_EXECUTION_ID: diagnostic-scaling-recovery-v1-35239300657-Qwen--Qwen3-14B
-      QWEN_POD_ID: chajz73nljzr5b
     steps:
       - name: Install S3 dependency
         run: python -m pip install --quiet 'boto3>=1.35,<2'
 
-      - name: Read governed Qwen terminal evidence
+      - name: Read all governed terminal evidence for recovery run
         run: |
           python - <<'PY'
           import json, os
@@ -36,38 +34,33 @@ jobs:
           from botocore.config import Config
           c=boto3.client('s3', endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'), region_name=os.environ['RUNPOD_DATACENTER_ID'], aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'], config=Config(retries={'mode':'standard','max_attempts':5}))
           bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID']
-          prefix=f"hephaestus/scientific/v1/executions/{os.environ['QWEN_EXECUTION_ID']}"
+          prefix=f"hephaestus/scientific/v1/executions/{os.environ['TARGET_RUN_ID']}-"
+          rows=[]
           keys=[]
           for page in c.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=prefix):
               keys += [x['Key'] for x in page.get('Contents',[]) if x.get('Key')]
-          driver=[k for k in keys if k.endswith('/driver_result.json')]
-          out={'prefix':prefix,'driver_keys':driver,'key_count':len(keys)}
-          if driver:
-              raw=c.get_object(Bucket=bucket,Key=driver[-1])['Body'].read()
+          for key in sorted(k for k in keys if k.endswith('/driver_result.json')):
+              raw=c.get_object(Bucket=bucket,Key=key)['Body'].read()
               d=json.loads(raw)
-              out['driver_result']={k:d.get(k) for k in ('status','disposition','model_id','attempt','error','traceback','phase','failed_phase')}
-          print('QWEN_TERMINAL_JSON '+json.dumps(out,sort_keys=True))
-          json.dump(out,open('qwen_terminal_probe.json','w'),indent=2,sort_keys=True)
+              rows.append({
+                  'key':key,
+                  'status':d.get('status'),
+                  'disposition':d.get('disposition'),
+                  'model_id':d.get('model_id'),
+                  'attempt':d.get('attempt'),
+                  'error':d.get('error'),
+                  'traceback':d.get('traceback'),
+                  'phase':d.get('phase'),
+                  'failed_phase':d.get('failed_phase'),
+              })
+          out={'prefix':prefix,'driver_results':rows,'key_count':len(keys)}
+          print('RECOVERY_TERMINALS_JSON '+json.dumps(out,sort_keys=True))
+          json.dump(out,open('recovery_terminal_probe.json','w'),indent=2,sort_keys=True)
           PY
-
-      - name: Read historical Qwen container log tail
-        run: |
-          set +e
-          curl -sS -N --max-time 20 \
-            -H "Authorization: Bearer $RUNPOD_API_KEY" \
-            -H 'Accept: text/event-stream' \
-            "https://api.runpod.io/v2/pods/${QWEN_POD_ID}/logs?tail=400&source=container" \
-            > qwen_container_logs.txt
-          STATUS=$?
-          set -e
-          echo "QWEN_LOG_PROBE curl_status=${STATUS} bytes=$(wc -c < qwen_container_logs.txt)"
-          tail -n 220 qwen_container_logs.txt || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: diagnostic-scaling-recovery-v1-forensic-probe
-          path: |
-            qwen_terminal_probe.json
-            qwen_container_logs.txt
+          path: recovery_terminal_probe.json
           if-no-files-found: error
           retention-days: 7
