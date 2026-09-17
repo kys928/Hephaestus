@@ -3,9 +3,8 @@
 
 Default mode is repository/Hugging Face validation only. --verify-source-s3 performs
 read-only verification of the already-existing Test-3 training bytes and
-contamination evidence. --persist-launch-admission is intentionally unusable
-until the recovery contract is explicitly re-authorized for paid launch and the
-second authorization environment lock is present.
+contamination evidence. --persist-launch-admission remains gated by the committed
+recovery authorization state plus the second authorization environment lock.
 """
 from __future__ import annotations
 
@@ -95,19 +94,21 @@ def build_preflight(*, repo_sha: str, verify_s3: bool) -> tuple[dict[str, Any], 
         "training_dataset_sha256": contract["sources"]["source_training_dataset_sha256"],
     }
     requirements = requirements_bytes(contract)
+    paid_allowed = bool(contract["governance"]["paid_launch_allowed_now"])
     summary = {
         "preflight_version": "diagnostic-scaling-recovery-preflight.v1",
-        "status": "recovery_inputs_validated_not_launchable",
+        "status": "recovery_inputs_validated_launch_authorized" if paid_allowed else "recovery_inputs_validated_not_launchable",
         "repo_sha": repo_sha,
         "protocol_id": contract["protocol_id"],
         "protocol_sha256": sha(contract_raw),
         "candidate_revisions": {row["model_id"]: row["revision"] for row in contract["candidates"]},
         "fixed_non_thinking_eligible": local["fixed_non_thinking_eligible"],
         "reasoning_aware_eligible": local["reasoning_aware_eligible"],
+        "authorization_state": local["authorization_state"],
         "remote_models": remote,
         "source_training": {key: value for key, value in source.items() if key not in {"training_raw", "contamination_raw"}},
         "runtime_requirements_sha256": sha(requirements),
-        "paid_launch_allowed_now": False,
+        "paid_launch_allowed_now": paid_allowed,
         "paid_launch_admission_persisted": False,
         "network_volume_attached": False,
         "promotion_allowed": False,
@@ -147,6 +148,7 @@ def persist_launch_admission(*, repo_sha: str, summary: dict[str, Any], objects:
         "fixed_non_thinking_eligible": summary["fixed_non_thinking_eligible"],
         "reasoning_aware_eligible": summary["reasoning_aware_eligible"],
         "paid_launch_authorized": True,
+        "authorization_state": summary["authorization_state"],
         "network_volume_attached": False,
         "promotion_allowed": False,
         "lineage_mutation_allowed": False,
@@ -172,7 +174,7 @@ def persist_launch_admission(*, repo_sha: str, summary: dict[str, Any], objects:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verify-source-s3", action="store_true", help="read-only verify existing Test-3 source bytes")
-    parser.add_argument("--persist-launch-admission", action="store_true", help="persist launchable S3 admission; hard-blocked before new user go")
+    parser.add_argument("--persist-launch-admission", action="store_true", help="persist launchable S3 admission; requires committed user authorization plus environment lock")
     args = parser.parse_args()
     repo_sha = os.environ.get("GITHUB_SHA", "local-preflight").strip()
     summary, objects = build_preflight(repo_sha=repo_sha, verify_s3=args.verify_source_s3 or args.persist_launch_admission)
