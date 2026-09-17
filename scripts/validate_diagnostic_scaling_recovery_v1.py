@@ -155,6 +155,13 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
     execution = contract.get("execution", {})
     if execution.get("runtime_dependencies") != EXPECTED_RUNTIME:
         raise ValueError("runtime dependency lock drifted")
+    if execution.get("image") != "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime":
+        raise ValueError("recovery CUDA runtime image drifted")
+    if execution.get("preferred_gpu_for_30b") != ["NVIDIA H200"]:
+        raise ValueError("large-model recovery GPU scope drifted")
+    cuda_recovery = execution.get("cuda_runtime_recovery", {})
+    if cuda_recovery.get("fail_fast_cuda_preflight_before_model_download") is not True:
+        raise ValueError("large-model CUDA fail-fast preflight is required")
     if execution.get("network_volume_attached") is not False or execution.get("persistent_model_cache_allowed") is not False:
         raise ValueError("recovery must remain ephemeral")
     if execution.get("pod_exit_without_terminal_policy") != "fail_immediately_preserve_pod_status_and_log_snapshot":

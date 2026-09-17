@@ -106,6 +106,30 @@ export TMPDIR=/opt/hephaestus-tmp
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=0
 mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+python - <<'PYCUDA'
+import json, os, subprocess, torch
+smi = subprocess.run(
+    ['nvidia-smi', '--query-gpu=driver_version,name,memory.total,uuid', '--format=csv,noheader'],
+    check=False, capture_output=True, text=True,
+)
+probe = dict(
+    torch_version=str(torch.__version__),
+    torch_cuda_version=str(torch.version.cuda),
+    cuda_available=bool(torch.cuda.is_available()),
+    device_count=int(torch.cuda.device_count()),
+    cuda_visible_devices=os.environ.get('CUDA_VISIBLE_DEVICES'),
+    nvidia_visible_devices=os.environ.get('NVIDIA_VISIBLE_DEVICES'),
+    nvidia_smi_returncode=int(smi.returncode),
+    nvidia_smi_stdout=smi.stdout.strip(),
+    nvidia_smi_stderr=smi.stderr.strip(),
+)
+print('HEPHAESTUS_CUDA_PREFLIGHT_JSON ' + json.dumps(probe, sort_keys=True), flush=True)
+if not probe['cuda_available'] or probe['device_count'] != 1:
+    raise SystemExit('CUDA preflight failed before dependency/model download')
+x = torch.ones(1, device='cuda')
+torch.cuda.synchronize()
+print('HEPHAESTUS_CUDA_PREFLIGHT_OK ' + str(float(x.item())), flush=True)
+PYCUDA
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv curl
 rm -rf /var/lib/apt/lists/* /opt/hephaestus-src /opt/hephaestus-venv
@@ -194,6 +218,8 @@ def validate_pod_request(contract: dict[str, Any], candidate: dict[str, Any], bo
         raise ValueError("Recovery Pod GPU allowlist drifted")
     if body.get("containerDiskInGb") != int(contract["execution"]["container_disk_gb"]):
         raise ValueError("Recovery Pod container disk drifted")
+    if body.get("imageName") != contract["execution"]["image"]:
+        raise ValueError("Recovery Pod runtime image drifted")
     shell = str((body.get("dockerStartCmd") or ["", "", ""])[-1])
     if 'git checkout --detach "$HEPHAESTUS_REPO_SHA"' not in shell:
         raise ValueError("Recovery bootstrap does not checkout exact admitted repository SHA")

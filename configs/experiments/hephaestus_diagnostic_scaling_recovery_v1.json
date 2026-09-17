@@ -23,8 +23,12 @@
     "source_semantic_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad"
   },
   "roles": {
-    "primary": ["diagnosis"],
-    "calibration": ["controller"]
+    "primary": [
+      "diagnosis"
+    ],
+    "calibration": [
+      "controller"
+    ]
   },
   "evaluation_lanes": {
     "fixed_non_thinking": {
@@ -48,7 +52,9 @@
       "budget_exhaustion_policy": "inconclusive_reasoning_budget_exhausted_not_floor_score",
       "preserve_raw_generation": true,
       "score_projection": "text_after_last_reasoning_close_delimiter_else_raw",
-      "reasoning_close_delimiters": ["</think>"],
+      "reasoning_close_delimiters": [
+        "</think>"
+      ],
       "same_seed_on_budget_retry": true,
       "require_complete_schema_before_scoring_topology": true,
       "cross_lane_ranking_allowed": false
@@ -65,15 +71,38 @@
       "minimum_gpu_memory_gib": 75,
       "fixed_non_thinking": {
         "eligible": true,
-        "chat_template_kwargs": {"enable_thinking": false}
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
       },
       "reasoning_aware": {
         "eligible": true,
-        "chat_template_kwargs": {"enable_thinking": true},
+        "chat_template_kwargs": {
+          "enable_thinking": true
+        },
         "assistant_prefill": null,
-        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": 20},
-        "topology_token_ladder": [1024, 2048, 4096, 8192, 16384, 32768],
-        "semantic_token_ladder": [256, 512, 1024, 2048, 4096, 8192]
+        "decoding": {
+          "do_sample": true,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": 20
+        },
+        "topology_token_ladder": [
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "semantic_token_ladder": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192
+        ]
       }
     },
     {
@@ -92,9 +121,28 @@
         "eligible": true,
         "chat_template_kwargs": {},
         "assistant_prefill": "<think>\n",
-        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": null},
-        "topology_token_ladder": [1024, 2048, 4096, 8192, 16384, 32768],
-        "semantic_token_ladder": [256, 512, 1024, 2048, 4096, 8192]
+        "decoding": {
+          "do_sample": true,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": null
+        },
+        "topology_token_ladder": [
+          1024,
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "semantic_token_ladder": [
+          256,
+          512,
+          1024,
+          2048,
+          4096,
+          8192
+        ]
       }
     },
     {
@@ -107,15 +155,36 @@
       "minimum_gpu_memory_gib": 140,
       "fixed_non_thinking": {
         "eligible": true,
-        "chat_template_kwargs": {"enable_thinking": false}
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
       },
       "reasoning_aware": {
         "eligible": true,
-        "chat_template_kwargs": {"enable_thinking": true},
+        "chat_template_kwargs": {
+          "enable_thinking": true
+        },
         "assistant_prefill": null,
-        "decoding": {"do_sample": true, "temperature": 1.0, "top_p": 0.95, "top_k": null},
-        "topology_token_ladder": [2048, 4096, 8192, 16384, 32768],
-        "semantic_token_ladder": [512, 1024, 2048, 4096, 8192]
+        "decoding": {
+          "do_sample": true,
+          "temperature": 1.0,
+          "top_p": 0.95,
+          "top_k": null
+        },
+        "topology_token_ladder": [
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "semantic_token_ladder": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192
+        ]
       }
     },
     {
@@ -134,9 +203,26 @@
         "eligible": true,
         "chat_template_kwargs": {},
         "assistant_prefill": null,
-        "decoding": {"do_sample": true, "temperature": 0.6, "top_p": 0.95, "top_k": 20},
-        "topology_token_ladder": [2048, 4096, 8192, 16384, 32768],
-        "semantic_token_ladder": [512, 1024, 2048, 4096, 8192]
+        "decoding": {
+          "do_sample": true,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": 20
+        },
+        "topology_token_ladder": [
+          2048,
+          4096,
+          8192,
+          16384,
+          32768
+        ],
+        "semantic_token_ladder": [
+          512,
+          1024,
+          2048,
+          4096,
+          8192
+        ]
       }
     }
   ],
@@ -163,29 +249,72 @@
     "examples_per_role": 48,
     "max_epochs": 4,
     "expected_optimizer_steps_per_epoch": 12,
-    "dose_optimizer_steps": [3, 6, 12, 24, 36, 48],
+    "dose_optimizer_steps": [
+      3,
+      6,
+      12,
+      24,
+      36,
+      48
+    ],
     "target_policy": {
       "qwen3": {
-        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
         "target_parameters": [],
         "expert_rank": null,
         "expert_count": null
       },
       "qwen2": {
-        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
         "target_parameters": [],
         "expert_rank": null,
         "expert_count": null
       },
       "qwen3_moe": {
-        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "target_modules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj"
+        ],
+        "target_parameters": [
+          "mlp.experts.gate_up_proj",
+          "mlp.experts.down_proj"
+        ],
         "expert_rank": 1,
         "expert_count": 128
       },
       "glm4_moe_lite": {
-        "target_modules": ["q_a_proj", "q_b_proj", "kv_a_proj_with_mqa", "kv_b_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "target_parameters": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"],
+        "target_modules": [
+          "q_a_proj",
+          "q_b_proj",
+          "kv_a_proj_with_mqa",
+          "kv_b_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
+        "target_parameters": [
+          "mlp.experts.gate_up_proj",
+          "mlp.experts.down_proj"
+        ],
         "expert_rank": 1,
         "expert_count": 64
       }
@@ -194,8 +323,17 @@
   },
   "evaluation": {
     "screening_seed": 11,
-    "full_confirmation_seeds": [11, 29, 47],
-    "quality_thresholds_100": [60, 70, 80, 90],
+    "full_confirmation_seeds": [
+      11,
+      29,
+      47
+    ],
+    "quality_thresholds_100": [
+      60,
+      70,
+      80,
+      90
+    ],
     "schema_compliance_required": 1.0,
     "hallucination_rate_required": 0.0,
     "strict_semantic_delta_min": 0.0,
@@ -208,7 +346,7 @@
     "gpu_count_per_pod": 1,
     "cloud_type": "SECURE",
     "placement_scope": "global_no_datacenter_filter",
-    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
     "preferred_gpu_for_14b": [
       "NVIDIA H100 80GB HBM3",
       "NVIDIA H100 PCIe",
@@ -220,7 +358,9 @@
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
       "NVIDIA B200"
     ],
-    "preferred_gpu_for_30b": ["NVIDIA H200", "NVIDIA B200"],
+    "preferred_gpu_for_30b": [
+      "NVIDIA H200"
+    ],
     "container_disk_gb": 300,
     "network_volume_attached": false,
     "persistent_model_cache_allowed": false,
@@ -233,7 +373,17 @@
       "huggingface_hub": "1.31.0",
       "peft": "0.20.0"
     },
-    "silent_container_start_timeout_seconds": 900
+    "silent_container_start_timeout_seconds": 900,
+    "cuda_runtime_recovery": {
+      "reason": "H200 attempts enumerated one GPU through NVML/nvidia-smi but torch CUDA initialization failed under the CUDA 13.0 image before model loading",
+      "failed_image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+      "recovery_image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+      "large_model_gpu_scope": [
+        "NVIDIA H200"
+      ],
+      "fail_fast_cuda_preflight_before_model_download": true,
+      "scientific_geometry_changed": false
+    }
   },
   "governance": {
     "training_is_experimentally_approved": true,

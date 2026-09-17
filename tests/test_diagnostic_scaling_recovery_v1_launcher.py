@@ -36,6 +36,10 @@ def test_render_only_never_executes_paid_launch():
     assert request["env"]["CUDA_VISIBLE_DEVICES"] == "0"
     assert request["env"]["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
     shell = request["dockerStartCmd"][-1]
+    assert request["imageName"] == "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
+    assert "HEPHAESTUS_CUDA_PREFLIGHT_JSON" in shell
+    assert "HEPHAESTUS_CUDA_PREFLIGHT_OK" in shell
+    assert shell.index("HEPHAESTUS_CUDA_PREFLIGHT_JSON") < shell.index("apt-get update")
     assert "scripts/run_diagnostic_scaling_recovery_v1.py" in shell
     assert "git checkout --detach \"$HEPHAESTUS_REPO_SHA\"" in shell
 
@@ -74,7 +78,7 @@ def test_pod_request_rejects_network_volume_attachment():
 def test_30b_gpu_allowlist_is_large_memory_only():
     payload = contract()
     row = next(r for r in payload["candidates"] if r["model_id"] == "Qwen/Qwen3-30B-A3B-Thinking-2507")
-    assert launcher.gpu_ids(payload, row) == ["NVIDIA H200", "NVIDIA B200"]
+    assert launcher.gpu_ids(payload, row) == ["NVIDIA H200"]
 
 
 def test_wait_terminal_fails_immediately_on_exited_pod(monkeypatch):

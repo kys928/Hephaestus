@@ -105,3 +105,6 @@ def test_reasoning_lanes_have_sufficient_terminal_compute_and_startup_watchdog()
         assert row["reasoning_aware"]["topology_token_ladder"][-1] >= 32768
         assert row["reasoning_aware"]["semantic_token_ladder"][-1] >= 8192
     assert 300 <= payload["execution"]["silent_container_start_timeout_seconds"] <= 1800
+    assert payload["execution"]["image"] == "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime"
+    assert payload["execution"]["preferred_gpu_for_30b"] == ["NVIDIA H200"]
+    assert payload["execution"]["cuda_runtime_recovery"]["fail_fast_cuda_preflight_before_model_download"] is True
