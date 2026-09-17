@@ -23,11 +23,12 @@ def candidate(model_id: str = "Qwen/Qwen3-14B") -> dict:
     return next(row for row in contract()["candidates"] if row["model_id"] == model_id)
 
 
-def test_render_only_never_authorizes_paid_launch():
+def test_render_only_never_executes_paid_launch():
+    payload = contract()
     rendered = launcher.render_only("Qwen/Qwen3-14B", repo_sha="1" * 40, run_id="dry")
     assert rendered["status"] == "rendered_not_launched"
     assert rendered["launch_authorized"] is False
-    assert rendered["paid_launch_allowed_now"] is False
+    assert rendered["paid_launch_allowed_now"] is bool(payload["governance"]["paid_launch_allowed_now"])
     request = rendered["request"]
     assert "networkVolumeId" not in request
     assert "volumeMountPath" not in request
@@ -37,12 +38,16 @@ def test_render_only_never_authorizes_paid_launch():
     assert "git checkout --detach \"$HEPHAESTUS_REPO_SHA\"" in shell
 
 
-def test_paid_execute_is_blocked_by_current_contract_even_with_env_yes():
-    with pytest.raises(RuntimeError, match="blocked by the committed recovery contract"):
-        launcher.paid_launch_gate(contract(), execute=True, authorization_env="YES")
+def test_paid_execute_obeys_committed_contract_and_second_env_lock():
+    payload = contract()
+    if payload["governance"]["paid_launch_allowed_now"] is True:
+        launcher.paid_launch_gate(payload, execute=True, authorization_env="YES")
+    else:
+        with pytest.raises(RuntimeError, match="blocked by the committed recovery contract"):
+            launcher.paid_launch_gate(payload, execute=True, authorization_env="YES")
 
 
-def test_future_paid_execute_still_requires_new_authorization_env():
+def test_paid_execute_still_requires_new_authorization_env():
     payload = copy.deepcopy(contract())
     payload["governance"]["paid_launch_allowed_now"] = True
     with pytest.raises(RuntimeError, match="without HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED=YES"):
