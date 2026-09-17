@@ -1,0 +1,183 @@
+name: Diagnostic Scaling Recovery V1 H200 CUDA smoke
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-h200-cuda-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+    steps:
+      - name: Create, verify, and destroy one H200 CUDA smoke Pod
+        run: |
+          python - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+          from datetime import datetime, timezone
+
+          base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          key=os.environ['RUNPOD_API_KEY']
+          headers={
+              'Authorization':'Bearer '+key,
+              'Accept':'application/json',
+              'Content-Type':'application/json',
+              'User-Agent':'Hephaestus-H200-CUDA-Smoke/1.0',
+          }
+          image='pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime'
+          name='hephaestus-h200-cuda126-smoke-'+str(int(time.time()))
+          command=r'''set -Eeuo pipefail
+          export CUDA_DEVICE_ORDER=PCI_BUS_ID
+          export CUDA_VISIBLE_DEVICES=0
+          python - <<'PYCUDA'
+          import json, os, subprocess, torch
+          smi=subprocess.run(
+              ['nvidia-smi','--query-gpu=driver_version,name,memory.total,uuid','--format=csv,noheader'],
+              check=False,capture_output=True,text=True,
+          )
+          probe={
+              'torch_version':str(torch.__version__),
+              'torch_cuda_version':str(torch.version.cuda),
+              'cuda_available':bool(torch.cuda.is_available()),
+              'device_count':int(torch.cuda.device_count()),
+              'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),
+              'nvidia_visible_devices':os.environ.get('NVIDIA_VISIBLE_DEVICES'),
+              'nvidia_smi_returncode':int(smi.returncode),
+              'nvidia_smi_stdout':smi.stdout.strip(),
+              'nvidia_smi_stderr':smi.stderr.strip(),
+          }
+          print('HEPHAESTUS_CUDA_PREFLIGHT_JSON '+json.dumps(probe,sort_keys=True),flush=True)
+          if not probe['cuda_available'] or probe['device_count'] != 1:
+              print('HEPHAESTUS_CUDA_PREFLIGHT_FAIL',flush=True)
+              raise SystemExit(42)
+          x=torch.ones(1,device='cuda')
+          y=(x+1).sum()
+          torch.cuda.synchronize()
+          print('HEPHAESTUS_CUDA_PREFLIGHT_OK '+json.dumps({'value':float(y.item()),'device':str(x.device)},sort_keys=True),flush=True)
+          PYCUDA
+          sleep 300'''
+          body={
+              'name':name,
+              'computeType':'GPU',
+              'gpuCount':1,
+              'gpuTypeIds':['NVIDIA H200'],
+              'gpuTypePriority':'availability',
+              'cloudType':'SECURE',
+              'imageName':image,
+              'containerDiskInGb':30,
+              'dockerStartCmd':['bash','-lc',command],
+              'interruptible':False,
+              'env':{
+                  'CUDA_DEVICE_ORDER':'PCI_BUS_ID',
+                  'CUDA_VISIBLE_DEVICES':'0',
+                  'PYTHONUNBUFFERED':'1',
+              },
+          }
+
+          def api(method,path,payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request(base+'/'+path.lstrip('/'),data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      raw=r.read()
+                      return r.status, json.loads(raw) if raw else None
+              except urllib.error.HTTPError as exc:
+                  raw=exc.read().decode('utf-8',errors='replace')[:2000]
+                  raise RuntimeError(f'RunPod HTTP {exc.code}: {raw}') from exc
+
+          def logs(pod_id,source='container'):
+              req=urllib.request.Request(
+                  f'https://api.runpod.io/v2/pods/{pod_id}/logs?tail=1000&source={source}',
+                  headers={'Authorization':'Bearer '+key,'Accept':'text/event-stream','User-Agent':'Hephaestus-H200-CUDA-Smoke/1.0'},
+              )
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as r:
+                      raw=r.read(200000).decode('utf-8',errors='replace')
+              except Exception as exc:
+                  return '', f'{type(exc).__name__}: {exc}'
+              lines=[]
+              for line in raw.splitlines():
+                  if not line.startswith('data: '):
+                      continue
+                  try:
+                      event=json.loads(line[6:])
+                      lines.append(str(event.get('line') or ''))
+                  except Exception:
+                      pass
+              return '\n'.join(lines), None
+
+          pod_id=None
+          record={'name':name,'image':image,'gpu_type':'NVIDIA H200','created_at':datetime.now(timezone.utc).isoformat(),'status':'starting'}
+          try:
+              status,pod=api('POST','pods',body)
+              if status != 201 or not isinstance(pod,dict) or not pod.get('id'):
+                  raise RuntimeError(f'unexpected create response: {status} {pod}')
+              pod_id=str(pod['id'])
+              record['pod_id']=pod_id
+              record['status']='running_probe'
+              deadline=time.time()+600
+              observed=''
+              while time.time()<deadline:
+                  text,log_error=logs(pod_id)
+                  if text:
+                      observed=text
+                      for line in text.splitlines():
+                          if line.startswith('HEPHAESTUS_CUDA_PREFLIGHT_JSON '):
+                              record['probe']=json.loads(line.split(' ',1)[1])
+                          if line.startswith('HEPHAESTUS_CUDA_PREFLIGHT_OK '):
+                              record['ok']=json.loads(line.split(' ',1)[1])
+                              record['status']='passed'
+                              print('H200_CUDA_SMOKE_JSON '+json.dumps(record,sort_keys=True))
+                              raise SystemExit(0)
+                          if 'HEPHAESTUS_CUDA_PREFLIGHT_FAIL' in line:
+                              record['status']='failed_cuda_preflight'
+                              raise RuntimeError('H200 CUDA preflight failed')
+                  try:
+                      _,detail=api('GET','pods/'+pod_id)
+                      desired=str((detail or {}).get('desiredStatus','')).upper()
+                      record['desired_status']=desired
+                      if desired in {'EXITED','FAILED','TERMINATED','STOPPED'}:
+                          sys_text,sys_err=logs(pod_id,'system')
+                          record['status']='pod_exited_before_success'
+                          record['container_tail']=observed[-8000:]
+                          record['system_tail']=sys_text[-8000:]
+                          raise RuntimeError('H200 smoke Pod exited before CUDA success marker')
+                  except RuntimeError:
+                      raise
+                  except Exception as exc:
+                      record['last_detail_error']=f'{type(exc).__name__}: {exc}'
+                  time.sleep(8)
+              record['status']='timeout'
+              raise TimeoutError('H200 CUDA smoke timed out')
+          except SystemExit:
+              raise
+          except Exception as exc:
+              record['error']=f'{type(exc).__name__}: {exc}'
+              print('H200_CUDA_SMOKE_JSON '+json.dumps(record,sort_keys=True))
+              raise
+          finally:
+              if pod_id:
+                  try:
+                      status,_=api('DELETE','pods/'+pod_id)
+                      record['delete_status']=status
+                  except Exception as exc:
+                      record['delete_error']=f'{type(exc).__name__}: {exc}'
+              record['completed_at']=datetime.now(timezone.utc).isoformat()
+              with open('h200_cuda_smoke.json','w',encoding='utf-8') as f:
+                  json.dump(record,f,indent=2,sort_keys=True)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-scaling-recovery-h200-cuda-smoke
+          path: h200_cuda_smoke.json
+          if-no-files-found: warn
+          retention-days: 30
