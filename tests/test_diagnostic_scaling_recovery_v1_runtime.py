@@ -60,7 +60,7 @@ def test_adaptive_generation_retries_only_token_budget_exhaustion(monkeypatch):
     assert result["final_schema_complete"] is True
 
 
-def test_eos_malformed_json_is_real_model_failure_not_extra_compute(monkeypatch):
+def test_eos_malformed_json_retries_before_becoming_inconclusive(monkeypatch):
     calls = []
 
     def fake_generate(*args, max_new_tokens, **kwargs):
@@ -72,9 +72,9 @@ def test_eos_malformed_json_is_real_model_failure_not_extra_compute(monkeypatch)
         object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,
         token_ladder=[1024, 2048, 4096], contract=contract(), require_schema=True,
     )
-    assert calls == [1024]
-    assert result["budget_retry_count"] == 0
-    assert result["budget_exhausted"] is False
+    assert calls == [1024, 2048, 4096]
+    assert result["budget_retry_count"] == 2
+    assert result["budget_exhausted"] is True
     assert result["final_schema_complete"] is False
 
 

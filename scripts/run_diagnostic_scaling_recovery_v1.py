@@ -208,7 +208,10 @@ def adaptive_generate(
         raw = str(generated["output"])
         projected = project_reasoning(raw, contract, lane)
         complete_schema = topology_complete(projected) if require_schema else True
-        needs_retry = generated["finish_reason"] == "max_tokens"
+        needs_retry = (
+            generated["finish_reason"] == "max_tokens"
+            or (require_schema and not complete_schema)
+        )
         attempts.append({
             "budget": int(budget),
             "finish_reason": generated["finish_reason"],
@@ -217,7 +220,7 @@ def adaptive_generate(
         })
         if needs_retry and index < len(token_ladder) - 1:
             continue
-        exhausted = bool(generated["finish_reason"] == "max_tokens" and index == len(token_ladder) - 1)
+        exhausted = bool(needs_retry and index == len(token_ladder) - 1)
         return {
             **generated,
             "output": raw,

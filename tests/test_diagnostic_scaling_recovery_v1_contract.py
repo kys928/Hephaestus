@@ -86,3 +86,11 @@ def test_cross_lane_ranking_is_forbidden():
     payload["evaluation_lanes"]["fixed_non_thinking"]["cross_lane_ranking_allowed"] = True
     with pytest.raises(ValueError, match="cross-lane ranking"):
         validator.validate_contract(payload, ROOT)
+
+
+def test_reasoning_lanes_have_sufficient_terminal_compute_and_startup_watchdog():
+    payload = contract()
+    for row in payload["candidates"]:
+        assert row["reasoning_aware"]["topology_token_ladder"][-1] >= 32768
+        assert row["reasoning_aware"]["semantic_token_ladder"][-1] >= 8192
+    assert 300 <= payload["execution"]["silent_container_start_timeout_seconds"] <= 1800

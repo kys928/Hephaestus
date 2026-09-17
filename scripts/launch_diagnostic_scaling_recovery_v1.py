@@ -48,6 +48,14 @@ class PodExitedWithoutTerminal(RuntimeError):
         self.snapshot = snapshot
 
 
+class PodSilentStartup(RuntimeError):
+    def __init__(self, pod_id: str, snapshot: dict[str, Any] | None, log_snapshot: dict[str, Any]):
+        super().__init__(f"RunPod {pod_id} produced no container output before the bounded startup watchdog expired")
+        self.pod_id = pod_id
+        self.snapshot = snapshot
+        self.log_snapshot = log_snapshot
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -277,7 +285,7 @@ def best_effort_log_snapshot(pod_id: str) -> dict[str, Any]:
                 "curl", "-sS", "-N", "--max-time", "8",
                 "-H", f"Authorization: Bearer {key}",
                 "-H", "Accept: text/event-stream",
-                f"https://api.runpod.io/v2/pods/{pod_id}/logs?tail=1000",
+                f"https://api.runpod.io/v2/pods/{pod_id}/logs?tail=1000&source=container",
             ],
             check=False,
             capture_output=True,
@@ -295,9 +303,20 @@ def best_effort_log_snapshot(pod_id: str) -> dict[str, Any]:
         return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
 
 
-def wait_terminal(client: Any, execution: RunPodExecutionAdapter, *, execution_id: str, attempt: int, pod_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def wait_terminal(
+    client: Any,
+    execution: RunPodExecutionAdapter,
+    *,
+    execution_id: str,
+    attempt: int,
+    pod_id: str,
+    silent_start_timeout_seconds: int = 900,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     key = f"{storage.SCIENTIFIC_PREFIX}/executions/{execution_id}/attempt-{attempt}/driver_result.json"
-    deadline = time.monotonic() + MAX_SECONDS
+    started = time.monotonic()
+    deadline = started + MAX_SECONDS
+    startup_probe_due = started + max(0, int(silent_start_timeout_seconds))
+    startup_output_verified = False
     observations: list[dict[str, Any]] = []
     last_status: str | None = None
     while time.monotonic() < deadline:
@@ -314,6 +333,18 @@ def wait_terminal(client: Any, execution: RunPodExecutionAdapter, *, execution_i
             last_status = status
         if status in TERMINAL_STATUSES:
             raise PodExitedWithoutTerminal(pod_id, snapshot)
+        if not startup_output_verified and time.monotonic() >= startup_probe_due:
+            log_snapshot = best_effort_log_snapshot(pod_id)
+            observations.append({
+                "at": now(),
+                "startup_watchdog": True,
+                "container_log_status": log_snapshot.get("status"),
+                "container_log_bytes": int(log_snapshot.get("bytes", 0) or 0),
+            })
+            if log_snapshot.get("status") == "captured" and int(log_snapshot.get("bytes", 0) or 0) > 0:
+                startup_output_verified = True
+            else:
+                raise PodSilentStartup(pod_id, snapshot, log_snapshot)
         time.sleep(POLL_SECONDS)
     raise TimeoutError(f"Recovery model did not finish within {MAX_SECONDS} seconds")
 
@@ -433,7 +464,14 @@ def main() -> int:
         pod_id = str(pod["id"])
         record["pod_id"] = pod_id
         record["capacity_selection"] = capacity
-        terminal, observations = wait_terminal(client, execution, execution_id=execution_id, attempt=attempt, pod_id=pod_id)
+        terminal, observations = wait_terminal(
+            client,
+            execution,
+            execution_id=execution_id,
+            attempt=attempt,
+            pod_id=pod_id,
+            silent_start_timeout_seconds=int(contract["execution"]["silent_container_start_timeout_seconds"]),
+        )
         record["pod_observations"] = observations
         record["verification"] = verify_terminal(client, terminal, run_id=run_id, execution_id=execution_id, model_id=args.model_id, contract=contract)
         record["status"] = "verified"
@@ -443,6 +481,12 @@ def main() -> int:
         record["error"] = str(exc)
         record["terminal_pod_snapshot"] = exc.snapshot
         record["runpod_v2_log_snapshot"] = best_effort_log_snapshot(exc.pod_id)
+        raise
+    except PodSilentStartup as exc:
+        record["status"] = "failed_pod_silent_startup"
+        record["error"] = str(exc)
+        record["terminal_pod_snapshot"] = exc.snapshot
+        record["runpod_v2_log_snapshot"] = exc.log_snapshot
         raise
     except Exception as exc:
         record["status"] = "failed"

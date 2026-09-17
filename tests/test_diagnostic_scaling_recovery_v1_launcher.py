@@ -82,6 +82,20 @@ def test_wait_terminal_fails_immediately_on_exited_pod(monkeypatch):
     assert exc.value.snapshot["desiredStatus"] == "EXITED"
 
 
+def test_wait_terminal_aborts_silent_running_pod(monkeypatch):
+    class Client:
+        pass
+
+    monkeypatch.setattr(launcher.storage, "maybe_read_key", lambda *args, **kwargs: None)
+    monkeypatch.setattr(launcher.storage, "pod_snapshot", lambda *args, **kwargs: {"desiredStatus": "RUNNING", "id": "pod-silent"})
+    monkeypatch.setattr(launcher, "best_effort_log_snapshot", lambda *_: {"status": "empty", "bytes": 0})
+    monkeypatch.setattr(launcher.time, "sleep", lambda _: None)
+    with pytest.raises(launcher.PodSilentStartup):
+        launcher.wait_terminal(
+            Client(), object(), execution_id="exec", attempt=1, pod_id="pod-silent", silent_start_timeout_seconds=0
+        )
+
+
 def test_terminal_verification_requires_no_cross_lane_ranking():
     source = SCRIPT.read_text(encoding="utf-8")
     assert '"cross_lane_ranking_performed": False' in source

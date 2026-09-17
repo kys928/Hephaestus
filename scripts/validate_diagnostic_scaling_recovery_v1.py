@@ -144,8 +144,12 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
 
     if candidates["deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"]["reasoning_aware"].get("assistant_prefill") != "<think>\n":
         raise ValueError("DeepSeek reasoning prefill drifted")
-    if candidates["Qwen/Qwen3-30B-A3B-Thinking-2507"]["reasoning_aware"]["topology_token_ladder"][-1] < 32768:
-        raise ValueError("Qwen3-30B thinking lane lacks sufficient terminal budget")
+    for model_id, row in candidates.items():
+        aware = row["reasoning_aware"]
+        if aware["topology_token_ladder"][-1] < 32768:
+            raise ValueError(f"reasoning-aware topology lane lacks 32K terminal budget for {model_id}")
+        if aware["semantic_token_ladder"][-1] < 8192:
+            raise ValueError(f"reasoning-aware semantic lane lacks 8K terminal budget for {model_id}")
 
     execution = contract.get("execution", {})
     if execution.get("runtime_dependencies") != EXPECTED_RUNTIME:
@@ -154,6 +158,9 @@ def validate_contract(contract: dict[str, Any], root: Path = ROOT) -> dict[str, 
         raise ValueError("recovery must remain ephemeral")
     if execution.get("pod_exit_without_terminal_policy") != "fail_immediately_preserve_pod_status_and_log_snapshot":
         raise ValueError("silent pod-exit policy drifted")
+    silent_timeout = int(execution.get("silent_container_start_timeout_seconds", 0))
+    if not 300 <= silent_timeout <= 1800:
+        raise ValueError("silent container-start watchdog must be bounded between 5 and 30 minutes")
 
     governance = contract.get("governance", {})
     if governance.get("paid_launch_allowed_now") is not False or governance.get("paid_launch_requires_new_explicit_user_go") is not True:
