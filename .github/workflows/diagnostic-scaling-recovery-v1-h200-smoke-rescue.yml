@@ -1,0 +1,114 @@
+name: Diagnostic Scaling Recovery V1 H200 smoke rescue
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-h200-smoke-rescue.yml
+
+permissions:
+  contents: read
+
+jobs:
+  rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      POD_ID: 15px25ytwffh8k
+    steps:
+      - name: Capture CUDA marker and always teardown smoke Pod
+        run: |
+          set -Eeuo pipefail
+          : > smoke_container.sse
+          : > smoke_system.sse
+          cleanup() {
+            set +e
+            curl -sS -X DELETE \
+              -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              -H 'Accept: application/json' \
+              "${RUNPOD_API_BASE_URL:-https://rest.runpod.io/v1}/pods/$POD_ID" \
+              -o delete_response.txt -w '%{http_code}' > delete_status.txt
+            set -e
+          }
+          trap cleanup EXIT
+
+          FOUND=0
+          for I in 1 2 3 4 5 6; do
+            : > smoke_container.sse
+            set +e
+            curl -sS -N --max-time 10 \
+              -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              -H 'Accept: text/event-stream' \
+              "https://api.runpod.io/v2/pods/$POD_ID/logs?tail=2000&source=container" \
+              > smoke_container.sse
+            CURL_STATUS=$?
+            set -e
+            echo "attempt=$I curl_status=$CURL_STATUS bytes=$(wc -c < smoke_container.sse)"
+            if grep -q 'HEPHAESTUS_CUDA_PREFLIGHT_OK' smoke_container.sse; then
+              FOUND=1
+              break
+            fi
+            if grep -q 'HEPHAESTUS_CUDA_PREFLIGHT_FAIL' smoke_container.sse; then
+              break
+            fi
+            sleep 10
+          done
+
+          set +e
+          curl -sS -N --max-time 10 \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H 'Accept: text/event-stream' \
+            "https://api.runpod.io/v2/pods/$POD_ID/logs?tail=1000&source=system" \
+            > smoke_system.sse
+          set -e
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def lines(path):
+              out=[]
+              for raw in Path(path).read_text(encoding='utf-8',errors='replace').splitlines():
+                  if not raw.startswith('data: '):
+                      continue
+                  try:
+                      event=json.loads(raw[6:])
+                      out.append(str(event.get('line') or ''))
+                  except Exception:
+                      pass
+              return out
+
+          container=lines('smoke_container.sse')
+          system=lines('smoke_system.sse')
+          marker=next((x for x in container if x.startswith('HEPHAESTUS_CUDA_PREFLIGHT_JSON ')),None)
+          ok=next((x for x in container if x.startswith('HEPHAESTUS_CUDA_PREFLIGHT_OK ')),None)
+          fail=next((x for x in container if 'HEPHAESTUS_CUDA_PREFLIGHT_FAIL' in x),None)
+          result={
+              'pod_id':'15px25ytwffh8k',
+              'probe':None if marker is None else json.loads(marker.split(' ',1)[1]),
+              'ok':None if ok is None else json.loads(ok.split(' ',1)[1]),
+              'failed_marker':bool(fail),
+              'container_tail':container[-50:],
+              'system_tail':system[-50:],
+          }
+          result['status']='passed' if result['ok'] else ('failed_cuda_preflight' if fail else 'no_terminal_marker')
+          Path('h200_smoke_rescue.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('H200_SMOKE_RESCUE_JSON '+json.dumps(result,sort_keys=True))
+          if result['status'] != 'passed':
+              raise SystemExit(1)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-scaling-recovery-h200-smoke-rescue
+          path: |
+            h200_smoke_rescue.json
+            smoke_container.sse
+            smoke_system.sse
+            delete_status.txt
+            delete_response.txt
+          if-no-files-found: warn
+          retention-days: 30
