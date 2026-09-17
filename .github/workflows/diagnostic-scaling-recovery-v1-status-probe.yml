@@ -1,0 +1,46 @@
+name: Diagnostic Scaling Recovery V1 RunPod status probe
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-status-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35239300657
+    steps:
+      - name: Read current Recovery V1 Pods
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'Accept':'application/json','User-Agent':'Hephaestus-Recovery-Probe/1.0'}
+          req=urllib.request.Request(base+'/pods',headers=headers,method='GET')
+          with urllib.request.urlopen(req,timeout=30) as r: payload=json.load(r)
+          rows=(payload.get('pods') or payload.get('items') or payload.get('data') or []) if isinstance(payload,dict) else payload
+          matches=[]
+          for p in rows:
+              if not isinstance(p,dict): continue
+              name=str(p.get('name') or '')
+              if os.environ['TARGET_RUN_ID'] not in name: continue
+              matches.append({'id':p.get('id'),'name':name,'desiredStatus':p.get('desiredStatus'),'lastStatusChange':p.get('lastStatusChange'),'gpu':p.get('gpu'),'machine':p.get('machine')})
+          out={'target_run_id':os.environ['TARGET_RUN_ID'],'matching_pods':matches}
+          print('RECOVERY_RUNPOD_STATUS_JSON '+json.dumps(out,sort_keys=True))
+          json.dump(out,open('diagnostic_scaling_recovery_status_probe.json','w'),indent=2,sort_keys=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-recovery-v1-status-probe
+          path: diagnostic_scaling_recovery_status_probe.json
+          if-no-files-found: error
+          retention-days: 7
