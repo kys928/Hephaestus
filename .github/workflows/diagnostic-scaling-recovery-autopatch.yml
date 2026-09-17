@@ -1,0 +1,36 @@
+name: Diagnostic Scaling recovery one-shot patch
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-autopatch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment-diagnostic-scaling-v1
+      - name: Patch reasoning retry semantics and remove this one-shot workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/run_diagnostic_scaling_recovery_v1.py')
+          text = path.read_text(encoding='utf-8')
+          old = '        needs_retry = generated["finish_reason"] == "max_tokens" or (require_schema and not complete_schema and index < len(token_ladder) - 1)\n'
+          new = '        needs_retry = generated["finish_reason"] == "max_tokens"\n'
+          if old not in text:
+              raise SystemExit('expected adaptive-generation retry line not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git rm .github/workflows/diagnostic-scaling-recovery-autopatch.yml
+          git config user.name 'hephaestus-ci'
+          git config user.email 'hephaestus-ci@users.noreply.github.com'
+          git add scripts/run_diagnostic_scaling_recovery_v1.py
+          git commit -m 'Fix reasoning-aware retry semantics'
+          git push origin HEAD:experiment-diagnostic-scaling-v1
