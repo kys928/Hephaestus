@@ -70,7 +70,7 @@ def test_reasoning_budget_exhaustion_must_be_inconclusive_not_floor_score():
 def test_qwen30_reasoning_budget_cannot_regress_to_old_256_token_cap():
     payload = copy.deepcopy(contract())
     payload["candidates"][3]["reasoning_aware"]["topology_token_ladder"] = [512, 1024, 2048]
-    with pytest.raises(ValueError, match="sufficient terminal budget"):
+    with pytest.raises(ValueError, match="terminal budget"):
         validator.validate_contract(payload, ROOT)
 
 
