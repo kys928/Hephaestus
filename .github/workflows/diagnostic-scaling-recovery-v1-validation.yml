@@ -105,3 +105,5 @@ jobs:
             diagnostic_scaling_recovery_launch_request_*.json
           if-no-files-found: error
           retention-days: 90
+
+# Exact-head validation sentinel: recovery hardening complete; paid launch remains blocked.
