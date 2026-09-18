@@ -16,6 +16,8 @@ jobs:
     if: contains(github.event.head_commit.message, '[launch-diagnostic-scaling-recovery-v1]')
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    outputs:
+      models: ${{ steps.scope.outputs.models }}
     env:
       PYTHONPATH: src
       HF_HUB_DISABLE_XET: '1'
@@ -32,15 +34,18 @@ jobs:
           python-version: '3.12'
 
       - name: Require new explicit recovery authorization state
+        id: scope
         run: |
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
+
           marker_path = Path('configs/experiments/diagnostic_scaling_recovery_v1.launch.json')
           if not marker_path.is_file():
               raise SystemExit('recovery launch marker is absent')
           marker = json.loads(marker_path.read_text(encoding='utf-8'))
           contract = json.loads(Path('configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json').read_text(encoding='utf-8'))
+
           assert marker.get('authorized') is True
           assert marker.get('protocol_id') == 'hephaestus_diagnostic_scaling_recovery_v1'
           assert marker.get('authorization_source') == 'user_directive'
@@ -48,7 +53,27 @@ jobs:
           assert contract['governance']['paid_launch_requires_new_explicit_user_go'] is True
           assert contract['governance']['promotion_allowed'] is False
           assert contract['governance']['lineage_mutation_allowed'] is False
-          print(json.dumps({'marker': marker, 'paid_launch_allowed_now': True}, sort_keys=True))
+
+          models = marker.get('authorized_models')
+          if not isinstance(models, list) or not models or len(models) != len(set(models)):
+              raise SystemExit('launch marker must contain a non-empty unique authorized_models list')
+          cohort = {row['model_id'] for row in contract['candidates']}
+          unknown = [model for model in models if model not in cohort]
+          if unknown:
+              raise SystemExit('launch marker contains model outside frozen recovery cohort: '+repr(unknown))
+
+          # This workflow is intentionally restricted to the two scientifically
+          # unfinished candidates. Completed Qwen14/DeepSeek evidence is immutable.
+          unfinished = {
+              'zai-org/GLM-4.7-Flash',
+              'Qwen/Qwen3-30B-A3B-Thinking-2507',
+          }
+          if any(model not in unfinished for model in models):
+              raise SystemExit('launch marker attempts to rerun an already completed candidate')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write('models='+json.dumps(models, separators=(',', ':'))+'\n')
+          print(json.dumps({'marker': marker, 'authorized_models': models, 'paid_launch_allowed_now': True}, sort_keys=True))
           PY
 
       - name: Install exact recovery dependencies
@@ -94,11 +119,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        model:
-          - Qwen/Qwen3-14B
-          - deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
-          - zai-org/GLM-4.7-Flash
-          - Qwen/Qwen3-30B-A3B-Thinking-2507
+        model: ${{ fromJSON(needs.authorize-and-admit.outputs.models) }}
     runs-on: ubuntu-latest
     timeout-minutes: 430
     env:
