@@ -1,0 +1,79 @@
+name: Recover exited GLM RunPod logs
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-glm-exited-log-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      POD_ID: 3r98jpt59u9scn
+    steps:
+      - name: Recover retained RunPod v2 logs
+        run: |
+          set +e
+          curl -sS -N --max-time 20 \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H 'Accept: text/event-stream' \
+            "https://api.runpod.io/v2/pods/$POD_ID/logs?tail=5000&source=container" > container.sse
+          echo "container_status=$? bytes=$(wc -c < container.sse)"
+          curl -sS -N --max-time 20 \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H 'Accept: text/event-stream' \
+            "https://api.runpod.io/v2/pods/$POD_ID/logs?tail=5000&source=system" > system.sse
+          echo "system_status=$? bytes=$(wc -c < system.sse)"
+          set -e
+          python - <<'PY'
+          import json, re
+          for source in ('container','system'):
+              path=source+'.sse'
+              rows=[]
+              try:
+                  lines=open(path,encoding='utf-8',errors='replace').read().splitlines()
+              except FileNotFoundError:
+                  lines=[]
+              for raw in lines:
+                  if raw.startswith('data: '):
+                      try:
+                          event=json.loads(raw[6:])
+                          line=str(event.get('line') or '')
+                          ts=event.get('ts')
+                      except Exception:
+                          continue
+                      rows.append((ts,line))
+              print(f'{source.upper()}_EVENT_COUNT {len(rows)}')
+              markers=[(ts,line) for ts,line in rows if (
+                  'HEPHAESTUS_' in line or
+                  'DIAGNOSTIC_SCALING_RECOVERY_' in line or
+                  'Traceback' in line or
+                  'RuntimeError' in line or
+                  'CUDA' in line or
+                  'Loading weights' in line or
+                  'Fetching ' in line or
+                  'Killed' in line or
+                  'OOM' in line or
+                  'out of memory' in line.lower()
+              )]
+              for ts,line in markers[-300:]:
+                  # Do not print environment dumps or credential-shaped text.
+                  if any(x in line for x in ('RUNPOD_S3_SECRET_ACCESS_KEY','RUNPOD_API_KEY','RUNPOD_S3_ACCESS_KEY_ID')):
+                      continue
+                  print(f'{source.upper()}_RECOVERED {ts} {line}')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glm-exited-runpod-logs
+          path: |
+            container.sse
+            system.sse
+          if-no-files-found: warn
+          retention-days: 7
