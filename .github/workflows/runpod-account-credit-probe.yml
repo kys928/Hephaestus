@@ -17,31 +17,23 @@ jobs:
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
     steps:
-      - name: Query safe RunPod account credit fields
+      - name: Query RunPod GraphQL credit state
         run: |
           python - <<'PY'
-          import json, os, urllib.request, urllib.error
-          headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'Accept':'application/json','User-Agent':'Hephaestus-Credit-Probe/1.0'}
-          for url in ('https://api.runpod.io/v2/user','https://rest.runpod.io/v1/user'):
-              try:
-                  req=urllib.request.Request(url,headers=headers)
-                  with urllib.request.urlopen(req,timeout=20) as r:
-                      data=json.load(r)
-                  def walk(obj,prefix=''):
-                      out={}
-                      if isinstance(obj,dict):
-                          for k,v in obj.items():
-                              path=f'{prefix}.{k}' if prefix else k
-                              lk=k.lower()
-                              if any(term in lk for term in ('balance','credit')) and isinstance(v,(int,float,str,bool,type(None))):
-                                  out[path]=v
-                              elif isinstance(v,(dict,list)):
-                                  out.update(walk(v,path))
-                      elif isinstance(obj,list):
-                          for i,v in enumerate(obj[:20]):
-                              out.update(walk(v,f'{prefix}[{i}]'))
-                      return out
-                  print('RUNPOD_ACCOUNT_CREDIT_JSON '+json.dumps({'url':url,'fields':walk(data)},sort_keys=True))
-              except Exception as exc:
-                  print('RUNPOD_ACCOUNT_CREDIT_ERROR '+json.dumps({'url':url,'error':type(exc).__name__+': '+str(exc)},sort_keys=True))
+          import json, os, urllib.request
+          body=json.dumps({'query':'query { myself { clientBalance underBalance minBalance currentSpendPerHr } }'}).encode()
+          req=urllib.request.Request(
+              'https://api.runpod.io/graphql',
+              data=body,
+              headers={
+                  'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],
+                  'Content-Type':'application/json',
+                  'Accept':'application/json',
+              },
+              method='POST',
+          )
+          with urllib.request.urlopen(req,timeout=20) as r:
+              data=json.load(r)
+          safe=((data.get('data') or {}).get('myself') or {})
+          print('RUNPOD_ACCOUNT_CREDIT_JSON '+json.dumps(safe,sort_keys=True))
           PY
