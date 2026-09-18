@@ -22,9 +22,9 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35246035168
-      TARGET_EXECUTION_ID: diagnostic-scaling-recovery-v1-35246035168-deepseek-ai--DeepSeek-R1-Distill-Qwen-14B
-      TARGET_MODEL_ID: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35353021970
+      TARGET_EXECUTION_ID: diagnostic-scaling-recovery-v1-35353021970-zai-org--GLM-4.7-Flash
+      TARGET_MODEL_ID: zai-org/GLM-4.7-Flash
       SCIENTIFIC_PREFIX: hephaestus/scientific/v1
     steps:
       - uses: actions/setup-python@v5
