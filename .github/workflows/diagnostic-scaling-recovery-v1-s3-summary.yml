@@ -1,0 +1,275 @@
+name: Diagnostic Scaling Recovery V1 S3 scientific summary
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-recovery-v1-s3-summary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35246035168
+      SCIENTIFIC_PREFIX: hephaestus/scientific/v1
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install S3 client
+        run: python -m pip install --quiet boto3
+      - name: Read and summarize governed S3 evidence
+        run: |
+          python - <<'PY'
+          import json, os
+          from datetime import timezone
+          from pathlib import PurePosixPath
+          import boto3
+          from botocore.config import Config
+
+          def req(name):
+              value=(os.environ.get(name) or '').strip()
+              if not value:
+                  raise RuntimeError('missing '+name)
+              return value
+
+          run_id=req('TARGET_RUN_ID')
+          root=req('SCIENTIFIC_PREFIX').rstrip('/')
+          bucket=req('RUNPOD_NETWORK_VOLUME_ID')
+          s3=boto3.client(
+              's3',
+              endpoint_url=req('RUNPOD_S3_ENDPOINT_URL').rstrip('/'),
+              region_name=req('RUNPOD_DATACENTER_ID'),
+              aws_access_key_id=req('RUNPOD_S3_ACCESS_KEY_ID'),
+              aws_secret_access_key=req('RUNPOD_S3_SECRET_ACCESS_KEY'),
+              config=Config(retries={'mode':'standard','max_attempts':8}),
+          )
+
+          def list_prefix(prefix):
+              out=[]
+              for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket, Prefix=prefix):
+                  for obj in page.get('Contents',[]):
+                      lm=obj.get('LastModified')
+                      out.append({
+                          'key':obj['Key'],
+                          'bytes':int(obj.get('Size') or 0),
+                          'last_modified':lm.astimezone(timezone.utc).isoformat() if lm else None,
+                      })
+              return sorted(out,key=lambda x:(x['key']))
+
+          def read_json(key):
+              raw=s3.get_object(Bucket=bucket,Key=key)['Body'].read()
+              return json.loads(raw)
+
+          evidence_root=f"{root}/diagnostic_scaling_recovery/{run_id}/models/"
+          objects=list_prefix(evidence_root)
+          slugs=sorted({
+              key['key'][len(evidence_root):].split('/',1)[0]
+              for key in objects
+              if key['key'].startswith(evidence_root) and '/' in key['key'][len(evidence_root):]
+          })
+
+          result={
+              'run_id':run_id,
+              'bucket_id':bucket,
+              'evidence_object_count':len(objects),
+              'evidence_total_bytes':sum(x['bytes'] for x in objects),
+              'latest_evidence_modified':max((x['last_modified'] for x in objects if x['last_modified']),default=None),
+              'models':{},
+              'executions':{},
+          }
+
+          object_keys={x['key'] for x in objects}
+          for slug in slugs:
+              base=f"{evidence_root}{slug}/"
+              model={'slug':slug}
+              for name in ('run_manifest.json','evidence_manifest.json','model_manifest.json'):
+                  key=base+name
+                  if key in object_keys:
+                      doc=read_json(key)
+                      if name=='run_manifest.json':
+                          model['run_manifest']={
+                              k:doc.get(k) for k in (
+                                  'model_id','revision','repo_sha','protocol_sha256',
+                                  'training_dataset_sha256','roles','runtime_versions',
+                                  'evaluation_lanes','fixed_non_thinking_eligible',
+                                  'network_volume_attached'
+                              )
+                          }
+                      elif name=='evidence_manifest.json':
+                          model['evidence_manifest']={
+                              k:doc.get(k) for k in (
+                                  'model_id','revision','component_count','bytes',
+                                  'cross_lane_ranking_performed','promotion_performed','lineage_mutated'
+                              )
+                          }
+                      else:
+                          model['model_manifest']={
+                              k:doc.get(k) for k in ('model_id','revision','architecture','parameter_count','snapshot_bytes')
+                          }
+
+              baselines={}
+              for lane in ('fixed_non_thinking','reasoning_aware'):
+                  key=base+f"baseline/{lane}/semantic_summary.json"
+                  if key in object_keys:
+                      doc=read_json(key)
+                      baselines[lane]={
+                          k:doc.get(k) for k in (
+                              'sample_count','scored_sample_count','inconclusive_sample_count',
+                              'fixed_budget_truncation_count','mean_score','deterministic_pass_rate',
+                              'hard_failure_count','reasoning_projection_count','claimable'
+                          )
+                      }
+              if baselines:
+                  model['baseline_semantic']=baselines
+
+              roles={}
+              for role in ('controller','diagnosis'):
+                  key=base+f"roles/{role}/role_curve.json"
+                  if key not in object_keys:
+                      continue
+                  curve=read_json(key)
+                  r={
+                      'status':curve.get('status'),
+                      'model_id':curve.get('model_id'),
+                      'role':curve.get('role'),
+                      'trainable_parameters':curve.get('trainable_parameters'),
+                      'target_module_count':curve.get('target_module_count'),
+                      'target_parameter_count':curve.get('target_parameter_count'),
+                      'retained_adapter_steps':curve.get('retained_adapter_steps'),
+                      'selections_by_lane':curve.get('selections_by_lane'),
+                      'threshold_distances_by_lane':curve.get('threshold_distances_by_lane'),
+                      'full_seed_confirmations_by_lane':curve.get('full_seed_confirmations_by_lane'),
+                      'points':[],
+                  }
+                  for point in curve.get('points') or []:
+                      p={
+                          'optimizer_steps':point.get('optimizer_steps'),
+                          'approx_epochs':point.get('approx_epochs'),
+                          'training':{
+                              k:(point.get('training') or {}).get(k) for k in (
+                                  'training_seconds_cumulative','supervised_tokens_cumulative',
+                                  'trainable_parameters','peak_vram_bytes','mean_loss_since_previous_dose'
+                              )
+                          },
+                          'lanes':{},
+                      }
+                      for lane, lane_doc in (point.get('lanes') or {}).items():
+                          role_summary=(lane_doc or {}).get('role')
+                          sem_summary=(lane_doc or {}).get('semantic')
+                          safety=(lane_doc or {}).get('safety') or {}
+                          p['lanes'][lane]={
+                              'status':(lane_doc or {}).get('status'),
+                              'role':None if role_summary is None else {
+                                  k:role_summary.get(k) for k in (
+                                      'quality','quality_100','schema_compliance','hallucination_rate',
+                                      'sample_count','expected_sample_count','scored_sample_count',
+                                      'inconclusive_sample_count','fixed_budget_truncation_count','claimable'
+                                  )
+                              },
+                              'semantic':None if sem_summary is None else {
+                                  k:sem_summary.get(k) for k in (
+                                      'mean_score','deterministic_pass_rate','hard_failure_count',
+                                      'inconclusive_sample_count','fixed_budget_truncation_count',
+                                      'reasoning_projection_count','claimable'
+                                  )
+                              },
+                              'safety':{
+                                  k:safety.get(k) for k in (
+                                      'status','claimable','interface_ok','strict_safe','bounded_safe',
+                                      'semantic_score_delta','new_hard_failures'
+                                  )
+                              },
+                          }
+                      r['points'].append(p)
+                  target_key=base+f"roles/{role}/target_surface.json"
+                  if target_key in object_keys:
+                      target=read_json(target_key)
+                      r['target_surface']=target
+                  roles[role]=r
+              if roles:
+                  model['roles']=roles
+
+              model_objects=[x for x in objects if x['key'].startswith(base)]
+              model['object_count']=len(model_objects)
+              model['total_bytes']=sum(x['bytes'] for x in model_objects)
+              model['latest_modified']=max((x['last_modified'] for x in model_objects if x['last_modified']),default=None)
+              result['models'][slug]=model
+
+          # Terminal records, including failed candidates that produced no model evidence tree.
+          exec_root=f"{root}/executions/{run_id}-"
+          exec_objects=list_prefix(exec_root)
+          for obj in exec_objects:
+              if not obj['key'].endswith('/driver_result.json'):
+                  continue
+              doc=read_json(obj['key'])
+              eid=str(doc.get('execution_id') or PurePosixPath(obj['key']).parts[-3])
+              result['executions'][eid]={
+                  'key':obj['key'],
+                  'last_modified':obj['last_modified'],
+                  'status':doc.get('status'),
+                  'disposition':doc.get('disposition'),
+                  'model_id':doc.get('model_id'),
+                  'revision':doc.get('revision'),
+                  'repo_sha':doc.get('repo_sha'),
+                  'training_performed':doc.get('training_performed'),
+                  'exported_file_count':doc.get('exported_file_count'),
+                  'exported_bytes':doc.get('exported_bytes'),
+                  'error':doc.get('error'),
+                  'promotion_performed':doc.get('promotion_performed'),
+                  'lineage_mutated':doc.get('lineage_mutated'),
+                  'completed_at_unix':doc.get('completed_at_unix'),
+              }
+
+          with open('diagnostic_scaling_recovery_s3_summary.json','w',encoding='utf-8') as f:
+              json.dump(result,f,indent=2,sort_keys=True)
+
+          # Compact human-readable log section.
+          print('HEPHAESTUS_S3_RUN '+json.dumps({
+              'run_id':result['run_id'],
+              'evidence_object_count':result['evidence_object_count'],
+              'evidence_total_bytes':result['evidence_total_bytes'],
+              'latest_evidence_modified':result['latest_evidence_modified'],
+              'model_slugs':list(result['models']),
+          },sort_keys=True))
+          print('HEPHAESTUS_S3_EXECUTIONS '+json.dumps(result['executions'],sort_keys=True))
+          for slug,model in result['models'].items():
+              print('HEPHAESTUS_S3_MODEL '+json.dumps({
+                  'slug':slug,
+                  'run_manifest':model.get('run_manifest'),
+                  'evidence_manifest':model.get('evidence_manifest'),
+                  'baseline_semantic':model.get('baseline_semantic'),
+                  'object_count':model.get('object_count'),
+                  'total_bytes':model.get('total_bytes'),
+                  'latest_modified':model.get('latest_modified'),
+              },sort_keys=True))
+              for role,r in (model.get('roles') or {}).items():
+                  compact={
+                      'model_id':r.get('model_id'),
+                      'role':role,
+                      'trainable_parameters':r.get('trainable_parameters'),
+                      'retained_adapter_steps':r.get('retained_adapter_steps'),
+                      'selections_by_lane':r.get('selections_by_lane'),
+                      'threshold_distances_by_lane':r.get('threshold_distances_by_lane'),
+                      'full_seed_confirmations_by_lane':r.get('full_seed_confirmations_by_lane'),
+                      'points':r.get('points'),
+                      'target_surface':r.get('target_surface'),
+                  }
+                  print('HEPHAESTUS_S3_ROLE '+json.dumps(compact,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-scaling-recovery-v1-s3-summary
+          path: diagnostic_scaling_recovery_s3_summary.json
+          if-no-files-found: error
+          retention-days: 30
