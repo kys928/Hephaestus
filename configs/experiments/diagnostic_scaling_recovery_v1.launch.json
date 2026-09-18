@@ -8,16 +8,16 @@
   "authorized_models": [
     "zai-org/GLM-4.7-Flash"
   ],
-  "retry_reason": "GLM-4.7-Flash previously failed before scientific execution because the H200 CUDA 13 runtime enumerated the GPU via NVML/nvidia-smi while torch.cuda.is_available() was false. Recovery now uses the hardware-validated PyTorch 2.14.0 CUDA 12.6 image on H200 with fail-fast CUDA preflight. Qwen3-14B and DeepSeek-R1-Distill-Qwen-14B are already scientifically complete and must not rerun. Qwen3-30B-A3B-Thinking-2507 will require a separate fresh launch scope after GLM.",
-  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35246035168",
+  "retry_reason": "GLM attempt 1 passed the repaired CUDA 12.6 H200 preflight but was rejected by the runtime admission guard because torch reported 139.81 GiB usable VRAM against the 140-GiB nominal floor. The large-model route remains H200-only and the 140-GiB routing threshold is unchanged; runtime admission now permits a bounded 0.5-GiB accounting tolerance. Scientific training/evaluation geometry is unchanged.",
+  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35353021970",
   "promotion_allowed": false,
   "lineage_mutation_allowed": false,
   "launch_ready_validation": {
-    "workflow_run_id": 35352789238,
-    "job_id": 105624695767,
+    "workflow_run_id": 35354176602,
+    "job_id": 105629315777,
     "conclusion": "success",
     "tests_passed": 48,
-    "contract_sha256": "8f449d7a6517ba52f888786bf67b551fc745e2cb784f6d14abf72aec12f418e9",
+    "contract_sha256": "311c1c05212f8458eebaa1425dcba9d3b9e913282e197fab0b0744f56fc40a95",
     "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c"
   }
 }
