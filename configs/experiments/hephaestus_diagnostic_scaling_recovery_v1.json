@@ -36,8 +36,8 @@
       "topology_max_new_tokens": 256,
       "semantic_max_new_tokens": 96,
       "do_sample": false,
-      "temperature": 0.0,
-      "top_p": 1.0,
+      "temperature": 0,
+      "top_p": 1,
       "top_k": null,
       "adaptive_budget": false,
       "score_incomplete_final_answer": true,
@@ -167,7 +167,7 @@
         "assistant_prefill": null,
         "decoding": {
           "do_sample": true,
-          "temperature": 1.0,
+          "temperature": 1,
           "top_p": 0.95,
           "top_k": null
         },
@@ -232,15 +232,15 @@
     "precision": "bfloat16",
     "rank": 8,
     "alpha": 16,
-    "dropout": 0.0,
+    "dropout": 0,
     "bias": "none",
-    "learning_rate": 5e-05,
-    "weight_decay": 0.0,
+    "learning_rate": 0.00005,
+    "weight_decay": 0,
     "micro_batch_size": 1,
     "gradient_accumulation_steps": 4,
     "max_seq_length": 1024,
     "warmup_ratio": 0.1,
-    "max_grad_norm": 1.0,
+    "max_grad_norm": 1,
     "optimizer": "adamw_torch",
     "shuffle_seed": 314159,
     "model_seed": 271828,
@@ -334,9 +334,9 @@
       80,
       90
     ],
-    "schema_compliance_required": 1.0,
-    "hallucination_rate_required": 0.0,
-    "strict_semantic_delta_min": 0.0,
+    "schema_compliance_required": 1,
+    "hallucination_rate_required": 0,
+    "strict_semantic_delta_min": 0,
     "bounded_semantic_delta_min": -0.03,
     "incomplete_sample_blocks_threshold_claim": true,
     "lane_results_must_be_reported_separately": true
@@ -382,7 +382,9 @@
         "NVIDIA H200"
       ],
       "fail_fast_cuda_preflight_before_model_download": true,
-      "scientific_geometry_changed": false
+      "scientific_geometry_changed": false,
+      "gpu_memory_floor_tolerance_gib": 0.5,
+      "gpu_memory_floor_tolerance_reason": "Allow sub-GiB runtime/NVML accounting differences on an explicitly allowed H200 without lowering the 140-GiB large-model routing threshold."
     }
   },
   "governance": {
