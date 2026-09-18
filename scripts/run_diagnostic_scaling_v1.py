@@ -393,12 +393,22 @@ def load_base(snapshot: Path, candidate: dict[str, Any], contract: dict[str, Any
     torch.cuda.set_device(0)
     props = torch.cuda.get_device_properties(0)
     memory_gib = props.total_memory / (1024 ** 3)
-    if memory_gib + 1e-9 < float(candidate["minimum_gpu_memory_gib"]):
+    minimum_gib = float(candidate["minimum_gpu_memory_gib"])
+    tolerance_gib = float(
+        contract.get("execution", {})
+        .get("cuda_runtime_recovery", {})
+        .get("gpu_memory_floor_tolerance_gib", 0.0)
+    )
+    if tolerance_gib < 0 or tolerance_gib > 1.0:
+        raise RuntimeError(f"invalid GPU memory floor tolerance: {tolerance_gib}")
+    if memory_gib + tolerance_gib + 1e-9 < minimum_gib:
         raise RuntimeError(
-            f"allocated GPU is below candidate memory floor: {props.name} {memory_gib:.2f} GiB < {candidate['minimum_gpu_memory_gib']}"
+            f"allocated GPU is below candidate memory floor: {props.name} {memory_gib:.2f} GiB "
+            f"+ {tolerance_gib:.2f} GiB tolerance < {minimum_gib:g}"
         )
     model, tokenizer, runtime = elastic._load_training_base(snapshot, candidate, contract)
     runtime["contract_minimum_gpu_memory_gib"] = candidate["minimum_gpu_memory_gib"]
+    runtime["gpu_memory_floor_tolerance_gib"] = tolerance_gib
     runtime["observed_gpu_memory_gib"] = memory_gib
     return model, tokenizer, runtime
 
