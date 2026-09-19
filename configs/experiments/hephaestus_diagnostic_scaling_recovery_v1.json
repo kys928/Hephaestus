@@ -392,12 +392,15 @@
       "sync_baseline": true,
       "sync_each_dose": true,
       "sync_role_complete": true,
-      "purpose": "Preserve baseline, per-dose samples/adapters, and completed role evidence in governed S3 before terminal export so an ephemeral Pod interruption cannot erase completed science."
+      "purpose": "Preserve baseline, per-dose samples/adapters, and completed role evidence in governed S3 before terminal export so an ephemeral Pod interruption cannot erase completed science.",
+      "resume_completed_roles": true
     },
     "inference_runtime": {
       "use_kv_cache": true,
       "purpose": "Re-enable the standard autoregressive KV cache during no-grad evaluation even though training keeps use_cache=false for gradient-checkpointed LoRA updates.",
-      "scientific_geometry_changed": false
+      "scientific_geometry_changed": false,
+      "adaptive_budget_execution": "single_physical_terminal_cap_with_virtual_retry_accounting",
+      "adaptive_budget_accounting": "Preserve the frozen logical token ladder, same-seed retry count, final budget-exhaustion semantics, and scoring while executing only the terminal-cap autoregressive decode once."
     },
     "cost_control": {
       "strategy": "cheapest_empirically_valid_single_gpu_first",
