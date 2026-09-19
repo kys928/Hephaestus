@@ -63,6 +63,74 @@ def sync_tree_verified(client: Any, root: Path, prefix: str) -> list[dict[str, A
     return base.upload_tree_verified(client, root, prefix)
 
 
+def s3_key_exists(client: Any, key: str) -> bool:
+    response = client.list_objects_v2(Bucket=base.bucket(), Prefix=key, MaxKeys=4)
+    return any(str(item.get("Key")) == key for item in response.get("Contents", []))
+
+
+def download_s3_tree(client: Any, prefix: str, target_root: Path) -> list[Path]:
+    normalized = prefix.rstrip("/") + "/"
+    downloaded: list[Path] = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=base.bucket(), Prefix=normalized):
+        for item in page.get("Contents", []):
+            key = str(item.get("Key") or "")
+            if not key.startswith(normalized):
+                continue
+            relative = key[len(normalized):]
+            if not relative:
+                continue
+            target = target_root / relative
+            base.download_s3(client, key, target)
+            downloaded.append(target)
+    return downloaded
+
+
+def validate_reused_role_checkpoint(
+    role_root: Path,
+    *,
+    candidate: dict[str, Any],
+    role: str,
+    contract_sha: str,
+    dataset_sha: str,
+) -> dict[str, Any]:
+    curve_path = role_root / "role_curve.json"
+    curve = json.loads(curve_path.read_text(encoding="utf-8"))
+    expected = {
+        "status": "complete",
+        "protocol_sha256": contract_sha,
+        "training_dataset_sha256": dataset_sha,
+        "model_id": candidate["model_id"],
+        "revision": candidate["revision"],
+        "role": role,
+    }
+    for key, value in expected.items():
+        if curve.get(key) != value:
+            raise RuntimeError(f"reused role checkpoint identity mismatch: {key}")
+    for step in curve.get("retained_adapter_steps") or []:
+        adapter_dir = role_root / "adapters" / f"step_{int(step):03d}"
+        manifest_path = adapter_dir / "hephaestus_diagnostic_scaling_recovery_adapter_manifest.json"
+        if not manifest_path.is_file():
+            raise RuntimeError(f"reused role checkpoint lacks adapter manifest for step {step}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for key, value in {
+            "protocol_sha256": contract_sha,
+            "training_dataset_sha256": dataset_sha,
+            "model_id": candidate["model_id"],
+            "revision": candidate["revision"],
+            "role": role,
+            "optimizer_steps": int(step),
+        }.items():
+            if manifest.get(key) != value:
+                raise RuntimeError(f"reused adapter identity mismatch at step {step}: {key}")
+        for name, expected_hash in (manifest.get("components") or {}).items():
+            path = adapter_dir / str(name)
+            observed = "sha256:" + base.sha_file(path)
+            if observed != expected_hash:
+                raise RuntimeError(f"reused adapter hash mismatch at step {step}: {name}")
+    return curve
+
+
 def required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -661,6 +729,28 @@ def train_role_curve(
 
     model = tokenizer = None
     role_root = evidence_root / "roles" / role
+    checkpoint_role_prefix = f"{checkpoint_prefix}/roles/{role}"
+    reuse_enabled = bool(contract.get("execution", {}).get("progress_checkpointing", {}).get("resume_completed_roles"))
+    remote_curve_key = f"{checkpoint_role_prefix}/role_curve.json"
+    if reuse_enabled and s3_key_exists(client, remote_curve_key):
+        downloaded = download_s3_tree(client, checkpoint_role_prefix, role_root)
+        if not downloaded:
+            raise RuntimeError(f"completed role checkpoint was advertised but could not be downloaded: {role}")
+        curve = validate_reused_role_checkpoint(
+            role_root,
+            candidate=candidate,
+            role=role,
+            contract_sha=contract_sha,
+            dataset_sha=dataset_sha,
+        )
+        print("DIAGNOSTIC_SCALING_RECOVERY_ROLE_REUSED_JSON " + json.dumps({
+            "model_id": candidate["model_id"],
+            "role": role,
+            "checkpoint_prefix": checkpoint_role_prefix,
+            "downloaded_file_count": len(downloaded),
+        }, sort_keys=True), flush=True)
+        return curve
+
     role_root.mkdir(parents=True, exist_ok=False)
     try:
         model, tokenizer, runtime = base.load_base(snapshot, candidate, contract)
@@ -672,7 +762,6 @@ def train_role_curve(
             "target_parameters": target_parameters,
             "rank_pattern": rank_pattern,
         })
-        checkpoint_role_prefix = f"{checkpoint_prefix}/roles/{role}"
         upload_file_verified(client, role_root / "runtime.json", f"{checkpoint_role_prefix}/runtime.json")
         upload_file_verified(client, role_root / "target_surface.json", f"{checkpoint_role_prefix}/target_surface.json")
 
