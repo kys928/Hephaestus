@@ -30,3 +30,11 @@ def test_prerequisite_requires_passed_screen():
     try: runner.validate_prerequisite(bad,p)
     except RuntimeError: pass
     else: raise AssertionError("non-passing cheap screen must block tiny adaptation")
+
+def test_full_recovery_requires_exact_tiny_adaptation_evidence():
+    workflow=(ROOT/".github/workflows/diagnostic-scaling-recovery-v1-launch.yml").read_text()
+    assert "hephaestus-glm-tiny-adaptation.v1" in workflow
+    assert "tiny.get('advance_to_full_recovery') is not True" in workflow
+    assert "tiny.get('adaptation_probe_only') is not True" in workflow
+    assert "tiny.get('training_performed') is not True" in workflow
+    assert "tiny.get('cheap_screen_result_key') != cheap_key" in workflow
