@@ -127,3 +127,27 @@ def test_terminal_verification_requires_no_cross_lane_ranking():
     source = SCRIPT.read_text(encoding="utf-8")
     assert '"cross_lane_ranking_performed": False' in source
     assert "scientific_diagnostic_scaling_recovery_model_complete" in source
+
+
+def test_create_with_retries_fails_immediately_on_runpod_low_balance(monkeypatch):
+    class Execution:
+        def __init__(self):
+            self.calls = 0
+        def _create_pod(self, body):
+            self.calls += 1
+            raise RuntimeError('RunPod API request failed with HTTP 500: {"error":"create pod: Your account balance is too low to rent a pod. Please add funds to your account.","status":500}')
+
+    execution = Execution()
+    sleeps = []
+    monkeypatch.setattr(launcher.time, "sleep", lambda seconds: sleeps.append(seconds))
+    with pytest.raises(RuntimeError, match="balance is too low"):
+        launcher.create_with_retries(execution, {"name": "x"})
+    assert execution.calls == 1
+    assert sleeps == []
+
+
+def test_recovery_cost_policy_keeps_expensive_h200_as_explicit_fallback_only():
+    payload = contract()
+    policy = payload["execution"]["cost_control"]
+    assert policy["expensive_h200_fallback_requires_explicit_authorization"] is True
+    assert policy["target_secure_hourly_usd_max"] <= 2.25
