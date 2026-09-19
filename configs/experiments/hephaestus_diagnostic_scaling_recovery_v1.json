@@ -393,7 +393,8 @@
       "sync_each_dose": true,
       "sync_role_complete": true,
       "purpose": "Preserve baseline, per-dose samples/adapters, and completed role evidence in governed S3 before terminal export so an ephemeral Pod interruption cannot erase completed science.",
-      "resume_completed_roles": true
+      "resume_completed_roles": true,
+      "resume_baseline": true
     },
     "inference_runtime": {
       "use_kv_cache": true,
