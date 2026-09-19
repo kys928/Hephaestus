@@ -2,22 +2,22 @@
   "authorized": true,
   "protocol_id": "hephaestus_diagnostic_scaling_recovery_v1",
   "authorization_source": "user_directive",
-  "authorization_text": "okay let's finish it. do you have everything prepared for launch?",
-  "authorized_at": "2026-09-18T15:21:00+02:00",
-  "launch_scope": "single_candidate_glm_recovery_after_h200_runtime_fix",
+  "authorization_text": "no. i will add balance but we will do the GLM immediately under the new safer regime that u just implemented. we would waste money on these tests. lets just do it. select the gpu that has the vram that we need and lets do this.",
+  "authorized_at": "2026-09-19T11:42:00+02:00",
+  "launch_scope": "single_candidate_glm_immediate_recovery_under_durable_cost_optimized_regime",
   "authorized_models": [
     "zai-org/GLM-4.7-Flash"
   ],
-  "retry_reason": "GLM attempt 1 passed the repaired CUDA 12.6 H200 preflight but was rejected by the runtime admission guard because torch reported 139.81 GiB usable VRAM against the 140-GiB nominal floor. The large-model route remains H200-only and the 140-GiB routing threshold is unchanged; runtime admission now permits a bounded 0.5-GiB accounting tolerance. Scientific training/evaluation geometry is unchanged.",
-  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35353021970",
+  "retry_reason": "User explicitly requested immediate GLM execution without a separate cheaper-GPU fit probe. Use the minimum already-validated large-memory scientific route: one H200-class GPU with the frozen BF16/no-quantization/no-offload geometry, plus the new KV-cached inference, single-pass adaptive reasoning, incremental S3 checkpoints, baseline/role reuse, low-balance fail-fast behavior, and explicit expensive-GPU authorization. No promotion or lineage mutation.",
+  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35354519148",
   "promotion_allowed": false,
   "lineage_mutation_allowed": false,
   "launch_ready_validation": {
-    "workflow_run_id": 35354176602,
-    "job_id": 105629315777,
+    "workflow_run_id": 35436286910,
+    "job_id": 105879382722,
     "conclusion": "success",
-    "tests_passed": 48,
-    "contract_sha256": "311c1c05212f8458eebaa1425dcba9d3b9e913282e197fab0b0744f56fc40a95",
+    "tests_passed": 56,
+    "contract_sha256": "988332902d983364a3f647625d068ef87d4b7919d9579c1a5a51a265f72eac3a",
     "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c"
   }
 }
