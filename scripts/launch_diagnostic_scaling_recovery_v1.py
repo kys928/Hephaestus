@@ -34,6 +34,7 @@ from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json"
 AUTH_ENV = "HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED"
+EXPENSIVE_GPU_AUTH_ENV = "HEPHAESTUS_DIAGNOSTIC_SCALING_ALLOW_EXPENSIVE_GPU"
 MAX_SECONDS = 25000
 POLL_SECONDS = 15
 CREATE_ATTEMPTS = 18
@@ -93,6 +94,28 @@ def gpu_ids(contract: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
     if int(candidate["minimum_gpu_memory_gib"]) >= 140:
         return list(contract["execution"]["preferred_gpu_for_30b"])
     return list(contract["execution"]["preferred_gpu_for_14b"])
+
+
+def paid_cost_gate(
+    contract: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    authorization_env: str | None = None,
+) -> None:
+    policy = contract.get("execution", {}).get("cost_control", {})
+    if policy.get("expensive_h200_fallback_requires_explicit_authorization") is not True:
+        return
+    selected = gpu_ids(contract, candidate)
+    expensive = any("H200" in gpu_id or "B200" in gpu_id for gpu_id in selected)
+    if not expensive:
+        return
+    value = authorization_env if authorization_env is not None else os.environ.get(EXPENSIVE_GPU_AUTH_ENV, "")
+    if str(value).strip() != "YES":
+        ceiling = policy.get("target_secure_hourly_usd_max")
+        raise RuntimeError(
+            "refusing expensive large-model GPU fallback without "
+            f"{EXPENSIVE_GPU_AUTH_ENV}=YES; selected={selected}, target_hourly_usd_max={ceiling}"
+        )
 
 
 def pod_shell(contract: dict[str, Any]) -> str:
@@ -481,6 +504,7 @@ def main() -> int:
         return 0
 
     candidate = select_candidate(contract, args.model_id)
+    paid_cost_gate(contract, candidate)
     repo_sha = required("GITHUB_SHA")
     run_id = os.environ.get("HEPHAESTUS_DS_RUN_ID", "").strip() or f"diagnostic-scaling-recovery-v1-{required('GITHUB_RUN_ID')}"
     execution_id = f"{run_id}-{slug(args.model_id)}"
