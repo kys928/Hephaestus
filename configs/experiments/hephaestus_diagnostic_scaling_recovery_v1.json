@@ -385,6 +385,31 @@
       "scientific_geometry_changed": false,
       "gpu_memory_floor_tolerance_gib": 0.5,
       "gpu_memory_floor_tolerance_reason": "Allow sub-GiB runtime/NVML accounting differences on an explicitly allowed H200 without lowering the 140-GiB large-model routing threshold."
+    },
+    "progress_checkpointing": {
+      "enabled": true,
+      "series_id": "diagnostic-scaling-recovery-v1-final-cohort",
+      "sync_baseline": true,
+      "sync_each_dose": true,
+      "sync_role_complete": true,
+      "purpose": "Preserve baseline, per-dose samples/adapters, and completed role evidence in governed S3 before terminal export so an ephemeral Pod interruption cannot erase completed science."
+    },
+    "inference_runtime": {
+      "use_kv_cache": true,
+      "purpose": "Re-enable the standard autoregressive KV cache during no-grad evaluation even though training keeps use_cache=false for gradient-checkpointed LoRA updates.",
+      "scientific_geometry_changed": false
+    },
+    "cost_control": {
+      "strategy": "cheapest_empirically_valid_single_gpu_first",
+      "target_secure_hourly_usd_max": 2.25,
+      "preferred_large_model_probe_gpu": "NVIDIA RTX PRO 6000 Blackwell",
+      "preferred_large_model_probe_vram_gib": 96,
+      "expensive_h200_fallback_requires_explicit_authorization": true,
+      "quantization_allowed": false,
+      "cpu_or_disk_model_offload_allowed": false,
+      "preserve_bfloat16_base_weights": true,
+      "preserve_training_geometry": true,
+      "rationale": "Reduce cost through execution efficiency and a cheaper BF16-capable GPU, not by changing model precision, quantizing the base, offloading weights, or mutating the frozen scientific protocol."
     }
   },
   "governance": {
