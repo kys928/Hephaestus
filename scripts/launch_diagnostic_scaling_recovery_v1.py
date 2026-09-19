@@ -106,7 +106,7 @@ def paid_cost_gate(
     if policy.get("expensive_h200_fallback_requires_explicit_authorization") is not True:
         return
     selected = gpu_ids(contract, candidate)
-    expensive = any("H200" in gpu_id or "B200" in gpu_id for gpu_id in selected)
+    expensive = bool(selected) and all(("H200" in gpu_id or "B200" in gpu_id) for gpu_id in selected)
     if not expensive:
         return
     value = authorization_env if authorization_env is not None else os.environ.get(EXPENSIVE_GPU_AUTH_ENV, "")
