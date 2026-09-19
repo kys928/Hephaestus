@@ -22,9 +22,11 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35354519148
-      TARGET_EXECUTION_ID: diagnostic-scaling-recovery-v1-35354519148-zai-org--GLM-4.7-Flash
+      TARGET_RUN_ID: diagnostic-scaling-recovery-v1-35438149036
+      TARGET_EXECUTION_ID: diagnostic-scaling-recovery-v1-35438149036-zai-org--GLM-4.7-Flash
       TARGET_MODEL_ID: zai-org/GLM-4.7-Flash
+      TARGET_CONTRACT_SHA: 988332902d983364a3f647625d068ef87d4b7919d9579c1a5a51a265f72eac3a
+      PROGRESS_SERIES_ID: diagnostic-scaling-recovery-v1-final-cohort
       SCIENTIFIC_PREFIX: hephaestus/scientific/v1
     steps:
       - uses: actions/setup-python@v5
@@ -92,6 +94,7 @@ jobs:
           execution_prefix=f"{prefix}/executions/{required('TARGET_EXECUTION_ID')}/"
           model_slug=''.join(ch if ch.isalnum() or ch in '._-' else '--' for ch in required('TARGET_MODEL_ID')).strip('-.')
           evidence_prefix=f"{prefix}/diagnostic_scaling_recovery/{target_run}/models/{model_slug}/"
+          progress_prefix=f"{prefix}/diagnostic_scaling_recovery_progress/{required('PROGRESS_SERIES_ID')}/{required('TARGET_CONTRACT_SHA')}/{model_slug}/"
 
           def list_prefix(pfx):
               out=[]
@@ -109,6 +112,7 @@ jobs:
 
           execution_objects=list_prefix(execution_prefix)
           evidence_objects=list_prefix(evidence_prefix)
+          progress_objects=list_prefix(progress_prefix)
           terminal_objects=[o for o in execution_objects if str(o.get('key')).endswith('/driver_result.json')]
 
           terminal=None
@@ -161,6 +165,10 @@ jobs:
                   'evidence_total_bytes':sum(x['bytes'] for x in evidence_objects),
                   'evidence_recent_objects':evidence_objects[-20:],
                   'evidence_manifest':manifest,
+                  'progress_prefix':progress_prefix,
+                  'progress_object_count':len(progress_objects),
+                  'progress_total_bytes':sum(x['bytes'] for x in progress_objects),
+                  'progress_recent_objects':progress_objects[-40:],
               },
           }
           print('HEPHAESTUS_LIVE_MONITOR_JSON '+json.dumps(snapshot,sort_keys=True))
