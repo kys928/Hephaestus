@@ -3,7 +3,7 @@
   "protocol_id": "hephaestus_glm_cheap_screen_v1",
   "authorization_source": "user_directive",
   "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
-  "authorized_at": "2026-09-19T16:57:00+02:00",
+  "authorized_at": "2026-09-19T17:07:00+02:00",
   "launch_scope": "single_bounded_paid_cheap_screen",
   "model_id": "zai-org/GLM-4.7-Flash",
   "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
@@ -11,5 +11,13 @@
   "maximum_hourly_usd": 2.25,
   "hard_wall_seconds": 1500,
   "full_recovery_authorized": false,
-  "tiny_adaptation_authorized_conditionally_on_pass": true
+  "tiny_adaptation_authorized_conditionally_on_pass": true,
+  "retry_of_workflow_run_id": 35450382570,
+  "retry_reason": "First funded cheap-screen attempt was terminated after direct RunPod logs proved the container image PyTorch CUDA build lacked sm_120 kernels for RTX PRO 6000 Blackwell. The launcher now creates an isolated venv, installs official torch 2.14.0+cu130, requires sm_120 in torch.cuda.get_arch_list(), and executes a CUDA tensor smoke test before model download.",
+  "runtime_recovery": {
+    "cause": "base_image_torch_2.14.0+cu126_missing_sm_120_kernel_support",
+    "fix": "isolated_torch_2.14.0+cu130_with_sm_120_fail_fast_preflight",
+    "failed_pod_id": "6w5ac9zhggo1z7",
+    "failed_pod_teardown_verified": true
+  }
 }
