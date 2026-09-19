@@ -132,6 +132,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
       HEPHAESTUS_DIAGNOSTIC_SCALING_RECOVERY_LAUNCH_AUTHORIZED: 'YES'
+      HEPHAESTUS_DIAGNOSTIC_SCALING_ALLOW_EXPENSIVE_GPU: 'YES'
       HEPHAESTUS_DS_RUN_ID: diagnostic-scaling-recovery-v1-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
