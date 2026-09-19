@@ -3,7 +3,7 @@
   "protocol_id": "hephaestus_glm_cheap_screen_v1",
   "authorization_source": "user_directive",
   "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
-  "authorized_at": "2026-09-19T17:07:00+02:00",
+  "authorized_at": "2026-09-19T17:24:00+02:00",
   "launch_scope": "single_bounded_paid_cheap_screen",
   "model_id": "zai-org/GLM-4.7-Flash",
   "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
@@ -19,5 +19,25 @@
     "fix": "isolated_torch_2.14.0+cu130_with_sm_120_fail_fast_preflight",
     "failed_pod_id": "6w5ac9zhggo1z7",
     "failed_pod_teardown_verified": true
+  },
+  "attempt_number": 3,
+  "previous_attempts": [
+    {
+      "workflow_run_id": 35450382570,
+      "disposition": "terminated_runtime_incompatible_sm120",
+      "pod_id": "6w5ac9zhggo1z7",
+      "teardown_verified": true
+    },
+    {
+      "workflow_run_id": 35450840091,
+      "disposition": "terminated_materialization_stall",
+      "pod_id": "jt4mtqmv9osjtl",
+      "teardown_verified": true
+    }
+  ],
+  "watchdog": {
+    "materialization_stall_seconds": 600,
+    "max_estimated_total_usd": 0.75,
+    "hard_wall_seconds": 1500
   }
 }
