@@ -2,7 +2,7 @@ name: GLM Cheap Screen V1 validation
 
 on:
   push:
-    branches: [feature/glm-cheap-screen-v1]
+    branches: [feature/glm-cheap-screen-v1, experiment-diagnostic-scaling-v1]
     paths:
       - configs/experiments/hephaestus_glm_cheap_screen_v1.json
       - scripts/run_glm_cheap_screen_v1.py
