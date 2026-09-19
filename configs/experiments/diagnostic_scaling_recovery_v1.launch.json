@@ -1,23 +1,29 @@
 {
-  "authorized": true,
+  "authorized": false,
   "protocol_id": "hephaestus_diagnostic_scaling_recovery_v1",
   "authorization_source": "user_directive",
-  "authorization_text": "no. i will add balance but we will do the GLM immediately under the new safer regime that u just implemented. we would waste money on these tests. lets just do it. select the gpu that has the vram that we need and lets do this.",
-  "authorized_at": "2026-09-19T11:42:00+02:00",
-  "launch_scope": "single_candidate_glm_immediate_recovery_under_durable_cost_optimized_regime",
-  "authorized_models": [
-    "zai-org/GLM-4.7-Flash"
-  ],
-  "retry_reason": "User explicitly requested immediate GLM execution without a separate cheaper-GPU fit probe. Use the minimum already-validated large-memory scientific route: one H200-class GPU with the frozen BF16/no-quantization/no-offload geometry, plus the new KV-cached inference, single-pass adaptive reasoning, incremental S3 checkpoints, baseline/role reuse, low-balance fail-fast behavior, and explicit expensive-GPU authorization. No promotion or lineage mutation.",
-  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35354519148",
+  "authorization_text": "Cost-abort the long H200 GLM recovery path and replace it with a bounded cheap screen before any further adaptation.",
+  "authorized_at": "2026-09-19T15:40:00+02:00",
+  "launch_scope": "glm_full_recovery_blocked_pending_screening_funnel",
+  "authorized_models": [],
+  "retry_reason": "The prior GLM H200 run loaded and generated but exhausted the user's RunPod balance before completing baseline evidence. Full 48-step LoRA recovery is now blocked behind a cheap-screen result and a later tiny-adaptation gate.",
+  "supersedes_run_id": "diagnostic-scaling-recovery-v1-35438149036",
   "promotion_allowed": false,
   "lineage_mutation_allowed": false,
-  "launch_ready_validation": {
-    "workflow_run_id": 35436286910,
-    "job_id": 105879382722,
-    "conclusion": "success",
-    "tests_passed": 56,
-    "contract_sha256": "988332902d983364a3f647625d068ef87d4b7919d9579c1a5a51a265f72eac3a",
-    "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c"
+  "glm_screening_funnel": {
+    "required": true,
+    "cheap_screen_protocol_id": "hephaestus_glm_cheap_screen_v1",
+    "cheap_screen_result_key": null,
+    "require_cheap_screen_advance_to_tiny_adaptation": true,
+    "tiny_adaptation_required_before_full_recovery": true,
+    "tiny_adaptation_result_key": null,
+    "full_recovery_blocked_until_both_gates_present": true
+  },
+  "prior_paid_authorization": {
+    "authorized_at": "2026-09-19T11:42:00+02:00",
+    "launch_scope": "single_candidate_glm_immediate_recovery_under_durable_cost_optimized_regime",
+    "run_id": "diagnostic-scaling-recovery-v1-35438149036",
+    "outcome": "cost_aborted_before_baseline_completion",
+    "scientific_interpretation": "inconclusive"
   }
 }
