@@ -418,8 +418,8 @@
   },
   "governance": {
     "training_is_experimentally_approved": true,
-    "approval_source": "user_directive_2026-09-17_paid_recovery_launch",
-    "paid_launch_allowed_now": true,
+    "approval_source": "cost_aborted_full_recovery_replaced_by_glm_cheap_screen_funnel_2026-09-19",
+    "paid_launch_allowed_now": false,
     "paid_launch_requires_new_explicit_user_go": true,
     "promotion_allowed": false,
     "lineage_mutation_allowed": false,
