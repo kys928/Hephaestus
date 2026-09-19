@@ -62,14 +62,23 @@ jobs:
           if unknown:
               raise SystemExit('launch marker contains model outside frozen recovery cohort: '+repr(unknown))
 
-          # This workflow is intentionally restricted to the two scientifically
-          # unfinished candidates. Completed Qwen14/DeepSeek evidence is immutable.
           unfinished = {
               'zai-org/GLM-4.7-Flash',
               'Qwen/Qwen3-30B-A3B-Thinking-2507',
           }
           if any(model not in unfinished for model in models):
               raise SystemExit('launch marker attempts to rerun an already completed candidate')
+
+          if 'zai-org/GLM-4.7-Flash' in models:
+              funnel = marker.get('glm_screening_funnel') or {}
+              if funnel.get('required') is not True:
+                  raise SystemExit('GLM full recovery requires the screening funnel gate')
+              if not str(funnel.get('cheap_screen_result_key') or '').strip():
+                  raise SystemExit('GLM full recovery lacks an explicit cheap-screen result key')
+              if funnel.get('tiny_adaptation_required_before_full_recovery') is not True:
+                  raise SystemExit('GLM full recovery may not bypass tiny adaptation')
+              if not str(funnel.get('tiny_adaptation_result_key') or '').strip():
+                  raise SystemExit('GLM full recovery lacks an explicit tiny-adaptation result key')
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write('models='+json.dumps(models, separators=(',', ':'))+'\n')
@@ -84,6 +93,49 @@ jobs:
             'safetensors==0.8.0' \
             'huggingface-hub==1.31.0' \
             'peft==0.20.0'
+
+      - name: Require passed GLM screening funnel before full recovery
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          marker = json.loads(Path('configs/experiments/diagnostic_scaling_recovery_v1.launch.json').read_text(encoding='utf-8'))
+          models = marker.get('authorized_models') or []
+          if 'zai-org/GLM-4.7-Flash' not in models:
+              print('GLM screening funnel not applicable to this launch.')
+              raise SystemExit(0)
+
+          sys.path.insert(0, 'scripts')
+          import run_diagnostic_scaling_v1 as base
+
+          funnel = marker['glm_screening_funnel']
+          client = base.s3_client()
+
+          cheap_key = str(funnel['cheap_screen_result_key'])
+          cheap = json.loads(base.read_s3(client, cheap_key))
+          if cheap.get('result_version') != 'hephaestus-glm-cheap-screen.v1':
+              raise SystemExit('GLM cheap-screen result schema mismatch')
+          if cheap.get('status') != 'completed' or cheap.get('advance_to_tiny_adaptation') is not True:
+              raise SystemExit('GLM cheap screen did not authorize progression to tiny adaptation')
+          if cheap.get('model_id') != 'zai-org/GLM-4.7-Flash' or cheap.get('revision') != '7dd20894a642a0aa287e9827cb1a1f7f91386b67':
+              raise SystemExit('GLM cheap-screen result identity mismatch')
+          if cheap.get('training_performed') is not False or cheap.get('screening_only') is not True:
+              raise SystemExit('GLM cheap-screen result has invalid scientific scope')
+
+          tiny_key = str(funnel['tiny_adaptation_result_key'])
+          tiny = json.loads(base.read_s3(client, tiny_key))
+          if tiny.get('status') != 'completed' or tiny.get('advance_to_full_recovery') is not True:
+              raise SystemExit('GLM tiny adaptation did not authorize full recovery')
+          if tiny.get('model_id') != 'zai-org/GLM-4.7-Flash' or tiny.get('revision') != '7dd20894a642a0aa287e9827cb1a1f7f91386b67':
+              raise SystemExit('GLM tiny-adaptation result identity mismatch')
+
+          print(json.dumps({
+              'glm_screening_funnel': 'passed',
+              'cheap_screen_result_key': cheap_key,
+              'tiny_adaptation_result_key': tiny_key,
+          }, sort_keys=True))
+          PY
 
       - name: Re-run exact recovery gates on launch commit
         run: |

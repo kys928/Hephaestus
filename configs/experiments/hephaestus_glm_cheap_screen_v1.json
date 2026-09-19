@@ -1,0 +1,147 @@
+{
+  "protocol_id": "hephaestus_glm_cheap_screen_v1",
+  "protocol_version": 1,
+  "purpose": "Low-cost screening-only evaluation of the exact pinned GLM-4.7-Flash BF16 base before any LoRA adaptation or full Diagnostic Scaling Recovery certification.",
+  "scientific_scope": {
+    "screening_only": true,
+    "certification_claim_allowed": false,
+    "training_performed": false,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "interpretation": "Answers whether GLM shows enough bounded behavioral signal to justify a later tiny adaptation experiment. A pass is not certification; a fail under the bounded reasoning budget is not a general capability rejection."
+  },
+  "sources": {
+    "recovery_contract_path": "configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json",
+    "recovery_contract_git_blob_sha": "2c89ad6b693a7d78300e0f6a80a5235200410996",
+    "semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
+    "semantic_pack_git_blob_sha": "9295d1e9ab1d07ae107557fd0c4cafbc9689ae20",
+    "topology_pack_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "topology_pack_git_blob_sha": "edc5e88db22350ad5f523182a19db41ed113d595"
+  },
+  "model": {
+    "model_id": "zai-org/GLM-4.7-Flash",
+    "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+    "license": "mit",
+    "model_type": "glm4_moe_lite",
+    "loader": "AutoModelForCausalLM",
+    "precision": "bfloat16",
+    "quantization": false,
+    "cpu_or_disk_offload": false,
+    "gpu_count": 1
+  },
+  "generation": {
+    "seed": 11,
+    "use_kv_cache": true,
+    "fixed_non_thinking": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      },
+      "do_sample": false
+    },
+    "reasoning_aware": {
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      },
+      "do_sample": true,
+      "temperature": 1.0,
+      "top_p": 0.95
+    }
+  },
+  "probes": [
+    {
+      "probe_id": "semantic_instruction_triplet",
+      "source": "semantic",
+      "task_id": "instruction_triplet",
+      "lane": "fixed_non_thinking",
+      "max_new_tokens": 96,
+      "required_for_advance": true
+    },
+    {
+      "probe_id": "semantic_structured_planet",
+      "source": "semantic",
+      "task_id": "structured_planet_answer",
+      "lane": "fixed_non_thinking",
+      "max_new_tokens": 128,
+      "required_for_advance": true
+    },
+    {
+      "probe_id": "semantic_anti_repetition",
+      "source": "semantic",
+      "task_id": "anti_repetition",
+      "lane": "fixed_non_thinking",
+      "max_new_tokens": 128,
+      "required_for_advance": true
+    },
+    {
+      "probe_id": "topology_diagnosis_d1",
+      "source": "topology",
+      "case_id": "D1",
+      "role": "diagnosis",
+      "lane": "reasoning_aware",
+      "max_new_tokens": 1536,
+      "minimum_quality_100": 70.0,
+      "required_for_advance": true
+    },
+    {
+      "probe_id": "topology_controller_c3",
+      "source": "topology",
+      "case_id": "C3",
+      "role": "controller",
+      "lane": "reasoning_aware",
+      "max_new_tokens": 1024,
+      "minimum_quality_100": 70.0,
+      "required_for_advance": true
+    }
+  ],
+  "advance_gate": {
+    "require_all_probes_completed": true,
+    "require_no_fixed_lane_hard_failures": true,
+    "require_topology_schema_compliance": true,
+    "minimum_topology_quality_100": 70.0,
+    "on_pass": "eligible_for_tiny_adaptation_experiment_only",
+    "on_nonpass": "do_not_start_full_lora_recovery"
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 75,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 160,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed": false,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 1500,
+    "max_hourly_usd": 2.25,
+    "max_estimated_total_usd": 0.75,
+    "s3_prefix": "hephaestus/scientific/v1/glm_cheap_screen"
+  },
+  "observability": {
+    "write_run_manifest_before_model_load": true,
+    "write_sample_immediately": true,
+    "write_heartbeat_after_every_sample": true,
+    "write_mutable_progress_pointer": true,
+    "write_terminal_result": true
+  },
+  "prior_full_run_evidence": {
+    "run_id": "diagnostic-scaling-recovery-v1-35438149036",
+    "disposition": "cost_aborted_before_baseline_completion",
+    "scientific_result": "inconclusive",
+    "operational_evidence_only": {
+      "exact_revision_loaded": true,
+      "bf16_model_loaded": true,
+      "cuda_active": true,
+      "observed_h200_memory_used_mib": 60188,
+      "observed_gpu_utilization_percent_snapshot": 53,
+      "baseline_checkpoint_completed": false
+    },
+    "interpretation": "Preserve as compatibility/runtime evidence only. Do not reinterpret the aborted run as a GLM capability pass or failure."
+  },
+  "governance": {
+    "paid_launch_allowed_now": false,
+    "paid_launch_requires_explicit_user_go": true,
+    "reason_paid_launch_disabled": "Current user-reported RunPod balance is exhausted. Implementation and validation may proceed; paid execution must remain blocked until new explicit authorization after funding is available."
+  }
+}
