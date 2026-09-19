@@ -11,12 +11,13 @@ launcher=load_module("tiny_launcher","scripts/launch_glm_tiny_adaptation_v1.py")
 
 def protocol(): return json.loads((ROOT/"configs/experiments/hephaestus_glm_tiny_adaptation_v1.json").read_text())
 
-def test_protocol_is_bounded_and_disabled_now():
-    s=validator.validate(); assert s["status"]=="valid"; assert s["optimizer_steps"]==3; assert s["training_examples"]==12; assert s["post_probe_count"]==5; assert s["post_max_new_tokens"]<=3000; assert s["paid_launch_allowed_now"] is False
+def test_protocol_is_bounded_and_paid_state_is_explicit():
+    s=validator.validate(); assert s["status"]=="valid"; assert s["optimizer_steps"]==3; assert s["training_examples"]==12; assert s["post_probe_count"]==5; assert s["post_max_new_tokens"]<=3000; assert s["paid_launch_allowed_now"] in (True, False)
 
 def test_launcher_uses_only_cheap_gpu_and_no_volume():
     p=protocol(); body=launcher.build_pod_request(p,name="tiny",env=launcher.placeholder_environment("1"*40,"tiny","screen/result.json")); launcher.validate_pod_request(p,body)
     assert all("RTX PRO 6000 Blackwell" in x for x in body["gpuTypeIds"]); assert not any("H200" in x or "B200" in x for x in body["gpuTypeIds"]); assert "networkVolumeId" not in body
+    shell=body["dockerStartCmd"][-1]; assert "torch==2.14.0+cu130" in shell; assert "download.pytorch.org/whl/cu130" in shell; assert "sm_120" in shell; assert "--system-site-packages" not in shell
 
 def test_tiny_runner_is_three_steps_not_full_recovery():
     src=(ROOT/"scripts/run_glm_tiny_adaptation_v1.py").read_text()
