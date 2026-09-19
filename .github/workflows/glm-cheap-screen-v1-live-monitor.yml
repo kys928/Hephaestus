@@ -22,7 +22,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      TARGET_RUN_ID: glm-cheap-screen-v1-35450382570
+      TARGET_RUN_ID: glm-cheap-screen-v1-35450840091
       S3_PREFIX: hephaestus/scientific/v1/glm_cheap_screen
     steps:
       - uses: actions/setup-python@v5
