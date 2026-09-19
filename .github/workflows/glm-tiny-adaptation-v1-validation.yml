@@ -2,7 +2,7 @@ name: GLM Tiny Adaptation V1 validation
 
 on:
   push:
-    branches: [feature/glm-tiny-adaptation-v1]
+    branches: [feature/glm-tiny-adaptation-v1, experiment-diagnostic-scaling-v1]
     paths:
       - configs/experiments/hephaestus_glm_tiny_adaptation_v1.json
       - scripts/run_glm_tiny_adaptation_v1.py
