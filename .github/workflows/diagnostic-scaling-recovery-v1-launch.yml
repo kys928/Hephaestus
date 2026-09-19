@@ -125,10 +125,18 @@ jobs:
 
           tiny_key = str(funnel['tiny_adaptation_result_key'])
           tiny = json.loads(base.read_s3(client, tiny_key))
+          if tiny.get('result_version') != 'hephaestus-glm-tiny-adaptation.v1':
+              raise SystemExit('GLM tiny-adaptation result schema mismatch')
           if tiny.get('status') != 'completed' or tiny.get('advance_to_full_recovery') is not True:
               raise SystemExit('GLM tiny adaptation did not authorize full recovery')
           if tiny.get('model_id') != 'zai-org/GLM-4.7-Flash' or tiny.get('revision') != '7dd20894a642a0aa287e9827cb1a1f7f91386b67':
               raise SystemExit('GLM tiny-adaptation result identity mismatch')
+          if tiny.get('screening_only') is not True or tiny.get('adaptation_probe_only') is not True:
+              raise SystemExit('GLM tiny-adaptation result has invalid scientific scope')
+          if tiny.get('training_performed') is not True or tiny.get('full_recovery_performed') is not False:
+              raise SystemExit('GLM tiny-adaptation result has invalid execution scope')
+          if tiny.get('cheap_screen_result_key') != cheap_key:
+              raise SystemExit('GLM tiny-adaptation result does not descend from the admitted cheap screen')
 
           print(json.dumps({
               'glm_screening_funnel': 'passed',
