@@ -112,6 +112,35 @@ def load_bf16_base(snapshot: Path, candidate: dict[str, Any], screen: dict[str, 
     }
 
 
+def normalized_token_ids(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, int):
+        return [int(value)]
+    if isinstance(value, (list, tuple, set)):
+        return sorted({int(item) for item in value})
+    try:
+        return sorted({int(item) for item in value.tolist()})
+    except Exception as exc:
+        raise RuntimeError(f"unsupported EOS token id container: {type(value).__name__}") from exc
+
+
+def generation_stop_token_ids(model: Any, tokenizer: Any, screen: dict[str, Any]) -> list[int]:
+    model_generation_ids = normalized_token_ids(getattr(getattr(model, "generation_config", None), "eos_token_id", None))
+    model_config_ids = normalized_token_ids(getattr(getattr(model, "config", None), "eos_token_id", None))
+    tokenizer_ids = normalized_token_ids(getattr(tokenizer, "eos_token_id", None))
+    stop_ids = sorted(set(model_generation_ids) | set(model_config_ids) | set(tokenizer_ids))
+    expected = sorted({int(item) for item in screen["generation"].get("expected_eos_token_ids", [])})
+    if expected and stop_ids != expected:
+        raise RuntimeError(
+            f"GLM EOS token drift: observed={stop_ids} expected={expected}; "
+            f"generation_config={model_generation_ids} model_config={model_config_ids} tokenizer={tokenizer_ids}"
+        )
+    if not stop_ids:
+        raise RuntimeError("GLM generation has no EOS/turn-termination token ids")
+    return stop_ids
+
+
 def generate_one(
     model: Any,
     tokenizer: Any,
@@ -122,6 +151,7 @@ def generate_one(
     seed: int,
     max_new_tokens: int,
     deadline_monotonic: float,
+    screen: dict[str, Any],
 ) -> dict[str, Any]:
     import torch
     from transformers import StoppingCriteria, StoppingCriteriaList
@@ -143,6 +173,7 @@ def generate_one(
             return False
 
     lane_cfg = candidate[lane]
+    stop_token_ids = generation_stop_token_ids(model, tokenizer, screen)
     rendered = tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt}],
         tokenize=False,
@@ -176,7 +207,7 @@ def generate_one(
             **kwargs,
             max_new_tokens=int(max_new_tokens),
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
+            eos_token_id=stop_token_ids,
             stopping_criteria=StoppingCriteriaList([clock]),
             return_dict_in_generate=True,
             use_cache=True,
@@ -185,12 +216,18 @@ def generate_one(
     finished = time.perf_counter()
     continuation = generated.sequences[0][input_width:]
     raw = tokenizer.decode(continuation, skip_special_tokens=True).strip()
-    eos = tokenizer.eos_token_id
-    eos_ids = set(eos if isinstance(eos, (list, tuple)) else [eos]) if eos is not None else set()
+    eos_ids = set(stop_token_ids)
     generated_tokens = int(continuation.shape[0])
+    final_token_id = int(continuation[-1]) if generated_tokens else None
+    stop_token_id = final_token_id if final_token_id in eos_ids else None
+    stop_token_text = (
+        tokenizer.decode([stop_token_id], skip_special_tokens=False)
+        if stop_token_id is not None
+        else None
+    )
     if clock.deadline_hit:
         finish_reason = "runtime_deadline"
-    elif generated_tokens and int(continuation[-1]) in eos_ids:
+    elif stop_token_id is not None:
         finish_reason = "eos"
     elif generated_tokens >= int(max_new_tokens):
         finish_reason = "max_tokens"
@@ -204,6 +241,9 @@ def generate_one(
         "generated_tokens": generated_tokens,
         "max_new_tokens": int(max_new_tokens),
         "finish_reason": finish_reason,
+        "configured_eos_token_ids": stop_token_ids,
+        "stop_token_id": stop_token_id,
+        "stop_token_text": stop_token_text,
         "runtime_deadline_hit": bool(clock.deadline_hit),
         "ttft_seconds": ttft,
         "total_latency_seconds": total,
@@ -369,6 +409,7 @@ def main() -> int:
                 seed=seed,
                 max_new_tokens=int(probe["max_new_tokens"]),
                 deadline_monotonic=deadline,
+                screen=screen,
             )
             projected = project_reasoning(str(generated["output"]), str(probe["lane"]))
             score, probe_pass = score_probe(
