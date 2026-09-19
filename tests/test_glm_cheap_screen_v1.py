@@ -94,3 +94,27 @@ def test_launcher_has_materialization_stall_watchdog() -> None:
     source=(ROOT / "scripts/launch_glm_cheap_screen_v1.py").read_text(encoding="utf-8")
     assert "materialization_stall_seconds" in source
     assert 'progress.get("stage") == "materializing_model"' in source
+
+
+def test_glm_multi_eos_termination_contract() -> None:
+    screen = load_screen()
+    assert screen["generation"]["expected_eos_token_ids"] == [154820, 154827, 154829]
+    source = (ROOT / "scripts/run_glm_cheap_screen_v1.py").read_text(encoding="utf-8")
+    assert "eos_token_id=stop_token_ids" in source
+    assert "eos_token_id=tokenizer.eos_token_id" not in source
+    assert "configured_eos_token_ids" in source
+    assert "stop_token_id" in source
+
+
+def test_generation_stop_token_ids_preserves_full_model_set() -> None:
+    class Obj:
+        pass
+    model = Obj()
+    model.generation_config = Obj()
+    model.generation_config.eos_token_id = [154820, 154827, 154829]
+    model.config = Obj()
+    model.config.eos_token_id = [154820, 154827, 154829]
+    tokenizer = Obj()
+    tokenizer.eos_token_id = 154820
+    observed = runner.generation_stop_token_ids(model, tokenizer, load_screen())
+    assert observed == [154820, 154827, 154829]
