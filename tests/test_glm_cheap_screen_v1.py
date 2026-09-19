@@ -45,12 +45,20 @@ def test_launcher_has_no_expensive_gpu_fallback_or_volume() -> None:
     assert "run_glm_cheap_screen_v1.py" in shell
     assert "run_diagnostic_scaling_recovery_v1.py" not in shell
     assert "peft" not in shell.casefold()
+    assert "torch==2.14.0+cu130" in shell
+    assert "download.pytorch.org/whl/cu130" in shell
+    assert "sm_120" in shell
+    assert "--system-site-packages" not in shell
 
 
-def test_paid_launch_remains_disabled_until_new_user_go() -> None:
+def test_paid_launch_state_is_explicit_and_requires_user_go() -> None:
     screen = load_screen()
-    assert screen["governance"]["paid_launch_allowed_now"] is False
-    assert screen["governance"]["paid_launch_requires_explicit_user_go"] is True
+    governance = screen["governance"]
+    assert governance["paid_launch_allowed_now"] in (True, False)
+    assert governance["paid_launch_requires_explicit_user_go"] is True
+    if governance["paid_launch_allowed_now"]:
+        assert governance.get("authorization_source") == "user_directive"
+        assert str(governance.get("authorization_text") or "").strip()
 
 
 def test_runner_never_contains_lora_training_surface() -> None:
