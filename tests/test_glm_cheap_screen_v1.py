@@ -30,6 +30,7 @@ def test_protocol_is_bounded_screening_only() -> None:
     assert summary["hard_wall_seconds"] <= 1500
     assert summary["max_hourly_usd"] <= 2.25
     assert summary["max_estimated_total_usd"] <= 0.75
+    assert load_screen()["execution"]["materialization_stall_seconds"] == 600
 
 
 def test_launcher_has_no_expensive_gpu_fallback_or_volume() -> None:
@@ -88,3 +89,8 @@ def test_screen_disposition_requires_every_probe_and_no_reasoning_exhaustion() -
     disposition, advance = runner.screen_disposition(exhausted, 5)
     assert disposition == "screen_inconclusive_reasoning_budget_exhausted"
     assert advance is False
+
+def test_launcher_has_materialization_stall_watchdog() -> None:
+    source=(ROOT / "scripts/launch_glm_cheap_screen_v1.py").read_text(encoding="utf-8")
+    assert "materialization_stall_seconds" in source
+    assert 'progress.get("stage") == "materializing_model"' in source
