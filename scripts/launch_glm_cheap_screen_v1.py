@@ -182,6 +182,7 @@ def execute(screen: dict[str, Any]) -> dict[str, Any]:
     run_id = f"glm-cheap-screen-v1-{github_run_id}"
     prefix = f"{screen['execution']['s3_prefix'].rstrip('/')}/{run_id}"
     result_key = f"{prefix}/result.json"
+    progress_key = f"{prefix}/progress.json"
     execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
     client = storage.s3_client()
     env = pod_environment(repo_sha, run_id)
@@ -199,6 +200,7 @@ def execute(screen: dict[str, Any]) -> dict[str, Any]:
         "max_hourly_usd": screen["execution"]["max_hourly_usd"],
         "max_estimated_total_usd": screen["execution"]["max_estimated_total_usd"],
         "hard_wall_seconds": screen["execution"]["hard_wall_seconds"],
+        "materialization_stall_seconds": screen["execution"]["materialization_stall_seconds"],
     }
     try:
         pod = execution._create_pod(body)
@@ -221,6 +223,18 @@ def execute(screen: dict[str, Any]) -> dict[str, Any]:
                     raise RuntimeError(f"cheap-screen hourly price ceiling exceeded: ${hourly:.4f}/hr")
                 if estimated > float(screen["execution"]["max_estimated_total_usd"]):
                     raise RuntimeError(f"cheap-screen estimated total cost ceiling exceeded: ${estimated:.4f}")
+
+            progress_raw = storage.maybe_read_key(client, progress_key)
+            if progress_raw is not None:
+                progress = json.loads(progress_raw)
+                record["last_progress"] = progress
+                if progress.get("stage") == "materializing_model":
+                    age = time.time() - float(progress.get("timestamp_unix", time.time()))
+                    record["materialization_progress_age_seconds"] = age
+                    if age > float(screen["execution"]["materialization_stall_seconds"]):
+                        raise TimeoutError(
+                            f"GLM cheap-screen materialization made no progress for {age:.1f}s"
+                        )
 
             terminal = storage.maybe_read_key(client, result_key)
             if terminal is not None:
