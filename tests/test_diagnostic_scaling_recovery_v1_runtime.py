@@ -40,22 +40,22 @@ def test_fixed_lane_eligibility_is_explicit():
 
 def test_adaptive_generation_retries_only_token_budget_exhaustion(monkeypatch):
     calls = []
-    outputs = iter([
-        {"output": "<think>still reasoning", "finish_reason": "max_tokens", "generated_tokens": 1024},
-        {"output": '<think>done</think>{"decision":"x","action":"y","primary_variable":"z","confidence":0.5,"evidence_refs":[],"uncertainties":[],"rationale":"r"}', "finish_reason": "eos", "generated_tokens": 1200},
-    ])
-
     def fake_generate(*args, max_new_tokens, **kwargs):
         calls.append(max_new_tokens)
-        return next(outputs)
+        return {
+            "output": '<think>done</think>{"decision":"x","action":"y","primary_variable":"z","confidence":0.5,"evidence_refs":[],"uncertainties":[],"rationale":"r"}',
+            "finish_reason": "eos",
+            "generated_tokens": 1200,
+        }
 
     monkeypatch.setattr(runtime, "generate_once", fake_generate)
     result = runtime.adaptive_generate(
         object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,
         token_ladder=[1024, 2048, 4096], contract=contract(), require_schema=True,
     )
-    assert calls == [1024, 2048]
+    assert calls == [4096]
     assert result["budget_retry_count"] == 1
+    assert result["physical_generation_count"] == 1
     assert result["budget_exhausted"] is False
     assert result["final_schema_complete"] is True
 
@@ -72,8 +72,9 @@ def test_eos_malformed_json_retries_before_becoming_inconclusive(monkeypatch):
         object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,
         token_ladder=[1024, 2048, 4096], contract=contract(), require_schema=True,
     )
-    assert calls == [1024, 2048, 4096]
+    assert calls == [4096]
     assert result["budget_retry_count"] == 2
+    assert result["physical_generation_count"] == 1
     assert result["budget_exhausted"] is True
     assert result["final_schema_complete"] is False
 
@@ -90,8 +91,9 @@ def test_terminal_budget_exhaustion_is_inconclusive_signal(monkeypatch):
         object(), object(), "p", candidate=candidate(), lane="reasoning_aware", seed=11,
         token_ladder=[1024, 2048], contract=contract(), require_schema=True,
     )
-    assert calls == [1024, 2048]
+    assert calls == [2048]
     assert result["budget_exhausted"] is True
+    assert result["physical_generation_count"] == 1
     assert result["budget_retry_count"] == 1
 
 
@@ -137,3 +139,10 @@ def test_recovery_streams_incremental_s3_progress():
     assert "DIAGNOSTIC_SCALING_RECOVERY_BASELINE_CHECKPOINT_JSON" in source
     assert "DIAGNOSTIC_SCALING_RECOVERY_ROLE_CHECKPOINT_JSON" in source
     assert "sync_tree_verified(client, adapter_dir" in source
+
+
+def test_adaptive_budget_execution_is_single_physical_decode():
+    payload = contract()
+    settings = payload["execution"]["inference_runtime"]
+    assert settings["adaptive_budget_execution"] == "single_physical_terminal_cap_with_virtual_retry_accounting"
+    assert settings["scientific_geometry_changed"] is False
