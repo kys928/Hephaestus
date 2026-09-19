@@ -1148,34 +1148,72 @@ def main() -> int:
 
         baseline_model = baseline_tokenizer = None
         baseline_semantics: dict[str, Any] = {}
-        try:
-            baseline_model, baseline_tokenizer, baseline_runtime = base.load_base(snapshot, candidate, contract)
-            topology_runner._warmup(baseline_model, baseline_tokenizer)
-            semantic_seeds = [int(value) for value in semantic["decoding_config"]["seeds"]]
+        baseline_prefix = f"{checkpoint_prefix}/baseline"
+        baseline_checkpoint_key = f"{baseline_prefix}/checkpoint.json"
+        reuse_baseline = bool(contract.get("execution", {}).get("progress_checkpointing", {}).get("resume_baseline"))
+        if reuse_baseline and s3_key_exists(client, baseline_checkpoint_key):
+            downloaded = download_s3_tree(client, baseline_prefix, evidence_root / "baseline")
+            checkpoint = json.loads((evidence_root / "baseline" / "checkpoint.json").read_text(encoding="utf-8"))
+            for key, value in {
+                "protocol_sha256": contract_sha,
+                "training_dataset_sha256": dataset_sha,
+                "model_id": model_id,
+                "revision": candidate["revision"],
+            }.items():
+                if checkpoint.get(key) != value:
+                    raise RuntimeError(f"reused baseline checkpoint identity mismatch: {key}")
             for lane in LANES:
                 if not lane_eligible(candidate, lane):
                     baseline_semantics[lane] = {"claimable": False, "status": "not_applicable", "hard_failures": [], "mean_score": 0.0}
                     continue
-                sem_eval = evaluate_semantic_lane(
-                    baseline_model,
-                    baseline_tokenizer,
-                    semantic,
-                    contract,
-                    candidate,
-                    semantic_seeds,
-                    lane,
-                    evidence_root / "baseline" / lane / "semantic_samples.jsonl",
-                )
-                baseline_semantics[lane] = sem_eval["summary"]
-                base.write_once_json(evidence_root / "baseline" / lane / "semantic_summary.json", sem_eval["summary"])
-            base.write_once_json(evidence_root / "baseline" / "runtime.json", baseline_runtime)
-            sync_tree_verified(client, evidence_root / "baseline", f"{checkpoint_prefix}/baseline")
-            print("DIAGNOSTIC_SCALING_RECOVERY_BASELINE_CHECKPOINT_JSON " + json.dumps({
+                summary_path = evidence_root / "baseline" / lane / "semantic_summary.json"
+                if not summary_path.is_file():
+                    raise RuntimeError(f"reused baseline checkpoint lacks semantic summary for {lane}")
+                baseline_semantics[lane] = json.loads(summary_path.read_text(encoding="utf-8"))
+            print("DIAGNOSTIC_SCALING_RECOVERY_BASELINE_REUSED_JSON " + json.dumps({
                 "model_id": model_id,
-                "checkpoint_prefix": f"{checkpoint_prefix}/baseline",
+                "checkpoint_prefix": baseline_prefix,
+                "downloaded_file_count": len(downloaded),
             }, sort_keys=True), flush=True)
-        finally:
-            base.unload(baseline_model, baseline_tokenizer)
+        else:
+            try:
+                baseline_model, baseline_tokenizer, baseline_runtime = base.load_base(snapshot, candidate, contract)
+                topology_runner._warmup(baseline_model, baseline_tokenizer)
+                semantic_seeds = [int(value) for value in semantic["decoding_config"]["seeds"]]
+                for lane in LANES:
+                    if not lane_eligible(candidate, lane):
+                        baseline_semantics[lane] = {"claimable": False, "status": "not_applicable", "hard_failures": [], "mean_score": 0.0}
+                        continue
+                    sem_eval = evaluate_semantic_lane(
+                        baseline_model,
+                        baseline_tokenizer,
+                        semantic,
+                        contract,
+                        candidate,
+                        semantic_seeds,
+                        lane,
+                        evidence_root / "baseline" / lane / "semantic_samples.jsonl",
+                    )
+                    baseline_semantics[lane] = sem_eval["summary"]
+                    base.write_once_json(evidence_root / "baseline" / lane / "semantic_summary.json", sem_eval["summary"])
+                base.write_once_json(evidence_root / "baseline" / "runtime.json", baseline_runtime)
+                base.write_once_json(evidence_root / "baseline" / "checkpoint.json", {
+                    "checkpoint_version": "diagnostic-scaling-recovery-baseline.v1",
+                    "protocol_sha256": contract_sha,
+                    "training_dataset_sha256": dataset_sha,
+                    "model_id": model_id,
+                    "revision": candidate["revision"],
+                    "lanes": list(LANES),
+                    "promotion_performed": False,
+                    "lineage_mutated": False,
+                })
+                sync_tree_verified(client, evidence_root / "baseline", baseline_prefix)
+                print("DIAGNOSTIC_SCALING_RECOVERY_BASELINE_CHECKPOINT_JSON " + json.dumps({
+                    "model_id": model_id,
+                    "checkpoint_prefix": baseline_prefix,
+                }, sort_keys=True), flush=True)
+            finally:
+                base.unload(baseline_model, baseline_tokenizer)
 
         role_results: dict[str, Any] = {}
         for role_index, role in enumerate(roles):
