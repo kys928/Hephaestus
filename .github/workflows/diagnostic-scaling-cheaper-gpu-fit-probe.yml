@@ -1,0 +1,151 @@
+name: Diagnostic Scaling cheaper-GPU fit probe
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnostic-scaling-cheaper-gpu-fit-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostic-scaling-cheaper-gpu-fit-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    env:
+      PYTHONPATH: src
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher dependencies
+        run: python -m pip install -e '.[s3]'
+      - name: Launch bounded RTX Pro 6000 fit probe
+        run: |
+          python - <<'PY'
+          import json, os, sys, time
+          from pathlib import Path
+
+          ROOT=Path.cwd()
+          sys.path.insert(0,str(ROOT/'scripts'))
+          import launch_adaptation_elasticity_v1 as lifecycle
+          import launch_first_bounded_scientific_training as storage
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
+
+          model_id='zai-org/GLM-4.7-Flash'
+          probe_id=f'diagnostic-scaling-cost-fit-{os.environ["GITHUB_RUN_ID"]}'
+          result_key=f'{storage.SCIENTIFIC_PREFIX}/infrastructure_probes/{probe_id}/result.json'
+          repo_sha=os.environ['GITHUB_SHA']
+          execution=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
+          client=storage.s3_client()
+          pod_id=None
+          record={'probe_id':probe_id,'model_id':model_id,'repo_sha':repo_sha,'max_hourly_usd':2.25,'status':'starting'}
+          env={
+              'HEPHAESTUS_REPO_SHA':repo_sha,
+              'HEPHAESTUS_MODEL_ID':model_id,
+              'HEPHAESTUS_COST_PROBE_KEY':result_key,
+              'RUNPOD_S3_ACCESS_KEY_ID':os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              'RUNPOD_S3_SECRET_ACCESS_KEY':os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+              'RUNPOD_S3_ENDPOINT_URL':os.environ['RUNPOD_S3_ENDPOINT_URL'],
+              'RUNPOD_DATACENTER_ID':os.environ['RUNPOD_DATACENTER_ID'],
+              'RUNPOD_NETWORK_VOLUME_ID':os.environ['RUNPOD_NETWORK_VOLUME_ID'],
+              'CUDA_DEVICE_ORDER':'PCI_BUS_ID',
+              'CUDA_VISIBLE_DEVICES':'0',
+              'HF_HUB_DISABLE_XET':'1',
+              'PYTHONUNBUFFERED':'1',
+          }
+          shell=r'''set -Eeuo pipefail
+          export HF_HOME=/opt/hephaestus-cache/huggingface
+          export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
+          export XDG_CACHE_HOME=/opt/hephaestus-cache/xdg
+          export TMPDIR=/opt/hephaestus-tmp
+          mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+          python - <<'PYCUDA'
+          import json, torch, subprocess
+          p=subprocess.run(['nvidia-smi','--query-gpu=driver_version,name,memory.total,uuid','--format=csv,noheader'],capture_output=True,text=True)
+          d={'torch':str(torch.__version__),'cuda':str(torch.version.cuda),'cuda_available':bool(torch.cuda.is_available()),'device_count':int(torch.cuda.device_count()),'nvidia_smi':p.stdout.strip()}
+          print('HEPHAESTUS_COST_PROBE_CUDA_JSON '+json.dumps(d,sort_keys=True),flush=True)
+          if not d['cuda_available'] or d['device_count'] != 1:
+              raise SystemExit('cost probe CUDA preflight failed')
+          x=torch.ones(1,device='cuda'); torch.cuda.synchronize()
+          print('HEPHAESTUS_COST_PROBE_CUDA_OK '+str(float(x.item())),flush=True)
+          PYCUDA
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv
+          rm -rf /var/lib/apt/lists/* /opt/hephaestus-src /opt/hephaestus-venv
+          git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
+          cd /opt/hephaestus-src
+          git checkout --detach "$HEPHAESTUS_REPO_SHA"
+          python -m venv --system-site-packages /opt/hephaestus-venv
+          PY=/opt/hephaestus-venv/bin/python
+          "$PY" -m pip install --no-cache-dir --disable-pip-version-check -e '.[s3]'             'transformers==5.17.0' 'accelerate==1.15.0' 'safetensors==0.8.0'             'huggingface-hub==1.31.0' 'peft==0.20.0'
+          "$PY" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+          "$PY" scripts/probe_diagnostic_scaling_large_model_fit.py
+          '''
+          body={
+              'name':('hephaestus-'+probe_id)[:180],
+              'computeType':'GPU',
+              'gpuCount':1,
+              'gpuTypeIds':[
+                  'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+                  'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
+              ],
+              'gpuTypePriority':'availability',
+              'cloudType':'SECURE',
+              'imageName':'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime',
+              'containerDiskInGb':160,
+              'dockerStartCmd':['bash','-lc',shell],
+              'interruptible':False,
+              'env':env,
+          }
+          try:
+              pod=execution._create_pod(body)
+              pod_id=str(pod['id'])
+              record['pod_id']=pod_id
+              deadline=time.monotonic()+25*60
+              price=None
+              while time.monotonic()<deadline:
+                  snap=storage.pod_snapshot(execution,pod_id)
+                  if snap is not None:
+                      raw_price=snap.get('costPerHr')
+                      if raw_price is not None:
+                          price=float(raw_price)
+                          record['cost_per_hr']=price
+                          if price>2.25:
+                              raise RuntimeError(f'cost probe price ceiling exceeded: {price}')
+                  raw=storage.maybe_read_key(client,result_key)
+                  if raw is not None:
+                      result=json.loads(raw)
+                      record['result']=result
+                      if result.get('status')!='fit_probe_passed':
+                          raise RuntimeError('cheaper-GPU fit probe did not pass: '+str(result.get('error')))
+                      record['status']='passed'
+                      print('HEPHAESTUS_COST_FIT_RESULT_JSON '+json.dumps(record,sort_keys=True),flush=True)
+                      break
+                  if snap is None or str(snap.get('desiredStatus','')).upper() in {'EXITED','FAILED','TERMINATED','STOPPED'}:
+                      raise RuntimeError('cost probe Pod exited before producing governed result')
+                  time.sleep(10)
+              else:
+                  raise TimeoutError('cost probe exceeded 25 minute hard wall')
+          finally:
+              if pod_id:
+                  teardown=lifecycle.delete_pod_with_retries(execution,pod_id)
+                  print('HEPHAESTUS_COST_FIT_TEARDOWN_JSON '+json.dumps(teardown,sort_keys=True),flush=True)
+                  if not teardown.get('verified_absent'):
+                      raise RuntimeError('cost probe Pod teardown could not be verified')
+          PY
