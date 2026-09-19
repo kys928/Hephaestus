@@ -3,7 +3,7 @@
   "protocol_id": "hephaestus_glm_cheap_screen_v1",
   "authorization_source": "user_directive",
   "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
-  "authorized_at": "2026-09-19T17:57:00+02:00",
+  "authorized_at": "2026-09-19T18:05:00+02:00",
   "launch_scope": "single_bounded_paid_cheap_screen",
   "model_id": "zai-org/GLM-4.7-Flash",
   "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
@@ -20,7 +20,7 @@
     "failed_pod_id": "6w5ac9zhggo1z7",
     "failed_pod_teardown_verified": true
   },
-  "attempt_number": 4,
+  "attempt_number": 5,
   "previous_attempts": [
     {
       "workflow_run_id": 35450382570,
@@ -33,6 +33,12 @@
       "disposition": "terminated_materialization_stall",
       "pod_id": "jt4mtqmv9osjtl",
       "teardown_verified": true
+    },
+    {
+      "workflow_run_id": 35453362329,
+      "disposition": "terminated_precontainer_startup_stall",
+      "pod_id": "ho3ygokv75g4cu",
+      "teardown_verified": true
     }
   ],
   "watchdog": {
@@ -40,7 +46,7 @@
     "max_estimated_total_usd": 0.75,
     "hard_wall_seconds": 1500
   },
-  "rerun_purpose": "A/B rerun of the same five probes after fixing GLM multi-EOS turn termination only.",
+  "rerun_purpose": "Retry the same five-probe multi-EOS A/B screen on a fresh Blackwell host after recycling a silent pre-container node.",
   "termination_fix": {
     "prior_bug": "runner overrode GLM generation_config eos_token_id=[154820,154827,154829] with tokenizer.eos_token_id scalar",
     "expected_eos_token_ids": [
