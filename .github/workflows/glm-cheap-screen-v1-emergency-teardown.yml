@@ -13,7 +13,7 @@ jobs:
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
-      TARGET_POD_ID: 6w5ac9zhggo1z7
+      TARGET_POD_ID: jt4mtqmv9osjtl
     steps:
       - name: Delete incompatible Blackwell pod and verify absence
         run: |
