@@ -151,3 +151,17 @@ def test_recovery_cost_policy_keeps_expensive_h200_as_explicit_fallback_only():
     policy = payload["execution"]["cost_control"]
     assert policy["expensive_h200_fallback_requires_explicit_authorization"] is True
     assert policy["target_secure_hourly_usd_max"] <= 2.25
+
+
+def test_large_model_h200_fallback_requires_separate_expensive_gpu_authorization():
+    payload = contract()
+    row = candidate("zai-org/GLM-4.7-Flash")
+    with pytest.raises(RuntimeError, match="refusing expensive large-model GPU fallback"):
+        launcher.paid_cost_gate(payload, row, authorization_env="NO")
+    launcher.paid_cost_gate(payload, row, authorization_env="YES")
+
+
+def test_14b_mixed_gpu_profile_does_not_trigger_expensive_fallback_guard():
+    payload = contract()
+    row = candidate("Qwen/Qwen3-14B")
+    launcher.paid_cost_gate(payload, row, authorization_env="NO")
