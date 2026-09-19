@@ -42,6 +42,27 @@ EPHEMERAL_ROOT = Path("/opt/hephaestus-diagnostic-scaling-recovery")
 LANES = ("fixed_non_thinking", "reasoning_aware")
 
 
+def progress_checkpoint_prefix(contract: dict[str, Any], contract_sha: str, model_id: str) -> str:
+    settings = contract.get("execution", {}).get("progress_checkpointing", {})
+    if settings.get("enabled") is not True:
+        raise RuntimeError("recovery progress checkpointing must remain enabled")
+    series_id = str(settings.get("series_id") or "").strip()
+    if not series_id:
+        raise RuntimeError("recovery progress checkpoint series_id is missing")
+    return f"{SCIENTIFIC_PREFIX}/diagnostic_scaling_recovery_progress/{series_id}/{contract_sha}/{base.slug(model_id)}"
+
+
+def upload_file_verified(client: Any, source: Path, key: str) -> dict[str, Any]:
+    client.upload_file(str(source), base.bucket(), key)
+    return base.verify_s3_file(client, key, source)
+
+
+def sync_tree_verified(client: Any, root: Path, prefix: str) -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    return base.upload_tree_verified(client, root, prefix)
+
+
 def required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -146,6 +167,7 @@ def generate_once(
             eos_token_id=tokenizer.eos_token_id,
             stopping_criteria=StoppingCriteriaList([clock]),
             return_dict_in_generate=True,
+            use_cache=True,
         )
     torch.cuda.synchronize()
     finished = time.perf_counter()
@@ -592,6 +614,8 @@ def train_role_curve(
     baseline_semantics: dict[str, Any],
     evidence_root: Path,
     dataset_sha: str,
+    client: Any,
+    checkpoint_prefix: str,
 ) -> dict[str, Any]:
     import torch
     from peft import LoraConfig, PeftModel, TaskType, get_peft_model
@@ -610,6 +634,9 @@ def train_role_curve(
             "target_parameters": target_parameters,
             "rank_pattern": rank_pattern,
         })
+        checkpoint_role_prefix = f"{checkpoint_prefix}/roles/{role}"
+        upload_file_verified(client, role_root / "runtime.json", f"{checkpoint_role_prefix}/runtime.json")
+        upload_file_verified(client, role_root / "target_surface.json", f"{checkpoint_role_prefix}/target_surface.json")
 
         role_seeds = [int(contract["evaluation"]["screening_seed"])]
         semantic_seeds = [int(v) for v in semantic["decoding_config"]["seeds"]]
@@ -759,6 +786,30 @@ def train_role_curve(
                 }
                 points.append(point)
                 segment_losses = []
+                progress_dir = role_root / "progress"
+                progress_dir.mkdir(parents=True, exist_ok=True)
+                progress_path = progress_dir / f"step_{optimizer_step:03d}.json"
+                base.write_once_json(progress_path, {
+                    "result_version": "diagnostic-scaling-recovery-progress.v1",
+                    "protocol_sha256": contract_sha,
+                    "training_dataset_sha256": dataset_sha,
+                    "model_id": candidate["model_id"],
+                    "revision": candidate["revision"],
+                    "role": role,
+                    "optimizer_steps": optimizer_step,
+                    "point": point,
+                    "promotion_performed": False,
+                    "lineage_mutated": False,
+                })
+                upload_file_verified(client, progress_path, f"{checkpoint_role_prefix}/progress/{progress_path.name}")
+                sync_tree_verified(client, adapter_dir, f"{checkpoint_role_prefix}/adapters/{adapter_dir.name}")
+                sync_tree_verified(client, role_root / "samples", f"{checkpoint_role_prefix}/samples")
+                print("DIAGNOSTIC_SCALING_RECOVERY_CHECKPOINT_JSON " + json.dumps({
+                    "model_id": candidate["model_id"],
+                    "role": role,
+                    "optimizer_steps": optimizer_step,
+                    "checkpoint_prefix": checkpoint_role_prefix,
+                }, sort_keys=True), flush=True)
                 print("DIAGNOSTIC_SCALING_RECOVERY_DOSE_JSON " + json.dumps({
                     "model_id": candidate["model_id"],
                     "role": role,
@@ -862,6 +913,13 @@ def train_role_curve(
             "lineage_mutated": False,
         }
         base.write_once_json(role_root / "role_curve.json", curve)
+        sync_tree_verified(client, role_root, checkpoint_role_prefix)
+        print("DIAGNOSTIC_SCALING_RECOVERY_ROLE_CHECKPOINT_JSON " + json.dumps({
+            "model_id": candidate["model_id"],
+            "role": role,
+            "checkpoint_prefix": checkpoint_role_prefix,
+            "status": "complete",
+        }, sort_keys=True), flush=True)
         return curve
     finally:
         base.unload(model, tokenizer)
@@ -941,6 +999,7 @@ def main() -> int:
             raise RuntimeError("runtime role training data is incomplete")
 
         snapshot, model_manifest = base.materialize_model(candidate, model_root)
+        checkpoint_prefix = progress_checkpoint_prefix(contract, contract_sha, model_id)
         base.write_once_json(evidence_root / "model_manifest.json", model_manifest)
         base.write_once_json(evidence_root / "run_manifest.json", {
             "run_id": run_id,
@@ -957,6 +1016,8 @@ def main() -> int:
             "fixed_non_thinking_eligible": lane_eligible(candidate, "fixed_non_thinking"),
             "network_volume_attached": False,
         })
+        upload_file_verified(client, evidence_root / "model_manifest.json", f"{checkpoint_prefix}/model_manifest.json")
+        upload_file_verified(client, evidence_root / "run_manifest.json", f"{checkpoint_prefix}/run_manifest.json")
 
         baseline_model = baseline_tokenizer = None
         baseline_semantics: dict[str, Any] = {}
@@ -981,6 +1042,11 @@ def main() -> int:
                 baseline_semantics[lane] = sem_eval["summary"]
                 base.write_once_json(evidence_root / "baseline" / lane / "semantic_summary.json", sem_eval["summary"])
             base.write_once_json(evidence_root / "baseline" / "runtime.json", baseline_runtime)
+            sync_tree_verified(client, evidence_root / "baseline", f"{checkpoint_prefix}/baseline")
+            print("DIAGNOSTIC_SCALING_RECOVERY_BASELINE_CHECKPOINT_JSON " + json.dumps({
+                "model_id": model_id,
+                "checkpoint_prefix": f"{checkpoint_prefix}/baseline",
+            }, sort_keys=True), flush=True)
         finally:
             base.unload(baseline_model, baseline_tokenizer)
 
@@ -999,6 +1065,8 @@ def main() -> int:
                 baseline_semantics=baseline_semantics,
                 evidence_root=evidence_root,
                 dataset_sha=dataset_sha,
+                client=client,
+                checkpoint_prefix=checkpoint_prefix,
             )
             print("DIAGNOSTIC_SCALING_RECOVERY_ROLE_COMPLETE_JSON " + json.dumps({
                 "model_id": model_id,
