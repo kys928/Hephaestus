@@ -50,22 +50,24 @@ export TMPDIR=/opt/hephaestus-tmp
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=0
 mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
-python - <<'PYCUDA'
-import json, os, subprocess, torch
-p=subprocess.run(['nvidia-smi','--query-gpu=driver_version,name,memory.total,uuid','--format=csv,noheader'],capture_output=True,text=True,check=False)
-d={'torch':str(torch.__version__),'cuda':str(torch.version.cuda),'cuda_available':bool(torch.cuda.is_available()),'device_count':int(torch.cuda.device_count()),'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),'nvidia_smi_returncode':int(p.returncode),'nvidia_smi_stdout':p.stdout.strip(),'nvidia_smi_stderr':p.stderr.strip()}
-print('GLM_TINY_ADAPT_CUDA_JSON '+json.dumps(d,sort_keys=True),flush=True)
-if not d['cuda_available'] or d['device_count'] != 1: raise SystemExit('GLM tiny-adaptation CUDA preflight failed')
-x=torch.ones(1,device='cuda'); torch.cuda.synchronize(); print('GLM_TINY_ADAPT_CUDA_OK '+str(float(x.item())),flush=True)
-PYCUDA
+python - <<'PYGPU'
+import json, subprocess
+p=subprocess.run(['nvidia-smi','--query-gpu=driver_version,name,memory.total,uuid,compute_cap','--format=csv,noheader'],capture_output=True,text=True,check=False)
+d={'nvidia_smi_returncode':int(p.returncode),'nvidia_smi_stdout':p.stdout.strip(),'nvidia_smi_stderr':p.stderr.strip()}
+print('GLM_TINY_ADAPT_GPU_JSON '+json.dumps(d,sort_keys=True),flush=True)
+if p.returncode != 0 or 'RTX PRO 6000 Blackwell' not in p.stdout:
+    raise SystemExit('GLM tiny-adaptation GPU preflight failed')
+PYGPU
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv curl
 rm -rf /var/lib/apt/lists/* /opt/hephaestus-src /opt/hephaestus-venv
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
 cd /opt/hephaestus-src
 git checkout --detach "$HEPHAESTUS_REPO_SHA"
-python -m venv --system-site-packages /opt/hephaestus-venv
+python -m venv /opt/hephaestus-venv
 PY=/opt/hephaestus-venv/bin/python
+"$PY" -m pip install --no-cache-dir --disable-pip-version-check \
+  'torch==2.14.0+cu130' --index-url https://download.pytorch.org/whl/cu130
 "$PY" -m pip install --no-cache-dir --disable-pip-version-check -e '.[s3]' \
   'transformers==5.17.0' \
   'accelerate==1.15.0' \
@@ -73,6 +75,25 @@ PY=/opt/hephaestus-venv/bin/python
   'huggingface-hub==1.31.0' \
   'peft==0.20.0'
 "$PY" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+"$PY" - <<'PYCUDA'
+import json, os, torch
+arches=list(torch.cuda.get_arch_list())
+d={
+    'torch':str(torch.__version__),
+    'cuda':str(torch.version.cuda),
+    'cuda_available':bool(torch.cuda.is_available()),
+    'device_count':int(torch.cuda.device_count()),
+    'device_name':torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+    'device_capability':list(torch.cuda.get_device_capability(0)) if torch.cuda.is_available() else None,
+    'arch_list':arches,
+    'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),
+}
+print('GLM_TINY_ADAPT_CUDA_JSON '+json.dumps(d,sort_keys=True),flush=True)
+if not d['cuda_available'] or d['device_count'] != 1 or 'sm_120' not in arches:
+    raise SystemExit('GLM tiny-adaptation Blackwell CUDA runtime preflight failed')
+x=torch.ones(1,device='cuda'); torch.cuda.synchronize()
+print('GLM_TINY_ADAPT_CUDA_OK '+str(float(x.item())),flush=True)
+PYCUDA
 "$PY" -m py_compile scripts/run_glm_tiny_adaptation_v1.py
 "$PY" scripts/run_glm_tiny_adaptation_v1.py
 '''
