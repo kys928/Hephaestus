@@ -215,45 +215,83 @@ def adaptive_generate(
     contract: dict[str, Any],
     require_schema: bool,
 ) -> dict[str, Any]:
-    attempts: list[dict[str, Any]] = []
-    for index, budget in enumerate(token_ladder):
-        generated = generate_once(
-            model,
-            tokenizer,
-            prompt,
-            candidate=candidate,
-            lane=lane,
-            seed=seed,
-            max_new_tokens=int(budget),
-            contract=contract,
-        )
-        raw = str(generated["output"])
-        projected = project_reasoning(raw, contract, lane)
-        complete_schema = topology_complete(projected) if require_schema else True
-        needs_retry = (
-            generated["finish_reason"] == "max_tokens"
-            or (require_schema and not complete_schema)
-        )
-        attempts.append({
-            "budget": int(budget),
-            "finish_reason": generated["finish_reason"],
-            "generated_tokens": generated["generated_tokens"],
-            "projected_schema_complete": complete_schema if require_schema else None,
-        })
-        if needs_retry and index < len(token_ladder) - 1:
-            continue
-        exhausted = bool(needs_retry and index == len(token_ladder) - 1)
-        return {
-            **generated,
-            "output": raw,
-            "projected_output": projected,
-            "budget_attempts": attempts,
-            "budget_retry_count": len(attempts) - 1,
-            "budget_exhausted": exhausted,
-            "final_schema_complete": complete_schema if require_schema else None,
-        }
-    raise RuntimeError("adaptive generation ladder unexpectedly produced no result")
+    """Execute an adaptive budget ladder with one physical autoregressive decode.
 
+    Every historical retry reset the same RNG seed and differed only in
+    max_new_tokens. Therefore all lower-budget attempts are prefixes of the
+    terminal-cap decode until EOS. We preserve the same logical retry/accounting
+    policy while avoiding repeated decoding of identical prefixes.
+    """
+    if not token_ladder:
+        raise RuntimeError("adaptive generation ladder is empty")
+    ladder = [int(value) for value in token_ladder]
+    if ladder != sorted(set(ladder)) or ladder[0] <= 0:
+        raise RuntimeError(f"adaptive generation ladder must be strictly increasing positive integers: {ladder}")
+
+    terminal_budget = ladder[-1]
+    generated = generate_once(
+        model,
+        tokenizer,
+        prompt,
+        candidate=candidate,
+        lane=lane,
+        seed=seed,
+        max_new_tokens=terminal_budget,
+        contract=contract,
+    )
+    raw = str(generated["output"])
+    projected = project_reasoning(raw, contract, lane)
+    complete_schema = topology_complete(projected) if require_schema else True
+    actual_tokens = int(generated["generated_tokens"])
+    actual_finish = str(generated["finish_reason"])
+
+    attempts: list[dict[str, Any]] = []
+    exhausted = True
+    logical_stop_budget = terminal_budget
+    for budget in ladder:
+        # If the physical decode produced more tokens than this budget, the old
+        # execution would necessarily have stopped at this cap and retried.
+        if actual_tokens > budget:
+            virtual_finish = "max_tokens"
+            virtual_tokens = budget
+            virtual_schema = None
+            needs_retry = True
+        else:
+            # Once EOS/stopping is reached, larger max_new_tokens values reproduce
+            # the same completed sequence under the same seed. Schema validity can
+            # therefore be evaluated once on the physically generated output.
+            virtual_finish = actual_finish
+            virtual_tokens = actual_tokens
+            virtual_schema = complete_schema if require_schema else None
+            needs_retry = (
+                virtual_finish == "max_tokens"
+                or (require_schema and not complete_schema)
+            )
+        attempts.append({
+            "budget": budget,
+            "finish_reason": virtual_finish,
+            "generated_tokens": virtual_tokens,
+            "projected_schema_complete": virtual_schema,
+            "virtualized_from_terminal_decode": True,
+        })
+        if not needs_retry:
+            exhausted = False
+            logical_stop_budget = budget
+            break
+
+    return {
+        **generated,
+        "output": raw,
+        "projected_output": projected,
+        "max_new_tokens": logical_stop_budget,
+        "budget_attempts": attempts,
+        "budget_retry_count": len(attempts) - 1,
+        "budget_exhausted": exhausted,
+        "final_schema_complete": complete_schema if require_schema else None,
+        "physical_generation_count": 1,
+        "physical_terminal_budget": terminal_budget,
+        "adaptive_budget_execution": "single_physical_terminal_cap_with_virtual_retry_accounting",
+    }
 
 def evaluate_role_lane(
     model: Any,
