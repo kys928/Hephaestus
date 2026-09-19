@@ -146,3 +146,14 @@ def test_adaptive_budget_execution_is_single_physical_decode():
     settings = payload["execution"]["inference_runtime"]
     assert settings["adaptive_budget_execution"] == "single_physical_terminal_cap_with_virtual_retry_accounting"
     assert settings["scientific_geometry_changed"] is False
+
+
+def test_recovery_reuses_completed_baseline_and_roles():
+    payload = contract()
+    settings = payload["execution"]["progress_checkpointing"]
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert settings["resume_baseline"] is True
+    assert settings["resume_completed_roles"] is True
+    assert "DIAGNOSTIC_SCALING_RECOVERY_BASELINE_REUSED_JSON" in source
+    assert "DIAGNOSTIC_SCALING_RECOVERY_ROLE_REUSED_JSON" in source
+    assert "validate_reused_role_checkpoint" in source
