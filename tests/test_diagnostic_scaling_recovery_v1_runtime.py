@@ -120,3 +120,20 @@ def test_recovery_driver_retains_paid_launch_governance_guard():
     assert 'if contract["governance"].get("paid_launch_allowed_now") is not True:' in source
     assert "paid Diagnostic Scaling Recovery launch is not authorized" in source
     assert payload["governance"]["paid_launch_requires_new_explicit_user_go"] is True
+
+
+def test_recovery_generation_reenables_kv_cache_for_inference():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "use_cache=True" in source
+    payload = contract()
+    assert payload["execution"]["inference_runtime"]["use_kv_cache"] is True
+
+
+def test_recovery_streams_incremental_s3_progress():
+    source = SCRIPT.read_text(encoding="utf-8")
+    payload = contract()
+    assert payload["execution"]["progress_checkpointing"]["enabled"] is True
+    assert "DIAGNOSTIC_SCALING_RECOVERY_CHECKPOINT_JSON" in source
+    assert "DIAGNOSTIC_SCALING_RECOVERY_BASELINE_CHECKPOINT_JSON" in source
+    assert "DIAGNOSTIC_SCALING_RECOVERY_ROLE_CHECKPOINT_JSON" in source
+    assert "sync_tree_verified(client, adapter_dir" in source
