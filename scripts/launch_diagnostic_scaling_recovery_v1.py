@@ -451,7 +451,14 @@ def create_with_retries(execution: RunPodExecutionAdapter, body: dict[str, objec
             last_error = exc
             observations.append({"attempt": attempt, "queried_at": now(), "status": "failed", "error": f"{type(exc).__name__}: {exc}"})
             lowered = str(exc).lower()
-            if any(marker in lowered for marker in ("402", "insufficient funds", "insufficient credit", "insufficient balance")):
+            if any(marker in lowered for marker in (
+                "402",
+                "insufficient funds",
+                "insufficient credit",
+                "insufficient balance",
+                "balance is too low",
+                "account balance is too low",
+            )):
                 raise
             if attempt < CREATE_ATTEMPTS:
                 time.sleep(CREATE_RETRY_SECONDS)
