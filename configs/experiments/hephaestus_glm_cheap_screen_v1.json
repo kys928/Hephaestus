@@ -45,6 +45,16 @@
       "do_sample": true,
       "temperature": 1,
       "top_p": 0.95
+    },
+    "expected_eos_token_ids": [
+      154820,
+      154827,
+      154829
+    ],
+    "termination_policy": {
+      "source": "pinned_glm_generation_config",
+      "preserve_all_model_eos_token_ids": true,
+      "rationale": "Do not override GLM's multi-token end-of-turn set with tokenizer.eos_token_id; the prior screen repeated completed answers until max_new_tokens."
     }
   },
   "probes": [
@@ -145,7 +155,7 @@
     "paid_launch_requires_explicit_user_go": true,
     "reason_paid_launch_disabled": null,
     "authorization_source": "user_directive",
-    "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
-    "authorized_at": "2026-09-19T16:57:00+02:00"
+    "authorization_text": "fix GLM's proper generation termination, then rerun these same five probes.",
+    "authorized_at": "2026-09-19T17:54:00+02:00"
   }
 }
