@@ -12,7 +12,7 @@
   },
   "sources": {
     "recovery_contract_path": "configs/experiments/hephaestus_diagnostic_scaling_recovery_v1.json",
-    "recovery_contract_git_blob_sha": "2c89ad6b693a7d78300e0f6a80a5235200410996",
+    "recovery_contract_git_blob_sha": "b4175427a28d360819d79a929f4cc346071f0b08",
     "semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
     "semantic_pack_git_blob_sha": "9295d1e9ab1d07ae107557fd0c4cafbc9689ae20",
     "topology_pack_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
@@ -43,7 +43,7 @@
         "enable_thinking": true
       },
       "do_sample": true,
-      "temperature": 1.0,
+      "temperature": 1,
       "top_p": 0.95
     }
   },
@@ -79,7 +79,7 @@
       "role": "diagnosis",
       "lane": "reasoning_aware",
       "max_new_tokens": 1536,
-      "minimum_quality_100": 70.0,
+      "minimum_quality_100": 70,
       "required_for_advance": true
     },
     {
@@ -89,7 +89,7 @@
       "role": "controller",
       "lane": "reasoning_aware",
       "max_new_tokens": 1024,
-      "minimum_quality_100": 70.0,
+      "minimum_quality_100": 70,
       "required_for_advance": true
     }
   ],
@@ -97,7 +97,7 @@
     "require_all_probes_completed": true,
     "require_no_fixed_lane_hard_failures": true,
     "require_topology_schema_compliance": true,
-    "minimum_topology_quality_100": 70.0,
+    "minimum_topology_quality_100": 70,
     "on_pass": "eligible_for_tiny_adaptation_experiment_only",
     "on_nonpass": "do_not_start_full_lora_recovery"
   },

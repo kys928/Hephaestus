@@ -17,7 +17,9 @@
     "require_cheap_screen_advance_to_tiny_adaptation": true,
     "tiny_adaptation_required_before_full_recovery": true,
     "tiny_adaptation_result_key": null,
-    "full_recovery_blocked_until_both_gates_present": true
+    "full_recovery_blocked_until_both_gates_present": true,
+    "tiny_adaptation_protocol_id": "hephaestus_glm_tiny_adaptation_v1",
+    "required_tiny_adaptation_result_version": "hephaestus-glm-tiny-adaptation.v1"
   },
   "prior_paid_authorization": {
     "authorized_at": "2026-09-19T11:42:00+02:00",

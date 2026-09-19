@@ -1,0 +1,97 @@
+{
+  "protocol_id": "hephaestus_glm_tiny_adaptation_v1",
+  "protocol_version": 1,
+  "purpose": "Low-cost post-screen LoRA adaptability probe for the exact pinned GLM-4.7-Flash BF16 model. This is not full recovery training or certification.",
+  "scientific_scope": {
+    "screening_only": true,
+    "adaptation_probe_only": true,
+    "certification_claim_allowed": false,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "interpretation": "Tests whether a three-step diagnosis-role LoRA dose can execute on the cheap GPU route without catastrophic behavioral regression. A pass only permits considering the full recovery experiment."
+  },
+  "prerequisite": {
+    "required_result_version": "hephaestus-glm-cheap-screen.v1",
+    "required_status": "completed",
+    "required_advance_to_tiny_adaptation": true,
+    "require_screening_only": true,
+    "require_training_performed_false": true
+  },
+  "model": {
+    "model_id": "zai-org/GLM-4.7-Flash",
+    "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+    "model_type": "glm4_moe_lite",
+    "loader": "AutoModelForCausalLM",
+    "precision": "bfloat16",
+    "quantization": false,
+    "cpu_or_disk_offload": false,
+    "gpu_count": 1
+  },
+  "training": {
+    "role": "diagnosis",
+    "source_training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c",
+    "optimizer_steps": 3,
+    "gradient_accumulation_steps": 4,
+    "training_examples_consumed": 12,
+    "max_seq_length": 1024,
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "bias": "none",
+    "learning_rate": 0.00005,
+    "weight_decay": 0.0,
+    "max_grad_norm": 1.0,
+    "shuffle_seed": 314159,
+    "model_seed": 271828,
+    "train_only_assistant_tokens": true,
+    "reuse_full_recovery_target_surface": true,
+    "save_final_adapter_for_evidence": true
+  },
+  "post_adaptation_probes": {
+    "reuse_cheap_screen_probe_set_exactly": true,
+    "seed": 11,
+    "required_probe_count": 5,
+    "total_max_new_tokens_ceiling": 3000
+  },
+  "advance_gate": {
+    "require_training_complete": true,
+    "require_all_three_step_losses_finite": true,
+    "maximum_final_to_first_step_loss_ratio": 1.25,
+    "require_all_post_adaptation_probes_completed": true,
+    "require_all_post_adaptation_probes_pass": true,
+    "on_pass": "eligible_for_full_recovery_consideration_only",
+    "on_nonpass": "do_not_start_full_recovery"
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 75,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 160,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed": false,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 1500,
+    "max_hourly_usd": 2.25,
+    "max_estimated_total_usd": 0.95,
+    "s3_prefix": "hephaestus/scientific/v1/glm_tiny_adaptation"
+  },
+  "observability": {
+    "write_run_manifest_before_model_load": true,
+    "write_training_step_immediately": true,
+    "write_heartbeat_after_every_training_step": true,
+    "write_post_adaptation_sample_immediately": true,
+    "write_heartbeat_after_every_sample": true,
+    "write_mutable_progress_pointer": true,
+    "write_terminal_result": true
+  },
+  "governance": {
+    "paid_launch_allowed_now": false,
+    "paid_launch_requires_explicit_user_go": true,
+    "full_recovery_launch_is_separate_explicit_decision": true,
+    "reason_paid_launch_disabled": "RunPod balance is currently exhausted. The tiny-adaptation path is implemented and validated but must not create paid compute until separately authorized after a passed cheap screen."
+  }
+}
