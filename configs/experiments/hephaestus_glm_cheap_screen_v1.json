@@ -140,8 +140,11 @@
     "interpretation": "Preserve as compatibility/runtime evidence only. Do not reinterpret the aborted run as a GLM capability pass or failure."
   },
   "governance": {
-    "paid_launch_allowed_now": false,
+    "paid_launch_allowed_now": true,
     "paid_launch_requires_explicit_user_go": true,
-    "reason_paid_launch_disabled": "Current user-reported RunPod balance is exhausted. Implementation and validation may proceed; paid execution must remain blocked until new explicit authorization after funding is available."
+    "reason_paid_launch_disabled": null,
+    "authorization_source": "user_directive",
+    "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
+    "authorized_at": "2026-09-19T16:57:00+02:00"
   }
 }

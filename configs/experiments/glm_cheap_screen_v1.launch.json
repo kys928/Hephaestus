@@ -1,0 +1,15 @@
+{
+  "authorized": true,
+  "protocol_id": "hephaestus_glm_cheap_screen_v1",
+  "authorization_source": "user_directive",
+  "authorization_text": "okay i added funds. finish your work that u could and launch the inteded path.",
+  "authorized_at": "2026-09-19T16:57:00+02:00",
+  "launch_scope": "single_bounded_paid_cheap_screen",
+  "model_id": "zai-org/GLM-4.7-Flash",
+  "revision": "7dd20894a642a0aa287e9827cb1a1f7f91386b67",
+  "maximum_estimated_total_usd": 0.75,
+  "maximum_hourly_usd": 2.25,
+  "hard_wall_seconds": 1500,
+  "full_recovery_authorized": false,
+  "tiny_adaptation_authorized_conditionally_on_pass": true
+}
