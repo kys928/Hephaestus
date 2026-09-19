@@ -116,7 +116,8 @@
     "hard_wall_seconds": 1500,
     "max_hourly_usd": 2.25,
     "max_estimated_total_usd": 0.75,
-    "s3_prefix": "hephaestus/scientific/v1/glm_cheap_screen"
+    "s3_prefix": "hephaestus/scientific/v1/glm_cheap_screen",
+    "materialization_stall_seconds": 600
   },
   "observability": {
     "write_run_manifest_before_model_load": true,
