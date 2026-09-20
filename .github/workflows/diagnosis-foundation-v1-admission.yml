@@ -52,5 +52,14 @@ jobs:
                   "safetensors": getattr(info, "safetensors", None),
                   "siblings": siblings,
               })
+          from huggingface_hub import hf_hub_download
+          adapter_path=hf_hub_download(
+              "Esperanto/Mistral-7B-CauseAnalyzer",
+              "adapter_config.json",
+              revision=next(row["sha"] for row in rows if row["model_id"]=="Esperanto/Mistral-7B-CauseAnalyzer"),
+          )
+          with open(adapter_path, encoding="utf-8") as fh:
+              adapter_config=json.load(fh)
+          print("CAUSE_ANALYZER_ADAPTER_CONFIG_JSON "+json.dumps(adapter_config,sort_keys=True))
           print("DIAGNOSIS_FOUNDATION_ADMISSION_JSON "+json.dumps(rows,sort_keys=True,default=str))
           PY
