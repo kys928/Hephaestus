@@ -14,11 +14,22 @@ CFG=ROOT/"configs/experiments/hephaestus_diagnosis_adaptability_v1.json"
 AUTH="HEPHAESTUS_DIAG_ADAPT_LAUNCH_AUTHORIZED"
 TERMINAL={"EXITED","FAILED","TERMINATED","STOPPED"}
 RESUME_ENV="HEPHAESTUS_DIAG_ADAPT_RESUME_RUN_ID"
+MARKER=ROOT/"configs/experiments/diagnosis_adaptability_v1.launch.json"
 def req(k):
     v=(os.environ.get(k) or "").strip()
     if not v: raise RuntimeError("missing "+k)
     return v
 def load(): return json.loads(CFG.read_text())
+def resume_run_id()->str:
+    env=(os.environ.get(RESUME_ENV) or "").strip()
+    if env: return env
+    if MARKER.exists():
+        try:
+            marker=json.loads(MARKER.read_text())
+            return str(marker.get("resume_run_id") or "").strip()
+        except Exception:
+            return ""
+    return ""
 def resilient_maybe_read(client,key,attempts=5):
     last=None
     for i in range(attempts):
@@ -81,7 +92,7 @@ def body(c,name,e):
     return b
 def execute(c):
     if os.environ.get(AUTH)!="YES" or c["governance"]["paid_launch_allowed"] is not True: raise RuntimeError("paid adaptability run not authorized")
-    repo=req("GITHUB_SHA");gid=req("GITHUB_RUN_ID");run_id=(os.environ.get(RESUME_ENV) or "").strip() or f"diagnosis-adaptability-v1-{gid}"
+    repo=req("GITHUB_SHA");gid=req("GITHUB_RUN_ID");run_id=resume_run_id() or f"diagnosis-adaptability-v1-{gid}"
     prefix=f"{c['execution']['s3_prefix'].rstrip('/')}/{run_id}";result_key=f"{prefix}/result.json";progress_key=f"{prefix}/progress.json"
     ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider());client=storage.s3_client();b=body(c,"hephaestus-"+run_id,env(repo,run_id,True))
     pod_id=None;started=time.monotonic();rec={"launcher_version":"diagnosis-adaptability-launcher.v1","run_id":run_id,"repo_sha":repo,"result_key":result_key,"status":"starting","gpu_type_ids":b["gpuTypeIds"]}
@@ -113,7 +124,7 @@ def execute(c):
             if not td.get("verified_absent"): raise RuntimeError("pod teardown unverified")
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--execute",action="store_true");args=ap.parse_args();c=load()
-    repo=os.environ.get("GITHUB_SHA","<sha>");rid=(os.environ.get(RESUME_ENV) or "").strip() or f"diagnosis-adaptability-v1-{os.environ.get('GITHUB_RUN_ID','<run>')}"
+    repo=os.environ.get("GITHUB_SHA","<sha>");rid=resume_run_id() or f"diagnosis-adaptability-v1-{os.environ.get('GITHUB_RUN_ID','<run>')}"
     b=body(c,"hephaestus-"+rid,env(repo,rid))
     if not args.execute:
         print(json.dumps({"mode":"render_only","protocol_id":c["protocol_id"],"request":b,"limits":c["execution"]},indent=2));return

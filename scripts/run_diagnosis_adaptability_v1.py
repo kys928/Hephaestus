@@ -270,14 +270,22 @@ def main()->int:
     try:
         for ci,cand in enumerate(cfg["candidates"],1):
             existing_key=f"{prefix}/models/{cand['candidate_id']}/result.json"
-            try:
-                existing_raw=base.read_s3(client,existing_key)
-            except Exception as exc:
-                response=getattr(exc,"response",{})
-                code=str(response.get("Error",{}).get("Code","")) if isinstance(response,dict) else ""
-                if code not in {"404","NoSuchKey","NotFound"}:
+            existing_raw=None
+            for read_attempt in range(5):
+                try:
+                    existing_raw=base.read_s3(client,existing_key)
+                    break
+                except Exception as exc:
+                    response=getattr(exc,"response",{})
+                    code=str(response.get("Error",{}).get("Code","")) if isinstance(response,dict) else ""
+                    if code in {"404","NoSuchKey","NotFound"}:
+                        existing_raw=None
+                        break
+                    if type(exc).__name__=="FlexibleChecksumError" and read_attempt<4:
+                        print("DIAG_ADAPT_RESUME_CHECKSUM_RETRY "+json.dumps({"key":existing_key,"attempt":read_attempt+1,"error":str(exc)},sort_keys=True),flush=True)
+                        time.sleep(min(2.0**read_attempt,8.0))
+                        continue
                     raise
-                existing_raw=None
             if existing_raw:
                 existing=json.loads(existing_raw)
                 if existing.get("candidate_id")!=cand["candidate_id"]:

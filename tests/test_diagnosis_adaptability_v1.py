@@ -46,3 +46,10 @@ def test_runner_can_skip_complete_persisted_candidate():
     assert "candidate_resume_skip" in src
     assert "complete_candidate_result_already_persisted" in src
     assert 'completed_eval+=96' in src
+
+def test_resume_marker_can_select_original_run_id():
+    src=(ROOT/"scripts/launch_diagnosis_adaptability_v1.py").read_text()
+    assert 'MARKER=ROOT/"configs/experiments/diagnosis_adaptability_v1.launch.json"' in src
+    assert "def resume_run_id()" in src
+    runner=(ROOT/"scripts/run_diagnosis_adaptability_v1.py").read_text()
+    assert "DIAG_ADAPT_RESUME_CHECKSUM_RETRY" in runner
