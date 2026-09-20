@@ -22,7 +22,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      TARGET_RUN_ID: diagnosis-foundation-v1-35497153907
+      TARGET_RUN_ID: diagnosis-foundation-v1-35515098798
       S3_PREFIX: hephaestus/scientific/v1/diagnosis_foundation_bakeoff
     steps:
       - uses: actions/setup-python@v5
