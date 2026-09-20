@@ -1,0 +1,15 @@
+{
+  "protocol_id": "hephaestus_diagnosis_adaptability_v1",
+  "authorized": true,
+  "authorization_source": "user_directive",
+  "authorization_text": "Run the same micro-LoRA on both Granite and Ministral with 72 training cases, rank 8, alpha 16, 32 optimizer steps, learning rate 5e-5, seed 11, same training-token budget, and 48 untouched held-out adversarial cases.",
+  "authorized_at": "2026-09-20T19:25:00+02:00",
+  "launch_scope": "paired_micro_lora_adaptability",
+  "parent_run_id": "diagnosis-foundation-v1-35515098798",
+  "candidates": [
+    "granite42-3b",
+    "ministral3-3b-reasoning"
+  ],
+  "max_estimated_total_usd": 0.95,
+  "no_automatic_promotion": true
+}
