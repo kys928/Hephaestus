@@ -1,0 +1,174 @@
+{
+  "protocol_id": "hephaestus_diagnosis_foundation_bakeoff_v1",
+  "protocol_version": 1,
+  "scientific_scope": {
+    "screening_only": true,
+    "certification_claim_allowed": false,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "stage2_requires_zero_shot_gate": true
+  },
+  "pack": {
+    "builder_path": "scripts/build_diagnosis_foundation_bakeoff_v1.py",
+    "zero_shot_partition": "zero_shot",
+    "train_partition": "micro_lora_train",
+    "held_out_partition": "held_out"
+  },
+  "candidates": [
+    {
+      "candidate_id": "granite42-3b",
+      "model_id": "ibm-granite/granite-4.2-3b",
+      "revision": "e459acceac81e5fe67c07d9cfc72329a332e7eb1",
+      "license": "apache-2.0",
+      "loader": "AutoModelForCausalLM",
+      "load_kind": "causal_lm",
+      "parameter_count": 3659737600,
+      "adaptation_candidate": true,
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {
+        "enable_thinking": true,
+        "low_effort": true
+      },
+      "decoding": {
+        "do_sample": true,
+        "temperature": 1,
+        "top_p": 0.95
+      }
+    },
+    {
+      "candidate_id": "ministral3-3b-reasoning",
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "loader": "Mistral3ForConditionalGeneration",
+      "load_kind": "mistral3",
+      "parameter_count": 4251743232,
+      "adaptation_candidate": true,
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      }
+    },
+    {
+      "candidate_id": "causeanalyzer-7b-control",
+      "model_id": "Esperanto/Mistral-7B-CauseAnalyzer",
+      "revision": "2d05b51a8763de598eec0f7c7efe4af3e4d70b6b",
+      "license": "mit",
+      "loader": "PeftModel",
+      "load_kind": "peft_adapter",
+      "base_model_id": "mistralai/Mistral-7B-Instruct-v0.1",
+      "base_revision": "ec5deb64f2c6e6fa90c1abf74a91d5c93a9669ca",
+      "base_license": "apache-2.0",
+      "parameter_count": 7241732096,
+      "adaptation_candidate": false,
+      "control_role": "released_rca_specialist",
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      }
+    },
+    {
+      "candidate_id": "phi4-mini-reasoning-control",
+      "model_id": "microsoft/Phi-4-mini-reasoning",
+      "revision": "0e3b1e2d02ee478a3743abe3f629e9c0cb722e0a",
+      "license": "mit",
+      "loader": "AutoModelForCausalLM",
+      "load_kind": "causal_lm",
+      "parameter_count": 3836021760,
+      "adaptation_candidate": false,
+      "control_role": "small_reasoning_reference",
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "top_k": 50
+      }
+    }
+  ],
+  "generation": {
+    "seed": 11,
+    "max_new_tokens": 512,
+    "use_kv_cache": true,
+    "precision": "bfloat16",
+    "quantization": false,
+    "cpu_or_disk_offload": false
+  },
+  "zero_shot_gate": {
+    "minimum_overall_quality_100": 55,
+    "minimum_schema_compliance": 0.8,
+    "minimum_evidence_grounding": 0.8,
+    "maximum_hallucination_rate": 0.1,
+    "minimum_causal_restraint_quality_100": 55,
+    "require_all_samples_complete": true
+  },
+  "stage2_plan": {
+    "eligible_candidate_ids": [
+      "granite42-3b",
+      "ministral3-3b-reasoning"
+    ],
+    "lora_rank": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0,
+    "optimizer_steps": 32,
+    "learning_rate": 0.00005,
+    "seed": 11,
+    "max_sequence_length": 768,
+    "target_surface": "q_k_v_o_when_architecture_exposes_equivalent_projections",
+    "same_training_examples": true,
+    "same_step_count": true,
+    "same_training_token_budget": true,
+    "held_out_partition": "held_out",
+    "paid_launch_allowed_now": false
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA GeForce RTX 3090",
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA L4"
+    ],
+    "minimum_gpu_memory_gib": 22,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 160,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed": false,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 2700,
+    "materialization_stall_seconds": 600,
+    "max_hourly_usd": 0.85,
+    "max_estimated_total_usd": 0.65,
+    "s3_prefix": "hephaestus/scientific/v1/diagnosis_foundation_bakeoff"
+  },
+  "observability": {
+    "write_sample_immediately": true,
+    "write_model_summary_immediately": true,
+    "write_heartbeat_after_every_sample": true,
+    "write_mutable_progress_pointer": true,
+    "write_terminal_result": true
+  },
+  "governance": {
+    "paid_launch_allowed_now": true,
+    "paid_launch_requires_explicit_user_go": true,
+    "authorization_source": "user_directive",
+    "authorization_text": "The smart next experiment is zero-shot diagnosis battery → identical micro-LoRA → held-out diagnosis battery.",
+    "stage1_authorized": true,
+    "stage2_authorized_conditionally_on_zero_shot_gate": true
+  }
+}
