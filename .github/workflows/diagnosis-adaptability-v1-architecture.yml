@@ -1,0 +1,40 @@
+name: Diagnosis Adaptability V1 architecture admission
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnosis-adaptability-v1-architecture.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet 'transformers==5.17.0' 'accelerate==1.15.0' 'huggingface-hub==1.31.0' 'mistral-common==1.11.7'
+      - name: Inspect language-model attention surfaces on meta device
+        run: |
+          python - <<'PY'
+          import json
+          from accelerate import init_empty_weights
+          from transformers import AutoConfig, AutoModelForCausalLM, Mistral3ForConditionalGeneration
+          specs=[
+            ("granite42-3b","ibm-granite/granite-4.2-3b","e459acceac81e5fe67c07d9cfc72329a332e7eb1","granite"),
+            ("ministral3-3b-reasoning","mistralai/Ministral-3-3B-Reasoning-2512","4a36357c811bf511a7b625d132e12f22408aac91","mistral3"),
+          ]
+          for cid,mid,rev,kind in specs:
+              cfg=AutoConfig.from_pretrained(mid,revision=rev,trust_remote_code=False)
+              with init_empty_weights():
+                  if kind=="mistral3":
+                      model=Mistral3ForConditionalGeneration(cfg)
+                  else:
+                      model=AutoModelForCausalLM.from_config(cfg,trust_remote_code=False)
+              rows=[]
+              for name,m in model.named_modules():
+                  leaf=name.rsplit('.',1)[-1]
+                  if leaf in {"q_proj","k_proj","v_proj","o_proj"}:
+                      rows.append({"name":name,"class":type(m).__name__,"in_features":getattr(m,"in_features",None),"out_features":getattr(m,"out_features",None)})
+              print("ADAPT_ARCH_JSON "+json.dumps({"candidate_id":cid,"architectures":getattr(cfg,"architectures",None),"model_type":getattr(cfg,"model_type",None),"attention_modules":rows},sort_keys=True))
+          PY
