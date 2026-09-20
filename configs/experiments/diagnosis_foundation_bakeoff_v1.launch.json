@@ -1,0 +1,12 @@
+{
+  "protocol_id": "hephaestus_diagnosis_foundation_bakeoff_v1",
+  "authorized": true,
+  "authorization_source": "user_directive",
+  "authorization_text": "The smart next experiment is zero-shot diagnosis battery → identical micro-LoRA → held-out diagnosis battery.",
+  "authorized_at": "2026-09-20T09:33:00+02:00",
+  "launch_scope": "single_bounded_zero_shot_bakeoff",
+  "stage2_not_authorized_until_gate": true,
+  "max_estimated_total_usd": 0.65,
+  "max_hourly_usd": 0.85,
+  "candidate_count": 4
+}
