@@ -53,3 +53,19 @@ def test_resume_marker_can_select_original_run_id():
     assert "def resume_run_id()" in src
     runner=(ROOT/"scripts/run_diagnosis_adaptability_v1.py").read_text()
     assert "DIAG_ADAPT_RESUME_CHECKSUM_RETRY" in runner
+
+def test_mistral_training_uses_continue_final_message():
+    src=(ROOT/"scripts/run_diagnosis_adaptability_v1.py").read_text()
+    assert "continue_final_message=continue_final" in src
+    assert 'messages[-1].get("role")=="assistant"' in src
+
+def test_partial_resume_reuses_complete_pre_summary():
+    src=(ROOT/"scripts/run_diagnosis_adaptability_v1.py").read_text()
+    assert "pre_resume_skip" in src
+    assert "complete_pre_summary_already_persisted" in src
+
+def test_launcher_ignores_prior_failed_terminal_but_not_current_failure():
+    src=(ROOT/"scripts/launch_diagnosis_adaptability_v1.py").read_text()
+    assert "ignored_prior_terminal" in src
+    assert 'terminal_sha==repo' in src
+    assert 'terminal_status=="completed"' in src

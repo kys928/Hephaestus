@@ -115,7 +115,14 @@ def execute(c):
                     if age>float(c["execution"]["materialization_stall_seconds"]): raise TimeoutError(f"model materialization stalled {age:.1f}s")
             terminal=resilient_maybe_read(client,result_key)
             if terminal:
-                rec["result"]=json.loads(terminal);rec["status"]="completed";print("DIAG_ADAPT_LAUNCH_RESULT_JSON "+json.dumps(rec,sort_keys=True),flush=True);return rec
+                terminal_obj=json.loads(terminal)
+                terminal_sha=str(terminal_obj.get("repo_sha") or "")
+                terminal_status=str(terminal_obj.get("status") or "")
+                if terminal_status=="completed":
+                    rec["result"]=terminal_obj;rec["status"]="completed";print("DIAG_ADAPT_LAUNCH_RESULT_JSON "+json.dumps(rec,sort_keys=True),flush=True);return rec
+                if terminal_sha==repo:
+                    raise RuntimeError(f"scientific runner failed: {terminal_obj.get('error_type')}: {terminal_obj.get('error')}")
+                rec["ignored_prior_terminal"]={"repo_sha":terminal_sha,"status":terminal_status}
             if str(snap.get("desiredStatus","")).upper() in TERMINAL: raise RuntimeError("pod became terminal before S3 result")
             time.sleep(float(c["execution"]["poll_seconds"]))
     finally:

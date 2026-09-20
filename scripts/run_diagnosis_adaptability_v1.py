@@ -36,6 +36,25 @@ def canonical_sha(obj:object)->str:
     raw=(json.dumps(obj,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\n").encode()
     return hashlib.sha256(raw).hexdigest()
 
+def maybe_existing_json(client:Any,key:str)->dict[str,Any]|None:
+    for read_attempt in range(5):
+        try:
+            raw=base.read_s3(client,key)
+            obj=json.loads(raw)
+            if not isinstance(obj,dict): raise RuntimeError("persisted JSON is not an object: "+key)
+            return obj
+        except Exception as exc:
+            response=getattr(exc,"response",{})
+            code=str(response.get("Error",{}).get("Code","")) if isinstance(response,dict) else ""
+            if code in {"404","NoSuchKey","NotFound"}:
+                return None
+            if type(exc).__name__=="FlexibleChecksumError" and read_attempt<4:
+                print("DIAG_ADAPT_RESUME_CHECKSUM_RETRY "+json.dumps({"key":key,"attempt":read_attempt+1,"error":str(exc)},sort_keys=True),flush=True)
+                time.sleep(min(2.0**read_attempt,8.0))
+                continue
+            raise
+    return None
+
 def expected_answer(case:dict[str,Any])->str:
     exp=case["expected"]
     conf=(float(exp["confidence_min"])+float(exp["confidence_max"]))/2.0
@@ -68,7 +87,8 @@ def expected_answer(case:dict[str,Any])->str:
 def template_ids(tokenizer:Any,cand:dict[str,Any],messages:list[dict[str,str]],generation_prompt:bool)->list[int]:
     kwargs=dict(cand.get("chat_template_kwargs") or {})
     if cand["load_kind"]=="mistral3":
-        enc=tokenizer.apply_chat_template(messages,return_tensors="pt",return_dict=True,**kwargs)
+        continue_final=bool(messages and messages[-1].get("role")=="assistant" and not generation_prompt)
+        enc=tokenizer.apply_chat_template(messages,return_tensors="pt",return_dict=True,continue_final_message=continue_final,**kwargs)
     else:
         enc=tokenizer.apply_chat_template(messages,tokenize=True,add_generation_prompt=generation_prompt,return_tensors="pt",return_dict=True,**kwargs)
     ids=enc["input_ids"][0].tolist()
@@ -270,24 +290,8 @@ def main()->int:
     try:
         for ci,cand in enumerate(cfg["candidates"],1):
             existing_key=f"{prefix}/models/{cand['candidate_id']}/result.json"
-            existing_raw=None
-            for read_attempt in range(5):
-                try:
-                    existing_raw=base.read_s3(client,existing_key)
-                    break
-                except Exception as exc:
-                    response=getattr(exc,"response",{})
-                    code=str(response.get("Error",{}).get("Code","")) if isinstance(response,dict) else ""
-                    if code in {"404","NoSuchKey","NotFound"}:
-                        existing_raw=None
-                        break
-                    if type(exc).__name__=="FlexibleChecksumError" and read_attempt<4:
-                        print("DIAG_ADAPT_RESUME_CHECKSUM_RETRY "+json.dumps({"key":existing_key,"attempt":read_attempt+1,"error":str(exc)},sort_keys=True),flush=True)
-                        time.sleep(min(2.0**read_attempt,8.0))
-                        continue
-                    raise
-            if existing_raw:
-                existing=json.loads(existing_raw)
+            existing=maybe_existing_json(client,existing_key)
+            if existing:
                 if existing.get("candidate_id")!=cand["candidate_id"]:
                     raise RuntimeError("persisted candidate result identity mismatch")
                 if existing.get("pre",{}).get("sample_count")!=48 or existing.get("post",{}).get("sample_count")!=48:
@@ -302,8 +306,17 @@ def main()->int:
             heartbeat("loading_model",candidate_id=cand["candidate_id"],candidate_index=ci)
             model,tokenizer,runtime=stage1.load(cand,snap,adapter,{"execution":{"minimum_gpu_memory_gib":cfg["execution"]["minimum_gpu_memory_gib"]}})
             put(client,f"{prefix}/models/{cand['candidate_id']}/runtime.json",runtime)
-            pre_rows,pre=evaluate(model,tokenizer,cand,pack,cfg,held,seed,deadline,client,prefix,"pre",heartbeat);completed_eval+=len(pre_rows)
-            put(client,f"{prefix}/models/{cand['candidate_id']}/pre_summary.json",pre)
+            pre_key=f"{prefix}/models/{cand['candidate_id']}/pre_summary.json"
+            existing_pre=maybe_existing_json(client,pre_key)
+            if existing_pre is not None:
+                if existing_pre.get("sample_count")!=48:
+                    raise RuntimeError("persisted pre-LoRA summary is incomplete")
+                pre=existing_pre
+                completed_eval+=48
+                heartbeat("pre_resume_skip",candidate_id=cand["candidate_id"],candidate_index=ci,reason="complete_pre_summary_already_persisted")
+            else:
+                pre_rows,pre=evaluate(model,tokenizer,cand,pack,cfg,held,seed,deadline,client,prefix,"pre",heartbeat);completed_eval+=len(pre_rows)
+                put(client,pre_key,pre)
             heartbeat("training_started",candidate_id=cand["candidate_id"])
             model,train=train_lora(model,tokenizer,cand,pack,cfg,train_cases,deadline,heartbeat)
             put(client,f"{prefix}/models/{cand['candidate_id']}/training_summary.json",train)
