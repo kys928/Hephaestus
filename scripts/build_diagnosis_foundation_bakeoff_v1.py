@@ -95,7 +95,7 @@ def build_pack()->dict[str,Any]:
     zero=list(originals)
     for root in EXPECTED:
         zero.extend(variant(root,"zero_shot",i) for i in range(1,5))
-    train=[variant(root,"train",i) for root in EXPECTED for i in range(1,13)]
+    train=[variant(root,"micro_lora_train",i) for root in EXPECTED for i in range(1,13)]
     held=[variant(root,"held_out",i) for root in EXPECTED for i in range(1,9)]
     pack={
         "protocol_id":"hephaestus_diagnosis_foundation_bakeoff_v1",
