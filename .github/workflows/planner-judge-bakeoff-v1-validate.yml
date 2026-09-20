@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: python -m pip install --quiet pytest
+      - run: python -m pip install --quiet -e '.[test,s3]'
       - run: python scripts/build_planner_judge_bakeoff_v1.py
       - run: python scripts/validate_planner_judge_bakeoff_v1.py
       - run: python -m py_compile scripts/build_planner_judge_bakeoff_v1.py scripts/validate_planner_judge_bakeoff_v1.py scripts/run_planner_judge_bakeoff_v1.py scripts/launch_planner_judge_bakeoff_v1.py
