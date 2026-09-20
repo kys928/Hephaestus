@@ -3,10 +3,19 @@
   "authorized": true,
   "authorization_source": "user_directive",
   "authorization_text": "The smart next experiment is zero-shot diagnosis battery → identical micro-LoRA → held-out diagnosis battery.",
-  "authorized_at": "2026-09-20T09:33:00+02:00",
+  "authorized_at": "2026-09-20T16:01:00+02:00",
   "launch_scope": "single_bounded_zero_shot_bakeoff",
   "stage2_not_authorized_until_gate": true,
   "max_estimated_total_usd": 0.65,
   "max_hourly_usd": 0.85,
-  "candidate_count": 4
+  "candidate_count": 4,
+  "attempt_number": 2,
+  "rerun_purpose": "Repeat the identical 120-case zero-shot diagnosis bakeoff after evaluator/chat compatibility corrections only.",
+  "compatibility_corrections": {
+    "markdown_json_normalization": true,
+    "explicit_global_contract_vocabulary": true,
+    "phi_max_new_tokens": 1536,
+    "frozen_cases_expected_answers_seed_and_model_revisions_unchanged": true
+  },
+  "previous_run_id": "diagnosis-foundation-v1-35497153907"
 }
