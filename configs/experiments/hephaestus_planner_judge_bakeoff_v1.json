@@ -1,0 +1,303 @@
+{
+  "protocol_id": "hephaestus_planner_judge_bakeoff_v1",
+  "protocol_version": 1,
+  "purpose": "Select sub-10B foundation models for Hephaestus Planner and Judge by measuring adversarial zero-shot role fit and matched micro-LoRA adaptability on untouched held-out role cases.",
+  "scientific_scope": {
+    "screening_and_adaptability_only": true,
+    "certification_claim_allowed": false,
+    "production_promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "launch_prepared_but_not_authorized": true
+  },
+  "pack": {
+    "builder_path": "scripts/build_planner_judge_bakeoff_v1.py",
+    "canonical_sha256": "PENDING_STATIC_FREEZE",
+    "zero_shot_cases_per_role": 32,
+    "micro_lora_train_cases_per_role": 80,
+    "held_out_cases_per_role": 48,
+    "held_out_never_train": true,
+    "root_families_per_role": 8
+  },
+  "candidate_registry": [
+    {
+      "candidate_id": "nemotron-cascade-8b",
+      "model_id": "nvidia/Nemotron-Cascade-8B",
+      "revision": "276a779fe0c1fe2d63a68fd573fec7b4b0a1907e",
+      "observed_hf_license": "other",
+      "declared_license": "nvidia-open-model-license",
+      "license_review_required_before_promotion": true,
+      "load_kind": "causal_lm",
+      "model_type": "qwen3",
+      "parameter_count": 8190735360,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "roles": {
+        "planner": {
+          "chat_template_kwargs": {
+            "enable_thinking": true
+          },
+          "decoding": {
+            "do_sample": true,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        },
+        "judge": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "decoding": {
+            "do_sample": false
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        }
+      }
+    },
+    {
+      "candidate_id": "olmo3-7b-instruct",
+      "model_id": "allenai/Olmo-3-7B-Instruct",
+      "revision": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
+      "observed_hf_license": "apache-2.0",
+      "declared_license": "apache-2.0",
+      "license_review_required_before_promotion": false,
+      "load_kind": "causal_lm",
+      "model_type": "olmo3",
+      "parameter_count": 7298011136,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "roles": {
+        "planner": {
+          "chat_template_kwargs": {},
+          "decoding": {
+            "do_sample": false
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        },
+        "judge": {
+          "chat_template_kwargs": {},
+          "decoding": {
+            "do_sample": false
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        }
+      }
+    },
+    {
+      "candidate_id": "smollm3-3b",
+      "model_id": "HuggingFaceTB/SmolLM3-3B",
+      "revision": "a07cc9a04f16550a088caea529712d1d335b0ac1",
+      "observed_hf_license": "apache-2.0",
+      "declared_license": "apache-2.0",
+      "license_review_required_before_promotion": false,
+      "load_kind": "causal_lm",
+      "model_type": "smollm3",
+      "parameter_count": 3075098624,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "roles": {
+        "planner": {
+          "chat_template_kwargs": {
+            "enable_thinking": true
+          },
+          "decoding": {
+            "do_sample": true,
+            "temperature": 0.6,
+            "top_p": 0.95
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        },
+        "judge": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "decoding": {
+            "do_sample": false
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        }
+      }
+    },
+    {
+      "candidate_id": "ministral3-8b-reasoning",
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "observed_hf_license": "apache-2.0",
+      "declared_license": "apache-2.0",
+      "license_review_required_before_promotion": false,
+      "load_kind": "mistral3",
+      "model_type": "mistral3",
+      "parameter_count": 8918026240,
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ],
+      "roles": {
+        "planner": {
+          "chat_template_kwargs": {},
+          "decoding": {
+            "do_sample": true,
+            "temperature": 0.7,
+            "top_p": 0.95
+          },
+          "reasoning_projection": [
+            "[/THINK]",
+            "</think>"
+          ]
+        }
+      }
+    },
+    {
+      "candidate_id": "phi4-mini-instruct",
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "observed_hf_license": "mit",
+      "declared_license": "mit",
+      "license_review_required_before_promotion": false,
+      "load_kind": "causal_lm",
+      "model_type": "phi3",
+      "parameter_count": 3836021760,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$",
+      "roles": {
+        "judge": {
+          "chat_template_kwargs": {},
+          "decoding": {
+            "do_sample": false
+          },
+          "reasoning_projection": [
+            "</think>"
+          ]
+        }
+      }
+    }
+  ],
+  "role_rosters": {
+    "planner": [
+      "nemotron-cascade-8b",
+      "olmo3-7b-instruct",
+      "smollm3-3b",
+      "ministral3-8b-reasoning"
+    ],
+    "judge": [
+      "olmo3-7b-instruct",
+      "phi4-mini-instruct",
+      "smollm3-3b",
+      "nemotron-cascade-8b"
+    ]
+  },
+  "hypotheses": {
+    "planner_leading_candidate": "nemotron-cascade-8b",
+    "judge_leading_candidate": "olmo3-7b-instruct",
+    "hypotheses_are_not_selection_results": true
+  },
+  "evaluation": {
+    "seed": 11,
+    "max_new_tokens_by_role": {
+      "planner": 1024,
+      "judge": 512
+    },
+    "normalize_single_complete_json": true,
+    "expose_global_contract_vocabulary": true,
+    "expose_case_specific_expected_values": false,
+    "score_every_sample_immediately": true,
+    "report_root_skill_breakdown": true,
+    "zero_shot_partition": "zero_shot",
+    "adaptability_pre_partition": "held_out",
+    "adaptability_post_partition": "held_out",
+    "exact_same_held_out_cases_pre_post": true
+  },
+  "training": {
+    "apply_to_every_candidate_role_pair": true,
+    "method": "lora",
+    "precision": "bfloat16",
+    "seed": 11,
+    "lora_rank": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00005,
+    "weight_decay": 0,
+    "optimizer_steps": 32,
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "max_sequence_length": 768,
+    "padded_training_token_slots_per_pair": 98304,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "train_only_assistant_contract": true,
+    "same_examples_within_role": true,
+    "same_step_count": true,
+    "same_padded_token_slots": true,
+    "train_vision": false
+  },
+  "comparison": {
+    "primary_metrics": [
+      "held_out_quality_100_post",
+      "quality_gain",
+      "gain_per_1000_supervised_tokens"
+    ],
+    "report": [
+      "zero_shot_quality_100",
+      "held_out_quality_100_pre",
+      "held_out_quality_100_post",
+      "quality_gain",
+      "gain_per_1000_supervised_tokens",
+      "gain_per_optimizer_step",
+      "gain_per_training_minute",
+      "schema_compliance_pre_post",
+      "evidence_grounding_pre_post",
+      "hallucination_pre_post",
+      "confidence_calibration_pre_post",
+      "exact_contract_pass_pre_post",
+      "latency_pre_post",
+      "root_skill_pre_post",
+      "mastered_capability_regressions",
+      "trainable_parameter_count",
+      "peak_training_vram_bytes"
+    ],
+    "selection_rule": "rank within each role; do not compare Planner scores directly with Judge scores",
+    "no_automatic_selection_commit": true,
+    "no_automatic_promotion": true
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 220,
+    "network_volume_attached": false,
+    "persistent_model_cache_allowed_within_single_pod_only": true,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 10800,
+    "materialization_stall_seconds": 900,
+    "max_hourly_usd": 1.5,
+    "max_estimated_total_usd": 4.5,
+    "s3_prefix": "hephaestus/scientific/v1/planner_judge_bakeoff"
+  },
+  "governance": {
+    "paid_launch_allowed": false,
+    "explicit_launch_command_required": true,
+    "authorization_source": null,
+    "authorization_text": null,
+    "screening_only": true,
+    "certification_claim_allowed": false,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false
+  }
+}
