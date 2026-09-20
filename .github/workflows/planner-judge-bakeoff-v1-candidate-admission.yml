@@ -1,0 +1,54 @@
+name: Planner Judge Bakeoff V1 candidate admission
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/planner-judge-bakeoff-v1-candidate-admission.yml
+permissions:
+  contents: read
+jobs:
+  admit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+      - run: python -m pip install --quiet 'transformers==5.17.0' 'huggingface-hub==1.31.0' 'accelerate==1.15.0' 'mistral-common==1.11.7'
+      - name: Resolve immutable identities and runtime metadata
+        run: |
+          python - <<'PY'
+          import json
+          from huggingface_hub import HfApi
+          from transformers import AutoConfig, AutoTokenizer
+          models=[
+            "nvidia/Nemotron-Cascade-8B",
+            "allenai/Olmo-3-7B-Instruct",
+            "HuggingFaceTB/SmolLM3-3B",
+            "mistralai/Ministral-3-8B-Reasoning-2512",
+            "microsoft/Phi-4-mini-instruct",
+          ]
+          api=HfApi()
+          for mid in models:
+              info=api.model_info(mid,files_metadata=True)
+              cfg=AutoConfig.from_pretrained(mid,revision=info.sha,trust_remote_code=False)
+              tok=AutoTokenizer.from_pretrained(mid,revision=info.sha,trust_remote_code=False)
+              sf=getattr(info,"safetensors",None)
+              params=getattr(sf,"parameters",None) if sf else None
+              total=getattr(sf,"total",None) if sf else None
+              lic=str(getattr(getattr(info,"card_data",None),"license","") or "")
+              row={
+                "model_id":mid,
+                "revision":str(info.sha),
+                "license":lic,
+                "model_type":getattr(cfg,"model_type",None),
+                "architectures":getattr(cfg,"architectures",None),
+                "hidden_size":getattr(cfg,"hidden_size",None),
+                "num_hidden_layers":getattr(cfg,"num_hidden_layers",None),
+                "vocab_size":getattr(cfg,"vocab_size",None),
+                "tokenizer_class":type(tok).__name__,
+                "safetensors_total":total,
+                "safetensors_parameters":params,
+              }
+              print("PJ_ADMISSION_JSON "+json.dumps(row,sort_keys=True))
+          PY
