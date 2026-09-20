@@ -1,0 +1,163 @@
+{
+  "protocol_id": "hephaestus_diagnosis_adaptability_v1",
+  "protocol_version": 1,
+  "purpose": "Measure matched micro-LoRA adaptability of Granite 4.2 3B and Ministral 3 3B Reasoning on the frozen Hephaestus diagnosis curriculum.",
+  "parent_zero_shot": {
+    "protocol_id": "hephaestus_diagnosis_foundation_bakeoff_v1",
+    "run_id": "diagnosis-foundation-v1-35515098798",
+    "result_key": "hephaestus/scientific/v1/diagnosis_foundation_bakeoff/diagnosis-foundation-v1-35515098798/result.json",
+    "pack_sha256": "b1a1909c2fd89640a7c1981c5c9de8f951bf1083a8a76c5be653456ca42fcf8c",
+    "preserve_gate_result": true,
+    "note": "Granite passed the frozen Stage-1 gate. Ministral is included here by explicit user authorization as a paired adaptability challenger; this does not retroactively change its Stage-1 gate result."
+  },
+  "pack": {
+    "builder_path": "scripts/build_diagnosis_foundation_bakeoff_v1.py",
+    "train_partition": "micro_lora_train",
+    "held_out_partition": "held_out",
+    "expected_train_cases": 72,
+    "expected_held_out_cases": 48,
+    "held_out_never_train": true
+  },
+  "candidates": [
+    {
+      "candidate_id": "granite42-3b",
+      "model_id": "ibm-granite/granite-4.2-3b",
+      "revision": "e459acceac81e5fe67c07d9cfc72329a332e7eb1",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {
+        "enable_thinking": true,
+        "low_effort": true
+      },
+      "decoding": {
+        "do_sample": true,
+        "temperature": 1,
+        "top_p": 0.95
+      },
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$"
+    },
+    {
+      "candidate_id": "ministral3-3b-reasoning",
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ]
+    }
+  ],
+  "contract_vocabulary": {
+    "decision": [
+      "inconclusive",
+      "data_quality",
+      "tokenizer",
+      "evaluation_integrity"
+    ],
+    "action": [
+      "collect_more_evidence",
+      "repair_data",
+      "change_tokenizer",
+      "repair_evaluation"
+    ],
+    "primary_variable": [
+      "evidence",
+      "data_quality_filter",
+      "tokenizer",
+      "evaluation_protocol"
+    ]
+  },
+  "training": {
+    "seed": 11,
+    "lora_rank": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00005,
+    "optimizer_steps": 32,
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "max_sequence_length": 768,
+    "padded_training_token_slots": 98304,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "weight_decay": 0,
+    "same_examples": true,
+    "same_step_count": true,
+    "same_padded_token_slots": true,
+    "train_language_attention_only": true,
+    "train_vision": false
+  },
+  "evaluation": {
+    "seed": 11,
+    "max_new_tokens": 512,
+    "pre_train_partition": "held_out",
+    "post_train_partition": "held_out",
+    "exact_same_cases_pre_post": true,
+    "store_every_sample": true
+  },
+  "comparison": {
+    "primary_metric": "held_out_quality_gain_per_1000_supervised_tokens",
+    "report": [
+      "held_out_quality_100_pre",
+      "held_out_quality_100_post",
+      "quality_gain",
+      "gain_per_1000_supervised_tokens",
+      "gain_per_optimizer_step",
+      "gain_per_training_minute",
+      "causal_restraint_pre_post",
+      "evidence_grounding_pre_post",
+      "d5_admissibility_pre_post",
+      "d6_evaluation_integrity_pre_post",
+      "confidence_calibration_pre_post",
+      "schema_compliance_pre_post",
+      "exact_contract_pass_pre_post",
+      "latency_pre_post",
+      "peak_training_vram_bytes",
+      "trainable_parameter_count",
+      "mastered_capability_regressions"
+    ],
+    "no_automatic_promotion": true
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA GeForce RTX 3090",
+      "NVIDIA GeForce RTX 4090"
+    ],
+    "minimum_gpu_memory_gib": 22,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 4800,
+    "materialization_stall_seconds": 600,
+    "max_hourly_usd": 0.85,
+    "max_estimated_total_usd": 0.95,
+    "s3_prefix": "hephaestus/scientific/v1/diagnosis_adaptability"
+  },
+  "governance": {
+    "paid_launch_allowed": true,
+    "authorization_source": "user_directive",
+    "authorization_text": "Run the same micro-LoRA on both Granite and Ministral with 72 training cases, rank 8, alpha 16, 32 optimizer steps, learning rate 5e-5, seed 11, same training-token budget, and 48 untouched held-out adversarial cases.",
+    "screening_only": true,
+    "certification_claim_allowed": false,
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false
+  }
+}
