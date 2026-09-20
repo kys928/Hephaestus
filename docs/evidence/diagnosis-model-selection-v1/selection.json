@@ -1,0 +1,102 @@
+{
+  "record_id": "diagnosis-model-selection-v1",
+  "recorded_at": "2026-09-20",
+  "status": "frozen_selection_evidence",
+  "role": "diagnosis",
+  "selection": {
+    "candidate_id": "ministral3-3b-reasoning",
+    "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+    "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+    "license": "apache-2.0",
+    "disposition": "selected_candidate_for_role_specific_fine_tuning",
+    "production_certified": false,
+    "automatic_promotion_performed": false
+  },
+  "evidence": {
+    "foundation_bakeoff_run_id": "diagnosis-foundation-v1-35515098798",
+    "adaptability_run_id": "diagnosis-adaptability-v1-35525671435",
+    "adaptability_result_key": "hephaestus/scientific/v1/diagnosis_adaptability/diagnosis-adaptability-v1-35525671435/result.json",
+    "pack_sha256": "b1a1909c2fd89640a7c1981c5c9de8f951bf1083a8a76c5be653456ca42fcf8c",
+    "selected_adapter": {
+      "s3_key": "hephaestus/scientific/v1/diagnosis_adaptability/diagnosis-adaptability-v1-35525671435/models/ministral3-3b-reasoning/adapter.tar.gz",
+      "sha256": "15f29e4a12b912a8c4b917833676b5eefb40017cc6ace3467fe2a51beed7cd8e",
+      "bytes": 17325878
+    }
+  },
+  "matched_intervention": {
+    "training_cases": 72,
+    "held_out_cases": 48,
+    "lora_rank": 8,
+    "lora_alpha": 16,
+    "optimizer_steps": 32,
+    "learning_rate": 0.00005,
+    "seed": 11,
+    "padded_training_token_slots_per_candidate": 98304
+  },
+  "comparison": {
+    "ministral3-3b-reasoning": {
+      "held_out_quality_pre": 88.95833333333333,
+      "held_out_quality_post": 99.47916666666667,
+      "quality_gain": 10.520833333333343,
+      "gain_per_1000_supervised_tokens": 0.7824507908175921,
+      "gain_per_optimizer_step": 0.32877604166666696,
+      "gain_per_training_minute": 14.76619285440062,
+      "schema_post": 1,
+      "evidence_grounding_post": 0.9652777777777778,
+      "hallucination_post": 0.03472222222222223,
+      "exact_contract_post": 0.8958333333333334,
+      "confidence_calibration_post": 1,
+      "latency_seconds_post": 3.4808010482035265,
+      "mastered_capability_regressions": {},
+      "roots_post": {
+        "D1": 96.875,
+        "D2": 100,
+        "D3": 100,
+        "D4": 100,
+        "D5": 100,
+        "D6": 100
+      }
+    },
+    "granite42-3b": {
+      "held_out_quality_pre": 70.20833333333333,
+      "held_out_quality_post": 73.95833333333333,
+      "quality_gain": 3.75,
+      "gain_per_1000_supervised_tokens": 0.2926029962546816,
+      "gain_per_optimizer_step": 0.1171875,
+      "gain_per_training_minute": 4.535180703497781,
+      "schema_post": 0.7708333333333334,
+      "evidence_grounding_post": 0.75,
+      "hallucination_post": 0.25,
+      "exact_contract_post": 0.5416666666666666,
+      "confidence_calibration_post": 0.5833333333333334,
+      "latency_seconds_post": 22.750027204456273,
+      "mastered_capability_regressions": {
+        "D3": -50.625
+      },
+      "roots_post": {
+        "D1": 74.375,
+        "D2": 76.25,
+        "D3": 40.625,
+        "D4": 94.375,
+        "D5": 72.5,
+        "D6": 85.625
+      }
+    }
+  },
+  "selection_basis": [
+    "higher held-out post-LoRA diagnosis quality",
+    "larger adaptation gain under the matched LoRA intervention",
+    "higher adaptation gain per supervised-token update",
+    "perfect post-LoRA schema compliance",
+    "higher post-LoRA evidence grounding",
+    "lower post-LoRA hallucination rate",
+    "perfect confidence calibration on the held-out set",
+    "no regressions in previously mastered capabilities",
+    "substantially lower diagnosis latency"
+  ],
+  "boundaries": {
+    "selection_is_not_production_certification": true,
+    "selection_is_not_automatic_promotion": true,
+    "next_stage": "diagnosis_role_specific_fine_tuning_and_independent_certification"
+  }
+}

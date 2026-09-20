@@ -1,0 +1,15 @@
+{
+  "selection_id": "diagnosis-model-selection-v1",
+  "role": "diagnosis",
+  "status": "selected_candidate_for_role_specific_fine_tuning",
+  "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+  "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+  "license": "apache-2.0",
+  "evidence_record": "docs/evidence/diagnosis-model-selection-v1/selection.json",
+  "evidence_run_id": "diagnosis-adaptability-v1-35525671435",
+  "frozen_eval_pack_sha256": "b1a1909c2fd89640a7c1981c5c9de8f951bf1083a8a76c5be653456ca42fcf8c",
+  "selected_adapter_sha256": "15f29e4a12b912a8c4b917833676b5eefb40017cc6ace3467fe2a51beed7cd8e",
+  "production_certified": false,
+  "promotion_allowed": false,
+  "next_stage": "role_specific_fine_tuning_then_independent_certification"
+}
