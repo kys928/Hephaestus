@@ -1,0 +1,40 @@
+name: Diagnosis Adaptability V1 Mistral training-template admission
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnosis-adaptability-v1-mistral-template.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet 'transformers==5.17.0' 'mistral-common==1.11.7' 'huggingface-hub==1.31.0'
+      - name: Exercise pinned Ministral training transcript
+        run: |
+          python - <<'PY'
+          import importlib.util,json
+          from pathlib import Path
+          from transformers import MistralCommonBackend
+          root=Path('.')
+          cfg=json.loads((root/'configs/experiments/hephaestus_diagnosis_adaptability_v1.json').read_text())
+          cand=next(x for x in cfg['candidates'] if x['candidate_id']=='ministral3-3b-reasoning')
+          spec=importlib.util.spec_from_file_location('pack',root/cfg['pack']['builder_path'])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          pack=mod.build_pack();mod.validate(pack)
+          rspec=importlib.util.spec_from_file_location('runner',root/'scripts/run_diagnosis_adaptability_v1.py')
+          runner=importlib.util.module_from_spec(rspec);rspec.loader.exec_module(runner)
+          tokenizer=MistralCommonBackend.from_pretrained(cand['model_id'],revision=cand['revision'])
+          case=pack['partitions']['micro_lora_train'][0]
+          user=runner.stage1.prompt(pack,case,{'contract_vocabulary':cfg['contract_vocabulary']})
+          answer=runner.expected_answer(case)
+          prompt=runner.template_ids(tokenizer,cand,[{'role':'user','content':user}],True)
+          full=runner.template_ids(tokenizer,cand,[{'role':'user','content':user},{'role':'assistant','content':answer}],False)
+          assert len(full)>len(prompt)>0
+          print('MISTRAL_TRAINING_TEMPLATE_JSON '+json.dumps({'status':'valid','prompt_tokens':len(prompt),'full_tokens':len(full),'supervised_suffix_tokens':len(full)-len(prompt)},sort_keys=True))
+          PY
