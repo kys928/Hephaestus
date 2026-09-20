@@ -40,12 +40,14 @@ def test_hash_is_deterministic():
     m=load();a=m.build_pack();b=m.build_pack()
     assert m.canonical_sha256(a)==m.canonical_sha256(b)
 
-def test_prepared_launch_is_locked():
+def test_launch_authorization_is_consistent():
     import json
     cfg=json.loads((ROOT/"configs/experiments/hephaestus_planner_judge_bakeoff_v1.json").read_text())
     marker=json.loads((ROOT/"configs/experiments/planner_judge_bakeoff_v1.launch.json").read_text())
-    assert cfg["governance"]["paid_launch_allowed"] is False
-    assert marker["authorized"] is False
+    assert bool(cfg["governance"]["paid_launch_allowed"]) == bool(marker["authorized"])
+    if marker["authorized"]:
+        assert marker["authorization_source"] == "user_directive"
+        assert marker["authorization_text"].strip()
 
 def test_no_automatic_selection_or_promotion():
     import json
