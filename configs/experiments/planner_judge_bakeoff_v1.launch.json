@@ -1,8 +1,9 @@
 {
   "protocol_id": "hephaestus_planner_judge_bakeoff_v1",
-  "authorized": false,
+  "authorized": true,
   "launch_scope": "full_zero_shot_plus_matched_micro_lora_bakeoff",
-  "authorization_source": null,
-  "note": "Prepared only. Set authorized=true only after explicit user launch command.",
-  "expected_repo_protocol": "configs/experiments/hephaestus_planner_judge_bakeoff_v1.json"
+  "authorization_source": "user_directive",
+  "note": "Explicit user authorization granted for the frozen full zero-shot plus matched micro-LoRA Planner/Judge bakeoff.",
+  "expected_repo_protocol": "configs/experiments/hephaestus_planner_judge_bakeoff_v1.json",
+  "authorization_text": "approval granted initiate launch."
 }

@@ -7,7 +7,7 @@
     "certification_claim_allowed": false,
     "production_promotion_allowed": false,
     "lineage_mutation_allowed": false,
-    "launch_prepared_but_not_authorized": true
+    "launch_prepared_but_not_authorized": false
   },
   "pack": {
     "builder_path": "scripts/build_planner_judge_bakeoff_v1.py",
@@ -290,10 +290,10 @@
     "s3_prefix": "hephaestus/scientific/v1/planner_judge_bakeoff"
   },
   "governance": {
-    "paid_launch_allowed": false,
+    "paid_launch_allowed": true,
     "explicit_launch_command_required": true,
-    "authorization_source": null,
-    "authorization_text": null,
+    "authorization_source": "user_directive",
+    "authorization_text": "approval granted initiate launch.",
     "screening_only": true,
     "certification_claim_allowed": false,
     "promotion_allowed": false,
