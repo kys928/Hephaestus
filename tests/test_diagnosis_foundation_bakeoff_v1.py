@@ -20,3 +20,45 @@ def test_only_clean_foundations_are_stage2_candidates():
     c=json.loads((ROOT/"configs/experiments/hephaestus_diagnosis_foundation_bakeoff_v1.json").read_text())
     assert [x["candidate_id"] for x in c["candidates"] if x["adaptation_candidate"]]==["granite42-3b","ministral3-3b-reasoning"]
     assert c["stage2_plan"]["paid_launch_allowed_now"] is False
+
+
+def test_contract_vocabulary_is_global_and_complete():
+    c=json.loads((ROOT/"configs/experiments/hephaestus_diagnosis_foundation_bakeoff_v1.json").read_text())
+    p=load_builder().build_pack()
+    for axis in ("decision","action","primary_variable"):
+        expected={row["expected"][axis] for rows in p["partitions"].values() for row in rows}
+        assert expected <= set(c["contract_vocabulary"][axis])
+
+
+def test_phi_gets_bounded_reasoning_compatibility_budget():
+    c=json.loads((ROOT/"configs/experiments/hephaestus_diagnosis_foundation_bakeoff_v1.json").read_text())
+    phi=next(x for x in c["candidates"] if x["candidate_id"]=="phi4-mini-reasoning-control")
+    assert phi["max_new_tokens_override"] == 1536
+
+
+def test_runner_normalizes_fenced_json_without_changing_values():
+    import importlib.util
+    p=ROOT/"scripts/run_diagnosis_foundation_bakeoff_v1.py"
+    s=importlib.util.spec_from_file_location("runner",p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+    raw='''```json
+{"decision":"tokenizer","action":"change_tokenizer","primary_variable":"tokenizer","confidence":0.9,"evidence_refs":["E1"],"uncertainties":[],"rationale":"x"}
+```'''
+    normalized,meta=m.extract_complete_json(raw)
+    obj=json.loads(normalized)
+    assert meta["extracted"] is True
+    assert obj["decision"]=="tokenizer"
+    assert obj["action"]=="change_tokenizer"
+    assert set(obj)==set(m.topo.REQUIRED_KEYS)
+
+
+def test_prompt_exposes_only_global_contract_vocabulary_not_case_answer():
+    import importlib.util
+    pth=ROOT/"scripts/run_diagnosis_foundation_bakeoff_v1.py"
+    s=importlib.util.spec_from_file_location("runner2",pth);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+    c=json.loads((ROOT/"configs/experiments/hephaestus_diagnosis_foundation_bakeoff_v1.json").read_text())
+    pack=load_builder().build_pack(); case=pack["partitions"]["zero_shot"][0]
+    pr=m.prompt(pack,case,c)
+    for axis in ("decision","action","primary_variable"):
+        for value in c["contract_vocabulary"][axis]:
+            assert value in pr
+    assert "The vocabulary list is global and does not imply which value is correct here." in pr
