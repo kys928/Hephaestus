@@ -11,7 +11,7 @@
   },
   "pack": {
     "builder_path": "scripts/build_planner_judge_bakeoff_v1.py",
-    "canonical_sha256": "PENDING_STATIC_FREEZE",
+    "canonical_sha256": "1723aa1da329e0440d27073a62f74c1e0666a7649c55a00f9f9f55d6400ed749",
     "zero_shot_cases_per_role": 32,
     "micro_lora_train_cases_per_role": 80,
     "held_out_cases_per_role": 48,
