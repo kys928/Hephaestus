@@ -56,6 +56,49 @@ def project(raw:str,candidate:dict[str,Any])->str:
         if i>=0: best=max(best,i+len(str(delim)))
     return (raw[best:] if best>=0 else raw).strip()
 
+def extract_complete_json(raw:str)->tuple[str,dict[str,Any]]:
+    """Normalize presentation wrappers without changing decision semantics."""
+    text=raw.strip()
+    if text.startswith("~~~") or text.startswith("```"):
+        lines=text.splitlines()
+        if lines and (lines[0].strip().startswith("```") or lines[0].strip().startswith("~~~")):
+            lines=lines[1:]
+        if lines and (lines[-1].strip().startswith("```") or lines[-1].strip().startswith("~~~")):
+            lines=lines[:-1]
+        text="\n".join(lines).strip()
+    candidates=[]
+    depth=0; start=None; in_string=False; escape=False
+    for i,ch in enumerate(text):
+        if in_string:
+            if escape: escape=False
+            elif ch=="\\": escape=True
+            elif ch=='"': in_string=False
+            continue
+        if ch=='"':
+            in_string=True; continue
+        if ch=="{":
+            if depth==0:start=i
+            depth+=1
+        elif ch=="}" and depth:
+            depth-=1
+            if depth==0 and start is not None:
+                snippet=text[start:i+1]
+                try:
+                    obj=json.loads(snippet)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(obj,dict): candidates.append((snippet,obj))
+                start=None
+    required=set(topo.REQUIRED_KEYS)
+    valid=[x for x in candidates if set(x[1])==required]
+    chosen=(valid or candidates)
+    if not chosen:
+        return text,{"extracted":False,"candidate_count":0,"reason":"no_complete_json_object"}
+    snippet,obj=chosen[-1]
+    normalized=json.dumps(obj,ensure_ascii=False,separators=(",",":"))
+    return normalized,{"extracted":True,"candidate_count":len(candidates),"exact_key_match":set(obj)==required}
+
 def materialize(candidate:dict[str,Any],root:Path)->tuple[Path,Path|None,dict[str,Any]]:
     if candidate["load_kind"]!="peft_adapter":
         snap,manifest=base.materialize_model(candidate,root)
@@ -124,10 +167,12 @@ def generate(model:Any,tokenizer:Any,candidate:dict[str,Any],prompt:str,seed:int
     total=finished-started
     return {"raw_output":raw,"generated_tokens":n,"prompt_tokens":width,"finish_reason":reason,"stop_token_id":final if final in ids else None,"configured_eos_token_ids":sorted(ids),"total_latency_seconds":total,"ttft_seconds":(clock.first-started if clock.first else total),"tokens_per_second":n/total if total else 0.0,"peak_vram_bytes":int(torch.cuda.max_memory_allocated())}
 
-def prompt(pack:dict[str,Any],case:dict[str,Any])->str:
+def prompt(pack:dict[str,Any],case:dict[str,Any],cfg:dict[str,Any])->str:
     evidence="\n".join(f"- {x['ref']}: {x['fact']}" for x in case["evidence"])
     allowed=", ".join(case["allowed_evidence_refs"])
     keys=", ".join(pack["response_schema"]["required_exact_keys"])
+    vocab=cfg["contract_vocabulary"]
+    decisions=", ".join(vocab["decision"]); actions=", ".join(vocab["action"]); variables=", ".join(vocab["primary_variable"])
     return f"""You are acting only as the Hephaestus DIAGNOSIS role.
 ROLE BOUNDARY:
 {pack['role_rule']}
@@ -137,13 +182,15 @@ EVIDENCE:
 {evidence}
 Return exactly one JSON object and nothing else. Do not use markdown or code fences.
 The object must contain exactly these keys: {keys}.
-- decision: string
-- action: string
-- primary_variable: string
+Use the Hephaestus contract vocabulary exactly; do not paraphrase enum values:
+- decision MUST be one of: {decisions}
+- action MUST be one of: {actions}
+- primary_variable MUST be one of: {variables}
 - confidence: JSON number from 0 to 1
 - evidence_refs: JSON array. Cite only material evidence; relevant refs are a subset of: {allowed}
 - uncertainties: JSON array of short strings; use [] only when no material uncertainty remains
 - rationale: one concise string; do not invent evidence
+Select values from the evidence. The vocabulary list is global and does not imply which value is correct here.
 Do not reveal hidden reasoning. Give only the requested decision record."""
 
 def summary(rows:list[dict[str,Any]],cfg:dict[str,Any])->dict[str,Any]:
@@ -179,10 +226,13 @@ def main()->int:
             for ix,case in enumerate(cases,1):
                 if time.monotonic()>=deadline: raise TimeoutError("bakeoff hard wall during probes")
                 heartbeat("probe_started",candidate_id=slug,case_id=case["case_id"],case_index=ix)
-                gen=generate(model,tokenizer,cand,prompt(pack,case),seed,int(cfg["generation"]["max_new_tokens"]),deadline)
-                out=project(gen.pop("raw_output"),cand)
-                score=topo.score_response(pack,case,out)
-                row={"sample_version":"diagnosis-foundation-zero-shot.v1","candidate_id":slug,"model_id":cand["model_id"],"revision":cand["revision"],"case_id":case["case_id"],"root_case_id":case["root_case_id"],"condition":case["condition"],"seed":seed,"output":out,"generation":gen,"score":score}
+                max_new=int(cand.get("max_new_tokens_override",cfg["generation"]["max_new_tokens"]))
+                gen=generate(model,tokenizer,cand,prompt(pack,case,cfg),seed,max_new,deadline)
+                raw=gen.pop("raw_output")
+                projected=project(raw,cand)
+                normalized,extraction=extract_complete_json(projected)
+                score=topo.score_response(pack,case,normalized)
+                row={"sample_version":"diagnosis-foundation-zero-shot.v2","candidate_id":slug,"model_id":cand["model_id"],"revision":cand["revision"],"case_id":case["case_id"],"root_case_id":case["root_case_id"],"condition":case["condition"],"seed":seed,"raw_output":raw,"projected_output":projected,"output":normalized,"extraction":extraction,"generation":gen,"score":score}
                 rows.append(row);completed+=1;put(client,f"{prefix}/samples/{slug}/{ix:03d}-{case['case_id']}.json",row)
                 heartbeat("probe_complete",candidate_id=slug,case_id=case["case_id"],case_index=ix,quality_100=score["quality_100"],schema_compliant=score["schema_compliant"])
             sm=summary(rows,cfg);result["candidate_summaries"][slug]=sm;put(client,f"{prefix}/models/{slug}/summary.json",sm)
