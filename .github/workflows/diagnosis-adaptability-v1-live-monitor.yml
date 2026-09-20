@@ -1,0 +1,115 @@
+name: Diagnosis Adaptability V1 live monitor
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnosis-adaptability-v1-live-monitor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      TARGET_RUN_ID: diagnosis-adaptability-v1-35525671435
+      S3_PREFIX: hephaestus/scientific/v1/diagnosis_adaptability
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet boto3
+      - name: Snapshot live RunPod and S3
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request, boto3
+          from datetime import timezone
+          from botocore.config import Config
+          def req(n):
+              v=(os.environ.get(n) or '').strip()
+              if not v: raise RuntimeError('missing '+n)
+              return v
+          base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          headers={'Authorization':'Bearer '+req('RUNPOD_API_KEY'),'Accept':'application/json','User-Agent':'Hephaestus-Diagnosis-Adaptability-Monitor/1.0'}
+          def get(url):
+              q=urllib.request.Request(url,headers=headers,method='GET')
+              with urllib.request.urlopen(q,timeout=30) as r: return json.load(r)
+          payload=get(base+'/pods')
+          rows=(payload.get('pods') or payload.get('items') or payload.get('data') or []) if isinstance(payload,dict) else payload
+          pods=[]
+          for p in rows:
+              if not isinstance(p,dict): continue
+              pid=str(p.get('id') or '')
+              detail={}
+              if pid:
+                  try: detail=get(base+'/pods/'+pid)
+                  except Exception as e: detail={'detail_error':type(e).__name__+': '+str(e)}
+              pods.append({'id':pid,'name':p.get('name'),'desiredStatus':p.get('desiredStatus'),'lastStatusChange':p.get('lastStatusChange'),'costPerHr':detail.get('costPerHr'),'gpuCount':detail.get('gpuCount'),'machineId':detail.get('machineId'),'imageName':detail.get('imageName')})
+          run=req('TARGET_RUN_ID')
+          target=[p for p in pods if run in str(p.get('name') or '')]
+          s3=boto3.client('s3',endpoint_url=req('RUNPOD_S3_ENDPOINT_URL').rstrip('/'),region_name=req('RUNPOD_DATACENTER_ID'),aws_access_key_id=req('RUNPOD_S3_ACCESS_KEY_ID'),aws_secret_access_key=req('RUNPOD_S3_SECRET_ACCESS_KEY'),config=Config(retries={'mode':'standard','max_attempts':8}))
+          bucket=req('RUNPOD_NETWORK_VOLUME_ID')
+          prefix=req('S3_PREFIX').rstrip('/')+'/'+run+'/'
+          objects=[]
+          for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=prefix):
+              for item in page.get('Contents',[]):
+                  lm=item.get('LastModified')
+                  objects.append({'key':item['Key'],'bytes':int(item.get('Size') or 0),'last_modified':lm.astimezone(timezone.utc).isoformat() if lm else None})
+          objects=sorted(objects,key=lambda x:(x.get('last_modified') or '',x['key']))
+          def read_json(key):
+              try: return json.loads(s3.get_object(Bucket=bucket,Key=key)['Body'].read())
+              except Exception: return None
+          result=read_json(prefix+'result.json')
+          progress=read_json(prefix+'progress.json')
+          snap={'target_run_id':run,'runpod':{'all_pods':pods,'target_pods':target},'s3':{'bucket_id':bucket,'prefix':prefix,'object_count':len(objects),'total_bytes':sum(x['bytes'] for x in objects),'recent_objects':objects[-30:],'progress':progress,'result':result}}
+          print('DIAG_ADAPT_LIVE_JSON '+json.dumps(snap,sort_keys=True))
+          open('diagnosis_adaptability_live.json','w').write(json.dumps(snap,indent=2,sort_keys=True))
+          open('target_pod_ids.txt','w').write(''.join(str(p['id'])+'\n' for p in target if p.get('id')))
+          PY
+      - name: Capture container progress markers
+        run: |
+          : > diagnosis_adaptability_markers.jsonl
+          while IFS= read -r POD_ID; do
+            [ -z "$POD_ID" ] && continue
+            RAW="runpod_${POD_ID}_container.sse"
+            set +e
+            curl -sS -N --max-time 10 -H "Authorization: Bearer $RUNPOD_API_KEY" -H 'Accept: text/event-stream' "https://api.runpod.io/v2/pods/${POD_ID}/logs?tail=5000&source=container" > "$RAW"
+            STATUS=$?
+            set -e
+            python - "$POD_ID" "$RAW" <<'PY'
+          import json,sys
+          pod,path=sys.argv[1:]
+          rows=[]
+          for raw in open(path,encoding='utf-8',errors='replace'):
+              if not raw.startswith('data: '): continue
+              try: e=json.loads(raw[6:])
+              except Exception: continue
+              line=str(e.get('line') or '')
+              if 'DIAG_ADAPT_' in line:
+                  rows.append({'pod_id':pod,'ts':e.get('ts'),'line':line})
+          with open('diagnosis_adaptability_markers.jsonl','a') as out:
+              for row in rows[-100:]: out.write(json.dumps(row,sort_keys=True)+'\n')
+          print('DIAG_ADAPT_MARKERS pod='+pod+' count='+str(len(rows)))
+          for row in rows[-20:]: print(json.dumps(row,sort_keys=True))
+          PY
+            echo "LOG_STREAM_STATUS pod=${POD_ID} status=${STATUS} bytes=$(wc -c < "$RAW")"
+          done < target_pod_ids.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnosis-adaptability-v1-live-monitor
+          path: |
+            diagnosis_adaptability_live.json
+            diagnosis_adaptability_markers.jsonl
+            runpod_*_container.sse
+          if-no-files-found: error
+          retention-days: 14
