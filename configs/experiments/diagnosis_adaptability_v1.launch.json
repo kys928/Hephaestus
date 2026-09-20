@@ -11,5 +11,8 @@
     "ministral3-3b-reasoning"
   ],
   "max_estimated_total_usd": 0.95,
-  "no_automatic_promotion": true
+  "no_automatic_promotion": true,
+  "resume_run_id": "diagnosis-adaptability-v1-35525671435",
+  "resume_reason": "Original launch monitor hit a transient S3 FlexibleChecksumError after Granite completed; resume must preserve Granite and run only missing Ministral candidate.",
+  "resume_authorized_at": "2026-09-20T21:26:00+02:00"
 }
