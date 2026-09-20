@@ -39,3 +39,22 @@ def test_judge_contains_hard_gate_and_stage_boundary_cases():
 def test_hash_is_deterministic():
     m=load();a=m.build_pack();b=m.build_pack()
     assert m.canonical_sha256(a)==m.canonical_sha256(b)
+
+def test_prepared_launch_is_locked():
+    import json
+    cfg=json.loads((ROOT/"configs/experiments/hephaestus_planner_judge_bakeoff_v1.json").read_text())
+    marker=json.loads((ROOT/"configs/experiments/planner_judge_bakeoff_v1.launch.json").read_text())
+    assert cfg["governance"]["paid_launch_allowed"] is False
+    assert marker["authorized"] is False
+
+def test_no_automatic_selection_or_promotion():
+    import json
+    cfg=json.loads((ROOT/"configs/experiments/hephaestus_planner_judge_bakeoff_v1.json").read_text())
+    assert cfg["comparison"]["no_automatic_selection_commit"] is True
+    assert cfg["comparison"]["no_automatic_promotion"] is True
+
+def test_pinned_pack_hash():
+    import json
+    m=load();p=m.build_pack()
+    cfg=json.loads((ROOT/"configs/experiments/hephaestus_planner_judge_bakeoff_v1.json").read_text())
+    assert m.canonical_sha256(p)==cfg["pack"]["canonical_sha256"]=="1723aa1da329e0440d27073a62f74c1e0666a7649c55a00f9f9f55d6400ed749"

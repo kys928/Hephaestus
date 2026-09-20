@@ -7,7 +7,10 @@ on:
       - configs/experiments/hephaestus_planner_judge_bakeoff_v1.json
       - configs/experiments/planner_judge_bakeoff_v1.launch.json
       - scripts/validate_planner_judge_bakeoff_v1.py
+      - scripts/run_planner_judge_bakeoff_v1.py
+      - scripts/launch_planner_judge_bakeoff_v1.py
       - tests/test_planner_judge_bakeoff_v1.py
+      - .github/workflows/planner-judge-bakeoff-v1-launch.yml
       - .github/workflows/planner-judge-bakeoff-v1-validate.yml
 permissions:
   contents: read
@@ -23,4 +26,6 @@ jobs:
       - run: python -m pip install --quiet pytest
       - run: python scripts/build_planner_judge_bakeoff_v1.py
       - run: python scripts/validate_planner_judge_bakeoff_v1.py
+      - run: python -m py_compile scripts/build_planner_judge_bakeoff_v1.py scripts/validate_planner_judge_bakeoff_v1.py scripts/run_planner_judge_bakeoff_v1.py scripts/launch_planner_judge_bakeoff_v1.py
       - run: pytest -q tests/test_planner_judge_bakeoff_v1.py
+      - run: python scripts/launch_planner_judge_bakeoff_v1.py
