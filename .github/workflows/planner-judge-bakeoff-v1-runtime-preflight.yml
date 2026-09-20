@@ -5,18 +5,22 @@ on:
     paths:
       - .github/workflows/planner-judge-bakeoff-v1-runtime-preflight.yml
       - configs/experiments/hephaestus_planner_judge_bakeoff_v1.json
+      - scripts/build_planner_judge_bakeoff_v1.py
+      - scripts/run_planner_judge_bakeoff_v1.py
 permissions:
   contents: read
 jobs:
   preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
-      - run: python -m pip install --quiet 'transformers==5.17.0' 'huggingface-hub==1.31.0' 'accelerate==1.15.0' 'mistral-common==1.11.7'
+      - run: python -m pip install --quiet -e '.[s3]' 'transformers==5.17.0' 'huggingface-hub==1.31.0' 'accelerate==1.15.0' 'mistral-common==1.11.7'
       - name: Verify target surfaces and chat templates
         run: |
           python - <<'PY'
@@ -55,4 +59,34 @@ jobs:
                       raise SystemExit(f"training template prefix/suffix invalid for {cand['candidate_id']} {role}: lcp={lcp} prompt={len(p)} full={len(f)}")
                   role_rows[role]={'prompt_tokens':len(p),'full_tokens':len(f),'lcp':lcp,'assistant_suffix_tokens':len(f)-lcp}
               print('PJ_RUNTIME_PREFLIGHT_JSON '+json.dumps({'candidate_id':cand['candidate_id'],'model_type':getattr(acfg,'model_type',None),'matched_lora_modules':len(matched),'first_targets':matched[:8],'roles':role_rows},sort_keys=True))
+          PY
+      - name: Tokenize every real micro-LoRA training case
+        run: |
+          python - <<'PY'
+          import importlib.util,json
+          from pathlib import Path
+          from transformers import AutoTokenizer,MistralCommonBackend
+          root=Path('.')
+          cfg=json.loads((root/'configs/experiments/hephaestus_planner_judge_bakeoff_v1.json').read_text())
+          ps=importlib.util.spec_from_file_location('pack',root/cfg['pack']['builder_path'])
+          pm=importlib.util.module_from_spec(ps);ps.loader.exec_module(pm);pack=pm.build_pack();pm.validate(pack)
+          rs=importlib.util.spec_from_file_location('runner',root/'scripts/run_planner_judge_bakeoff_v1.py')
+          rm=importlib.util.module_from_spec(rs);rs.loader.exec_module(rm)
+          registry={x['candidate_id']:x for x in cfg['candidate_registry']}
+          maxlen=int(cfg['training']['max_sequence_length'])
+          for role in ('planner','judge'):
+              for cid in cfg['role_rosters'][role]:
+                  cand=rm.runtime_candidate(registry[cid],role)
+                  tok=(MistralCommonBackend.from_pretrained(cand['model_id'],revision=cand['revision']) if cand['load_kind']=='mistral3'
+                       else AutoTokenizer.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False))
+                  lengths=[];supervised=[]
+                  for case in pack['partitions'][role]['micro_lora_train']:
+                      ex=rm.training_example(tok,cand,pack,case,maxlen)
+                      lengths.append(int(ex['nonpad_tokens']));supervised.append(int(ex['supervised_tokens']))
+                  print('PJ_CURRICULUM_TOKENIZATION_JSON '+json.dumps({
+                    'role':role,'candidate_id':cid,'cases':len(lengths),
+                    'max_nonpad_tokens':max(lengths),'min_nonpad_tokens':min(lengths),
+                    'max_supervised_tokens':max(supervised),'min_supervised_tokens':min(supervised),
+                    'max_sequence_length':maxlen
+                  },sort_keys=True))
           PY
