@@ -12,7 +12,13 @@ def main():
     need([x["candidate_id"] for x in c["candidates"]]==["granite42-3b","ministral3-3b-reasoning","causeanalyzer-7b-control","phi4-mini-reasoning-control"],"candidate order drift")
     need(sum(bool(x.get("adaptation_candidate")) for x in c["candidates"])==2,"exactly two foundations may advance to matched LoRA")
     need(c["candidates"][2]["base_model_id"]=="mistralai/Mistral-7B-Instruct-v0.1","CauseAnalyzer base drift")
-    need(c["generation"]["max_new_tokens"]<=512,"generation cap drift")
+    need(c["generation"]["max_new_tokens"]<=512,"default generation cap drift")
+    vocab=c["contract_vocabulary"]
+    expected_values={axis:{row["expected"][axis] for split in p["partitions"].values() for row in split} for axis in ("decision","action","primary_variable")}
+    for axis in expected_values:
+        need(expected_values[axis] <= set(vocab[axis]), f"contract vocabulary missing expected {axis} values")
+    phi=next(x for x in c["candidates"] if x["candidate_id"]=="phi4-mini-reasoning-control")
+    need(phi.get("max_new_tokens_override")==1536,"Phi compatibility budget drift")
     e=c["execution"];need(e["hard_wall_seconds"]<=2700 and e["max_estimated_total_usd"]<=0.65 and e["max_hourly_usd"]<=0.85,"cost bound drift")
     need(not any("H100" in x or "H200" in x or "B200" in x for x in e["gpu_type_ids"]),"expensive GPU fallback forbidden")
     need(c["stage2_plan"]["paid_launch_allowed_now"] is False,"stage2 may not launch before zero-shot evidence")
