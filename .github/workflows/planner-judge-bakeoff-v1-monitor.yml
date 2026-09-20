@@ -37,7 +37,7 @@ jobs:
           target_pods=[{k:p.get(k) for k in ('id','name','desiredStatus','costPerHr','gpu')} for p in pods if target in str(p.get('name',''))]
           client=storage.s3_client()
           prefix=f'hephaestus/scientific/v1/planner_judge_bakeoff/{target}/'
-          resp=client.list_objects_v2(Bucket=storage.bucket(),Prefix=prefix)
+          resp=client.list_objects_v2(Bucket=storage.VOLUME_ID,Prefix=prefix)
           objs=[{'key':x['Key'],'size':x['Size']} for x in resp.get('Contents',[])]
           progress=None;result=None
           for key,name in ((prefix+'progress.json','progress'),(prefix+'result.json','result')):
