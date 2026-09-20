@@ -1,0 +1,27 @@
+name: Diagnosis Adaptability V1 validate
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - configs/experiments/hephaestus_diagnosis_adaptability_v1.json
+      - scripts/run_diagnosis_adaptability_v1.py
+      - scripts/validate_diagnosis_adaptability_v1.py
+      - scripts/launch_diagnosis_adaptability_v1.py
+      - tests/test_diagnosis_adaptability_v1.py
+      - .github/workflows/diagnosis-adaptability-v1-validate.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env: {PYTHONPATH: src}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test,s3]'
+      - run: python scripts/validate_diagnosis_adaptability_v1.py
+      - run: python -m py_compile scripts/run_diagnosis_adaptability_v1.py scripts/launch_diagnosis_adaptability_v1.py
+      - run: pytest -q tests/test_diagnosis_adaptability_v1.py
+      - run: python scripts/launch_diagnosis_adaptability_v1.py
