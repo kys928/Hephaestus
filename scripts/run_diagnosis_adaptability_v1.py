@@ -269,6 +269,25 @@ def main()->int:
     put(client,f"{prefix}/run_manifest.json",{"protocol":cfg,"repo_sha":repo_sha,"pack_sha256":pack_sha,"parent_result":parent})
     try:
         for ci,cand in enumerate(cfg["candidates"],1):
+            existing_key=f"{prefix}/models/{cand['candidate_id']}/result.json"
+            try:
+                existing_raw=base.read_s3(client,existing_key)
+            except Exception as exc:
+                response=getattr(exc,"response",{})
+                code=str(response.get("Error",{}).get("Code","")) if isinstance(response,dict) else ""
+                if code not in {"404","NoSuchKey","NotFound"}:
+                    raise
+                existing_raw=None
+            if existing_raw:
+                existing=json.loads(existing_raw)
+                if existing.get("candidate_id")!=cand["candidate_id"]:
+                    raise RuntimeError("persisted candidate result identity mismatch")
+                if existing.get("pre",{}).get("sample_count")!=48 or existing.get("post",{}).get("sample_count")!=48:
+                    raise RuntimeError("persisted candidate result is not a complete 48/48 held-out comparison")
+                result["candidate_results"][cand["candidate_id"]]=existing
+                completed_eval+=96
+                heartbeat("candidate_resume_skip",candidate_id=cand["candidate_id"],candidate_index=ci,reason="complete_candidate_result_already_persisted")
+                continue
             root=Path("/opt/hephaestus-diagnosis-adaptability")/run_id/cand["candidate_id"]
             heartbeat("materializing_model",candidate_id=cand["candidate_id"],candidate_index=ci)
             snap,adapter,manifest=stage1.materialize(cand,root/"model");put(client,f"{prefix}/models/{cand['candidate_id']}/model_manifest.json",manifest)

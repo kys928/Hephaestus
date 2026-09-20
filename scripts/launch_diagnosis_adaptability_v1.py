@@ -13,11 +13,24 @@ ROOT=Path(__file__).resolve().parents[1]
 CFG=ROOT/"configs/experiments/hephaestus_diagnosis_adaptability_v1.json"
 AUTH="HEPHAESTUS_DIAG_ADAPT_LAUNCH_AUTHORIZED"
 TERMINAL={"EXITED","FAILED","TERMINATED","STOPPED"}
+RESUME_ENV="HEPHAESTUS_DIAG_ADAPT_RESUME_RUN_ID"
 def req(k):
     v=(os.environ.get(k) or "").strip()
     if not v: raise RuntimeError("missing "+k)
     return v
 def load(): return json.loads(CFG.read_text())
+def resilient_maybe_read(client,key,attempts=5):
+    last=None
+    for i in range(attempts):
+        try:
+            return storage.maybe_read_key(client,key)
+        except Exception as exc:
+            if type(exc).__name__!="FlexibleChecksumError":
+                raise
+            last=exc
+            print("DIAG_ADAPT_S3_CHECKSUM_RETRY "+json.dumps({"key":key,"attempt":i+1,"error":str(exc)},sort_keys=True),flush=True)
+            time.sleep(min(2.0**i,8.0))
+    raise last
 def shell()->str:
     return r'''set -Eeuo pipefail
 export HF_HOME=/opt/hephaestus-cache/huggingface
@@ -68,7 +81,7 @@ def body(c,name,e):
     return b
 def execute(c):
     if os.environ.get(AUTH)!="YES" or c["governance"]["paid_launch_allowed"] is not True: raise RuntimeError("paid adaptability run not authorized")
-    repo=req("GITHUB_SHA");gid=req("GITHUB_RUN_ID");run_id=f"diagnosis-adaptability-v1-{gid}"
+    repo=req("GITHUB_SHA");gid=req("GITHUB_RUN_ID");run_id=(os.environ.get(RESUME_ENV) or "").strip() or f"diagnosis-adaptability-v1-{gid}"
     prefix=f"{c['execution']['s3_prefix'].rstrip('/')}/{run_id}";result_key=f"{prefix}/result.json";progress_key=f"{prefix}/progress.json"
     ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider());client=storage.s3_client();b=body(c,"hephaestus-"+run_id,env(repo,run_id,True))
     pod_id=None;started=time.monotonic();rec={"launcher_version":"diagnosis-adaptability-launcher.v1","run_id":run_id,"repo_sha":repo,"result_key":result_key,"status":"starting","gpu_type_ids":b["gpuTypeIds"]}
@@ -83,13 +96,13 @@ def execute(c):
                 hourly=float(snap["costPerHr"]);estimated=hourly*elapsed/3600;rec.update(cost_per_hr=hourly,estimated_cost_usd=estimated)
                 if hourly>float(c["execution"]["max_hourly_usd"]): raise RuntimeError(f"hourly cost ceiling exceeded: {hourly}")
                 if estimated>float(c["execution"]["max_estimated_total_usd"]): raise RuntimeError(f"total cost ceiling exceeded: {estimated}")
-            raw=storage.maybe_read_key(client,progress_key)
+            raw=resilient_maybe_read(client,progress_key)
             if raw:
                 p=json.loads(raw);rec["last_progress"]=p
                 if p.get("stage")=="materializing_model":
                     age=time.time()-float(p.get("timestamp_unix",time.time()));rec["materialization_age_seconds"]=age
                     if age>float(c["execution"]["materialization_stall_seconds"]): raise TimeoutError(f"model materialization stalled {age:.1f}s")
-            terminal=storage.maybe_read_key(client,result_key)
+            terminal=resilient_maybe_read(client,result_key)
             if terminal:
                 rec["result"]=json.loads(terminal);rec["status"]="completed";print("DIAG_ADAPT_LAUNCH_RESULT_JSON "+json.dumps(rec,sort_keys=True),flush=True);return rec
             if str(snap.get("desiredStatus","")).upper() in TERMINAL: raise RuntimeError("pod became terminal before S3 result")
@@ -100,7 +113,7 @@ def execute(c):
             if not td.get("verified_absent"): raise RuntimeError("pod teardown unverified")
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--execute",action="store_true");args=ap.parse_args();c=load()
-    repo=os.environ.get("GITHUB_SHA","<sha>");rid=f"diagnosis-adaptability-v1-{os.environ.get('GITHUB_RUN_ID','<run>')}"
+    repo=os.environ.get("GITHUB_SHA","<sha>");rid=(os.environ.get(RESUME_ENV) or "").strip() or f"diagnosis-adaptability-v1-{os.environ.get('GITHUB_RUN_ID','<run>')}"
     b=body(c,"hephaestus-"+rid,env(repo,rid))
     if not args.execute:
         print(json.dumps({"mode":"render_only","protocol_id":c["protocol_id"],"request":b,"limits":c["execution"]},indent=2));return

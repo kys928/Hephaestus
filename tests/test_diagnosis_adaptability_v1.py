@@ -34,3 +34,15 @@ def test_ministral_target_excludes_vision():
     assert "model.vision_tower." in m["exclude_module_prefixes"]
 def test_no_automatic_promotion():
     assert cfg()["comparison"]["no_automatic_promotion"] is True
+
+def test_launcher_has_checksum_retry_and_resume_support():
+    src=(ROOT/"scripts/launch_diagnosis_adaptability_v1.py").read_text()
+    assert "FlexibleChecksumError" in src
+    assert "HEPHAESTUS_DIAG_ADAPT_RESUME_RUN_ID" in src
+    assert "resilient_maybe_read" in src
+
+def test_runner_can_skip_complete_persisted_candidate():
+    src=(ROOT/"scripts/run_diagnosis_adaptability_v1.py").read_text()
+    assert "candidate_resume_skip" in src
+    assert "complete_candidate_result_already_persisted" in src
+    assert 'completed_eval+=96' in src
