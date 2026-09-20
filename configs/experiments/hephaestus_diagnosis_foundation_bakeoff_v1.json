@@ -97,7 +97,8 @@
         "temperature": 0.8,
         "top_p": 0.95,
         "top_k": 50
-      }
+      },
+      "max_new_tokens_override": 1536
     }
   ],
   "generation": {
@@ -170,5 +171,33 @@
     "authorization_text": "The smart next experiment is zero-shot diagnosis battery → identical micro-LoRA → held-out diagnosis battery.",
     "stage1_authorized": true,
     "stage2_authorized_conditionally_on_zero_shot_gate": true
+  },
+  "contract_vocabulary": {
+    "decision": [
+      "inconclusive",
+      "data_quality",
+      "tokenizer",
+      "evaluation_integrity"
+    ],
+    "action": [
+      "collect_more_evidence",
+      "repair_data",
+      "change_tokenizer",
+      "repair_evaluation"
+    ],
+    "primary_variable": [
+      "evidence",
+      "data_quality_filter",
+      "tokenizer",
+      "evaluation_protocol"
+    ]
+  },
+  "compatibility_policy": {
+    "extract_single_complete_json_object": true,
+    "strip_markdown_code_fences": true,
+    "score_only_normalized_json": true,
+    "case_specific_expected_values_exposed": false,
+    "global_contract_vocabulary_exposed": true,
+    "phi_reasoning_budget_rationale": "Phi-4-mini-reasoning routinely exhausted 512 tokens inside <think>; 1536 allows a final decision record while remaining bounded."
   }
 }
