@@ -13,6 +13,8 @@
   "max_estimated_total_usd": 0.95,
   "no_automatic_promotion": true,
   "resume_run_id": "diagnosis-adaptability-v1-35525671435",
-  "resume_reason": "Original launch monitor hit a transient S3 FlexibleChecksumError after Granite completed; resume must preserve Granite and run only missing Ministral candidate.",
-  "resume_authorized_at": "2026-09-20T21:26:00+02:00"
+  "resume_reason": "Resume from preserved Granite complete result and Ministral complete pre-LoRA summary after fixing and CPU-validating Mistral assistant-final training encoding.",
+  "resume_authorized_at": "2026-09-20T21:47:00+02:00",
+  "resume_expected_completed_eval_samples": 144,
+  "resume_remaining_work": "Ministral 32-step matched micro-LoRA plus 48 post-LoRA held-out cases"
 }
