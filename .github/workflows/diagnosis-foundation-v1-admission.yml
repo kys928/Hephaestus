@@ -1,0 +1,56 @@
+name: Diagnosis Foundation V1 model admission
+
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - .github/workflows/diagnosis-foundation-v1-admission.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve immutable Hugging Face identities
+        run: |
+          python -m pip install --quiet huggingface_hub
+          python - <<'PY'
+          import json
+          from huggingface_hub import HfApi
+          api=HfApi()
+          ids=[
+            "ibm-granite/granite-4.2-3b",
+            "mistralai/Ministral-3-3B-Reasoning-2512",
+            "Esperanto/Mistral-7B-CauseAnalyzer",
+            "mistralai/Mistral-7B-Instruct-v0.1",
+            "microsoft/Phi-4-mini-reasoning",
+          ]
+          rows=[]
+          for model_id in ids:
+              info=api.model_info(model_id, files_metadata=True)
+              siblings=[]
+              for s in info.siblings or []:
+                  siblings.append({
+                      "rfilename": s.rfilename,
+                      "size": getattr(s, "size", None),
+                  })
+              rows.append({
+                  "model_id": model_id,
+                  "sha": info.sha,
+                  "pipeline_tag": info.pipeline_tag,
+                  "library_name": info.library_name,
+                  "gated": info.gated,
+                  "private": info.private,
+                  "tags": list(info.tags or []),
+                  "safetensors": getattr(info, "safetensors", None),
+                  "siblings": siblings,
+              })
+          print("DIAGNOSIS_FOUNDATION_ADMISSION_JSON "+json.dumps(rows,sort_keys=True,default=str))
+          PY
