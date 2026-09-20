@@ -1,0 +1,29 @@
+name: Diagnosis Foundation Bakeoff V1 validate
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - scripts/build_diagnosis_foundation_bakeoff_v1.py
+      - scripts/run_diagnosis_foundation_bakeoff_v1.py
+      - scripts/launch_diagnosis_foundation_bakeoff_v1.py
+      - scripts/validate_diagnosis_foundation_bakeoff_v1.py
+      - configs/experiments/hephaestus_diagnosis_foundation_bakeoff_v1.json
+      - tests/test_diagnosis_foundation_bakeoff_v1.py
+      - .github/workflows/diagnosis-foundation-bakeoff-v1-validate.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test,s3]'
+      - run: python scripts/validate_diagnosis_foundation_bakeoff_v1.py
+      - run: python -m py_compile scripts/build_diagnosis_foundation_bakeoff_v1.py scripts/run_diagnosis_foundation_bakeoff_v1.py scripts/launch_diagnosis_foundation_bakeoff_v1.py
+      - run: pytest -q tests/test_diagnosis_foundation_bakeoff_v1.py
+      - run: python scripts/launch_diagnosis_foundation_bakeoff_v1.py
