@@ -1,0 +1,101 @@
+{
+  "protocol_id": "hephaestus_role_mastery_phase1_v1",
+  "protocol_version": 1,
+  "stack_ref": "configs/models/hephaestus_role_model_stack_v1.json",
+  "purpose": "Train and independently certify each frozen Hephaestus cognitive role before any pipeline/co-adaptation training.",
+  "pack": {
+    "builder_path": "scripts/build_role_mastery_phase1_v1.py",
+    "canonical_sha256": "PENDING_FREEZE",
+    "train_cases_per_role": 600,
+    "dev_cases_per_role": 100,
+    "cert_cases_per_role": 150,
+    "skills_per_role": 10,
+    "certification_never_train": true
+  },
+  "training": {
+    "method": "lora",
+    "precision": "bfloat16",
+    "seed": 271828,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "target_module_suffixes": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "qkv_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "optimizer": "AdamW",
+    "learning_rate": 0.00002,
+    "weight_decay": 0.01,
+    "epochs": [
+      1,
+      2
+    ],
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "max_sequence_length": 1024,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "train_only_assistant_contract": true,
+    "select_epoch_on": "dev_quality_with_hard_gates"
+  },
+  "evaluation": {
+    "dev_seed": 29,
+    "certification_seeds": [
+      11,
+      29,
+      47
+    ],
+    "temperature": 0,
+    "do_sample": false,
+    "max_new_tokens_by_role": {
+      "controller": 384,
+      "diagnosis": 512,
+      "planner": 512,
+      "evaluator": 512,
+      "judge": 384
+    },
+    "score_every_case": true,
+    "report_per_skill": true,
+    "hard_gates": {
+      "schema_compliance": 1,
+      "max_hallucination_rate": 0.02,
+      "min_evidence_grounding": 0.98
+    },
+    "certification_thresholds": {
+      "min_quality_100": 92,
+      "min_exact_contract_pass_rate": 0.7,
+      "min_skill_quality_100": 80,
+      "max_mastered_regression_points": 5
+    }
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 160,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 14400,
+    "max_hourly_usd": 1.5,
+    "max_estimated_role_usd": 3,
+    "s3_prefix": "hephaestus/scientific/v1/role_mastery_phase1"
+  },
+  "governance": {
+    "training_explicitly_requested": true,
+    "authorization_source": "user_directive_2026-09-21_phase_i_role_mastery",
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "production_certification_claim_allowed": false
+  }
+}
