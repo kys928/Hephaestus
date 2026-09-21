@@ -1,0 +1,112 @@
+name: Post-training red-team V1
+on:
+  push:
+    branches: [experiment-post-training-redteam-v1]
+    paths:
+      - configs/experiments/hephaestus_post_training_redteam_v1.json
+      - configs/experiments/post_training_redteam_v1.launch.json
+      - scripts/build_post_training_redteam_v1.py
+      - scripts/run_post_training_redteam_v1.py
+      - scripts/launch_post_training_redteam_v1.py
+      - scripts/aggregate_post_training_redteam_v1.py
+      - tests/test_post_training_redteam_v1.py
+      - .github/workflows/post-training-redteam-v1.yml
+permissions: {contents: read}
+concurrency:
+  group: post-training-redteam-v1
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: contains(github.event.head_commit.message, '[launch-post-training-redteam-v1]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]' pytest
+      - name: Validate frozen audit and certified adapter objects
+        run: |
+          python - <<'PY'
+          import importlib.util,json
+          from pathlib import Path
+          import launch_first_bounded_scientific_training as storage
+          root=Path('.')
+          cfg=json.loads((root/'configs/experiments/hephaestus_post_training_redteam_v1.json').read_text())
+          marker=json.loads((root/'configs/experiments/post_training_redteam_v1.launch.json').read_text())
+          s=importlib.util.spec_from_file_location('pack',root/cfg['pack']['builder_path'])
+          m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+          pack=m.build_pack();m.validate(pack)
+          observed=m.canonical_sha256(pack)
+          assert observed==cfg['pack']['canonical_sha256']==marker['pack_sha256']
+          assert sum(len(x) for x in pack['cases'].values())==600
+          assert cfg['governance']['inference_only'] is True
+          assert cfg['governance']['training_allowed'] is False
+          assert cfg['governance']['optimizer_use_allowed'] is False
+          assert marker['authorized'] is True and marker['inference_only'] is True
+          client=storage.s3_client()
+          for role,cand in cfg['candidates'].items():
+              art=cand['adapter']
+              head=client.head_object(Bucket=storage.VOLUME_ID,Key=art['s3_key'])
+              assert int(head['ContentLength'])==int(art['bytes']),(role,head['ContentLength'],art['bytes'])
+              assert len(art['sha256'])==64
+              print('REDTEAM_PREFLIGHT_ADAPTER_JSON '+json.dumps({'role':role,'model_id':cand['model_id'],'revision':cand['revision'],'bytes':art['bytes'],'sha256':art['sha256']},sort_keys=True))
+          print('REDTEAM_PREFLIGHT_JSON '+json.dumps({'pack_sha256':observed,'total_cases':600,'inference_only':True},sort_keys=True))
+          PY
+      - run: python scripts/build_post_training_redteam_v1.py
+      - run: python -m pytest -q tests/test_post_training_redteam_v1.py
+      - run: python -m py_compile scripts/build_post_training_redteam_v1.py scripts/run_post_training_redteam_v1.py scripts/launch_post_training_redteam_v1.py scripts/aggregate_post_training_redteam_v1.py
+
+  audit:
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        role: [controller, diagnosis, planner, evaluator, judge]
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HEPHAESTUS_POST_TRAINING_REDTEAM_AUTHORIZED: 'YES'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/launch_post_training_redteam_v1.py --role ${{ matrix.role }} --execute
+
+  aggregate:
+    needs: [preflight, audit]
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_POST_TRAINING_REDTEAM_RUN_ID: post-training-redteam-v1-${{ github.run_id }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/aggregate_post_training_redteam_v1.py
