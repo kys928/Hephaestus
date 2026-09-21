@@ -1,4 +1,4 @@
-name: Post-training red-team V1 monitor\n# check-2
+name: Post-training red-team V1 monitor\n# check-3
 on:
   push:
     branches: [experiment-post-training-redteam-v1]
