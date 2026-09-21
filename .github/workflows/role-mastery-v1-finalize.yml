@@ -1,0 +1,101 @@
+name: Phase I Role Mastery V1 Finalize
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths: [.github/workflows/role-mastery-v1-finalize.yml]
+permissions: {contents: read}
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - name: Verify certified adapters and teardown
+        run: |
+          python - <<'PY'
+          import hashlib,json,tempfile
+          from pathlib import Path
+          import launch_first_bounded_scientific_training as storage
+          import launch_adaptation_elasticity_v1 as lifecycle
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
+
+          run_id='role-mastery-v1-35596791201'
+          frozen_sha='c831bbfc0e2054d54fccd1ef374fd84722612c79'
+          roles=['controller','diagnosis','planner','evaluator','judge']
+          cfg=json.loads(Path('configs/experiments/hephaestus_role_mastery_v1.json').read_text())
+          client=storage.s3_client()
+          base=f"{cfg['execution']['s3_prefix'].rstrip('/')}/{run_id}"
+          agg=json.loads(storage.read_key(client,f'{base}/result.json'))
+          assert agg['status']=='completed'
+          assert agg['all_roles_completed'] is True
+          assert agg['all_roles_certified'] is True
+
+          verified={}
+          with tempfile.TemporaryDirectory() as td:
+              td=Path(td)
+              for role in roles:
+                  result=json.loads(storage.read_key(client,f'{base}/roles/{role}/result.json'))
+                  assert result['status']=='completed', (role,result.get('status'))
+                  assert result['repo_sha']==frozen_sha, (role,result.get('repo_sha'))
+                  assert result['model_id']==cfg['candidates'][role]['model_id']
+                  assert result['revision']==cfg['candidates'][role]['revision']
+                  assert result['certification']['passed'] is True
+                  assert all(result['certification']['gates'].values())
+                  art=result['selected_adapter']
+                  dest=td/f'{role}.tar.gz'
+                  client.download_file(storage.VOLUME_ID,art['s3_key'],str(dest))
+                  h=hashlib.sha256(dest.read_bytes()).hexdigest()
+                  assert h==art['sha256'], (role,h,art['sha256'])
+                  assert dest.stat().st_size==int(art['bytes'])
+                  verified[role]={
+                    'model_id':result['model_id'],
+                    'revision':result['revision'],
+                    'selected_dev_step':result['selected_dev_step'],
+                    'adapter_s3_key':art['s3_key'],
+                    'adapter_sha256':art['sha256'],
+                    'adapter_bytes':art['bytes'],
+                    'certification_quality_100':result['certification_summary']['quality_100'],
+                    'schema_compliance':result['certification_summary']['schema_compliance'],
+                    'evidence_grounding':result['certification_summary']['evidence_grounding'],
+                    'hallucination_rate':result['certification_summary']['hallucination_rate'],
+                    'observed_min_skill_quality':result['certification']['observed_min_skill_quality'],
+                  }
+
+          ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
+          pods=lifecycle.list_pods_with_retries(ex)
+          prefix=f'hephaestus-role-mastery-'
+          targets=[p for p in pods if prefix in str(p.get('name','')) and run_id in str(p.get('name',''))]
+          cleanup=[]
+          for p in targets:
+              cleanup.append({'pod_id':str(p['id']),**lifecycle.delete_pod_with_retries(ex,str(p['id']))})
+          remaining=lifecycle.list_pods_with_retries(ex)
+          dangling=[str(p.get('id')) for p in remaining if prefix in str(p.get('name','')) and run_id in str(p.get('name',''))]
+          assert not dangling, dangling
+          assert all(x.get('verified_absent') for x in cleanup)
+
+          print('ROLE_MASTERY_FINALIZATION_JSON '+json.dumps({
+             'run_id':run_id,
+             'frozen_repo_sha':frozen_sha,
+             'aggregate_verified':True,
+             'all_roles_completed':True,
+             'all_roles_certified':True,
+             'adapters':verified,
+             'matched_pods_before_cleanup':[str(p.get('id')) for p in targets],
+             'cleanup':cleanup,
+             'dangling_pods':dangling,
+             'production_promotion_performed':False
+          },sort_keys=True))
+          PY
