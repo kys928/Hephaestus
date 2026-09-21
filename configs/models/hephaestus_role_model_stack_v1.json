@@ -1,0 +1,41 @@
+{
+  "stack_id": "hephaestus-role-model-stack-v1",
+  "status": "frozen_selected_foundations_for_role_specific_fine_tuning",
+  "evidence_record": "docs/evidence/role-model-stack-v1/selection.json",
+  "roles": {
+    "controller": {
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "apache-2.0",
+      "status": "selected_for_role_specific_fine_tuning"
+    },
+    "diagnosis": {
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "status": "selected_for_role_specific_fine_tuning"
+    },
+    "planner": {
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "license": "apache-2.0",
+      "status": "selected_for_role_specific_fine_tuning"
+    },
+    "evaluator": {
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "license": "apache-2.0",
+      "status": "selected_for_role_specific_fine_tuning"
+    },
+    "judge": {
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "mit",
+      "status": "selected_for_role_specific_fine_tuning"
+    }
+  },
+  "production_certified": false,
+  "promotion_allowed": false,
+  "final_role_adapters_trained": false,
+  "next_stage": "role_specific_data_factory_and_fine_tuning"
+}

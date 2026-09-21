@@ -1,0 +1,127 @@
+{
+  "record_id": "hephaestus-role-model-stack-v1",
+  "recorded_at": "2026-09-21",
+  "status": "frozen_selected_foundations_for_role_specific_fine_tuning",
+  "scope": "Five-model cognitive stack selected for Hephaestus role-specific fine-tuning. This record is not production certification.",
+  "constraints": {
+    "preferred_parameter_ceiling": "<10B parameters per role model",
+    "production_certified": false,
+    "automatic_promotion_performed": false,
+    "final_role_adapters_not_yet_trained": true
+  },
+  "stack": {
+    "controller": {
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "apache-2.0",
+      "role_status": "selected_for_role_specific_fine_tuning",
+      "selection_basis": "Prior cognitive-topology/adaptation-elasticity/distance-to-role evidence plus explicit final stack decision.",
+      "evidence_refs": [
+        "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+        "configs/experiments/hephaestus_adaptation_elasticity_v1.json",
+        "configs/experiments/hephaestus_distance_to_role_v1.json"
+      ],
+      "evidence_runs": {
+        "topology": "cognitive-topology-v1-34953477882",
+        "elasticity": "adaptation-elasticity-v1-34961824753"
+      }
+    },
+    "diagnosis": {
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "role_status": "selected_for_role_specific_fine_tuning",
+      "selection_basis": "Dedicated diagnosis foundation bakeoff plus matched micro-LoRA adaptability experiment.",
+      "evidence_refs": [
+        "docs/evidence/diagnosis-model-selection-v1/selection.json",
+        "configs/models/diagnosis_selected_candidate_v1.json"
+      ],
+      "evidence_runs": {
+        "foundation_bakeoff": "diagnosis-foundation-v1-35515098798",
+        "adaptability": "diagnosis-adaptability-v1-35525671435"
+      },
+      "evidence_adapter": {
+        "sha256": "15f29e4a12b912a8c4b917833676b5eefb40017cc6ace3467fe2a51beed7cd8e",
+        "s3_key": "hephaestus/scientific/v1/diagnosis_adaptability/diagnosis-adaptability-v1-35525671435/models/ministral3-3b-reasoning/adapter.tar.gz"
+      }
+    },
+    "planner": {
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "license": "apache-2.0",
+      "role_status": "selected_for_role_specific_fine_tuning",
+      "selection_basis": "Dedicated Planner/Judge bakeoff; perfect post-LoRA held-out Planner score across all eight Planner skill families.",
+      "evidence_refs": [
+        "configs/experiments/hephaestus_planner_judge_bakeoff_v1.json",
+        "docs/evidence/planner-judge-bakeoff-v1/PREPARED.md"
+      ],
+      "evidence_run": "planner-judge-bakeoff-v1-35538704330",
+      "frozen_pack_sha256": "1723aa1da329e0440d27073a62f74c1e0666a7649c55a00f9f9f55d6400ed749",
+      "evidence_metrics": {
+        "zero_shot_quality_100": 77.5,
+        "held_out_pre_quality_100": 77.8125,
+        "held_out_post_quality_100": 100,
+        "quality_gain": 22.1875,
+        "schema_compliance": 1,
+        "evidence_grounding": 1,
+        "confidence_calibration": 1,
+        "hallucination_rate": 0,
+        "exact_contract_pass_rate": 1
+      },
+      "evidence_adapter": {
+        "sha256": "d51d71789f2613f91070809c68a8ae9631c8aa2c1c5ba2d96ac5a5900b5e9987",
+        "s3_key": "hephaestus/scientific/v1/planner_judge_bakeoff/planner-judge-bakeoff-v1-35538704330/pairs/planner--ministral3-8b-reasoning/adapter.tar.gz"
+      }
+    },
+    "evaluator": {
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "license": "apache-2.0",
+      "role_status": "selected_for_role_specific_fine_tuning",
+      "selection_basis": "Prior cognitive-topology/adaptation-elasticity/distance-to-role evidence plus explicit final stack decision.",
+      "evidence_refs": [
+        "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+        "configs/experiments/hephaestus_adaptation_elasticity_v1.json",
+        "configs/experiments/hephaestus_distance_to_role_v1.json"
+      ],
+      "evidence_runs": {
+        "topology": "cognitive-topology-v1-34953477882",
+        "elasticity": "adaptation-elasticity-v1-34961824753"
+      }
+    },
+    "judge": {
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "mit",
+      "role_status": "selected_for_role_specific_fine_tuning",
+      "selection_basis": "Dedicated Planner/Judge bakeoff; highest overall post-LoRA Judge quality among tested sub-10B candidates.",
+      "evidence_refs": [
+        "configs/experiments/hephaestus_planner_judge_bakeoff_v1.json",
+        "docs/evidence/planner-judge-bakeoff-v1/PREPARED.md"
+      ],
+      "evidence_run": "planner-judge-bakeoff-v1-35538704330",
+      "frozen_pack_sha256": "1723aa1da329e0440d27073a62f74c1e0666a7649c55a00f9f9f55d6400ed749",
+      "evidence_metrics": {
+        "zero_shot_quality_100": 81.875,
+        "held_out_pre_quality_100": 79.16666666666667,
+        "held_out_post_quality_100": 93.02083333333333,
+        "quality_gain": 13.854166666666657,
+        "schema_compliance": 1,
+        "evidence_grounding": 0.9375,
+        "confidence_calibration": 0.75,
+        "hallucination_rate": 0.0625,
+        "exact_contract_pass_rate": 0.5416666666666666
+      },
+      "evidence_adapter": {
+        "sha256": "109e6b2409f28b40b1d80f33fd2e3e7da3cd3857e126e09a8feec60a09a8ed81",
+        "s3_key": "hephaestus/scientific/v1/planner_judge_bakeoff/planner-judge-bakeoff-v1-35538704330/pairs/judge--phi4-mini-instruct/adapter.tar.gz"
+      }
+    }
+  },
+  "boundaries": {
+    "selection_is_frozen": true,
+    "selection_is_not_production_certification": true,
+    "micro_lora_bakeoff_adapters_are_evidence_not_final_production_adapters": true,
+    "next_stage": "build_governed_role_specific_training_corpora_then_train_and_independently_certify_each_role"
+  }
+}
