@@ -1,5 +1,5 @@
 name: Role Mastery Phase I monitor
-# funded-role-mastery-v1-check-12
+# funded-role-mastery-v1-check-13
 on:
   push:
     branches: [experiment-diagnostic-scaling-v1]
@@ -26,11 +26,14 @@ jobs:
       - run: |
           python - <<'PY'
           import json
+          from pathlib import Path
           from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
           from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
           import launch_first_bounded_scientific_training as storage
+          import run_role_mastery_v1 as runner
           gid='35596791201'
           run_id=f'role-mastery-v1-{gid}'
+          cfg=json.loads(Path('configs/experiments/hephaestus_role_mastery_v1.json').read_text())
           roles=['controller','diagnosis','planner','evaluator','judge']
           ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
           status,payload=ex._request('GET','pods')
@@ -40,12 +43,30 @@ jobs:
               target=f'hephaestus-role-mastery-{role}-{run_id}'
               matches=[{k:p.get(k) for k in ('id','name','desiredStatus','costPerHr','gpu')} for p in pods if target in str(p.get('name',''))]
               prefix=f'hephaestus/scientific/v1/role_mastery/{run_id}/roles/{role}'
-              progress=result=None
+              progress=result=None;dev={}
               try:
                   raw=storage.maybe_read_key(client,prefix+'/progress.json')
                   if raw: progress=json.loads(raw)
               except Exception as exc:
                   progress={'read_error':f'{type(exc).__name__}: {exc}'}
+              for step in cfg['training']['dev_checkpoints_by_role'][role]:
+                  try:
+                      raw=storage.maybe_read_key(client,f"{prefix}/dev/step-{int(step):04d}.jsonl")
+                      if raw:
+                          rows=[json.loads(line) for line in raw.decode().splitlines() if line.strip()]
+                          s=runner.summarize(rows)
+                          dev[str(step)]={
+                              'sample_count':s['sample_count'],
+                              'quality_100':s['quality_100'],
+                              'schema_compliance':s['schema_compliance'],
+                              'evidence_grounding':s['evidence_grounding'],
+                              'confidence_calibration':s['confidence_calibration'],
+                              'hallucination_rate':s['hallucination_rate'],
+                              'exact_contract_pass_rate':s['exact_contract_pass_rate'],
+                              'min_skill_quality':min((x['quality_100'] for x in s['skills'].values()),default=0.0),
+                          }
+                  except Exception as exc:
+                      dev[str(step)]={'read_error':f'{type(exc).__name__}: {exc}'}
               try:
                   raw=storage.maybe_read_key(client,prefix+'/result.json')
                   if raw:
@@ -56,6 +77,6 @@ jobs:
                       result['selected_adapter']=obj.get('selected_adapter')
               except Exception as exc:
                   result={'read_error':f'{type(exc).__name__}: {exc}'}
-              out[role]={'pods':matches,'progress':progress,'result':result}
+              out[role]={'pods':matches,'progress':progress,'dev':dev,'result':result}
           print('ROLE_MASTERY_MONITOR_JSON '+json.dumps({'pods_status':status,'run_id':run_id,'roles':out},sort_keys=True))
           PY
