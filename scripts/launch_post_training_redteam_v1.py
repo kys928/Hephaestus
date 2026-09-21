@@ -98,7 +98,7 @@ def maybe(client,key):
             time.sleep(min(2**i,8))
     return None
 
-def execute(role:str)->dict:
+def execute(role:str, run_id_override:str|None=None)->dict:
     c=cfg();m=marker()
     if role not in c["candidates"]:
         raise RuntimeError("unknown role "+role)
@@ -111,12 +111,26 @@ def execute(role:str)->dict:
 
     repo_sha=req("GITHUB_SHA")
     gid=req("GITHUB_RUN_ID")
-    run_id=f"post-training-redteam-v1-{gid}"
+    run_id=run_id_override or f"post-training-redteam-v1-{gid}"
     prefix=f"{c['execution']['s3_prefix'].rstrip('/')}/{run_id}/roles/{role}"
     result_key=f"{prefix}/result.json"
     progress_key=f"{prefix}/progress.json"
     ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
     client=storage.s3_client()
+    if run_id_override:
+        if os.environ.get("HEPHAESTUS_POST_TRAINING_REDTEAM_RECOVERY_AUTHORIZED")!="YES":
+            raise RuntimeError("recovery run-id override is not authorized")
+        raw_existing=maybe(client,result_key)
+        if raw_existing:
+            prior=json.loads(raw_existing)
+            if prior.get("status")!="failed":
+                raise RuntimeError("recovery is allowed only over a failed prior role result")
+            if prior.get("pack_sha256")!=c["pack"]["canonical_sha256"]:
+                raise RuntimeError("recovery prior result pack hash mismatch")
+            if prior.get("error_type")!="FileNotFoundError" or "selected-adapter.tar.gz." not in str(prior.get("error","")):
+                raise RuntimeError("recovery prior failure is not the known adapter download-directory bug")
+            client.delete_object(Bucket=storage.VOLUME_ID,Key=result_key)
+            client.delete_object(Bucket=storage.VOLUME_ID,Key=progress_key)
     pod_id=None
     started=time.monotonic()
     rec={"role":role,"run_id":run_id,"repo_sha":repo_sha,"status":"starting"}
@@ -182,12 +196,13 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--role",required=True)
     ap.add_argument("--execute",action="store_true")
+    ap.add_argument("--run-id")
     args=ap.parse_args()
     if not args.execute:
         c=cfg()
         print(json.dumps({"role":args.role,"authorized":marker().get("authorized"),"candidate":c["candidates"].get(args.role),"execution":c["execution"]},indent=2))
         return
-    execute(args.role)
+    execute(args.role,args.run_id)
 
 if __name__=="__main__":
     main()
