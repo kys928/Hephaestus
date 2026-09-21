@@ -1,0 +1,292 @@
+{
+  "protocol_id": "hephaestus_role_hardening_v2",
+  "protocol_version": 2,
+  "status": "frozen_ready_for_training",
+  "purpose": "Continue the certified Phase I LoRA adapters on independently generated neighboring cases around post-training red-team failure regions, after externalizing machine-verifiable responsibilities. Select checkpoints without using the frozen 600-case red-team pack, preserve original mastery, then run the frozen red-team exactly once as final acceptance evidence.",
+  "source_stack": {
+    "role_mastery_run_id": "role-mastery-v1-35596791201",
+    "original_redteam_run_id": "post-training-redteam-v1-35621923525",
+    "original_redteam_pack_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c"
+  },
+  "pack": {
+    "builder_path": "scripts/build_role_hardening_v2.py",
+    "canonical_sha256": "cd6397789cd11e1167a020cf0bd41bdad8b412494f6b483ae3e1a501c8539028",
+    "frozen_redteam_optimization_use": "forbidden",
+    "original_role_certification_optimization_use": "forbidden",
+    "checkpoint_selection_uses_only_hardening_dev": true
+  },
+  "candidates": {
+    "controller": {
+      "candidate_id": "qwen3-4b-controller-hardening-v2",
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "parameter_count": 4000000000,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "source_adapter": {
+        "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/controller/selected-adapter.tar.gz",
+        "sha256": "62ae757aad46191486c09acf87e164972434b19834f4401f9dd7f3e8bb65972e",
+        "bytes": 43618367
+      },
+      "original_certification_quality_100": 100,
+      "original_redteam_quality_100": 71.45595238095238
+    },
+    "diagnosis": {
+      "candidate_id": "ministral3-3b-diagnosis-hardening-v2",
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "parameter_count": 4251743232,
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "source_adapter": {
+        "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/diagnosis/selected-adapter.tar.gz",
+        "sha256": "534d1929d76fc64d07d8d36e85115d5660c113e63b022206bd500d288bdff32c",
+        "bytes": 34645558
+      },
+      "original_certification_quality_100": 100,
+      "original_redteam_quality_100": 53.335530355266314
+    },
+    "planner": {
+      "candidate_id": "ministral3-8b-planner-hardening-v2",
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "parameter_count": 8918026240,
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "source_adapter": {
+        "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/planner/selected-adapter.tar.gz",
+        "sha256": "1d4315b588c31262435cef1ad7df5c63edecd948b7992eca6e972a63bc18df85",
+        "bytes": 53593098
+      },
+      "original_certification_quality_100": 100,
+      "original_redteam_quality_100": 66.07857831959568
+    },
+    "evaluator": {
+      "candidate_id": "granite33-8b-evaluator-hardening-v2",
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "parameter_count": 8000000000,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "source_adapter": {
+        "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/evaluator/selected-adapter.tar.gz",
+        "sha256": "e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325",
+        "bytes": 61503144
+      },
+      "original_certification_quality_100": 99.81666666666666,
+      "original_redteam_quality_100": 56.150342712842715
+    },
+    "judge": {
+      "candidate_id": "phi4-mini-judge-hardening-v2",
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "mit",
+      "load_kind": "causal_lm",
+      "parameter_count": 3836021760,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "source_adapter": {
+        "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/judge/selected-adapter.tar.gz",
+        "sha256": "086d6b779fc27bd70f9e5a3c4cbfc056490a203da192d719bf23d65ff5660abd",
+        "bytes": 27139725
+      },
+      "original_certification_quality_100": 99.15,
+      "original_redteam_quality_100": 58.35738936988937
+    }
+  },
+  "training": {
+    "method": "continue_existing_lora",
+    "precision": "bfloat16",
+    "seed": 314159,
+    "learning_rate": 0.00002,
+    "weight_decay": 0,
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "max_sequence_length": 1280,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "train_only_assistant_contract": true,
+    "optimizer_steps_by_role": {
+      "controller": 400,
+      "diagnosis": 600,
+      "planner": 550,
+      "evaluator": 550,
+      "judge": 450
+    },
+    "dev_checkpoints_by_role": {
+      "controller": [
+        150,
+        275,
+        400
+      ],
+      "diagnosis": [
+        200,
+        400,
+        600
+      ],
+      "planner": [
+        180,
+        365,
+        550
+      ],
+      "evaluator": [
+        180,
+        365,
+        550
+      ],
+      "judge": [
+        150,
+        300,
+        450
+      ]
+    },
+    "coverage_policy": "one shuffled pass over every hardening+rehearsal training case; optimizer_steps * gradient_accumulation_steps == train_case_count",
+    "source_adapter_frozen_before_run": true
+  },
+  "evaluation": {
+    "seed": 11,
+    "adapted_redteam_seeds": [
+      11,
+      23,
+      47
+    ],
+    "max_new_tokens_by_role": {
+      "controller": 384,
+      "diagnosis": 1024,
+      "planner": 1024,
+      "evaluator": 512,
+      "judge": 512
+    },
+    "hardening_cert_thresholds": {
+      "controller": {
+        "quality_100": 96,
+        "schema": 0.99,
+        "grounding": 0.98,
+        "hallucination_max": 0.02,
+        "min_skill_quality": 88
+      },
+      "diagnosis": {
+        "quality_100": 95,
+        "schema": 0.97,
+        "grounding": 0.96,
+        "hallucination_max": 0.04,
+        "min_skill_quality": 86
+      },
+      "planner": {
+        "quality_100": 96,
+        "schema": 0.99,
+        "grounding": 0.98,
+        "hallucination_max": 0.02,
+        "min_skill_quality": 90
+      },
+      "evaluator": {
+        "quality_100": 95,
+        "schema": 0.98,
+        "grounding": 0.97,
+        "hallucination_max": 0.03,
+        "min_skill_quality": 87
+      },
+      "judge": {
+        "quality_100": 95,
+        "schema": 0.98,
+        "grounding": 0.97,
+        "hallucination_max": 0.03,
+        "min_skill_quality": 87
+      }
+    },
+    "original_cert_regression": {
+      "maximum_quality_drop_points": 2,
+      "minimum_schema_rate": 0.98,
+      "maximum_hallucination_rate": 0.04
+    },
+    "frozen_redteam_acceptance": {
+      "minimum_absolute_improvement_points": 10,
+      "role_quality_floor": {
+        "controller": 80,
+        "diagnosis": 68,
+        "planner": 76,
+        "evaluator": 68,
+        "judge": 70
+      },
+      "evaluate_once_after_checkpoint_selection": true,
+      "never_use_for_checkpoint_selection": true
+    }
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 12,
+    "hard_wall_seconds": 10800,
+    "max_hourly_usd": 1.25,
+    "max_estimated_usd_per_role": 3.25,
+    "s3_prefix": "hephaestus/scientific/v1/role_hardening_v2"
+  },
+  "governance": {
+    "training_authorized": true,
+    "authorization_source": "user_directive_2026-09-21_externalize_deterministic_responsibility_and_target_reasoning_failures",
+    "production_promotion_allowed": false,
+    "production_certification_mutation_allowed": false,
+    "automatic_role_dispatch_enable_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_redteam_mutation_allowed": false,
+    "original_certification_mutation_allowed": false
+  }
+}
