@@ -31,7 +31,7 @@ def test_every_role_has_new_ood_dimensions_and_stressors():
         stressors = {s for row in rows for s in row["stressors"]}
         assert "prompt_injection_in_evidence" in stressors
         assert "cross_role_bait" in stressors
-        assert "distractor_flood" in stressors
+        assert "long_context_noise" in stressors
         assert "one_fact_counterfactual" in stressors
 
 
