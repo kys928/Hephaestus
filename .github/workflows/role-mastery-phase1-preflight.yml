@@ -1,0 +1,51 @@
+name: Role Mastery Phase I runtime preflight
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - scripts/role_mastery_common_v1.py
+      - scripts/validate_role_mastery_phase1_v1.py
+      - scripts/build_role_mastery_phase1_v1.py
+      - configs/experiments/hephaestus_role_mastery_phase1_v1.json
+      - .github/workflows/role-mastery-phase1-preflight.yml
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env: {PYTHONPATH: src:scripts}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+      - run: python -m pip install --quiet 'transformers==5.17.0' 'huggingface-hub==1.31.0' 'accelerate==1.15.0' 'mistral-common==1.11.7' 'peft==0.21.0'
+      - run: python scripts/validate_role_mastery_phase1_v1.py
+      - name: Verify all model surfaces and training transcripts
+        run: |
+          python - <<'PY'
+          import json
+          from accelerate import init_empty_weights
+          from transformers import AutoConfig,AutoModelForCausalLM,AutoTokenizer,Mistral3ForConditionalGeneration,MistralCommonBackend
+          import role_mastery_common_v1 as common
+          cfg=common.load_cfg();_,pack=common.load_pack(cfg);maxlen=int(cfg['training']['max_sequence_length'])
+          suffixes=list(cfg['training']['target_module_suffixes'])
+          for role,cand in cfg['candidate_registry'].items():
+              acfg=AutoConfig.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False)
+              with init_empty_weights():
+                  model=Mistral3ForConditionalGeneration(acfg) if cand['load_kind']=='mistral3' else AutoModelForCausalLM.from_config(acfg,trust_remote_code=False)
+              targets=common.target_modules(model,cand,suffixes)
+              tok=(MistralCommonBackend.from_pretrained(cand['model_id'],revision=cand['revision'])
+                   if cand['load_kind']=='mistral3' else AutoTokenizer.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False))
+              lengths=[];supervised=[]
+              for case in pack['partitions'][role]['train']:
+                  ex=common.training_example(tok,cand,pack,case,maxlen)
+                  lengths.append(ex['nonpad_tokens']);supervised.append(ex['supervised_tokens'])
+              print('ROLE_MASTERY_PREFLIGHT_JSON '+json.dumps({
+                 'role':role,'candidate_id':cand['candidate_id'],'model_type':getattr(acfg,'model_type',None),
+                 'target_module_count':len(targets),'first_targets':targets[:8],
+                 'train_cases':len(lengths),'max_nonpad_tokens':max(lengths),'max_supervised_tokens':max(supervised),
+                 'max_sequence_length':maxlen
+              },sort_keys=True))
+          PY
