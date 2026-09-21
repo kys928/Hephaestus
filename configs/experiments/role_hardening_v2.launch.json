@@ -1,0 +1,14 @@
+{
+  "protocol_id": "hephaestus_role_hardening_v2",
+  "authorized": true,
+  "authorization_source": "user_directive_2026-09-21_externalize_deterministic_responsibility_and_target_reasoning_failures",
+  "pack_sha256": "cd6397789cd11e1167a020cf0bd41bdad8b412494f6b483ae3e1a501c8539028",
+  "frozen_redteam_pack_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c",
+  "continue_from_certified_adapters": true,
+  "frozen_redteam_optimization_use": "forbidden",
+  "original_certification_optimization_use": "forbidden",
+  "production_promotion_allowed": false,
+  "production_certification_mutation_allowed": false,
+  "automatic_role_dispatch_enable_allowed": false,
+  "launch_nonce": "2026-09-21T21:20:00+02:00"
+}
