@@ -93,12 +93,13 @@
   },
   "governance": {
     "training_explicitly_requested": true,
-    "authorization_source": "user_directive_2026-09-21_phase_i_role_mastery",
+    "authorization_source": "user_directive",
     "promotion_allowed": false,
     "lineage_mutation_allowed": false,
     "production_certification_claim_allowed": false,
-    "paid_launch_allowed": false,
-    "launch_authorized": false
+    "paid_launch_allowed": true,
+    "launch_authorized": true,
+    "authorization_text": "okay then. lets do Phase I — Role mastery"
   },
   "candidate_registry": {
     "controller": {
