@@ -5,7 +5,7 @@
   "purpose": "Phase I independent role mastery. Train each frozen foundation only on its own role contract, select by held-back dev performance, and certify on independently framed certification cases.",
   "pack": {
     "builder_path": "scripts/build_role_mastery_v1.py",
-    "canonical_sha256": "PENDING_STATIC_FREEZE",
+    "canonical_sha256": "6f4bb3b8c8312a4189136ea961e8fa32629c02fa5459e18fa960670badb203b3",
     "certification_never_train": true
   },
   "candidates": {
