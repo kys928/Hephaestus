@@ -5,7 +5,7 @@
   "purpose": "Train and independently certify each frozen Hephaestus cognitive role before any pipeline/co-adaptation training.",
   "pack": {
     "builder_path": "scripts/build_role_mastery_phase1_v1.py",
-    "canonical_sha256": "PENDING_FREEZE",
+    "canonical_sha256": "230f55fea716340b789a2da5e1b49e58184c57351919613bf729aade093e38fb",
     "train_cases_per_role": 600,
     "dev_cases_per_role": 100,
     "cert_cases_per_role": 150,
@@ -96,6 +96,81 @@
     "authorization_source": "user_directive_2026-09-21_phase_i_role_mastery",
     "promotion_allowed": false,
     "lineage_mutation_allowed": false,
-    "production_certification_claim_allowed": false
+    "production_certification_claim_allowed": false,
+    "paid_launch_allowed": false,
+    "launch_authorized": false
+  },
+  "candidate_registry": {
+    "controller": {
+      "candidate_id": "qwen3-4b-controller",
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "model_type": "qwen3",
+      "parameter_count": 4000000000,
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      }
+    },
+    "diagnosis": {
+      "candidate_id": "ministral3-3b-diagnosis",
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "model_type": "mistral3",
+      "parameter_count": 4251743232,
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ]
+    },
+    "planner": {
+      "candidate_id": "ministral3-8b-planner",
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "model_type": "mistral3",
+      "parameter_count": 8918026240,
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ]
+    },
+    "evaluator": {
+      "candidate_id": "granite33-8b-evaluator",
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "model_type": "granite",
+      "parameter_count": 8000000000,
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      }
+    },
+    "judge": {
+      "candidate_id": "phi4-mini-judge",
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "mit",
+      "load_kind": "causal_lm",
+      "model_type": "phi3",
+      "parameter_count": 3836021760,
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      }
+    }
   }
 }
