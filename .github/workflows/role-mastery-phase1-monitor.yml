@@ -1,5 +1,5 @@
 name: Role Mastery Phase I monitor
-# check-5
+# funded-role-mastery-v1
 on:
   push:
     branches: [experiment-diagnostic-scaling-v1]
@@ -29,28 +29,33 @@ jobs:
           from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
           from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
           import launch_first_bounded_scientific_training as storage
-          gid='35588102438'
+          gid='35596791201'
+          run_id=f'role-mastery-v1-{gid}'
           roles=['controller','diagnosis','planner','evaluator','judge']
           ex=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
           status,payload=ex._request('GET','pods')
           pods=payload if isinstance(payload,list) else payload.get('pods',[]) if isinstance(payload,dict) else []
           client=storage.s3_client();out={}
           for role in roles:
-              target=f'role-mastery-phase1-{gid}-{role}'
+              target=f'hephaestus-role-mastery-{role}-{run_id}'
               matches=[{k:p.get(k) for k in ('id','name','desiredStatus','costPerHr','gpu')} for p in pods if target in str(p.get('name',''))]
-              prefix=f'hephaestus/scientific/v1/role_mastery_phase1/{target}'
+              prefix=f'hephaestus/scientific/v1/role_mastery/{run_id}/roles/{role}'
               progress=result=None
               try:
                   raw=storage.maybe_read_key(client,prefix+'/progress.json')
                   if raw: progress=json.loads(raw)
-              except Exception: pass
+              except Exception as exc:
+                  progress={'read_error':f'{type(exc).__name__}: {exc}'}
               try:
                   raw=storage.maybe_read_key(client,prefix+'/result.json')
                   if raw:
-                      obj=json.loads(raw);result={k:obj.get(k) for k in ('status','selected_epoch','eligible_for_phase2','error_type','error')}
-                      if obj.get('certification_gate'): result['certification_passed']=obj['certification_gate'].get('passed')
-                      if obj.get('certification'): result['cert_quality_100']=obj['certification'].get('quality_100')
-              except Exception: pass
+                      obj=json.loads(raw)
+                      result={k:obj.get(k) for k in ('status','model_id','selected_dev_step','error_type','error')}
+                      result['certification']=obj.get('certification')
+                      result['certification_summary']=obj.get('certification_summary')
+                      result['selected_adapter']=obj.get('selected_adapter')
+              except Exception as exc:
+                  result={'read_error':f'{type(exc).__name__}: {exc}'}
               out[role]={'pods':matches,'progress':progress,'result':result}
-          print('ROLE_MASTERY_MONITOR_JSON '+json.dumps({'pods_status':status,'roles':out},sort_keys=True))
+          print('ROLE_MASTERY_MONITOR_JSON '+json.dumps({'pods_status':status,'run_id':run_id,'roles':out},sort_keys=True))
           PY
