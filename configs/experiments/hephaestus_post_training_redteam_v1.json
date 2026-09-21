@@ -3,7 +3,7 @@
   "status": "frozen_ready_for_inference_only_audit",
   "pack": {
     "builder_path": "scripts/build_post_training_redteam_v1.py",
-    "canonical_sha256": "2b6b7b3fd42796fd99b82b321adcfa0c3517cb69c63beecae38f6ea863c4b5ee",
+    "canonical_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c",
     "total_cases": 600,
     "cases_per_role": 120,
     "created_after_training": true,
