@@ -292,6 +292,7 @@ def safe_extract_tar(archive: Path, dest: Path) -> None:
 
 def download_adapter(client: Any, cand: dict[str, Any], root: Path) -> Path:
     meta = cand["adapter"]
+    root.mkdir(parents=True, exist_ok=True)
     archive = root / "selected-adapter.tar.gz"
     client.download_file(storage.VOLUME_ID, meta["s3_key"], str(archive))
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
