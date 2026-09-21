@@ -1,4 +1,4 @@
-name: Post-training red-team V1 monitor\n# check-5
+name: Post-training red-team V1 monitor\n# check-6
 on:
   push:
     branches: [experiment-post-training-redteam-v1]
@@ -52,5 +52,13 @@ jobs:
                     'audit_flags':obj.get('audit_flags'),
                   }
               out[role]={'pods':matches,'progress':progress,'result':result}
-          print('POST_TRAINING_REDTEAM_MONITOR_JSON '+json.dumps({'pods_status':status,'run_id':run_id,'roles':out},sort_keys=True))
+          planner_pod=next((p for p in pods if f'hephaestus-post-redteam-planner-{run_id}' in str(p.get('name',''))),None)
+          safe={}
+          if planner_pod:
+              allow={'id','name','desiredStatus','costPerHr','createdAt','lastStatusChange','gpuCount','gpuTypeId','gpu','machine','containerDiskInGb','vcpuCount','memoryInGb','volumeInGb','uptimeInSeconds','locked','networkVolumeId','cloudType','dataCenterId','dataCenterIds','imageName'}
+              for k,v in planner_pod.items():
+                  if k in allow:
+                      safe[k]=v
+              safe['available_keys']=sorted([str(k) for k in planner_pod.keys() if str(k) not in {'env','dockerStartCmd'}])
+          print('POST_TRAINING_REDTEAM_MONITOR_JSON '+json.dumps({'pods_status':status,'run_id':run_id,'roles':out,'planner_pod_safe':safe},sort_keys=True))
           PY
