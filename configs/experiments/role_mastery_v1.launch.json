@@ -1,0 +1,7 @@
+{
+  "protocol_id": "hephaestus_role_mastery_v1",
+  "authorized": true,
+  "authorization_source": "user_directive",
+  "authorization_text": "okay then. lets do Phase I — Role mastery",
+  "launch_scope": "five_parallel_independent_role_mastery_jobs"
+}

@@ -1,0 +1,231 @@
+{
+  "protocol_id": "hephaestus_role_mastery_v1",
+  "protocol_version": 1,
+  "stack_ref": "configs/models/hephaestus_role_model_stack_v1.json",
+  "purpose": "Phase I independent role mastery. Train each frozen foundation only on its own role contract, select by held-back dev performance, and certify on independently framed certification cases.",
+  "pack": {
+    "builder_path": "scripts/build_role_mastery_v1.py",
+    "canonical_sha256": "PENDING_STATIC_FREEZE",
+    "certification_never_train": true
+  },
+  "candidates": {
+    "controller": {
+      "candidate_id": "qwen3-4b-controller",
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "parameter_count": 4000000000,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ]
+    },
+    "diagnosis": {
+      "candidate_id": "ministral3-3b-diagnosis",
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "parameter_count": 4251743232,
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ]
+    },
+    "planner": {
+      "candidate_id": "ministral3-8b-planner",
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "license": "apache-2.0",
+      "load_kind": "mistral3",
+      "parameter_count": 8918026240,
+      "lora_target_regex": "^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "exclude_module_prefixes": [
+        "model.vision_tower."
+      ],
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ]
+    },
+    "evaluator": {
+      "candidate_id": "granite33-8b-evaluator",
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "license": "apache-2.0",
+      "load_kind": "causal_lm",
+      "parameter_count": 8000000000,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ]
+    },
+    "judge": {
+      "candidate_id": "phi4-mini-judge",
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "license": "mit",
+      "load_kind": "causal_lm",
+      "parameter_count": 3836021760,
+      "lora_target_regex": "^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$",
+      "chat_template_kwargs": {},
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ]
+    }
+  },
+  "training": {
+    "method": "lora",
+    "precision": "bfloat16",
+    "seed": 271828,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00005,
+    "weight_decay": 0,
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "max_sequence_length": 1024,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "train_only_assistant_contract": true,
+    "optimizer_steps_by_role": {
+      "controller": 128,
+      "diagnosis": 192,
+      "planner": 192,
+      "evaluator": 192,
+      "judge": 160
+    },
+    "dev_checkpoints_by_role": {
+      "controller": [
+        64,
+        128
+      ],
+      "diagnosis": [
+        64,
+        128,
+        192
+      ],
+      "planner": [
+        64,
+        128,
+        192
+      ],
+      "evaluator": [
+        64,
+        128,
+        192
+      ],
+      "judge": [
+        80,
+        160
+      ]
+    }
+  },
+  "evaluation": {
+    "seed": 11,
+    "max_new_tokens_by_role": {
+      "controller": 384,
+      "diagnosis": 1024,
+      "planner": 1024,
+      "evaluator": 512,
+      "judge": 512
+    },
+    "score_every_sample": true,
+    "report_skill_breakdown": true
+  },
+  "certification": {
+    "thresholds": {
+      "controller": {
+        "quality_100": 94,
+        "schema": 1,
+        "grounding": 0.97,
+        "hallucination_max": 0.03,
+        "min_skill_quality": 85
+      },
+      "diagnosis": {
+        "quality_100": 95,
+        "schema": 1,
+        "grounding": 0.95,
+        "hallucination_max": 0.05,
+        "min_skill_quality": 88
+      },
+      "planner": {
+        "quality_100": 97,
+        "schema": 1,
+        "grounding": 0.98,
+        "hallucination_max": 0.02,
+        "min_skill_quality": 92
+      },
+      "evaluator": {
+        "quality_100": 94,
+        "schema": 1,
+        "grounding": 0.97,
+        "hallucination_max": 0.03,
+        "min_skill_quality": 86
+      },
+      "judge": {
+        "quality_100": 93,
+        "schema": 1,
+        "grounding": 0.95,
+        "hallucination_max": 0.05,
+        "min_skill_quality": 85
+      }
+    },
+    "production_promotion": false,
+    "independent_pack_required": true
+  },
+  "execution": {
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 12,
+    "hard_wall_seconds": 10800,
+    "max_hourly_usd": 1.25,
+    "max_estimated_usd_per_role": 3.25,
+    "s3_prefix": "hephaestus/scientific/v1/role_mastery"
+  },
+  "governance": {
+    "training_authorized": true,
+    "authorization_source": "user_directive_2026-09-21_phase_i_role_mastery",
+    "production_promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false
+  }
+}
