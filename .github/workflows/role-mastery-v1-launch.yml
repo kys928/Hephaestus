@@ -1,0 +1,106 @@
+name: Phase I Role Mastery V1
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - configs/experiments/role_mastery_v1.launch.json
+      - configs/experiments/hephaestus_role_mastery_v1.json
+      - scripts/build_role_mastery_v1.py
+      - scripts/run_role_mastery_v1.py
+      - scripts/launch_role_mastery_v1.py
+      - scripts/aggregate_role_mastery_v1.py
+      - .github/workflows/role-mastery-v1-launch.yml
+permissions: {contents: read}
+concurrency:
+  group: phase-i-role-mastery-v1
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: contains(github.event.head_commit.message, '[launch-role-mastery-v1]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: src:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+      - run: python -m pip install --quiet -e '.[s3]' 'transformers==5.17.0' 'accelerate==1.15.0' 'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
+      - name: Validate corpus, coverage, model surfaces and all training transcripts
+        run: |
+          python - <<'PY'
+          import importlib.util,json,re
+          from pathlib import Path
+          from accelerate import init_empty_weights
+          from transformers import AutoConfig,AutoModelForCausalLM,AutoTokenizer,Mistral3ForConditionalGeneration,MistralCommonBackend
+          root=Path('.')
+          cfg=json.loads((root/'configs/experiments/hephaestus_role_mastery_v1.json').read_text())
+          ps=importlib.util.spec_from_file_location('pack',root/cfg['pack']['builder_path']);pm=importlib.util.module_from_spec(ps);ps.loader.exec_module(pm)
+          pack=pm.build_pack();pm.validate(pack)
+          assert pm.canonical_sha256(pack)==cfg['pack']['canonical_sha256']
+          rs=importlib.util.spec_from_file_location('runner',root/'scripts/run_role_mastery_v1.py');rm=importlib.util.module_from_spec(rs);rs.loader.exec_module(rm)
+          maxlen=int(cfg['training']['max_sequence_length'])
+          for role,cand in cfg['candidates'].items():
+              assert cfg['training']['optimizer_steps_by_role'][role]*cfg['training']['gradient_accumulation_steps']==len(pack['splits'][role]['train'])
+              acfg=AutoConfig.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False)
+              with init_empty_weights():
+                  model=Mistral3ForConditionalGeneration(acfg) if cand['load_kind']=='mistral3' else AutoModelForCausalLM.from_config(acfg,trust_remote_code=False)
+              pat=re.compile(cand['lora_target_regex']);matched=[n for n,_ in model.named_modules() if pat.match(n)]
+              if not matched:raise SystemExit(f'no LoRA targets for {role}')
+              if role in {'diagnosis','planner'} and any('vision_tower' in n for n in matched):raise SystemExit(f'vision target leak {role}')
+              tok=(MistralCommonBackend.from_pretrained(cand['model_id'],revision=cand['revision']) if cand['load_kind']=='mistral3' else AutoTokenizer.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False))
+              lengths=[];sup=[]
+              for case in pack['splits'][role]['train']:
+                  ex=rm.training_example(tok,cand,pack,pm,case,maxlen);lengths.append(ex['nonpad_tokens']);sup.append(ex['supervised_tokens'])
+              print('ROLE_MASTERY_PREFLIGHT_JSON '+json.dumps({'role':role,'model_id':cand['model_id'],'revision':cand['revision'],'train_cases':len(lengths),'max_nonpad_tokens':max(lengths),'max_supervised_tokens':max(sup),'matched_lora_modules':len(matched)},sort_keys=True))
+          PY
+      - run: python -m py_compile scripts/build_role_mastery_v1.py scripts/run_role_mastery_v1.py scripts/launch_role_mastery_v1.py scripts/aggregate_role_mastery_v1.py
+      - run: python -m pytest -q tests/test_role_mastery_v1.py
+
+  train:
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        role: [controller, diagnosis, planner, evaluator, judge]
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HEPHAESTUS_ROLE_MASTERY_LAUNCH_AUTHORIZED: 'YES'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/launch_role_mastery_v1.py --role ${{ matrix.role }} --execute
+
+  aggregate:
+    needs: [preflight, train]
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_ROLE_MASTERY_RUN_ID: role-mastery-v1-${{ github.run_id }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/aggregate_role_mastery_v1.py
