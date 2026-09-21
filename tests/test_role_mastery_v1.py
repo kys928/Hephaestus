@@ -5,7 +5,7 @@ def mod():
  p=ROOT/"scripts/build_role_mastery_v1.py";s=importlib.util.spec_from_file_location("rm",p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 def test_role_mastery_pack_valid():
  m=mod();p=m.build_pack();m.validate(p)
- assert sum(len(v) for r in p["splits"].values() for v in r.values())==9200
+ assert sum(len(v) for r in p["splits"].values() for v in r.values())==9800
 def test_cert_is_disjoint():
  m=mod();p=m.build_pack()
  for role in p["splits"]:
