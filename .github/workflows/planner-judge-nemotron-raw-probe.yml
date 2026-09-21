@@ -1,0 +1,42 @@
+name: Planner Judge Nemotron raw probe
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths: [.github/workflows/planner-judge-nemotron-raw-probe.yml]
+permissions: {contents: read}
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: |
+          python - <<'PY'
+          import json
+          import launch_first_bounded_scientific_training as storage
+          base='hephaestus/scientific/v1/planner_judge_bakeoff/planner-judge-bakeoff-v1-35538704330/samples/planner/nemotron-cascade-8b/post/'
+          c=storage.s3_client()
+          resp=c.list_objects_v2(Bucket=storage.VOLUME_ID,Prefix=base)
+          rows=[]
+          for x in resp.get('Contents',[]):
+              o=json.loads(storage.read_key(c,x['Key']))
+              if o['root_case_id'] in {'P3','P4','P7','P8'} and o['score']['quality_100']<=5.01:
+                  rows.append({
+                    'case_id':o['case_id'],'raw_output':o['raw_output'][:1600],
+                    'projected_output':o['projected_output'][:1600],
+                    'output':o['output'][:1600],'extraction':o['extraction'],
+                    'generated_tokens':o['generation']['generated_tokens'],'finish_reason':o['generation']['finish_reason']
+                  })
+                  if len(rows)>=4: break
+          print('NEMO_RAW_JSON '+json.dumps(rows,sort_keys=True))
+          PY
