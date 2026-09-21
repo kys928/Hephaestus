@@ -1,0 +1,91 @@
+{
+  "record_id": "hephaestus-role-model-stack-v1-certification",
+  "recorded_at": "2026-09-21",
+  "status": "certified_and_artifact_verified",
+  "scope": "Production certification record for the five Hephaestus role adapters. This record promotes the certified adapter registry, not automatic replacement of deterministic control-spine role implementations.",
+  "source": {
+    "role_mastery_run_id": "role-mastery-v1-35596791201",
+    "frozen_training_repo_sha": "c831bbfc0e2054d54fccd1ef374fd84722612c79",
+    "aggregate_s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/result.json",
+    "finalization_workflow_run_id": 35616576860,
+    "finalization_checks": [
+      "aggregate status completed",
+      "all five roles completed",
+      "all five roles passed independent certification",
+      "base model ids and immutable revisions matched the frozen protocol",
+      "all five selected adapter archives downloaded and SHA-256 re-hashed",
+      "adapter byte sizes matched recorded artifacts",
+      "no dangling RunPod pods remained"
+    ],
+    "dangling_pods": []
+  },
+  "roles": {
+    "controller": {
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "selected_dev_step": 300,
+      "quality_100": 100,
+      "schema_compliance": 1,
+      "evidence_grounding": 1,
+      "hallucination_rate": 0,
+      "min_skill_quality": 100,
+      "adapter_sha256": "62ae757aad46191486c09acf87e164972434b19834f4401f9dd7f3e8bb65972e"
+    },
+    "diagnosis": {
+      "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+      "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+      "selected_dev_step": 450,
+      "quality_100": 100,
+      "schema_compliance": 1,
+      "evidence_grounding": 1,
+      "hallucination_rate": 0,
+      "min_skill_quality": 100,
+      "adapter_sha256": "534d1929d76fc64d07d8d36e85115d5660c113e63b022206bd500d288bdff32c"
+    },
+    "planner": {
+      "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+      "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+      "selected_dev_step": 250,
+      "quality_100": 100,
+      "schema_compliance": 1,
+      "evidence_grounding": 1,
+      "hallucination_rate": 0,
+      "min_skill_quality": 100,
+      "adapter_sha256": "1d4315b588c31262435cef1ad7df5c63edecd948b7992eca6e972a63bc18df85"
+    },
+    "evaluator": {
+      "model_id": "ibm-granite/granite-3.3-8b-instruct",
+      "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+      "selected_dev_step": 250,
+      "quality_100": 99.81666666666666,
+      "schema_compliance": 1,
+      "evidence_grounding": 1,
+      "hallucination_rate": 0,
+      "min_skill_quality": 98.8,
+      "adapter_sha256": "e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325"
+    },
+    "judge": {
+      "model_id": "microsoft/Phi-4-mini-instruct",
+      "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+      "selected_dev_step": 200,
+      "quality_100": 99.15,
+      "schema_compliance": 1,
+      "evidence_grounding": 1,
+      "hallucination_rate": 0,
+      "min_skill_quality": 94.6,
+      "adapter_sha256": "086d6b779fc27bd70f9e5a3c4cbfc056490a203da192d719bf23d65ff5660abd"
+    }
+  },
+  "decision": {
+    "production_certified": true,
+    "runtime_registry_ready": true,
+    "automatic_role_dispatch_enabled": false,
+    "reason": "Every role passed its frozen independent certification gates and every selected adapter artifact was independently re-hashed after persistence.",
+    "confidence": "high"
+  },
+  "boundary": {
+    "registry_integration_is_complete": true,
+    "automatic_model_backed_role_dispatch_is_not_enabled": true,
+    "rationale": "Hephaestus preserves deterministic control-spine behavior until a separately tested inference-dispatch integration explicitly replaces or augments a role implementation."
+  }
+}
