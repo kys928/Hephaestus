@@ -1,0 +1,142 @@
+name: Role hardening V2
+on:
+  push:
+    branches: [experiment-role-hardening-v2]
+    paths:
+      - configs/experiments/hephaestus_role_hardening_v2.json
+      - configs/experiments/role_hardening_v2.launch.json
+      - scripts/build_role_hardening_v2.py
+      - scripts/run_role_hardening_v2.py
+      - scripts/launch_role_hardening_v2.py
+      - scripts/aggregate_role_hardening_v2.py
+      - tests/test_role_hardening_v2.py
+      - .github/workflows/role-hardening-v2.yml
+permissions: {contents: read}
+concurrency:
+  group: role-hardening-v2
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: contains(github.event.head_commit.message, '[launch-role-hardening-v2]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+      - run: python -m pip install --quiet -e '.[s3]' pytest 'transformers==5.17.0' 'accelerate==1.15.0' 'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
+      - name: Validate frozen science, source adapters and model surfaces
+        run: |
+          python - <<'PY'
+          import importlib.util,json,re
+          from pathlib import Path
+          from accelerate import init_empty_weights
+          from transformers import AutoConfig,AutoModelForCausalLM,Mistral3ForConditionalGeneration
+          import launch_first_bounded_scientific_training as storage
+          root=Path('.')
+          cfg=json.loads((root/'configs/experiments/hephaestus_role_hardening_v2.json').read_text())
+          marker=json.loads((root/'configs/experiments/role_hardening_v2.launch.json').read_text())
+          def load(path,name):
+              s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
+          h=load(root/cfg['pack']['builder_path'],'hardening')
+          pack=h.build_pack();h.validate(pack);hard_hash=h.canonical_sha256(pack)
+          assert hard_hash==cfg['pack']['canonical_sha256']==marker['pack_sha256']
+          m=load(root/'scripts/build_role_mastery_v1.py','mastery')
+          mp=m.build_pack();m.validate(mp)
+          assert m.canonical_sha256(mp)==cfg['source_stack']['original_role_mastery_pack_sha256']
+          r=load(root/'scripts/build_post_training_redteam_v1.py','redteam')
+          rp=r.build_pack();r.validate(rp)
+          assert r.canonical_sha256(rp)==cfg['source_stack']['original_redteam_pack_sha256']==marker['frozen_redteam_pack_sha256']
+          assert cfg['pack']['frozen_redteam_optimization_use']=='forbidden'
+          assert cfg['pack']['original_role_certification_optimization_use']=='forbidden'
+          assert cfg['pack']['checkpoint_selection_uses_only_hardening_dev'] is True
+          assert cfg['governance']['production_promotion_allowed'] is False
+          assert cfg['governance']['production_certification_mutation_allowed'] is False
+          assert cfg['governance']['automatic_role_dispatch_enable_allowed'] is False
+          client=storage.s3_client()
+          for role,cand in cfg['candidates'].items():
+              expected=cfg['training']['optimizer_steps_by_role'][role]*cfg['training']['gradient_accumulation_steps']
+              observed=len(pack['splits'][role]['train'])
+              assert expected==observed,(role,expected,observed)
+              art=cand['source_adapter']
+              head=client.head_object(Bucket=storage.VOLUME_ID,Key=art['s3_key'])
+              assert int(head['ContentLength'])==int(art['bytes']),(role,head['ContentLength'],art['bytes'])
+              acfg=AutoConfig.from_pretrained(cand['model_id'],revision=cand['revision'],trust_remote_code=False)
+              with init_empty_weights():
+                  model=Mistral3ForConditionalGeneration(acfg) if cand['load_kind']=='mistral3' else AutoModelForCausalLM.from_config(acfg,trust_remote_code=False)
+              pat=re.compile(cand['lora_target_regex'])
+              matched=[n for n,_ in model.named_modules() if pat.match(n)]
+              assert matched,role
+              if role in {'diagnosis','planner'}:
+                  assert not any('vision_tower' in n for n in matched)
+              print('ROLE_HARDENING_V2_PREFLIGHT_JSON '+json.dumps({
+                  'role':role,'model_id':cand['model_id'],'revision':cand['revision'],
+                  'training_cases':observed,'source_adapter_bytes':art['bytes'],
+                  'source_adapter_sha256':art['sha256'],'matched_lora_modules':len(matched)
+              },sort_keys=True))
+          print('ROLE_HARDENING_V2_SCIENCE_JSON '+json.dumps({
+              'hardening_pack_sha256':hard_hash,
+              'original_role_mastery_pack_sha256':cfg['source_stack']['original_role_mastery_pack_sha256'],
+              'frozen_redteam_pack_sha256':cfg['source_stack']['original_redteam_pack_sha256'],
+              'redteam_optimization_use':'forbidden',
+              'checkpoint_selection':'hardening_dev_only'
+          },sort_keys=True))
+          PY
+      - run: python scripts/build_role_hardening_v2.py
+      - run: python -m pytest -q tests/test_role_hardening_v2.py
+      - run: python -m py_compile scripts/build_role_hardening_v2.py scripts/run_role_hardening_v2.py scripts/launch_role_hardening_v2.py scripts/aggregate_role_hardening_v2.py
+
+  train:
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        role: [controller, diagnosis, planner, evaluator, judge]
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      PYTHONPATH: src:scripts
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HEPHAESTUS_ROLE_HARDENING_V2_AUTHORIZED: 'YES'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/launch_role_hardening_v2.py --role ${{ matrix.role }} --execute
+
+  aggregate:
+    needs: [preflight, train]
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_ROLE_HARDENING_RUN_ID: role-hardening-v2-${{ github.run_id }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/aggregate_role_hardening_v2.py
