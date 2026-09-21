@@ -6,7 +6,8 @@
   "source_stack": {
     "role_mastery_run_id": "role-mastery-v1-35596791201",
     "original_redteam_run_id": "post-training-redteam-v1-35621923525",
-    "original_redteam_pack_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c"
+    "original_redteam_pack_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c",
+    "original_role_mastery_pack_sha256": "6f4bb3b8c8312a4189136ea961e8fa32629c02fa5459e18fa960670badb203b3"
   },
   "pack": {
     "builder_path": "scripts/build_role_hardening_v2.py",
