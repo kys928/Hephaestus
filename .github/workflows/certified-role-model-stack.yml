@@ -1,0 +1,28 @@
+name: Certified role model stack
+on:
+  push:
+    paths:
+      - configs/models/hephaestus_role_model_stack_v1.json
+      - src/hephaestus/providers/models/role_stack.py
+      - src/hephaestus/providers/models/__init__.py
+      - tests/test_certified_role_stack.py
+      - .github/workflows/certified-role-model-stack.yml
+  pull_request:
+    paths:
+      - configs/models/hephaestus_role_model_stack_v1.json
+      - src/hephaestus/providers/models/role_stack.py
+      - src/hephaestus/providers/models/__init__.py
+      - tests/test_certified_role_stack.py
+      - .github/workflows/certified-role-model-stack.yml
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e . pytest
+      - run: python -m pytest -q tests/test_certified_role_stack.py
+      - run: python -m py_compile src/hephaestus/providers/models/role_stack.py
