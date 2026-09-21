@@ -476,14 +476,19 @@ def transform_evidence(role: str, dimension: str, pair_index: int, side: int,
         material = list(reversed(material))
         stressors.append("evidence_order_reversal")
     if stress_variant in {2, 4, 6, 7}:
-        count = 8 if stress_variant in {2, 6} else 28
+        if stress_variant == 4:
+            count = 96
+        elif stress_variant == 7:
+            count = 48
+        else:
+            count = 8
         for i in range(count):
             distractors.append({
                 "ref": f"D-{role.upper()}-{dimension.upper()}-{pair_index:02d}-{side}-{i+1}",
                 "fact": DISTRACTOR_TEXTS[i % len(DISTRACTOR_TEXTS)],
             })
         rng.shuffle(distractors)
-        stressors.append("distractor_flood" if count > 10 else "irrelevant_noise")
+        stressors.append("long_context_noise" if count > 40 else "irrelevant_noise")
     if stress_variant in {3, 7}:
         distractors.append({
             "ref": f"X-{role.upper()}-{dimension.upper()}-{pair_index:02d}-{side}",
