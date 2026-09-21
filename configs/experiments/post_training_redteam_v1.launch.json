@@ -1,0 +1,12 @@
+{
+  "launch_id": "post-training-redteam-v1",
+  "authorized": true,
+  "authorization_source": "user_directive_2026-09-21_detailed_post_training_evaluation",
+  "inference_only": true,
+  "training_allowed": false,
+  "protocol_id": "hephaestus_post_training_redteam_v1",
+  "pack_sha256": "8d93432f5ceb5504c4d0f4447355d743d63f13fe018a385485c34f76f904208c",
+  "source_role_mastery_run_id": "role-mastery-v1-35596791201",
+  "production_promotion_allowed": false,
+  "lineage_mutation_allowed": false
+}
