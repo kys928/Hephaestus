@@ -1,0 +1,23 @@
+name: Role Mastery Phase I validate
+on:
+  push:
+    branches: [experiment-diagnostic-scaling-v1]
+    paths:
+      - scripts/build_role_mastery_phase1_v1.py
+      - tests/test_role_mastery_phase1_v1.py
+      - configs/experiments/hephaestus_role_mastery_phase1_v1.json
+      - .github/workflows/role-mastery-phase1-validate.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env: {PYTHONPATH: src}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet pytest
+      - run: python scripts/build_role_mastery_phase1_v1.py
+      - run: pytest -q tests/test_role_mastery_phase1_v1.py
