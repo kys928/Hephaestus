@@ -119,37 +119,40 @@
     "max_grad_norm": 1,
     "train_only_assistant_contract": true,
     "optimizer_steps_by_role": {
-      "controller": 128,
-      "diagnosis": 192,
-      "planner": 192,
-      "evaluator": 192,
-      "judge": 160
+      "controller": 300,
+      "diagnosis": 450,
+      "planner": 375,
+      "evaluator": 375,
+      "judge": 300
     },
     "dev_checkpoints_by_role": {
       "controller": [
-        64,
-        128
+        100,
+        200,
+        300
       ],
       "diagnosis": [
-        64,
-        128,
-        192
+        150,
+        300,
+        450
       ],
       "planner": [
-        64,
-        128,
-        192
+        125,
+        250,
+        375
       ],
       "evaluator": [
-        64,
-        128,
-        192
+        125,
+        250,
+        375
       ],
       "judge": [
-        80,
-        160
+        100,
+        200,
+        300
       ]
-    }
+    },
+    "coverage_policy": "one shuffled pass over every training case: optimizer_steps * gradient_accumulation_steps == train_case_count"
   },
   "evaluation": {
     "seed": 11,
