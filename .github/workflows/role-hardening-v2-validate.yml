@@ -1,0 +1,23 @@
+name: Role hardening V2 validate
+on:
+  push:
+    branches: [experiment-role-hardening-v2]
+    paths:
+      - scripts/build_role_hardening_v2.py
+      - tests/test_role_hardening_v2.py
+      - .github/workflows/role-hardening-v2-validate.yml
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e . pytest
+      - run: python scripts/build_role_hardening_v2.py
+      - run: python -m pytest -q tests/test_role_hardening_v2.py
+      - run: python -m py_compile scripts/build_role_hardening_v2.py
