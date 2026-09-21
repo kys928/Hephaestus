@@ -1,0 +1,14 @@
+{
+  "protocol_id": "hephaestus_role_mastery_phase1_v1",
+  "authorized": false,
+  "authorization_source": null,
+  "authorization_text": null,
+  "roles": [
+    "controller",
+    "diagnosis",
+    "planner",
+    "evaluator",
+    "judge"
+  ],
+  "note": "Prepared but locked until runtime preflight and explicit Phase I authorization commit."
+}
