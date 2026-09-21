@@ -409,6 +409,8 @@ def main() -> int:
     mastery_builder = _import(ROOT / "scripts/build_role_mastery_v1.py", "mastery_pack_final_holdout")
     mastery_pack = mastery_builder.build_pack()
     mastery_builder.validate(mastery_pack)
+    if mastery_builder.canonical_sha256(mastery_pack) != cfg["source_stack"]["original_role_mastery_pack_sha256"]:
+        raise RuntimeError("original role-mastery certification pack identity drift")
     redteam_builder = _import(ROOT / "scripts/build_post_training_redteam_v1.py", "redteam_pack_final_holdout")
     redteam_pack = redteam_builder.build_pack()
     redteam_builder.validate(redteam_pack)
