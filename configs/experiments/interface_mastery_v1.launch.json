@@ -1,0 +1,8 @@
+{
+  "protocol_id": "hephaestus_interface_mastery_v1",
+  "authorized": false,
+  "authorization_phrase": "LAUNCH_PHASE_II_INTERFACE_MASTERY_V1",
+  "authorized_by": null,
+  "authorized_at": null,
+  "note": "Preparation boundary. Flip only after an explicit operator launch command. No paid pod may be created while authorized=false."
+}
