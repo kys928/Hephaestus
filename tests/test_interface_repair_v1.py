@@ -14,6 +14,9 @@ REPAIR_CFG = ROOT / "configs/experiments/hephaestus_interface_repair_v1.json"
 IIB_CFG = ROOT / "configs/experiments/hephaestus_interface_mastery_v1b.json"
 AB_CFG = ROOT / "configs/experiments/hephaestus_interface_normalization_ab_v1.json"
 
+REPAIR_SHA256 = "0653d7fc4d3dba0acabcbef763f9451566f083920afc0593cc3ff0ca05d532f2"
+IIB_SHA256 = "e71f02a1965e53d1c157e5c6f1d3adba23216560569325c25b18661967b1a9ed"
+
 
 def load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -43,6 +46,8 @@ def test_repair_data_is_separate_valid_and_role_targeted() -> None:
     assert not (v1_ids & repair_ids)
     assert set(repair_pack["samples"]) == {"controller", "evaluator", "judge"}
     cfg = json.loads(REPAIR_CFG.read_text())
+    assert cfg["canonical_sha256"] == REPAIR_SHA256
+    assert repair.canonical_sha256(repair_pack) == REPAIR_SHA256
     assert cfg["leakage_policy"]["phase_ii_v1_training_use"] is False
     assert cfg["leakage_policy"]["phase_ii_b_training_use"] is False
 
@@ -58,6 +63,8 @@ def test_phase_ii_b_is_fresh_frozen_and_not_training_data() -> None:
     assert not (iib_ids & v1_ids)
     assert not (iib_ids & repair_ids)
     cfg = json.loads(IIB_CFG.read_text())
+    assert cfg["pack"]["canonical_sha256"] == IIB_SHA256
+    assert iib.canonical_sha256(iib_pack) == IIB_SHA256
     assert cfg["pack"]["frozen"] is True
     assert cfg["governance"]["training_use_allowed"] is False
     assert cfg["governance"]["must_remain_unseen_until_post_repair_recertification"] is True
