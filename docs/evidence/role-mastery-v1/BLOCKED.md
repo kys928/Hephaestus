@@ -1,33 +1,29 @@
-# Phase I Role Mastery V1 — External Blocker
+# Phase I Role Mastery V1 — External Launch Blocker
 
-Recorded: 2026-09-21
+Status: **blocked before pod creation**.
 
-Status: **blocked before GPU pod creation**.
+GitHub workflow run: `35701163947`
 
-## Scientific state
+Launch commit: `cb17f68e644f46101804c8749a895ddf26f48de0`
 
-- Frozen corpus SHA-256: `6f4bb3b8c8312a4189136ea961e8fa32629c02fa5459e18fa960670badb203b3`
-- Total source-generated cases: 9,800
-- Training cases: 7,200
-- All corpus validation tests passed.
-- All five pinned tokenizers/chat templates validated.
-- All 7,200 training transcripts fit the 1024-token budget.
-- All five LoRA target surfaces validated.
-- Python compilation and repository tests passed.
-- No role-specific training result exists yet.
-
-## External blocker
-
-RunPod rejected pod creation for all five matrix jobs with:
+All five authorized matrix jobs reached the RunPod pod-creation boundary and were rejected by the provider with:
 
 `create pod: Your account balance is too low to rent a pod. Please add funds to your account.`
 
-No model failed. No scientific training began. No paid GPU pod was successfully created by this Phase I launch.
+Affected roles:
+- controller
+- diagnosis
+- planner
+- evaluator
+- judge
 
-Failed workflow run:
+No RunPod pod was created for any role. No role-specific training began. No GPU spend was incurred by this attempt.
 
-`35596791201`
+The scientific preparation remains frozen and valid:
+- corpus SHA-256: `eb70310da56e79a2066df838cc12ad2f513f5e3ad286dd96ffb2bff8bd863c6e`
+- 1,024 training + 128 certification cases per role
+- static validation passed
+- runtime/tokenizer/LoRA-surface preflight passed for all five selected models
+- launch authorization remains valid
 
-## Resume boundary
-
-After RunPod balance is restored, relaunch the exact frozen protocol from the current repository state. Do not regenerate the corpus, mutate the pack, substitute model revisions, or alter the training geometry merely because the infrastructure launch was blocked.
+Resume condition: sufficient RunPod account funds. Once available, relaunch the same frozen protocol without changing corpus, model revisions, training geometry, or certification gates.
