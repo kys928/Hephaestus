@@ -1,0 +1,8 @@
+{
+  "protocol_id": "hephaestus_interface_targeted_repair_v1",
+  "authorized": false,
+  "authorization_phrase": "LAUNCH_INTERFACE_TARGETED_REPAIR_V1",
+  "authorized_by": null,
+  "authorized_at": null,
+  "note": "Blocked until the paired normalization A/B is complete and its recommended presentation is frozen."
+}
