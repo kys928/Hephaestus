@@ -5,7 +5,7 @@
   "purpose": "Fresh adversarial holdout for recertifying repaired role-to-role interfaces without training leakage.",
   "pack": {
     "builder_path": "scripts/build_interface_mastery_v1b.py",
-    "canonical_sha256": null,
+    "canonical_sha256": "e71f02a1965e53d1c157e5c6f1d3adba23216560569325c25b18661967b1a9ed",
     "total_cases": 32,
     "cases_per_interface": 8,
     "frozen": true,
