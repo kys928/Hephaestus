@@ -23,10 +23,11 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install boto3
-      - name: Inspect frozen Phase II sample evidence
+      - name: Aggregate frozen Phase II sample evidence
         run: |
           python - <<'PY'
           import json, os
+          from collections import Counter, defaultdict
           import boto3
           from botocore.config import Config
 
@@ -44,8 +45,7 @@ jobs:
 
           def extract(raw):
               text = str(raw).strip()
-              candidates=[]
-              depth=0; start=None; ins=False; esc=False
+              candidates=[]; depth=0; start=None; ins=False; esc=False
               for i,ch in enumerate(text):
                   if ins:
                       if esc: esc=False
@@ -77,29 +77,62 @@ jobs:
               if not page.get("IsTruncated"): break
               token=page.get("NextContinuationToken")
 
-          rows=[]
+          agg=defaultdict(lambda:{
+              "cases":0,"producer_exact":0,"consumer_exact":0,"producer_schema":0,"consumer_schema":0,
+              "boundary_pass":0,"evidence_grounded":0,"deadline_hits":0,
+              "failures":Counter(),"producer_mismatch_fields":Counter(),"consumer_mismatch_fields":Counter(),
+              "failed_case_ids":[],"boundary_failed_cases":[]
+          })
+          overall_failures=Counter()
           for key in sorted(keys):
               response=client.get_object(Bucket=bucket,Key=key)
               data=json.loads(response["Body"].read())
-              case=data["case"]; score=data["scorecard"]
+              case=data["case"]; sc=data["scorecard"]; iface=case["interface_id"]
               prod=extract(data["producer_generation"]["projected_output"])
               cons=extract(data["consumer_generation"]["projected_output"])
-              def slim(x):
-                  if not isinstance(x,dict): return None
-                  return {k:x.get(k) for k in ("decision","action","primary_variable","confidence","evidence_refs")}
+              a=agg[iface]; a["cases"]+=1
+              for metric,field in [
+                  ("producer_exact","producer_contract_exact"),
+                  ("consumer_exact","consumer_contract_exact"),
+                  ("producer_schema","producer_schema_valid"),
+                  ("consumer_schema","consumer_schema_valid"),
+                  ("boundary_pass","deterministic_boundary_passed"),
+                  ("evidence_grounded","evidence_grounded")
+              ]:
+                  a[metric]+=int(bool(sc[field]))
+              a["deadline_hits"] += int(bool(data["producer_generation"].get("deadline_hit"))) + int(bool(data["consumer_generation"].get("deadline_hit")))
+              for f in sc["failures"]:
+                  a["failures"][f]+=1; overall_failures[f]+=1
+              if sc["failures"]:
+                  a["failed_case_ids"].append(case["case_id"])
+              if not sc["deterministic_boundary_passed"]:
+                  a["boundary_failed_cases"].append({
+                      "case_id":case["case_id"],
+                      "boundary":data.get("deterministic_boundary")
+                  })
+              for role,actual,expected,counter in [
+                  ("producer",prod,case["producer_expected"],a["producer_mismatch_fields"]),
+                  ("consumer",cons,case["consumer_expected"],a["consumer_mismatch_fields"])
+              ]:
+                  if not isinstance(actual,dict):
+                      counter["not_json"]+=1
+                      continue
+                  for field in ("decision","action","primary_variable"):
+                      if str(actual.get(field)) != str(expected.get(field)):
+                          counter[field]+=1
+                  try:
+                      c=float(actual.get("confidence",-1))
+                      if not (float(expected.get("confidence_min",0)) <= c <= float(expected.get("confidence_max",1))):
+                          counter["confidence"]+=1
+                  except Exception:
+                      counter["confidence"]+=1
 
-              rows.append({
-                  "case_id":case["case_id"],
-                  "interface_id":case["interface_id"],
-                  "producer_expected":{k:case["producer_expected"].get(k) for k in ("decision","action","primary_variable","confidence_min","confidence_max")},
-                  "producer_actual":slim(prod),
-                  "consumer_expected":{k:case["consumer_expected"].get(k) for k in ("decision","action","primary_variable","confidence_min","confidence_max")},
-                  "consumer_actual":slim(cons),
-                  "scorecard":score,
-                  "deterministic_boundary":data.get("deterministic_boundary"),
-                  "producer_deadline_hit":data["producer_generation"].get("deadline_hit"),
-                  "consumer_deadline_hit":data["consumer_generation"].get("deadline_hit"),
-              })
-
-          print("PHASE_II_CASE_REPORT_JSON "+json.dumps(rows,separators=(",",":"),sort_keys=True))
+          serial={}
+          for iface,a in sorted(agg.items()):
+              serial[iface]={**{k:v for k,v in a.items() if not isinstance(v,Counter)},
+                  "failures":dict(a["failures"]),
+                  "producer_mismatch_fields":dict(a["producer_mismatch_fields"]),
+                  "consumer_mismatch_fields":dict(a["consumer_mismatch_fields"])}
+          report={"interfaces":serial,"overall_failures":dict(overall_failures),"total_sample_files":len(keys)}
+          print("PHASE_II_AGGREGATE_JSON "+json.dumps(report,separators=(",",":"),sort_keys=True))
           PY
