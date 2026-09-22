@@ -112,15 +112,17 @@ def safe_extract(archive: Path, destination: Path) -> None:
 def materialize_adapter(client: Any, role_spec: Any, root: Path) -> Path:
     archive = root / "adapter.tar.gz"
     archive.parent.mkdir(parents=True, exist_ok=True)
-    client.download_file(bucket(), role_spec.adapter.s3_key, str(archive))
+    if not archive.is_file():
+        client.download_file(bucket(), role_spec.adapter.s3_key, str(archive))
     if archive.stat().st_size != role_spec.adapter.bytes:
         raise RuntimeError(f"{role_spec.role} adapter byte-size mismatch")
     observed = sha256_file(archive)
     if observed != role_spec.adapter.sha256:
         raise RuntimeError(f"{role_spec.role} adapter SHA-256 mismatch")
     extracted = root / "extracted"
-    safe_extract(archive, extracted)
     candidate = extracted / "adapter"
+    if not candidate.is_dir():
+        safe_extract(archive, extracted)
     if not candidate.is_dir():
         directories = [p for p in extracted.iterdir() if p.is_dir()]
         if len(directories) != 1:
@@ -134,11 +136,12 @@ def materialize_base(role_spec: Any, root: Path) -> Path:
 
     destination = root / "base"
     destination.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=role_spec.model_id,
-        revision=role_spec.revision,
-        local_dir=str(destination),
-    )
+    if not (destination / "config.json").is_file():
+        snapshot_download(
+            repo_id=role_spec.model_id,
+            revision=role_spec.revision,
+            local_dir=str(destination),
+        )
     return destination
 
 
@@ -199,8 +202,8 @@ def load_role_model(role: str, stack: Any, cfg: Mapping[str, Any], client: Any, 
     }
 
 
-def unload(model: Any, tokenizer: Any) -> None:
-    del model, tokenizer
+def release_cuda() -> None:
+    """Release objects after the caller drops its last model/tokenizer references."""
     gc.collect()
     import torch
 
@@ -438,17 +441,18 @@ def main() -> int:
             producer_role = str(cases[0]["producer_role"])
             consumer_role = str(cases[0]["consumer_role"])
             heartbeat("interface_producer_loading", interface_id=interface_id, producer_role=producer_role, interface_index=interface_index)
-            producer_model, producer_tokenizer, producer_runtime = load_role_model(producer_role, stack, cfg, client, root / interface_id / "producer")
+            producer_model, producer_tokenizer, producer_runtime = load_role_model(producer_role, stack, cfg, client, root / "assets")
             put_json(client, f"{prefix}/runtime/{interface_id}/producer.json", producer_runtime)
             upstream: dict[str, dict[str, Any]] = {}
             for case_index, case in enumerate(cases, 1):
                 generation = generate(producer_model, producer_tokenizer, cfg["runtime"][producer_role], prompt_for_role(pack, case, producer_role), seed + case_index, deadline)
                 upstream[str(case["case_id"])] = generation
                 heartbeat("producer_case_complete", interface_id=interface_id, case_id=case["case_id"], case_index=case_index)
-            unload(producer_model, producer_tokenizer)
+            del producer_model, producer_tokenizer
+            release_cuda()
 
             heartbeat("interface_consumer_loading", interface_id=interface_id, consumer_role=consumer_role, interface_index=interface_index)
-            consumer_model, consumer_tokenizer, consumer_runtime = load_role_model(consumer_role, stack, cfg, client, root / interface_id / "consumer")
+            consumer_model, consumer_tokenizer, consumer_runtime = load_role_model(consumer_role, stack, cfg, client, root / "assets")
             put_json(client, f"{prefix}/runtime/{interface_id}/consumer.json", consumer_runtime)
             for case_index, case in enumerate(cases, 1):
                 producer_generation = upstream[str(case["case_id"])]
@@ -484,7 +488,8 @@ def main() -> int:
                 interface_records.append(record)
                 put_json(client, f"{prefix}/samples/{interface_id}/{case_index:02d}-{case['case_id']}.json", record)
                 heartbeat("consumer_case_complete", interface_id=interface_id, case_id=case["case_id"], case_index=case_index, quality_100=score.quality_100)
-            unload(consumer_model, consumer_tokenizer)
+            del consumer_model, consumer_tokenizer
+            release_cuda()
             heartbeat("interface_complete", interface_id=interface_id, interface_index=interface_index)
 
         summary = summarize_scorecards(scorecards, cfg["certification"], protocol_id=cfg["protocol_id"])
