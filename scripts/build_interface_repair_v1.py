@@ -66,7 +66,8 @@ def _sample(
     raw = json.dumps(upstream, sort_keys=True, separators=(",", ":"))
     return {
         "sample_id": sid,
-        "target_role": target_role,\n        "split": "train" if index <= 8 else "dev",
+        "target_role": target_role,
+        "split": "train" if index <= 8 else "dev",
         "source_role": source_role,
         "failure_family": family,
         "situation": situation,
