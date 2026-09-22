@@ -1,8 +1,8 @@
 {
   "protocol_id": "hephaestus_role_mastery_v1",
-  "authorized": false,
+  "authorized": true,
   "authorization_source": "user_directive",
   "authorization_text": "lets do Phase I — Role mastery",
   "launch_scope": "five_parallel_independent_role_mastery_jobs",
-  "note": "Prepared after successful static and runtime preflight; paid launch remains locked until final launch commit."
+  "note": "Explicit Phase I role-mastery authorization is active; launch all five frozen independent role jobs."
 }

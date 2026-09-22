@@ -167,6 +167,6 @@
     "production_promotion_allowed": false,
     "lineage_mutation_allowed": false,
     "frozen_eval_mutation_allowed": false,
-    "paid_launch_allowed": false
+    "paid_launch_allowed": true
   }
 }
