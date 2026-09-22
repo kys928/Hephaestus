@@ -81,9 +81,7 @@
     "parallel_pods": 1,
     "gpu_type_ids": [
       "NVIDIA A40",
-      "NVIDIA L40",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      "NVIDIA L40"
     ],
     "minimum_gpu_memory_gib": 44,
     "cloud_type": "SECURE",
