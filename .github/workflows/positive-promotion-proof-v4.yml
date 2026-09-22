@@ -1,0 +1,249 @@
+name: Positive real-model promotion proof V4
+# Evidence-selected wave after exact V3 per-gate retrieval. Granite 3.3 8B is
+# evaluated first and OLMo 2 13B second if needed. Frozen eval, decoding,
+# reviewer, Judge, certification, and promotion gates remain unchanged.
+# Execution routing is availability-adaptive: one live >=48GB Secure Cloud GPU
+# in EU-CZ-1, FP16, Transformers balanced placement, no quantization/offload.
+
+on:
+  push:
+    branches: [feature/production-loop-v1]
+    paths:
+      - .github/workflows/positive-promotion-proof-v4.yml
+      - configs/programs/positive_promotion_runpod_v4.json
+      - scripts/runpod_positive_promotion_driver_v4.py
+      - scripts/run_positive_promotion_proof_v4.py
+      - scripts/launch_positive_promotion_proof_v4.py
+      - scripts/runpod_positive_promotion_driver_v3.py
+      - scripts/run_positive_promotion_proof_v3.py
+      - scripts/launch_positive_promotion_proof_v3.py
+      - scripts/runpod_positive_promotion_driver.py
+      - scripts/run_positive_promotion_proof.py
+      - scripts/run_positive_promotion_proof_v2.py
+      - scripts/launch_positive_promotion_proof.py
+      - src/hephaestus/control/semantic_judge.py
+      - src/hephaestus/policy/promotion_gates.py
+      - src/hephaestus/production/**
+      - src/hephaestus/providers/runpod/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: positive-real-model-promotion-cviwpryzao
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install preflight dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Verify production loop and governed promotion boundaries
+        run: |
+          python -m pytest -q \
+            tests/test_production_loop_v1.py \
+            tests/test_semantic_judge_integration.py \
+            tests/test_promotion_reject_rollback_branch_gates.py \
+            tests/test_runpod_provider.py \
+            tests/test_runpod_gpu_execution.py
+      - name: Compile V4 promotion path
+        run: |
+          python -m py_compile scripts/runpod_positive_promotion_driver.py
+          python -m py_compile scripts/runpod_positive_promotion_driver_v3.py
+          python -m py_compile scripts/runpod_positive_promotion_driver_v4.py
+          python -m py_compile scripts/run_positive_promotion_proof.py
+          python -m py_compile scripts/run_positive_promotion_proof_v2.py
+          python -m py_compile scripts/run_positive_promotion_proof_v3.py
+          python -m py_compile scripts/run_positive_promotion_proof_v4.py
+          python -m py_compile scripts/launch_positive_promotion_proof.py
+          python -m py_compile scripts/launch_positive_promotion_proof_v3.py
+          python -m py_compile scripts/launch_positive_promotion_proof_v4.py
+      - name: Verify V4 candidates, frozen science, availability routing, and no-offload envelope
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          scripts = Path('scripts').resolve()
+          sys.path.insert(0, str(scripts))
+          import launch_positive_promotion_proof_v4 as launcher_v4
+          import run_positive_promotion_proof_v4 as proof_v4
+          import runpod_positive_promotion_driver_v4 as driver_v4
+
+          expected = {
+              '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b': 'apache-2.0',
+              '3a5c85baefbb1896a54d56fe2e76c0395627ddf4': 'apache-2.0',
+          }
+          expected_candidates = [
+              ('ibm-granite/granite-3.3-8b-instruct', '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b', 'apache-2.0'),
+              ('allenai/OLMo-2-1124-13B-Instruct', '3a5c85baefbb1896a54d56fe2e76c0395627ddf4', 'apache-2.0'),
+          ]
+          candidates = proof_v4.proof.CANDIDATES
+          assert [(x['model_id'], x['revision'], x['license']) for x in candidates] == expected_candidates
+          assert launcher_v4.ALLOWED_REVISION_LICENSES == expected
+
+          # Frozen scientific protocol remains unchanged.
+          assert proof_v4.proof.EVAL_PACK_HASH == 'ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad'
+          assert proof_v4.JUDGE_MODEL_ID == 'Qwen/Qwen2.5-1.5B-Instruct'
+          assert proof_v4.JUDGE_REVISION == '582efe62d7cfafd242bffca71ecbde1bcecc1bcc'
+
+          # Infrastructure routing is now live-availability based across GPUs
+          # that can run both candidates in FP16 without CPU/disk offload.
+          assert driver_v4.V4_GPU_COUNT == 1
+          assert driver_v4.V4_PER_GPU_MEMORY_GB == 48
+          assert driver_v4.V4_AGGREGATE_GPU_MEMORY_GB == 48
+          assert driver_v4.V4_MAX_MEMORY_GIB_PER_GPU == 44
+          assert driver_v4.V4_MODEL_PARALLELISM == 'transformers_device_map_balanced_fp16'
+          assert driver_v4.V4_CONTAINER_DISK_GB == 400
+          assert driver_v4.V4_IMAGE == 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime'
+          assert driver_v4.V4_MIN_CUDA_VERSION == '13.0'
+          assert 'NVIDIA RTX PRO 6000 Blackwell Server Edition' in driver_v4.V4_GPU_IDS
+          assert 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition' in driver_v4.V4_GPU_IDS
+          assert 'NVIDIA GeForce RTX 3090' not in driver_v4.V4_GPU_IDS
+          assert proof_v4.proof.PinnedChatTemplateBackend.__name__ == 'AdaptiveV4ChatTemplateBackend'
+
+          shell = launcher_v4.pod_shell_v4()
+          assert 'run_positive_promotion_proof_v4.py' in shell
+          assert "'accelerate>=1,<2'" in shell
+          assert 'torch.cuda.device_count()' in shell
+          assert '>=48GB-class GPU' in shell
+          assert 'HF_HUB_DISABLE_XET=1' in shell
+
+          captured = {}
+          original_retry = driver_v4.base.launcher.create_with_capacity_retries
+          try:
+              def one_shot(create_once):
+                  pod = create_once(list(driver_v4.V4_GPU_IDS))
+                  return pod, []
+              driver_v4.base.launcher.create_with_capacity_retries = one_shot
+
+              class FakeExecution:
+                  def _create_pod(self, body):
+                      captured.update(body)
+                      return {
+                          'id': 'dry-run-v4-availability-adaptive',
+                          'gpu': {
+                              'id': 'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+                              'displayName': 'RTX PRO 6000',
+                              'count': 1,
+                          },
+                      }
+
+              pod, _ = driver_v4._v4_create_pod(
+                  FakeExecution(),
+                  proof_run_id='preflight-v4',
+                  repo_sha='0' * 40,
+                  attempt=1,
+                  controlled_bootstrap_failure=False,
+              )
+              assert pod['id'] == 'dry-run-v4-availability-adaptive'
+          finally:
+              driver_v4.base.launcher.create_with_capacity_retries = original_retry
+
+          assert captured['gpuCount'] == 1
+          assert captured['gpuTypeIds'] == list(driver_v4.V4_GPU_IDS)
+          assert captured['gpuTypePriority'] == 'availability'
+          assert captured['cloudType'] == 'SECURE'
+          assert captured['imageName'] == driver_v4.V4_IMAGE
+          assert 'minCudaVersion' not in captured
+          assert captured['containerDiskInGb'] == 400
+          assert captured['dataCenterIds'] == [driver_v4.base.launcher.DATACENTER_ID]
+          assert captured['networkVolumeId'] == driver_v4.base.launcher.VOLUME_ID
+
+          program = json.loads(Path('configs/programs/positive_promotion_runpod_v4.json').read_text())
+          assert program['driver'] == 'scripts/runpod_positive_promotion_driver_v4.py:build_driver'
+          assert program['driver_config']['prove_bootstrap_recovery_once'] is False
+          assert program['maximum_cycles'] == 1
+          assert program['stop_on_promotion'] is True
+          PY
+
+  prove:
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[launch-positive-promotion-v4]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      PYTHONPATH: src
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install launcher dependencies
+        run: python -m pip install -e '.[s3,test]'
+      - name: Launch V4 real GPU proof through generic production loop
+        run: |
+          hephaestus run --config configs/programs/positive_promotion_runpod_v4.json --fresh > positive_promotion_v4_generic_run.json
+          hephaestus status --config configs/programs/positive_promotion_runpod_v4.json > positive_promotion_v4_generic_status.json
+      - name: Verify V4 promotion evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          launcher = json.loads(Path('positive_promotion_v4_launcher.json').read_text())
+          verification = json.loads(Path('positive_promotion_verification.json').read_text())
+          status = json.loads(Path('positive_promotion_v4_generic_status.json').read_text())
+
+          expected = {
+              '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b': 'apache-2.0',
+              '3a5c85baefbb1896a54d56fe2e76c0395627ddf4': 'apache-2.0',
+          }
+          assert launcher['status'] == 'verified', launcher
+          assert launcher['proof_driver'] == 'scripts/run_positive_promotion_proof_v4.py', launcher
+          assert launcher['allowed_revision_licenses'] == expected, launcher
+          assert launcher['gpu_count'] == 1, launcher
+          assert launcher['gpu_memory_floor_gb'] == 48, launcher
+          assert launcher['aggregate_gpu_memory_floor_gb'] == 48, launcher
+          assert launcher['max_memory_gib_per_gpu'] == 44, launcher
+          assert launcher['model_parallelism'] == 'transformers_device_map_balanced_fp16', launcher
+          assert launcher['container_image'] == 'pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime', launcher
+          assert launcher['min_cuda_version'] == '13.0', launcher
+          assert 'NVIDIA GeForce RTX 3090' not in launcher['gpu_type_ids'], launcher
+          attempts = launcher['attempts']
+          assert len(attempts) >= 1, attempts
+          assert all(item['scientific_variables_changed'] is False for item in attempts), attempts
+          assert attempts[-1].get('verified') is True, attempts[-1]
+
+          program = status['program']
+          assert program['status'] == 'completed', program
+          assert program['stop_reason'] == 'candidate_promoted', program
+          assert verification['status'] == 'verified', verification
+          assert verification['verification_version'] == 'positive-real-model-promotion-launcher-verification.v4', verification
+          manifest = verification['certified_model_manifest']
+          assert manifest['revision'] in expected, manifest
+          assert manifest['license'].lower() == expected[manifest['revision']], manifest
+          assert verification['terminal_result']['status'] == 'completed', verification
+          PY
+      - name: Upload V4 positive-promotion proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: positive-real-model-promotion-proof-v4
+          path: |
+            positive_promotion_v4_launcher.json
+            positive_promotion_verification.json
+            positive_promotion_v4_generic_run.json
+            positive_promotion_v4_generic_status.json
+            state/positive-promotion-runpod-v4-live/
+            artifacts/positive-promotion-runpod-v4-live/
+          if-no-files-found: warn
+          retention-days: 30
