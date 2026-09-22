@@ -8,14 +8,21 @@ on:
       - scripts/build_interface_mastery_v1b.py
       - scripts/run_interface_normalization_ab_v1.py
       - scripts/launch_interface_normalization_ab_v1.py
+      - scripts/run_interface_targeted_repair_v1.py
+      - scripts/launch_interface_targeted_repair_v1.py
+      - scripts/aggregate_interface_targeted_repair_v1.py
       - configs/experiments/hephaestus_interface_repair_v1.json
       - configs/experiments/hephaestus_interface_mastery_v1b.json
       - configs/experiments/hephaestus_interface_normalization_ab_v1.json
       - configs/experiments/interface_normalization_ab_v1.launch.json
+      - configs/experiments/hephaestus_interface_targeted_repair_v1.json
+      - configs/experiments/interface_targeted_repair_v1.launch.json
       - tests/test_interface_repair_v1.py
+      - tests/test_interface_targeted_repair_v1.py
       - docs/phase_ii_targeted_interface_repair.md
       - .github/workflows/interface-repair-v1-validate.yml
       - .github/workflows/interface-normalization-ab-v1-paid-launch.yml
+      - .github/workflows/interface-targeted-repair-v1-paid-launch.yml
   pull_request:
     paths:
       - src/hephaestus/evaluation/handoff_normalization.py
@@ -23,14 +30,21 @@ on:
       - scripts/build_interface_mastery_v1b.py
       - scripts/run_interface_normalization_ab_v1.py
       - scripts/launch_interface_normalization_ab_v1.py
+      - scripts/run_interface_targeted_repair_v1.py
+      - scripts/launch_interface_targeted_repair_v1.py
+      - scripts/aggregate_interface_targeted_repair_v1.py
       - configs/experiments/hephaestus_interface_repair_v1.json
       - configs/experiments/hephaestus_interface_mastery_v1b.json
       - configs/experiments/hephaestus_interface_normalization_ab_v1.json
       - configs/experiments/interface_normalization_ab_v1.launch.json
+      - configs/experiments/hephaestus_interface_targeted_repair_v1.json
+      - configs/experiments/interface_targeted_repair_v1.launch.json
       - tests/test_interface_repair_v1.py
+      - tests/test_interface_targeted_repair_v1.py
       - docs/phase_ii_targeted_interface_repair.md
       - .github/workflows/interface-repair-v1-validate.yml
       - .github/workflows/interface-normalization-ab-v1-paid-launch.yml
+      - .github/workflows/interface-targeted-repair-v1-paid-launch.yml
 permissions: {contents: read}
 jobs:
   validate:
@@ -45,10 +59,11 @@ jobs:
       - run: python scripts/build_interface_repair_v1.py
       - run: python scripts/build_interface_mastery_v1b.py
       - run: python scripts/launch_interface_normalization_ab_v1.py > /tmp/interface-normalization-render.json
-      - run: python -m pytest -q tests/test_interface_repair_v1.py tests/test_interface_mastery_v1.py tests/test_certified_role_stack.py
+      - run: python scripts/launch_interface_targeted_repair_v1.py --role controller > /tmp/interface-repair-render.json
+      - run: python -m pytest -q tests/test_interface_repair_v1.py tests/test_interface_targeted_repair_v1.py tests/test_interface_mastery_v1.py tests/test_certified_role_stack.py
       - run: python -m pytest -q
-      - run: python -m py_compile scripts/build_interface_repair_v1.py scripts/build_interface_mastery_v1b.py scripts/run_interface_normalization_ab_v1.py scripts/launch_interface_normalization_ab_v1.py src/hephaestus/evaluation/handoff_normalization.py
-      - name: Assert isolation and no-training boundary
+      - run: python -m py_compile scripts/build_interface_repair_v1.py scripts/build_interface_mastery_v1b.py scripts/run_interface_normalization_ab_v1.py scripts/launch_interface_normalization_ab_v1.py scripts/run_interface_targeted_repair_v1.py scripts/launch_interface_targeted_repair_v1.py scripts/aggregate_interface_targeted_repair_v1.py src/hephaestus/evaluation/handoff_normalization.py
+      - name: Assert isolation and gating
         run: |
           python - <<'PY'
           import json
@@ -56,13 +71,18 @@ jobs:
           repair=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
           iib=json.loads(Path('configs/experiments/hephaestus_interface_mastery_v1b.json').read_text())
           ab=json.loads(Path('configs/experiments/hephaestus_interface_normalization_ab_v1.json').read_text())
-          marker=json.loads(Path('configs/experiments/interface_normalization_ab_v1.launch.json').read_text())
+          ab_marker=json.loads(Path('configs/experiments/interface_normalization_ab_v1.launch.json').read_text())
+          train=json.loads(Path('configs/experiments/hephaestus_interface_targeted_repair_v1.json').read_text())
+          train_marker=json.loads(Path('configs/experiments/interface_targeted_repair_v1.launch.json').read_text())
           assert repair['leakage_policy']['phase_ii_v1_training_use'] is False
           assert repair['leakage_policy']['phase_ii_b_training_use'] is False
           assert iib['governance']['training_use_allowed'] is False
           assert ab['governance']['weights_mutation_allowed'] is False
           assert ab['governance']['targeted_repair_training_allowed'] is False
-          assert marker['authorization_phrase']=='LAUNCH_INTERFACE_NORMALIZATION_AB_V1'
-          if marker['authorized']:
-              assert marker['authorized_by'] and marker['authorized_at']
+          assert train['governance']['phase_ii_b_access_during_training_allowed'] is False
+          assert train['governance']['production_promotion_allowed'] is False
+          assert train_marker['authorization_phrase']=='LAUNCH_INTERFACE_TARGETED_REPAIR_V1'
+          assert ab_marker['authorization_phrase']=='LAUNCH_INTERFACE_NORMALIZATION_AB_V1'
+          if train['normalization_gate']['required_ab_run_id'] is None:
+              assert train_marker['authorized'] is False
           PY
