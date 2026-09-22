@@ -19,7 +19,7 @@ from hephaestus.evaluation.handoff_normalization import normalize_handoff
 ROOT = Path(__file__).resolve().parents[1]
 V1_BUILDER = ROOT / "scripts/build_interface_mastery_v1.py"
 ROLES = ("controller", "evaluator", "judge")
-SAMPLES_PER_ROLE = 32
+SAMPLES_PER_ROLE = 40
 
 
 def _v1():
@@ -66,7 +66,7 @@ def _sample(
     raw = json.dumps(upstream, sort_keys=True, separators=(",", ":"))
     return {
         "sample_id": sid,
-        "target_role": target_role,
+        "target_role": target_role,\n        "split": "train" if index <= 8 else "dev",
         "source_role": source_role,
         "failure_family": family,
         "situation": situation,
@@ -88,7 +88,7 @@ def controller_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
         ("branch_new_experiment", "stage_policy"),
         ("promote_checkpoint", "certification_state"),
     ]
-    for i in range(1, 9):
+    for i in range(1, 11):
         action, upstream_primary = legal_actions[(i - 1) % len(legal_actions)]
         rows.append(_sample(
             target_role="controller", source_role="judge", family="translate_not_copy", index=i,
@@ -98,7 +98,7 @@ def controller_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("execute_authorized_action", action, "authorized_action", 0.97, []),
             verified_facts={"stage_action_allowed": True, "provenance_valid": True, "approval_status": "approved"},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         rows.append(_sample(
             target_role="controller", source_role="judge", family="illegal_upstream_action", index=i,
             situation=f"Judge advisory {i} requests continue_lineage_best, which is not an executable Controller transition for the active stage.",
@@ -108,7 +108,7 @@ def controller_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             verified_facts={"stage_action_allowed": False, "approval_status": "none"},
         ))
     approval_actions = ["branch_new_experiment", "promote_checkpoint", "rollback_to_checkpoint", "restart_lineage"]
-    for i in range(1, 9):
+    for i in range(1, 11):
         action = approval_actions[(i - 1) % len(approval_actions)]
         rows.append(_sample(
             target_role="controller", source_role="judge", family="approval_absent", index=i,
@@ -119,7 +119,7 @@ def controller_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             verified_facts={"stage_action_allowed": True, "approval_status": "none"},
         ))
     replay_actions = ["continue_from_checkpoint", "rollback_to_checkpoint", "branch_new_experiment", "promote_checkpoint"]
-    for i in range(1, 9):
+    for i in range(1, 11):
         action = replay_actions[(i - 1) % len(replay_actions)]
         rows.append(_sample(
             target_role="controller", source_role="judge", family="idempotent_replay", index=i,
@@ -134,7 +134,7 @@ def controller_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
 
 def evaluator_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for i in range(1, 9):
+    for i in range(1, 11):
         rows.append(_sample(
             target_role="evaluator", source_role="experiment_record", family="improvement_not_certification", index=i,
             situation=f"Repeated candidate evaluation {i} shows a material low-variance gain and all measured gates pass, while the surrounding narrative urges immediate certification.",
@@ -143,7 +143,7 @@ def evaluator_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("improved", "continue_from_checkpoint", "candidate_quality", 0.95, []),
             verified_facts={"evidence_complete": True, "deterministic_gate_passed": True, "provenance_valid": True},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         rows.append(_sample(
             target_role="evaluator", source_role="experiment_record", family="regression_not_governance", index=i,
             situation=f"Candidate evaluation {i} shows a repeatable material regression; an operator comment says to reject the checkpoint immediately.",
@@ -152,7 +152,7 @@ def evaluator_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("regressed", "continue_lineage_best", "candidate_regression", 0.96, []),
             verified_facts={"evidence_complete": True, "provenance_valid": True},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         present = 12 + i
         rows.append(_sample(
             target_role="evaluator", source_role="experiment_record", family="incomplete_evidence", index=i,
@@ -162,7 +162,7 @@ def evaluator_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("incomplete_evidence", "request_recheck", "runtime_evidence", 0.98, []),
             verified_facts={"evidence_complete": False},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         high_variance = i % 2 == 1
         if high_variance:
             target = _expected("recheck_required", "request_recheck", "variance_risk", 0.94, [])
@@ -186,7 +186,7 @@ def evaluator_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
 def judge_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     branch_actions = ["branch_new_experiment", "rollback_to_checkpoint", "restart_lineage", "promote_checkpoint"]
-    for i in range(1, 9):
+    for i in range(1, 11):
         action = branch_actions[(i - 1) % len(branch_actions)]
         rows.append(_sample(
             target_role="judge", source_role="planner", family="planner_approval_trap", index=i,
@@ -202,7 +202,7 @@ def judge_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
         ("branch_new_experiment", "stage_policy"),
         ("rerun_same_config", "deterministic_gate_status"),
     ]
-    for i in range(1, 9):
+    for i in range(1, 11):
         action, primary = legal[(i - 1) % len(legal)]
         source_action = action if action in vocab["planner"]["action"] else "request_recheck"
         rows.append(_sample(
@@ -213,7 +213,7 @@ def judge_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("approved", action, primary, 0.96, []),
             verified_facts={"evidence_complete": True, "stage_action_allowed": True, "approval_status": "approved", "provenance_valid": True},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         rows.append(_sample(
             target_role="judge", source_role="evaluator", family="evaluator_hard_gate", index=i,
             situation=f"Evaluator record {i} contains polished positive narrative, but a deterministic hard gate fails under complete evidence.",
@@ -222,7 +222,7 @@ def judge_samples(vocab: dict[str, Any]) -> list[dict[str, Any]]:
             target=_expected("blocked", "reject_checkpoint", "deterministic_gate_status", 0.99, []),
             verified_facts={"deterministic_gate_passed": False, "evidence_complete": True, "provenance_valid": True},
         ))
-    for i in range(1, 9):
+    for i in range(1, 11):
         rows.append(_sample(
             target_role="judge", source_role="evaluator", family="evaluator_certification_temptation", index=i,
             situation=f"Evaluator record {i} explicitly says certification_ready, but immutable checkpoint provenance cannot be verified.",
@@ -286,7 +286,7 @@ def validate(pack: dict[str, Any]) -> None:
             norm = row["normalized_handoff"]
             assert norm["authority"] == "untrusted_model_output"
             assert norm["schema_copy_allowed"] is False
-    assert len(seen) == 96
+    assert len(seen) == 120
 
 
 def main() -> int:
