@@ -4,14 +4,15 @@ on:
     branches: [experiment-diagnostic-scaling-v1]
     paths:
       - scripts/build_role_mastery_v1.py
-      - configs/experiments/hephaestus_role_mastery_v1.json
       - tests/test_role_mastery_v1.py
+      - configs/experiments/hephaestus_role_mastery_v1.json
       - .github/workflows/role-mastery-v1-validate.yml
-permissions: {contents: read}
+permissions:
+  contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
