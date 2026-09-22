@@ -3,7 +3,7 @@
   "dataset_version": 1,
   "purpose": "Targeted repair data for cross-role contamination observed in Phase II V1, isolated from all certification holdouts.",
   "builder_path": "scripts/build_interface_repair_v1.py",
-  "canonical_sha256": null,
+  "canonical_sha256": "58cce9a9a4b43ac4874a50af86f6c6080f50d541d56dfd343d01539e2821335f",
   "total_samples": 120,
   "samples_per_role": {
     "controller": 40,
