@@ -3,12 +3,12 @@
   "dataset_version": 1,
   "purpose": "Targeted repair data for cross-role contamination observed in Phase II V1, isolated from all certification holdouts.",
   "builder_path": "scripts/build_interface_repair_v1.py",
-  "canonical_sha256": "0653d7fc4d3dba0acabcbef763f9451566f083920afc0593cc3ff0ca05d532f2",
-  "total_samples": 96,
+  "canonical_sha256": null,
+  "total_samples": 120,
   "samples_per_role": {
-    "controller": 32,
-    "evaluator": 32,
-    "judge": 32
+    "controller": 40,
+    "evaluator": 40,
+    "judge": 40
   },
   "source_failure_run_id": "interface-mastery-v1-35734212862",
   "presentation_policy": {
@@ -25,5 +25,9 @@
     "weights_mutation_allowed_by_dataset_build": false,
     "production_promotion_allowed": false,
     "automatic_role_dispatch_allowed": false
+  },
+  "split_counts": {
+    "train_per_role": 32,
+    "dev_per_role": 8
   }
 }
