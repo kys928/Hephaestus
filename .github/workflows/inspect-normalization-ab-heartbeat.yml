@@ -1,0 +1,42 @@
+name: Inspect normalization A-B heartbeat
+on:
+  push:
+    branches: [phase-ii-targeted-interface-repair]
+    paths:
+      - .github/workflows/inspect-normalization-ab-heartbeat.yml
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install boto3
+      - name: Read A-B state
+        run: |
+          python - <<'PY'
+          import json,os
+          import boto3
+          from botocore.config import Config
+          c=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"].rstrip("/"),region_name=os.environ["RUNPOD_DATACENTER_ID"],aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],config=Config(retries={"mode":"standard","max_attempts":5}))
+          b=os.environ["RUNPOD_NETWORK_VOLUME_ID"]
+          p="hephaestus/scientific/v1/interface_normalization_ab/interface-normalization-ab-v1-35763443477"
+          for name in ("heartbeat.json","result.json","summary.json"):
+              key=f"{p}/{name}"
+              try:
+                  r=c.get_object(Bucket=b,Key=key)
+              except Exception as e:
+                  code=str(getattr(e,"response",{}).get("Error",{}).get("Code",""))
+                  print("AB_OBJECT "+json.dumps({"name":name,"exists":False,"code":code},sort_keys=True))
+                  continue
+              try: obj=json.loads(r["Body"].read())
+              finally:r["Body"].close()
+              print("AB_OBJECT "+json.dumps({"name":name,"exists":True,"payload":obj},sort_keys=True))
+          PY
