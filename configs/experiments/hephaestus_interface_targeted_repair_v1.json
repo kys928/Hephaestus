@@ -1,0 +1,67 @@
+{
+  "protocol_id": "hephaestus_interface_targeted_repair_v1",
+  "protocol_version": 1,
+  "phase": "phase_ii_targeted_repair",
+  "purpose": "Continue only the certified Controller, Evaluator, and Judge adapters on isolated interface-repair train data, selecting checkpoints on held-back repair dev data before Phase II-B.",
+  "repair_pack": {
+    "builder_path": "scripts/build_interface_repair_v1.py",
+    "canonical_sha256": null,
+    "train_cases_per_role": 32,
+    "dev_cases_per_role": 8,
+    "phase_ii_v1_training_use": false,
+    "phase_ii_b_training_use": false
+  },
+  "source_stack": {
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201",
+    "continue_selected_phase_i_adapters": true
+  },
+  "normalization_gate": {
+    "required_ab_run_id": null,
+    "s3_prefix": "hephaestus/scientific/v1/interface_normalization_ab",
+    "require_completed": true,
+    "use_recommended_presentation": true
+  },
+  "training": {
+    "roles_in_order": ["controller", "evaluator", "judge"],
+    "precision": "bfloat16",
+    "seed": 314159,
+    "epochs": 4,
+    "gradient_accumulation_steps": 4,
+    "micro_batch_size": 1,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00001,
+    "weight_decay": 0.0,
+    "max_grad_norm": 1.0,
+    "max_sequence_length": 1536,
+    "gradient_checkpointing": true,
+    "dev_checkpoints": [8, 16, 24, 32]
+  },
+  "repair_dev_gate": {
+    "minimum_quality_100": 90.0,
+    "minimum_schema_compliance": 1.0,
+    "minimum_grounding": 1.0,
+    "minimum_exact_contract_pass_rate": 0.875,
+    "maximum_hallucination_rate": 0.0
+  },
+  "execution": {
+    "gpu_type_ids": ["NVIDIA A40", "NVIDIA L40"],
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 7200,
+    "max_hourly_usd": 1.25,
+    "max_estimated_usd_per_role": 1.25,
+    "s3_prefix": "hephaestus/scientific/v1/interface_repair_training"
+  },
+  "governance": {
+    "training_authorized": false,
+    "explicit_launch_authorization_required": true,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false,
+    "phase_i_registry_mutation_allowed": false,
+    "phase_ii_b_access_during_training_allowed": false
+  }
+}
