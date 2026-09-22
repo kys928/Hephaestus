@@ -77,18 +77,8 @@ jobs:
               assert matched,role
               if role in {'diagnosis','planner'}:
                   assert not any('vision_tower' in n for n in matched)
-              print('ROLE_HARDENING_V2_PREFLIGHT_JSON '+json.dumps({
-                  'role':role,'model_id':cand['model_id'],'revision':cand['revision'],
-                  'training_cases':observed,'source_adapter_bytes':art['bytes'],
-                  'source_adapter_sha256':art['sha256'],'matched_lora_modules':len(matched)
-              },sort_keys=True))
-          print('ROLE_HARDENING_V2_SCIENCE_JSON '+json.dumps({
-              'hardening_pack_sha256':hard_hash,
-              'original_role_mastery_pack_sha256':cfg['source_stack']['original_role_mastery_pack_sha256'],
-              'frozen_redteam_pack_sha256':cfg['source_stack']['original_redteam_pack_sha256'],
-              'redteam_optimization_use':'forbidden',
-              'checkpoint_selection':'hardening_dev_only'
-          },sort_keys=True))
+              print('ROLE_HARDENING_V2_PREFLIGHT_JSON '+json.dumps({'role':role,'model_id':cand['model_id'],'revision':cand['revision'],'training_cases':observed,'source_adapter_bytes':art['bytes'],'source_adapter_sha256':art['sha256'],'matched_lora_modules':len(matched)},sort_keys=True))
+          print('ROLE_HARDENING_V2_SCIENCE_JSON '+json.dumps({'hardening_pack_sha256':hard_hash,'original_role_mastery_pack_sha256':cfg['source_stack']['original_role_mastery_pack_sha256'],'frozen_redteam_pack_sha256':cfg['source_stack']['original_redteam_pack_sha256'],'redteam_optimization_use':'forbidden','checkpoint_selection':'hardening_dev_only'},sort_keys=True))
           PY
       - run: python scripts/build_role_hardening_v2.py
       - run: python -m pytest -q tests/test_role_hardening_v2.py
@@ -103,7 +93,7 @@ jobs:
       matrix:
         role: [controller, diagnosis, planner, evaluator, judge]
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 370
     env:
       PYTHONPATH: src:scripts
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
