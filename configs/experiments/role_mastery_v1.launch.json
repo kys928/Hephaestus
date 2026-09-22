@@ -1,15 +1,8 @@
 {
   "protocol_id": "hephaestus_role_mastery_v1",
-  "authorized": true,
+  "authorized": false,
   "authorization_source": "user_directive",
-  "authorization_text": "okay then. lets do Phase I — Role mastery",
+  "authorization_text": "lets do Phase I — Role mastery",
   "launch_scope": "five_parallel_independent_role_mastery_jobs",
-  "last_attempt": {
-    "workflow_run_id": "35596791201",
-    "status": "blocked_external",
-    "blocker": "insufficient_runpod_balance",
-    "scientific_training_started": false,
-    "pod_creation_succeeded": false
-  },
-  "resume_policy": "relaunch_exact_frozen_protocol_after_balance_restored"
+  "note": "Prepared after successful static and runtime preflight; paid launch remains locked until final launch commit."
 }

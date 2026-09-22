@@ -147,8 +147,8 @@
     "gpu_type_ids": [
       "NVIDIA A40",
       "NVIDIA L40",
-      "NVIDIA RTX 4090",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
     "minimum_gpu_memory_gib": 44,
     "cloud_type": "SECURE",
@@ -166,6 +166,7 @@
     "training_approved": true,
     "production_promotion_allowed": false,
     "lineage_mutation_allowed": false,
-    "frozen_eval_mutation_allowed": false
+    "frozen_eval_mutation_allowed": false,
+    "paid_launch_allowed": false
   }
 }
