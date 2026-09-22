@@ -1,18 +1,16 @@
 name: Phase II Interface Mastery paid launch
 on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Exact launch phrase required'
-        required: true
-        type: string
+  push:
+    branches: [phase-ii-interface-mastery]
+    paths:
+      - configs/experiments/interface_mastery_v1.launch.json
 permissions: {contents: read}
 concurrency:
   group: phase-ii-interface-mastery-paid
   cancel-in-progress: false
 jobs:
   launch:
-    if: ${{ inputs.confirm == 'LAUNCH_PHASE_II_INTERFACE_MASTERY_V1' }}
+    if: contains(github.event.head_commit.message, '[launch-interface-mastery-v1]')
     runs-on: ubuntu-latest
     timeout-minutes: 200
     env:
