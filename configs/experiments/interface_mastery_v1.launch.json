@@ -1,8 +1,8 @@
 {
   "protocol_id": "hephaestus_interface_mastery_v1",
-  "authorized": false,
+  "authorized": true,
   "authorization_phrase": "LAUNCH_PHASE_II_INTERFACE_MASTERY_V1",
-  "authorized_by": null,
-  "authorized_at": null,
-  "note": "Preparation boundary. Flip only after an explicit operator launch command. No paid pod may be created while authorized=false."
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-22T13:26:00Z",
+  "note": "Authorized by explicit operator launch command on 2026-09-22. Paid Phase II Interface Mastery V1 launch is permitted under the frozen governance and cost ceilings."
 }
