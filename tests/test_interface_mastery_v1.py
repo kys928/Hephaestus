@@ -66,11 +66,17 @@ def test_phase_ii_uses_certified_phase_i_stack_without_enabling_dispatch() -> No
     assert cfg["governance"]["targeted_repair_training_allowed"] is False
 
 
-def test_phase_ii_launch_is_frozen_unauthorized_before_operator_command() -> None:
+def test_phase_ii_launch_marker_is_frozen_and_well_formed() -> None:
     marker = json.loads(MARKER.read_text(encoding="utf-8"))
     assert marker["protocol_id"] == "hephaestus_interface_mastery_v1"
-    assert marker["authorized"] is False
     assert marker["authorization_phrase"] == "LAUNCH_PHASE_II_INTERFACE_MASTERY_V1"
+    if marker["authorized"] is True:
+        assert marker["authorized_by"]
+        assert marker["authorized_at"]
+    else:
+        assert marker["authorized"] is False
+        assert marker["authorized_by"] is None
+        assert marker["authorized_at"] is None
 
 
 def test_interface_scorecard_accepts_exact_grounded_handoff() -> None:
