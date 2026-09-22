@@ -17,6 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: python -m pip install --quiet pytest
+      - run: python -m pip install --quiet -e '.[test,s3]'
       - run: python scripts/build_role_mastery_v1.py
       - run: pytest -q tests/test_role_mastery_v1.py
+      - run: python -m py_compile scripts/build_role_mastery_v1.py scripts/run_role_mastery_v1.py scripts/launch_role_mastery_v1.py
+      - run: |
+          for role in controller diagnosis planner evaluator judge; do
+            python scripts/launch_role_mastery_v1.py --role "$role" >/dev/null
+          done
