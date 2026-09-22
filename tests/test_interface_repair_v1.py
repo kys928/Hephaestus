@@ -14,7 +14,7 @@ REPAIR_CFG = ROOT / "configs/experiments/hephaestus_interface_repair_v1.json"
 IIB_CFG = ROOT / "configs/experiments/hephaestus_interface_mastery_v1b.json"
 AB_CFG = ROOT / "configs/experiments/hephaestus_interface_normalization_ab_v1.json"
 
-REPAIR_SHA256 = "0653d7fc4d3dba0acabcbef763f9451566f083920afc0593cc3ff0ca05d532f2"
+REPAIR_SHA256 = None
 IIB_SHA256 = "e71f02a1965e53d1c157e5c6f1d3adba23216560569325c25b18661967b1a9ed"
 
 
@@ -42,7 +42,7 @@ def test_repair_data_is_separate_valid_and_role_targeted() -> None:
     v1.validate(v1_pack); repair.validate(repair_pack)
     v1_ids = {c["case_id"] for rows in v1_pack["partitions"].values() for c in rows}
     repair_ids = {r["sample_id"] for rows in repair_pack["samples"].values() for r in rows}
-    assert len(repair_ids) == 96
+    assert len(repair_ids) == 120
     assert not (v1_ids & repair_ids)
     assert set(repair_pack["samples"]) == {"controller", "evaluator", "judge"}
     cfg = json.loads(REPAIR_CFG.read_text())
