@@ -1,0 +1,8 @@
+{
+  "protocol_id": "hephaestus_interface_mastery_v1b",
+  "authorized": false,
+  "authorization_phrase": "LAUNCH_PHASE_II_B_INTERFACE_MASTERY_V1",
+  "authorized_by": null,
+  "authorized_at": null,
+  "note": "Blocked until targeted Controller, Evaluator, and Judge repair completes and its aggregate is frozen into the Phase II-B config."
+}

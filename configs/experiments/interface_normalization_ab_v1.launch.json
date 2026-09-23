@@ -1,0 +1,8 @@
+{
+  "protocol_id": "hephaestus_interface_normalization_ab_v1",
+  "authorized": true,
+  "authorization_phrase": "LAUNCH_INTERFACE_NORMALIZATION_AB_V1",
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-22T17:52:00Z",
+  "note": "Authorized by the user's explicit request to run the paired handoff-normalization A/B before any targeted repair training."
+}

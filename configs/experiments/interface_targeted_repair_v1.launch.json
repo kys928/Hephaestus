@@ -1,0 +1,8 @@
+{
+  "protocol_id": "hephaestus_interface_targeted_repair_v1",
+  "authorized": true,
+  "authorization_phrase": "LAUNCH_INTERFACE_TARGETED_REPAIR_V1",
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-23T07:10:00Z",
+  "note": "Authorized after normalization A/B interface-normalization-ab-v1-35763443477 selected raw_handoff; user explicitly green-lit Controller -> Evaluator -> Judge repair and subsequent Phase II-B recertification."
+}
