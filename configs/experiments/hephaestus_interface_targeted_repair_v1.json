@@ -17,10 +17,12 @@
     "continue_selected_phase_i_adapters": true
   },
   "normalization_gate": {
-    "required_ab_run_id": null,
+    "required_ab_run_id": "interface-normalization-ab-v1-35763443477",
     "s3_prefix": "hephaestus/scientific/v1/interface_normalization_ab",
     "require_completed": true,
-    "use_recommended_presentation": true
+    "use_recommended_presentation": true,
+    "required_recommended_presentation": "raw_handoff",
+    "required_normalization_preferred": false
   },
   "training": {
     "roles_in_order": [
@@ -69,11 +71,12 @@
     "s3_prefix": "hephaestus/scientific/v1/interface_repair_training"
   },
   "governance": {
-    "training_authorized": false,
+    "training_authorized": true,
     "explicit_launch_authorization_required": true,
     "production_promotion_allowed": false,
     "automatic_role_dispatch_allowed": false,
     "phase_i_registry_mutation_allowed": false,
-    "phase_ii_b_access_during_training_allowed": false
+    "phase_ii_b_access_during_training_allowed": false,
+    "authorization_source": "user_directive_2026-09-23_phase_ii_targeted_interface_repair_and_recertification"
   }
 }
