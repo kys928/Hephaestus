@@ -298,9 +298,16 @@ def main() -> int:
     ab_result=get_json(client,bucket,ab_key)
     if ab_result.get("status")!="completed":
         raise RuntimeError("required normalization A/B is not completed")
-    presentation=str(ab_result.get("comparison",{}).get("recommended_repair_presentation",""))
+    comparison=ab_result.get("comparison",{})
+    presentation=str(comparison.get("recommended_repair_presentation",""))
     if presentation not in {"raw_handoff","normalized_handoff"}:
         raise RuntimeError("normalization A/B did not produce a valid repair presentation")
+    required_presentation=str(cfg["normalization_gate"].get("required_recommended_presentation",""))
+    if presentation != required_presentation:
+        raise RuntimeError(f"normalization A/B presentation drift {presentation} != {required_presentation}")
+    required_preferred=cfg["normalization_gate"].get("required_normalization_preferred")
+    if required_preferred is not None and comparison.get("normalization_preferred") is not required_preferred:
+        raise RuntimeError("normalization A/B preference drifted from frozen repair gate")
 
     prefix=f"{cfg['execution']['s3_prefix'].rstrip('/')}/{run_id}/roles/{role}"
     root=Path(f"/tmp/{run_id}-{role}");shutil.rmtree(root,ignore_errors=True);root.mkdir(parents=True,exist_ok=True)
