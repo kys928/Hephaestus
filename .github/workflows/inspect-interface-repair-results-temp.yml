@@ -25,17 +25,17 @@ jobs:
           c=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"].rstrip("/"),region_name=os.environ["RUNPOD_DATACENTER_ID"],aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],config=Config(retries={"mode":"standard","max_attempts":10}))
           b=os.environ["RUNPOD_NETWORK_VOLUME_ID"]
           prefix="hephaestus/scientific/v1/interface_repair_training/interface-repair-v1-35830231064"
-          for key in [
-            prefix+"/roles/controller/result.json",
-            prefix+"/roles/evaluator/result.json",
-            prefix+"/roles/judge/result.json",
-            prefix+"/aggregate.json",
-          ]:
-              try:
-                  r=c.get_object(Bucket=b,Key=key)
-                  try: data=json.loads(r["Body"].read().decode())
-                  finally: r["Body"].close()
-                  print("S3_RESULT_JSON "+json.dumps({"key":key,"value":data},sort_keys=True))
-              except Exception as e:
-                  print("S3_RESULT_MISSING "+json.dumps({"key":key,"error":str(e)},sort_keys=True))
+          for role,step in [("controller",24),("evaluator",32),("judge",32)]:
+              key=f"{prefix}/roles/{role}/dev/step-{step:04d}.json"
+              r=c.get_object(Bucket=b,Key=key)
+              try: data=json.loads(r["Body"].read().decode())
+              finally: r["Body"].close()
+              compact={"role":role,"step":step,"summary":data.get("summary"),"gate":data.get("gate"),"rows":[]}
+              for row in data.get("rows",[]):
+                  compact["rows"].append({
+                    "sample_id":row.get("sample_id"),
+                    "score":row.get("score"),
+                    "output":row.get("output")
+                  })
+              print("SELECTED_DEV_JSON "+json.dumps(compact,sort_keys=True))
           PY
