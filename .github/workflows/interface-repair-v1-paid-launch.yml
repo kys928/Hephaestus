@@ -17,7 +17,7 @@ jobs:
       matrix:
         role: [planner, evaluator, judge, controller]
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 420
     env:
       PYTHONPATH: src:scripts
       HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
