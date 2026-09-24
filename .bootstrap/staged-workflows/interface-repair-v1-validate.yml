@@ -1,0 +1,55 @@
+name: Interface Repair V1 validate
+on:
+  push:
+    branches: [experiment-interface-repair-v1]
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v1.json
+      - configs/experiments/interface_repair_v1.launch.json
+      - scripts/build_interface_repair_v1.py
+      - scripts/run_interface_repair_v1.py
+      - scripts/run_interface_repair_live_v1.py
+      - scripts/launch_interface_repair_v1.py
+      - tests/test_interface_repair_v1.py
+      - .github/workflows/interface-repair-v1-validate.yml
+      - .github/workflows/interface-repair-v1-paid-launch.yml
+      - docs/evidence/interface-repair-v1/PREFLIGHT.md
+  pull_request:
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v1.json
+      - configs/experiments/interface_repair_v1.launch.json
+      - scripts/build_interface_repair_v1.py
+      - scripts/run_interface_repair_v1.py
+      - scripts/run_interface_repair_live_v1.py
+      - scripts/launch_interface_repair_v1.py
+      - tests/test_interface_repair_v1.py
+      - .github/workflows/interface-repair-v1-validate.yml
+      - .github/workflows/interface-repair-v1-paid-launch.yml
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e . pytest
+      - run: python scripts/build_interface_repair_v1.py
+      - run: python scripts/launch_interface_repair_v1.py --role planner > /tmp/repair-role-render.json
+      - run: python scripts/launch_interface_repair_v1.py --live > /tmp/repair-live-render.json
+      - run: python -m pytest -q tests/test_interface_repair_v1.py
+      - run: python -m pytest -q
+      - run: python -m py_compile scripts/build_interface_repair_v1.py scripts/run_interface_repair_v1.py scripts/run_interface_repair_live_v1.py scripts/launch_interface_repair_v1.py
+      - name: Assert repair governance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
+          assert cfg['frozen_diagnosis'] is True
+          assert 'diagnosis' not in cfg['trainable_roles']
+          assert cfg['governance']['production_promotion_allowed'] is False
+          assert cfg['governance']['automatic_role_dispatch_allowed'] is False
+          assert cfg['governance']['source_phase_i_adapter_mutation_allowed'] is False
+          assert cfg['pack']['phase_ii_v1_cases_reused_for_certification'] is False
+          PY
