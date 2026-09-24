@@ -1,0 +1,127 @@
+name: Interface Repair V1 paid experiment
+on:
+  push:
+    branches: [experiment-interface-repair-v1]
+    paths:
+      - configs/experiments/interface_repair_v1.launch.json
+permissions: {contents: read}
+concurrency:
+  group: interface-repair-v1-paid
+  cancel-in-progress: false
+jobs:
+  train:
+    if: contains(github.event.head_commit.message, '[launch-interface-repair-v1]')
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        role: [planner, evaluator, judge, controller]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
+      HEPHAESTUS_INTERFACE_REPAIR_LAUNCH_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V1
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - name: Verify frozen launch
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
+          marker=json.loads(Path('configs/experiments/interface_repair_v1.launch.json').read_text())
+          assert cfg['pack']['canonical_sha256']=='495aaaa6663939cd2d9f89f8f0ce1702cbdf59f25e9406ececbc649c6aa78b2e'
+          assert cfg['source_phase_i_stack']['required_source_run_id']=='role-mastery-v1-35596791201'
+          assert cfg['frozen_diagnosis'] is True
+          assert marker['authorized'] is True
+          assert marker['authorization_phrase']=='LAUNCH_INTERFACE_REPAIR_V1'
+          assert marker['authorized_by'] and marker['authorized_at']
+          assert cfg['governance']['production_promotion_allowed'] is False
+          assert cfg['governance']['automatic_role_dispatch_allowed'] is False
+          PY
+      - run: python scripts/build_interface_repair_v1.py
+      - run: python scripts/launch_interface_repair_v1.py --role ${{ matrix.role }} --execute
+
+  aggregate:
+    needs: train
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install boto3
+      - name: Require all four role repairs to certify
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+          from botocore.config import Config
+          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
+          prefix=f'hephaestus/scientific/v1/interface_repair/{run_id}/roles'
+          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
+          bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          out={}
+          for role in ('planner','evaluator','judge','controller'):
+              key=f'{prefix}/{role}/result.json'
+              r=client.get_object(Bucket=bucket,Key=key)
+              data=json.loads(r['Body'].read())
+              out[role]={'status':data.get('status'),'certified':data.get('certification',{}).get('certified'),'pre_interface':data.get('pre_interface'),'post_interface':data.get('post_interface'),'pre_regression':data.get('pre_regression'),'post_regression':data.get('post_regression'),'adapter':data.get('adapter')}
+              assert data.get('status')=='completed', (role,data.get('error'))
+              assert data.get('certification',{}).get('certified') is True, (role,data.get('certification'))
+          print('INTERFACE_REPAIR_AGGREGATE_JSON '+json.dumps(out,sort_keys=True))
+          PY
+
+  live-certify:
+    needs: aggregate
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
+      HEPHAESTUS_INTERFACE_REPAIR_LAUNCH_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V1
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - run: python scripts/launch_interface_repair_v1.py --live --execute
+      - name: Require live repaired stack certification
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+          from botocore.config import Config
+          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
+          key=f'hephaestus/scientific/v1/interface_repair/{run_id}/live/result.json'
+          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
+          r=client.get_object(Bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID'],Key=key); data=json.loads(r['Body'].read())
+          print('INTERFACE_REPAIR_LIVE_CERTIFICATION_JSON '+json.dumps(data.get('summary',{}),sort_keys=True))
+          assert data.get('status')=='completed'
+          assert data.get('summary',{}).get('certified') is True, data.get('summary')
+          PY
