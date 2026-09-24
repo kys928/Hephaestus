@@ -32,8 +32,10 @@ jobs:
       - name: Commit experiment and remove bootstrap
         run: |
           set -euo pipefail
-          rm -rf .bootstrap
-          rm -f .github/workflows/interface-repair-bootstrap.yml
+          mkdir -p .bootstrap/staged-workflows
+          mv .github/workflows/interface-repair-v1-paid-launch.yml .bootstrap/staged-workflows/interface-repair-v1-paid-launch.yml
+          mv .github/workflows/interface-repair-v1-validate.yml .bootstrap/staged-workflows/interface-repair-v1-validate.yml
+          rm -f .bootstrap/interface-repair-v1.part-trigger .bootstrap/interface-repair-v1.part0 .bootstrap/interface-repair-v1.part1 .bootstrap/interface-repair-v1.part2a .bootstrap/interface-repair-v1.part2b .bootstrap/interface-repair-v1.part3
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
