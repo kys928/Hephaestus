@@ -4,6 +4,7 @@ on:
     branches: [experiment-interface-repair-v1]
     paths:
       - '.bootstrap/interface-repair-v1.part*'
+      - '.github/workflows/interface-repair-bootstrap.yml'
 permissions:
   contents: write
 jobs:
