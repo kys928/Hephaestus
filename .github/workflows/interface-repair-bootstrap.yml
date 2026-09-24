@@ -1,0 +1,40 @@
+name: Bootstrap Interface Repair V1
+on:
+  push:
+    branches: [experiment-interface-repair-v1]
+    paths:
+      - '.bootstrap/interface-repair-v1.part*'
+permissions:
+  contents: write
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Reconstruct validated experiment payload
+        run: |
+          set -euo pipefail
+          cat .bootstrap/interface-repair-v1.part0 .bootstrap/interface-repair-v1.part1 .bootstrap/interface-repair-v1.part2a .bootstrap/interface-repair-v1.part2b .bootstrap/interface-repair-v1.part3 | base64 -d > /tmp/interface-repair-v1.tgz
+          echo "dca628d06564a865fa2c8a46ca3c0cff9ba7702d8d643597c1f7945b9b631667  /tmp/interface-repair-v1.tgz" | sha256sum -c -
+          tar -tzf /tmp/interface-repair-v1.tgz | tee /tmp/payload-files.txt
+          if grep -Ev '^(scripts/|configs/experiments/|tests/|\.github/workflows/|docs/evidence/interface-repair-v1/)' /tmp/payload-files.txt; then
+            echo "Unexpected payload path" >&2
+            exit 1
+          fi
+          tar -xzf /tmp/interface-repair-v1.tgz -C .
+      - name: Smoke validate payload
+        run: |
+          python -m py_compile scripts/build_interface_repair_v1.py scripts/run_interface_repair_v1.py scripts/run_interface_repair_live_v1.py scripts/launch_interface_repair_v1.py
+          python scripts/build_interface_repair_v1.py
+      - name: Commit experiment and remove bootstrap
+        run: |
+          set -euo pipefail
+          rm -rf .bootstrap
+          rm -f .github/workflows/interface-repair-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Prepare targeted interface repair V1"
+          git push origin HEAD:experiment-interface-repair-v1
