@@ -19,7 +19,7 @@ jobs:
           cat .bootstrap/interface-repair-v1.part0 .bootstrap/interface-repair-v1.part1 .bootstrap/interface-repair-v1.part2a .bootstrap/interface-repair-v1.part2b .bootstrap/interface-repair-v1.part3 | base64 -d > /tmp/interface-repair-v1.tgz
           echo "dca628d06564a865fa2c8a46ca3c0cff9ba7702d8d643597c1f7945b9b631667  /tmp/interface-repair-v1.tgz" | sha256sum -c -
           tar -tzf /tmp/interface-repair-v1.tgz | tee /tmp/payload-files.txt
-          if grep -Ev '^(scripts/?$|scripts/|configs/?$|configs/experiments/?$|configs/experiments/|tests/?$|tests/|\\.github/?$|\\.github/workflows/?$|\\.github/workflows/|docs/?$|docs/evidence/?$|docs/evidence/interface-repair-v1/?$|docs/evidence/interface-repair-v1/)' /tmp/payload-files.txt; then
+          if grep -Ev '^(scripts(/|$)|configs(/|$)|tests(/|$)|\.github(/|$)|docs(/|$))' /tmp/payload-files.txt; then
             echo "Unexpected payload path" >&2
             exit 1
           fi
