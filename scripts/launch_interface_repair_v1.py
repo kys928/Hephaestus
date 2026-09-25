@@ -11,6 +11,7 @@ from typing import Any
 
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod import RunPodConfig, RunPodExecutionAdapter
+from hephaestus.providers.runpod.execution import RunPodApiError
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG_PATH = ROOT / "configs/experiments/hephaestus_interface_repair_v1.json"
@@ -133,6 +134,30 @@ def maybe_json(client: Any, key: str) -> dict[str, Any] | None:
     return value
 
 
+def create_with_capacity_retries(
+    execution: RunPodExecutionAdapter,
+    body: dict[str, object],
+    *,
+    attempts: int,
+    delay_seconds: float,
+) -> dict[str, Any]:
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            pod = execution._create_pod(body)
+            print("INTERFACE_REPAIR_CAPACITY_JSON " + json.dumps({"attempt": attempt, "status": "created", "pod_id": pod.get("id")}, sort_keys=True), flush=True)
+            return pod
+        except RunPodApiError as exc:
+            last_error = exc
+            lowered = str(exc).lower()
+            if "no instances currently available" not in lowered:
+                raise
+            print("INTERFACE_REPAIR_CAPACITY_JSON " + json.dumps({"attempt": attempt, "status": "unavailable", "error": str(exc)}, sort_keys=True), flush=True)
+            if attempt < attempts:
+                time.sleep(delay_seconds)
+    raise RuntimeError(f"RunPod capacity unavailable after {attempts} attempts: {last_error}") from last_error
+
+
 def delete_with_retries(execution: RunPodExecutionAdapter, pod_id: str) -> dict[str, object]:
     errors: list[str] = []
     for attempt in range(1, 6):
@@ -162,11 +187,16 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str, role: str | 
     client = s3_client(); client.head_bucket(Bucket=required("RUNPOD_NETWORK_VOLUME_ID"))
     execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
     body = request_body(cfg, repo_sha, run_id, mode, role, real_env=True)
-    pod_id: str | None = None; started = time.monotonic()
+    pod_id: str | None = None; started: float | None = None
     record: dict[str, Any] = {"mode": mode, "role": role, "run_id": run_id, "repo_sha": repo_sha, "status": "starting", "result_key": result_key}
     try:
-        pod = execution._create_pod(body)
-        pod_id = str(pod["id"]); record["pod_id"] = pod_id
+        pod = create_with_capacity_retries(
+            execution,
+            body,
+            attempts=int(cfg["execution"].get("capacity_retry_attempts", 1)),
+            delay_seconds=float(cfg["execution"].get("capacity_retry_seconds", 10)),
+        )
+        pod_id = str(pod["id"]); record["pod_id"] = pod_id; started = time.monotonic()
         while True:
             elapsed = time.monotonic() - started
             if elapsed >= wall:
@@ -176,10 +206,11 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str, role: str | 
             if cost is not None:
                 hourly = float(cost); estimated = hourly * elapsed / 3600.0
                 record.update(cost_per_hr=hourly, estimated_cost_usd=estimated)
-                if hourly > float(cfg["execution"]["max_hourly_usd_per_pod"]):
-                    raise RuntimeError("hourly cost ceiling exceeded")
+                hourly_limit = float(cfg["execution"]["max_hourly_usd_per_pod"])
+                if hourly > hourly_limit:
+                    raise RuntimeError(f"hourly cost ceiling exceeded: {hourly:.4f} > {hourly_limit:.4f}")
                 if estimated > max_total:
-                    raise RuntimeError("estimated total cost ceiling exceeded")
+                    raise RuntimeError(f"estimated total cost ceiling exceeded: {estimated:.4f} > {max_total:.4f}")
             terminal = maybe_json(client, result_key)
             if terminal is not None:
                 record["result"] = terminal
