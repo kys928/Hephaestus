@@ -4,5 +4,5 @@
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V1",
   "authorized_by": "kys928",
   "authorized_at": "2026-09-24T12:42:00Z",
-  "note": "Authorized by explicit operator command to execute targeted Phase-II interface-repair training and certification. Production promotion and automatic dispatch remain disabled. Relaunching unchanged scientific protocol after infrastructure-only timeout fixes: role hard wall extended to six hours and GitHub runner envelope to seven hours on 2026-09-24."
+  "note": "Authorized targeted Phase-II interface-repair training and certification. Production promotion and automatic dispatch remain disabled. Relaunched after operator confirmed funds restored on 2026-09-26. Scientific protocol remains frozen; infrastructure-only changes add bounded RunPod capacity retries, verified >=48 GiB GPU fallbacks, six-hour role wall, seven-hour GitHub runner envelope, and restored hard spend caps."
 }
