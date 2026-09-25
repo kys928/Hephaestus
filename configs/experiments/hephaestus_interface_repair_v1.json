@@ -4,7 +4,12 @@
   "phase": "phase_ii_targeted_interface_repair",
   "hypothesis": "Phase-II V1 failure is primarily missing interface curriculum rather than insufficient base-model capability.",
   "frozen_diagnosis": true,
-  "trainable_roles": ["planner", "evaluator", "judge", "controller"],
+  "trainable_roles": [
+    "planner",
+    "evaluator",
+    "judge",
+    "controller"
+  ],
   "source_phase_i_stack": {
     "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
     "required_source_run_id": "role-mastery-v1-35596791201",
@@ -27,15 +32,15 @@
     "seed": 20260924,
     "lora_rank": 8,
     "lora_alpha": 16,
-    "lora_dropout": 0.0,
+    "lora_dropout": 0,
     "optimizer": "AdamW",
     "learning_rate": 0.00001,
-    "weight_decay": 0.0,
+    "weight_decay": 0,
     "micro_batch_size": 1,
     "gradient_accumulation_steps": 8,
     "max_sequence_length": 2048,
     "gradient_checkpointing": true,
-    "max_grad_norm": 1.0,
+    "max_grad_norm": 1,
     "assistant_only_loss": true,
     "optimizer_steps": {
       "planner": 160,
@@ -48,57 +53,88 @@
     "planner": {
       "load_kind": "mistral3",
       "lora_target_regex": "^base_model\\.model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^base_model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": true, "temperature": 0.7, "top_p": 0.95},
-      "reasoning_projection": ["[/THINK]", "</think>"],
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
       "max_new_tokens": 1024
     },
     "evaluator": {
       "load_kind": "causal_lm",
       "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
       "max_new_tokens": 512
     },
     "judge": {
       "load_kind": "causal_lm",
       "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
       "max_new_tokens": 512
     },
     "controller": {
       "load_kind": "causal_lm",
       "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
       "max_new_tokens": 384
     }
   },
   "certification": {
-    "minimum_interface_quality_100": 95.0,
+    "minimum_interface_quality_100": 95,
     "minimum_interface_exact_contract_pass_rate": 0.95,
-    "schema_compliance_required": 1.0,
+    "schema_compliance_required": 1,
     "minimum_evidence_grounding": 0.99,
     "maximum_hallucination_rate": 0.01,
-    "maximum_semantic_escalation_rate": 0.0,
-    "minimum_regression_quality_100": 97.0,
-    "maximum_regression_quality_drop_100": 2.0,
-    "minimum_regression_exact_contract_pass_rate": 0.90
+    "maximum_semantic_escalation_rate": 0,
+    "minimum_regression_quality_100": 97,
+    "maximum_regression_quality_drop_100": 2,
+    "minimum_regression_exact_contract_pass_rate": 0.9
   },
   "live_certification": {
-    "minimum_overall_quality_100": 95.0,
-    "minimum_interface_quality_100": 90.0,
-    "schema_compliance_required": 1.0,
+    "minimum_overall_quality_100": 95,
+    "minimum_interface_quality_100": 90,
+    "schema_compliance_required": 1,
     "minimum_evidence_grounding": 0.99,
-    "minimum_consumer_exact_contract_pass_rate": 0.90,
-    "deterministic_boundary_pass_rate_required": 1.0,
+    "minimum_consumer_exact_contract_pass_rate": 0.9,
+    "deterministic_boundary_pass_rate_required": 1,
     "maximum_hallucination_rate": 0.01,
-    "maximum_semantic_escalation_rate": 0.0,
-    "maximum_upstream_copy_violation_rate": 0.0
+    "maximum_semantic_escalation_rate": 0,
+    "maximum_upstream_copy_violation_rate": 0
   },
   "execution": {
     "parallel_training_roles": 4,
-    "gpu_type_ids": ["NVIDIA A40", "NVIDIA L40", "NVIDIA RTX PRO 6000 Blackwell Server Edition", "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"],
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA L40",
+      "NVIDIA L40S",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "NVIDIA A100 80GB PCIe",
+      "NVIDIA A100-SXM4-80GB",
+      "NVIDIA H100 PCIe",
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA H100 NVL",
+      "NVIDIA H200"
+    ],
     "minimum_gpu_memory_gib": 44,
     "cloud_type": "SECURE",
     "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
@@ -106,11 +142,13 @@
     "poll_seconds": 10,
     "hard_wall_seconds_per_role": 21600,
     "hard_wall_seconds_live": 14400,
-    "max_hourly_usd_per_pod": 1.25,
-    "max_estimated_total_usd_per_training_role": 2.75,
-    "max_estimated_total_usd_live": 4.0,
-    "max_estimated_experiment_total_usd": 15.0,
-    "s3_prefix": "hephaestus/scientific/v1/interface_repair"
+    "max_hourly_usd_per_pod": 4,
+    "max_estimated_total_usd_per_training_role": 15,
+    "max_estimated_total_usd_live": 15,
+    "max_estimated_experiment_total_usd": 75,
+    "s3_prefix": "hephaestus/scientific/v1/interface_repair",
+    "capacity_retry_attempts": 40,
+    "capacity_retry_seconds": 30
   },
   "governance": {
     "training_approved": true,
