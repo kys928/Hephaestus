@@ -64,6 +64,35 @@ jobs:
           PY
       - run: python scripts/build_interface_repair_v1.py
       - run: python scripts/launch_interface_repair_v1.py --role ${{ matrix.role }} --execute
+      - name: Report hardware and require role certification
+        run: |
+          python - <<'PY'
+          import json, os
+          import boto3
+          from botocore.config import Config
+          role='${{ matrix.role }}'
+          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
+          key=f'hephaestus/scientific/v1/interface_repair/{run_id}/roles/{role}/result.json'
+          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
+          r=client.get_object(Bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID'],Key=key); data=json.loads(r['Body'].read())
+          runtime=data.get('runtime') or {}
+          training=data.get('training') or {}
+          report={
+              'role': role,
+              'status': data.get('status'),
+              'certified': data.get('certification',{}).get('certified'),
+              'gpu': runtime.get('gpu'),
+              'gpu_memory_bytes': runtime.get('gpu_memory_bytes'),
+              'gpu_memory_gib': round(float(runtime.get('gpu_memory_bytes',0))/(1024**3),2) if runtime.get('gpu_memory_bytes') else None,
+              'peak_training_vram_bytes': training.get('peak_training_vram_bytes'),
+              'training_seconds': training.get('training_seconds'),
+          }
+          print('INTERFACE_REPAIR_ROLE_HARDWARE_JSON '+json.dumps(report,sort_keys=True))
+          assert data.get('status')=='completed', data.get('error')
+          assert runtime.get('gpu') and 'A40' in str(runtime.get('gpu')), runtime
+          assert float(runtime.get('gpu_memory_bytes',0))/(1024**3) >= 44, runtime
+          assert data.get('certification',{}).get('certified') is True, data.get('certification')
+          PY
 
   aggregate:
     needs: train
