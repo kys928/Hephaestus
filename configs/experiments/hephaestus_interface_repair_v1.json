@@ -121,31 +121,21 @@
     "maximum_upstream_copy_violation_rate": 0
   },
   "execution": {
-    "parallel_training_roles": 4,
+    "parallel_training_roles": 1,
     "gpu_type_ids": [
-      "NVIDIA A40",
-      "NVIDIA L40",
-      "NVIDIA L40S",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
-      "NVIDIA A100 80GB PCIe",
-      "NVIDIA A100-SXM4-80GB",
-      "NVIDIA H100 PCIe",
-      "NVIDIA H100 80GB HBM3",
-      "NVIDIA H100 NVL",
-      "NVIDIA H200"
+      "NVIDIA A40"
     ],
     "minimum_gpu_memory_gib": 44,
     "cloud_type": "SECURE",
     "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
     "container_disk_gb": 180,
     "poll_seconds": 10,
-    "hard_wall_seconds_per_role": 21600,
+    "hard_wall_seconds_per_role": 18000,
     "hard_wall_seconds_live": 14400,
-    "max_hourly_usd_per_pod": 4,
-    "max_estimated_total_usd_per_training_role": 15,
-    "max_estimated_total_usd_live": 15,
-    "max_estimated_experiment_total_usd": 75,
+    "max_hourly_usd_per_pod": 0.6,
+    "max_estimated_total_usd_per_training_role": 2.5,
+    "max_estimated_total_usd_live": 2.0,
+    "max_estimated_experiment_total_usd": 12.0,
     "s3_prefix": "hephaestus/scientific/v1/interface_repair",
     "capacity_retry_attempts": 40,
     "capacity_retry_seconds": 30
@@ -156,7 +146,7 @@
     "automatic_role_dispatch_allowed": false,
     "source_phase_i_adapter_mutation_allowed": false,
     "diagnosis_weight_mutation_allowed": false,
-    "paid_launch_allowed": true,
+    "paid_launch_allowed": false,
     "explicit_launch_authorization_required": true
   }
 }
