@@ -12,12 +12,12 @@ jobs:
   train:
     if: contains(github.event.head_commit.message, '[launch-interface-repair-v1]')
     strategy:
-      fail-fast: false
-      max-parallel: 4
+      fail-fast: true
+      max-parallel: 1
       matrix:
         role: [planner, evaluator, judge, controller]
     runs-on: ubuntu-latest
-    timeout-minutes: 420
+    timeout-minutes: 360
     env:
       PYTHONPATH: src:scripts
       HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
@@ -41,14 +41,26 @@ jobs:
           from pathlib import Path
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v1.launch.json').read_text())
+          ex=cfg['execution']
           assert cfg['pack']['canonical_sha256']=='495aaaa6663939cd2d9f89f8f0ce1702cbdf59f25e9406ececbc649c6aa78b2e'
           assert cfg['source_phase_i_stack']['required_source_run_id']=='role-mastery-v1-35596791201'
           assert cfg['frozen_diagnosis'] is True
           assert marker['authorized'] is True
           assert marker['authorization_phrase']=='LAUNCH_INTERFACE_REPAIR_V1'
           assert marker['authorized_by'] and marker['authorized_at']
+          assert cfg['governance']['paid_launch_allowed'] is True
           assert cfg['governance']['production_promotion_allowed'] is False
           assert cfg['governance']['automatic_role_dispatch_allowed'] is False
+          assert ex['parallel_training_roles'] == 1
+          assert ex['gpu_type_ids'] == ['NVIDIA A40']
+          assert ex['minimum_gpu_memory_gib'] == 44
+          assert ex['hard_wall_seconds_per_role'] == 18000
+          assert ex['hard_wall_seconds_live'] == 14400
+          assert ex['max_hourly_usd_per_pod'] == 0.6
+          assert ex['max_estimated_total_usd_per_training_role'] == 2.5
+          assert ex['max_estimated_total_usd_live'] == 2.0
+          assert ex['max_estimated_experiment_total_usd'] == 12.0
+          assert len(cfg['trainable_roles']) * ex['max_estimated_total_usd_per_training_role'] + ex['max_estimated_total_usd_live'] <= ex['max_estimated_experiment_total_usd']
           PY
       - run: python scripts/build_interface_repair_v1.py
       - run: python scripts/launch_interface_repair_v1.py --role ${{ matrix.role }} --execute
@@ -84,7 +96,7 @@ jobs:
               key=f'{prefix}/{role}/result.json'
               r=client.get_object(Bucket=bucket,Key=key)
               data=json.loads(r['Body'].read())
-              out[role]={'status':data.get('status'),'certified':data.get('certification',{}).get('certified'),'pre_interface':data.get('pre_interface'),'post_interface':data.get('post_interface'),'pre_regression':data.get('pre_regression'),'post_regression':data.get('post_regression'),'adapter':data.get('adapter')}
+              out[role]={'status':data.get('status'),'certified':data.get('certification',{}).get('certified'),'runtime':data.get('runtime'),'pre_interface':data.get('pre_interface'),'post_interface':data.get('post_interface'),'pre_regression':data.get('pre_regression'),'post_regression':data.get('post_regression'),'training':data.get('training'),'adapter':data.get('adapter')}
               assert data.get('status')=='completed', (role,data.get('error'))
               assert data.get('certification',{}).get('certified') is True, (role,data.get('certification'))
           print('INTERFACE_REPAIR_AGGREGATE_JSON '+json.dumps(out,sort_keys=True))
