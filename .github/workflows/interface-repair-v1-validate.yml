@@ -40,16 +40,28 @@ jobs:
       - run: python -m pytest -q tests/test_interface_repair_v1.py
       - run: python -m pytest -q
       - run: python -m py_compile scripts/build_interface_repair_v1.py scripts/run_interface_repair_v1.py scripts/run_interface_repair_live_v1.py scripts/launch_interface_repair_v1.py
-      - name: Assert repair governance
+      - name: Assert repair governance and frozen compute
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
+          ex=cfg['execution']
           assert cfg['frozen_diagnosis'] is True
           assert 'diagnosis' not in cfg['trainable_roles']
           assert cfg['governance']['production_promotion_allowed'] is False
           assert cfg['governance']['automatic_role_dispatch_allowed'] is False
           assert cfg['governance']['source_phase_i_adapter_mutation_allowed'] is False
+          assert cfg['governance']['paid_launch_allowed'] is False
           assert cfg['pack']['phase_ii_v1_cases_reused_for_certification'] is False
+          assert ex['parallel_training_roles'] == 1
+          assert ex['gpu_type_ids'] == ['NVIDIA A40']
+          assert ex['minimum_gpu_memory_gib'] == 44
+          assert ex['hard_wall_seconds_per_role'] == 18000
+          assert ex['hard_wall_seconds_live'] == 14400
+          assert ex['max_hourly_usd_per_pod'] == 0.6
+          assert ex['max_estimated_total_usd_per_training_role'] == 2.5
+          assert ex['max_estimated_total_usd_live'] == 2.0
+          assert ex['max_estimated_experiment_total_usd'] == 12.0
+          assert len(cfg['trainable_roles']) * ex['max_estimated_total_usd_per_training_role'] + ex['max_estimated_total_usd_live'] <= ex['max_estimated_experiment_total_usd']
           PY
