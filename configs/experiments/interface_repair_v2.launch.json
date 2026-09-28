@@ -4,7 +4,9 @@
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
+  "preflight_evidence_key": null,
+  "preflight_repo_sha": null,
   "authorized_by": null,
   "authorized_at": null,
-  "note": "V2 is prepared but all paid execution remains disabled until explicit operator authorization. Preflight and full launch are separate approval boundaries."
+  "note": "V2 is prepared but all paid execution remains disabled until explicit operator authorization. Preflight and full launch are separate approval boundaries. A full launch additionally requires a persisted successful preflight result bound to the exact repository SHA."
 }
