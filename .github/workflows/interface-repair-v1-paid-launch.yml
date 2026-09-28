@@ -9,160 +9,48 @@ concurrency:
   group: interface-repair-v1-paid
   cancel-in-progress: true
 jobs:
-  train:
-    if: contains(github.event.head_commit.message, '[launch-interface-repair-v1]')
-    strategy:
-      fail-fast: true
-      max-parallel: 1
-      matrix:
-        role: [planner, evaluator, judge, controller]
+  abort-cleanup:
+    if: "!contains(github.event.head_commit.message, '[launch-interface-repair-v1]')"
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 5
     env:
-      PYTHONPATH: src:scripts
-      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
-      HEPHAESTUS_INTERFACE_REPAIR_LAUNCH_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V1
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
-      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
-      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
-      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.12'}
-      - run: python -m pip install -e '.[s3]'
-      - name: Verify frozen launch
+      - name: Delete orphaned planner pod and verify absence
         run: |
           python - <<'PY'
-          import json
-          from pathlib import Path
-          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
-          marker=json.loads(Path('configs/experiments/interface_repair_v1.launch.json').read_text())
-          ex=cfg['execution']
-          assert cfg['pack']['canonical_sha256']=='495aaaa6663939cd2d9f89f8f0ce1702cbdf59f25e9406ececbc649c6aa78b2e'
-          assert cfg['source_phase_i_stack']['required_source_run_id']=='role-mastery-v1-35596791201'
-          assert cfg['frozen_diagnosis'] is True
-          assert marker['authorized'] is True
-          assert marker['authorization_phrase']=='LAUNCH_INTERFACE_REPAIR_V1'
-          assert marker['authorized_by'] and marker['authorized_at']
-          assert cfg['governance']['paid_launch_allowed'] is True
-          assert cfg['governance']['production_promotion_allowed'] is False
-          assert cfg['governance']['automatic_role_dispatch_allowed'] is False
-          assert ex['parallel_training_roles'] == 1
-          assert ex['gpu_type_ids'] == ['NVIDIA A40']
-          assert ex['minimum_gpu_memory_gib'] == 44
-          assert ex['hard_wall_seconds_per_role'] == 18000
-          assert ex['hard_wall_seconds_live'] == 14400
-          assert ex['max_hourly_usd_per_pod'] == 0.6
-          assert ex['max_estimated_total_usd_per_training_role'] == 2.5
-          assert ex['max_estimated_total_usd_live'] == 2.0
-          assert ex['max_estimated_experiment_total_usd'] == 12.0
-          assert len(cfg['trainable_roles']) * ex['max_estimated_total_usd_per_training_role'] + ex['max_estimated_total_usd_live'] <= ex['max_estimated_experiment_total_usd']
-          PY
-      - run: python scripts/build_interface_repair_v1.py
-      - run: python scripts/launch_interface_repair_v1.py --role ${{ matrix.role }} --execute
-      - name: Report hardware and require role certification
-        run: |
-          python - <<'PY'
-          import json, os
-          import boto3
-          from botocore.config import Config
-          role='${{ matrix.role }}'
-          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
-          key=f'hephaestus/scientific/v1/interface_repair/{run_id}/roles/{role}/result.json'
-          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
-          r=client.get_object(Bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID'],Key=key); data=json.loads(r['Body'].read())
-          runtime=data.get('runtime') or {}
-          training=data.get('training') or {}
-          report={
-              'role': role,
-              'status': data.get('status'),
-              'certified': data.get('certification',{}).get('certified'),
-              'gpu': runtime.get('gpu'),
-              'gpu_memory_bytes': runtime.get('gpu_memory_bytes'),
-              'gpu_memory_gib': round(float(runtime.get('gpu_memory_bytes',0))/(1024**3),2) if runtime.get('gpu_memory_bytes') else None,
-              'peak_training_vram_bytes': training.get('peak_training_vram_bytes'),
-              'training_seconds': training.get('training_seconds'),
+          import os, time, urllib.error, urllib.request
+          pod_id='ri18wxnya0f5ji'
+          base=(os.environ.get('RUNPOD_API_BASE_URL') or 'https://rest.runpod.io/v1').rstrip('/')
+          key=os.environ['RUNPOD_API_KEY']
+          headers={
+              'Accept':'application/json',
+              'Authorization':f'Bearer {key}',
+              'User-Agent':'Mozilla/5.0 (compatible; Hephaestus-RunPod/1.0)',
           }
-          print('INTERFACE_REPAIR_ROLE_HARDWARE_JSON '+json.dumps(report,sort_keys=True))
-          assert data.get('status')=='completed', data.get('error')
-          assert runtime.get('gpu') and 'A40' in str(runtime.get('gpu')), runtime
-          assert float(runtime.get('gpu_memory_bytes',0))/(1024**3) >= 44, runtime
-          assert data.get('certification',{}).get('certified') is True, data.get('certification')
-          PY
-
-  aggregate:
-    needs: train
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
-      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
-      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
-      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.12'}
-      - run: python -m pip install boto3
-      - name: Require all four role repairs to certify
-        run: |
-          python - <<'PY'
-          import json, os
-          import boto3
-          from botocore.config import Config
-          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
-          prefix=f'hephaestus/scientific/v1/interface_repair/{run_id}/roles'
-          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
-          bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID']
-          out={}
-          for role in ('planner','evaluator','judge','controller'):
-              key=f'{prefix}/{role}/result.json'
-              r=client.get_object(Bucket=bucket,Key=key)
-              data=json.loads(r['Body'].read())
-              out[role]={'status':data.get('status'),'certified':data.get('certification',{}).get('certified'),'runtime':data.get('runtime'),'pre_interface':data.get('pre_interface'),'post_interface':data.get('post_interface'),'pre_regression':data.get('pre_regression'),'post_regression':data.get('post_regression'),'training':data.get('training'),'adapter':data.get('adapter')}
-              assert data.get('status')=='completed', (role,data.get('error'))
-              assert data.get('certification',{}).get('certified') is True, (role,data.get('certification'))
-          print('INTERFACE_REPAIR_AGGREGATE_JSON '+json.dumps(out,sort_keys=True))
-          PY
-
-  live-certify:
-    needs: aggregate
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    env:
-      PYTHONPATH: src:scripts
-      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v1-${{ github.run_id }}
-      HEPHAESTUS_INTERFACE_REPAIR_LAUNCH_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V1
-      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
-      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
-      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
-      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
-      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.12'}
-      - run: python -m pip install -e '.[s3]'
-      - run: python scripts/launch_interface_repair_v1.py --live --execute
-      - name: Require live repaired stack certification
-        run: |
-          python - <<'PY'
-          import json, os
-          import boto3
-          from botocore.config import Config
-          run_id=os.environ['HEPHAESTUS_INTERFACE_REPAIR_RUN_ID']
-          key=f'hephaestus/scientific/v1/interface_repair/{run_id}/live/result.json'
-          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
-          r=client.get_object(Bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID'],Key=key); data=json.loads(r['Body'].read())
-          print('INTERFACE_REPAIR_LIVE_CERTIFICATION_JSON '+json.dumps(data.get('summary',{}),sort_keys=True))
-          assert data.get('status')=='completed'
-          assert data.get('summary',{}).get('certified') is True, data.get('summary')
+          def request(method):
+              req=urllib.request.Request(f'{base}/pods/{pod_id}', headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return response.status, response.read().decode('utf-8', errors='replace')
+              except urllib.error.HTTPError as exc:
+                  if exc.code == 404:
+                      return 404, ''
+                  raise
+          status, _=request('GET')
+          print(f'ABORT_CLEANUP_PREDELETE pod_id={pod_id} status={status}')
+          if status != 404:
+              status, _=request('DELETE')
+              if status != 204:
+                  raise RuntimeError(f'unexpected delete status {status}')
+          for attempt in range(1, 11):
+              time.sleep(2)
+              status, _=request('GET')
+              print(f'ABORT_CLEANUP_VERIFY pod_id={pod_id} attempt={attempt} status={status}')
+              if status == 404:
+                  print(f'ABORT_CLEANUP_VERIFIED_ABSENT pod_id={pod_id}')
+                  break
+          else:
+              raise RuntimeError(f'pod {pod_id} still present after delete')
           PY
