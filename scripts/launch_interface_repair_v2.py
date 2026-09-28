@@ -19,6 +19,7 @@ CFG_PATH = ROOT / "configs/experiments/hephaestus_interface_repair_v2.json"
 MARKER_PATH = ROOT / "configs/experiments/interface_repair_v2.launch.json"
 AUTH_ENV = "HEPHAESTUS_INTERFACE_REPAIR_V2_AUTHORIZED"
 TERMINAL = {"EXITED", "FAILED", "TERMINATED", "STOPPED"}
+# Keep the historical constant name because tests and evidence tooling already consume it.
 PRELIGHT_BENCHMARK_STAGES = {
     "preflight_evaluation_started",
     "preflight_eval_progress",
@@ -67,20 +68,23 @@ def authorize(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> None:
         raise RuntimeError(f"Interface Repair V2 {mode} authorization phrase missing or mismatched")
 
 
-def pod_shell(mode: str, venv_cache: str) -> str:
+def pod_shell(mode: str, venv_cache: str, pip_cache: str, adapter_cache: str) -> str:
     if mode == "preflight":
         body = '''export HEPHAESTUS_REPAIR_ROLE=planner
-"$PY" scripts/run_interface_repair_v2.py --preflight'''
+"$PY" scripts/run_interface_repair_v2_cached.py --preflight'''
     elif mode == "full":
         body = '''for ROLE in planner evaluator judge controller; do
   export HEPHAESTUS_REPAIR_ROLE="$ROLE"
-  "$PY" scripts/run_interface_repair_v2.py
+  "$PY" scripts/run_interface_repair_v2_cached.py
 done
 unset HEPHAESTUS_REPAIR_ROLE
 "$PY" scripts/run_interface_repair_live_v2.py'''
     else:
         raise ValueError(mode)
-    quoted_venv = shlex.quote(venv_cache)
+
+    qvenv = shlex.quote(venv_cache)
+    qpip = shlex.quote(pip_cache)
+    qadapter = shlex.quote(adapter_cache)
     return rf'''set -Eeuo pipefail
 export HF_HOME=/workspace/hephaestus-cache/huggingface
 export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
@@ -89,41 +93,133 @@ export XDG_CACHE_HOME=/workspace/hephaestus-cache/xdg
 export TMPDIR=/workspace/hephaestus-tmp
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=0
-VENV={quoted_venv}
+export PIP_CACHE_DIR={qpip}
+export HEPHAESTUS_V2_ADAPTER_CACHE={qadapter}
+VENV={qvenv}
 READY="$VENV/.hephaestus-ready"
-mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR" "$(dirname "$VENV")"
-nvidia-smi --query-gpu=driver_version,name,memory.total,uuid,compute_cap --format=csv,noheader
+BOOTSTRAP_FILE="/workspace/$HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY"
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR" "$PIP_CACHE_DIR" "$HEPHAESTUS_V2_ADAPTER_CACHE" "$(dirname "$VENV")" "$(dirname "$BOOTSTRAP_FILE")"
+
+write_bootstrap() {{
+  STAGE="$1" python - <<'PY'
+import json, os, pathlib, subprocess, time
+path = pathlib.Path(os.environ['BOOTSTRAP_FILE'])
+payload = {{
+    'stage': os.environ['STAGE'],
+    'timestamp_unix': time.time(),
+    'venv_ready': pathlib.Path(os.environ['READY']).is_file(),
+    'hf_cache_root_exists': pathlib.Path(os.environ['HUGGINGFACE_HUB_CACHE']).exists(),
+}}
+try:
+    raw = subprocess.check_output(
+        ['nvidia-smi', '--query-gpu=name,memory.total,uuid,driver_version', '--format=csv,noheader,nounits'],
+        text=True, stderr=subprocess.STDOUT, timeout=15,
+    ).strip()
+    if raw:
+        payload['nvidia_smi'] = raw
+except Exception as exc:
+    payload['nvidia_smi_error'] = type(exc).__name__
+tmp = path.with_suffix(path.suffix + '.tmp')
+tmp.write_text(json.dumps(payload, sort_keys=True) + '\n', encoding='utf-8')
+os.replace(tmp, path)
+print('INTERFACE_REPAIR_V2_BOOTSTRAP_JSON ' + json.dumps(payload, sort_keys=True), flush=True)
+PY
+}}
+export BOOTSTRAP_FILE READY HUGGINGFACE_HUB_CACHE
+
+write_bootstrap container_started
 if ! command -v git >/dev/null 2>&1 || ! python -m venv --help >/dev/null 2>&1; then
+  write_bootstrap base_packages_install_started
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv
   rm -rf /var/lib/apt/lists/*
 fi
+
+write_bootstrap repo_checkout_started
 rm -rf /opt/hephaestus-src
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
 cd /opt/hephaestus-src
 git checkout --detach "$HEPHAESTUS_REPO_SHA"
-if [ ! -f "$READY" ]; then
-  rm -rf "$VENV"
+write_bootstrap repo_checkout_complete
+
+write_bootstrap environment_check_started
+if [ ! -x "$VENV/bin/python" ]; then
+  # Do not delete a partial cache. venv creation is idempotent enough to repair the
+  # directory, and pip below resumes from the persistent wheel/download cache.
   python -m venv --system-site-packages "$VENV"
-  "$VENV/bin/python" -m pip install --no-cache-dir --disable-pip-version-check -e '.[s3]' \
-    'transformers==5.17.0' 'accelerate==1.15.0' 'safetensors==0.8.0' \
-    'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
-  "$VENV/bin/python" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
-  touch "$READY"
 fi
 PY="$VENV/bin/python"
+
+ENV_OK=0
+if "$PY" - <<'PY' >/dev/null 2>&1
+import importlib.metadata as m
+expected = {{
+    'transformers': '5.17.0',
+    'accelerate': '1.15.0',
+    'safetensors': '0.8.0',
+    'huggingface-hub': '1.31.0',
+    'peft': '0.21.0',
+    'mistral-common': '1.11.7',
+}}
+for package, version in expected.items():
+    if m.version(package) != version:
+        raise SystemExit(1)
+import boto3, transformers, accelerate, safetensors, peft, mistral_common  # noqa: F401
+PY
+then
+  ENV_OK=1
+fi
+
+if [ "$ENV_OK" -ne 1 ]; then
+  write_bootstrap environment_install_started
+  "$PY" -m pip install --disable-pip-version-check \
+    'boto3>=1.35,<2' \
+    'transformers==5.17.0' 'accelerate==1.15.0' 'safetensors==0.8.0' \
+    'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
+  "$PY" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+  "$PY" - <<'PY'
+import importlib.metadata as m
+expected = {{
+    'transformers': '5.17.0',
+    'accelerate': '1.15.0',
+    'safetensors': '0.8.0',
+    'huggingface-hub': '1.31.0',
+    'peft': '0.21.0',
+    'mistral-common': '1.11.7',
+}}
+for package, version in expected.items():
+    observed = m.version(package)
+    if observed != version:
+        raise RuntimeError(f'{{package}}={{observed}} expected {{version}}')
+import boto3, transformers, accelerate, safetensors, peft, mistral_common  # noqa: F401
+PY
+  touch "$READY"
+fi
+write_bootstrap environment_ready
+
+# Refresh only this repository's editable metadata. Heavy dependencies remain in
+# the persistent venv and are never re-downloaded merely because the source SHA changed.
 "$PY" -m pip install --disable-pip-version-check --no-deps -e . >/dev/null
-"$PY" -m py_compile scripts/run_interface_repair_v2.py scripts/run_interface_repair_live_v2.py scripts/launch_interface_repair_v2.py
+"$PY" -m py_compile \
+  scripts/run_interface_repair_v2.py \
+  scripts/run_interface_repair_v2_cached.py \
+  scripts/interface_repair_v2_bootstrap.py \
+  scripts/run_interface_repair_live_v2.py \
+  scripts/launch_interface_repair_v2.py
+write_bootstrap pack_build_started
 "$PY" scripts/build_interface_repair_v1.py
+write_bootstrap runner_started
 {body}
 '''
 
 
 def request_body(cfg: dict[str, Any], repo_sha: str, run_id: str, mode: str, *, real_env: bool) -> dict[str, object]:
     ex = cfg["execution"]
+    bootstrap_key = f"{str(ex['s3_prefix']).rstrip('/')}/{run_id}/bootstrap/progress.json"
     env = {
         "HEPHAESTUS_REPO_SHA": repo_sha,
         "HEPHAESTUS_INTERFACE_REPAIR_RUN_ID": run_id,
+        "HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY": bootstrap_key,
         "RUNPOD_S3_ACCESS_KEY_ID": "<secret>",
         "RUNPOD_S3_SECRET_ACCESS_KEY": "<secret>",
         "RUNPOD_S3_ENDPOINT_URL": "<endpoint>",
@@ -132,7 +228,10 @@ def request_body(cfg: dict[str, Any], repo_sha: str, run_id: str, mode: str, *, 
         "PYTHONUNBUFFERED": "1",
     }
     if real_env:
-        for key in ("RUNPOD_S3_ACCESS_KEY_ID", "RUNPOD_S3_SECRET_ACCESS_KEY", "RUNPOD_S3_ENDPOINT_URL", "RUNPOD_DATACENTER_ID", "RUNPOD_NETWORK_VOLUME_ID"):
+        for key in (
+            "RUNPOD_S3_ACCESS_KEY_ID", "RUNPOD_S3_SECRET_ACCESS_KEY", "RUNPOD_S3_ENDPOINT_URL",
+            "RUNPOD_DATACENTER_ID", "RUNPOD_NETWORK_VOLUME_ID",
+        ):
             env[key] = required(key)
     datacenter = required("RUNPOD_DATACENTER_ID") if real_env else "<region>"
     volume = required("RUNPOD_NETWORK_VOLUME_ID") if real_env else "<volume>"
@@ -149,7 +248,15 @@ def request_body(cfg: dict[str, Any], repo_sha: str, run_id: str, mode: str, *, 
         "containerDiskInGb": int(ex["container_disk_gb"]),
         "networkVolumeId": volume,
         "volumeMountPath": "/workspace",
-        "dockerStartCmd": ["bash", "-lc", pod_shell(mode, str(ex["persistent_venv_cache"]))],
+        "dockerStartCmd": [
+            "bash", "-lc",
+            pod_shell(
+                mode,
+                str(ex["persistent_venv_cache"]),
+                str(ex["persistent_pip_cache"]),
+                str(ex["persistent_adapter_cache"]),
+            ),
+        ],
         "interruptible": False,
         "env": env,
     }
@@ -159,8 +266,11 @@ def s3_client() -> Any:
     import boto3
     from botocore.config import Config
     return boto3.client(
-        "s3", endpoint_url=required("RUNPOD_S3_ENDPOINT_URL").rstrip("/"), region_name=required("RUNPOD_DATACENTER_ID"),
-        aws_access_key_id=required("RUNPOD_S3_ACCESS_KEY_ID"), aws_secret_access_key=required("RUNPOD_S3_SECRET_ACCESS_KEY"),
+        "s3",
+        endpoint_url=required("RUNPOD_S3_ENDPOINT_URL").rstrip("/"),
+        region_name=required("RUNPOD_DATACENTER_ID"),
+        aws_access_key_id=required("RUNPOD_S3_ACCESS_KEY_ID"),
+        aws_secret_access_key=required("RUNPOD_S3_SECRET_ACCESS_KEY"),
         config=Config(retries={"mode": "standard", "max_attempts": 10}),
     )
 
@@ -223,27 +333,19 @@ def safe_pod_metadata(snapshot: dict[str, Any]) -> dict[str, Any]:
         "memoryInGb", "vcpuCount", "dataCenterId",
     ):
         value = snapshot.get(key)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            if value is not None:
-                safe[key] = value
-    gpu = snapshot.get("gpu")
-    if isinstance(gpu, dict):
-        safe_gpu = {
-            key: gpu[key]
-            for key in ("id", "name", "displayName", "memoryInGb", "memoryInGB", "securePrice", "communityPrice")
-            if key in gpu and isinstance(gpu[key], (str, int, float, bool))
-        }
-        if safe_gpu:
-            safe["gpu"] = safe_gpu
-    machine = snapshot.get("machine")
-    if isinstance(machine, dict):
-        safe_machine = {
-            key: machine[key]
-            for key in ("id", "dataCenterId", "gpuTypeId", "gpuDisplayName")
-            if key in machine and isinstance(machine[key], (str, int, float, bool))
-        }
-        if safe_machine:
-            safe["machine"] = safe_machine
+        if isinstance(value, (str, int, float, bool)) and value is not None:
+            safe[key] = value
+    for parent_key in ("gpu", "machine"):
+        parent = snapshot.get(parent_key)
+        if isinstance(parent, dict):
+            filtered = {
+                key: value
+                for key, value in parent.items()
+                if key in {"id", "name", "displayName", "memoryInGb", "memoryInGB", "securePrice", "communityPrice", "dataCenterId", "gpuTypeId", "gpuDisplayName"}
+                and isinstance(value, (str, int, float, bool))
+            }
+            if filtered:
+                safe[parent_key] = filtered
     return safe
 
 
@@ -268,6 +370,7 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
     github_run_id = required("GITHUB_RUN_ID")
     run_id = os.environ.get("HEPHAESTUS_INTERFACE_REPAIR_RUN_ID", f"interface-repair-v2-{mode}-{github_run_id}")
     prefix = f"{str(cfg['execution']['s3_prefix']).rstrip('/')}/{run_id}"
+    bootstrap_key = f"{prefix}/bootstrap/progress.json"
     if mode == "preflight":
         role = str(cfg["preflight"]["role"])
         result_key = f"{prefix}/preflight/{role}/result.json"
@@ -292,28 +395,47 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
     started: float | None = None
     benchmark_started: float | None = None
     last_progress_stage: str | None = None
+    last_bootstrap_stage: str | None = None
     metadata_printed = False
     record: dict[str, Any] = {
-        "mode": mode, "run_id": run_id, "repo_sha": repo_sha, "status": "starting", "result_key": result_key,
+        "mode": mode,
+        "run_id": run_id,
+        "repo_sha": repo_sha,
+        "status": "starting",
+        "result_key": result_key,
+        "bootstrap_progress_key": bootstrap_key,
         "preflight_evidence_key": marker.get("preflight_evidence_key") if mode == "full" else None,
         "preflight_projection_seconds": preflight_evidence.get("projected_full_role_seconds") if preflight_evidence else None,
     }
     try:
-        pod = create_with_capacity_retries(execution, body, int(cfg["execution"]["capacity_retry_attempts"]), float(cfg["execution"]["capacity_retry_seconds"]))
+        pod = create_with_capacity_retries(
+            execution,
+            body,
+            int(cfg["execution"]["capacity_retry_attempts"]),
+            float(cfg["execution"]["capacity_retry_seconds"]),
+        )
         pod_id = str(pod["id"])
         record["pod_id"] = pod_id
         started = time.monotonic()
-        print("INTERFACE_REPAIR_V2_POD_JSON " + json.dumps({"mode": mode, "pod_id": pod_id, "created_at_unix": time.time(), "gpu_allowlist": cfg["execution"]["gpu_type_ids"]}, sort_keys=True), flush=True)
+        print("INTERFACE_REPAIR_V2_POD_JSON " + json.dumps({
+            "mode": mode,
+            "pod_id": pod_id,
+            "created_at_unix": time.time(),
+            "gpu_allowlist": cfg["execution"]["gpu_type_ids"],
+        }, sort_keys=True), flush=True)
+
         while True:
             elapsed = time.monotonic() - started
             if elapsed >= wall:
                 raise TimeoutError(f"V2 {mode} total hard wall reached")
+
             snapshot = execution.get_pod(pod_id)
             metadata = safe_pod_metadata(snapshot)
             if metadata and not metadata_printed:
                 print("INTERFACE_REPAIR_V2_POD_METADATA_JSON " + json.dumps(metadata, sort_keys=True), flush=True)
                 record["pod_metadata"] = metadata
                 metadata_printed = True
+
             cost = snapshot.get("adjustedCostPerHr", snapshot.get("costPerHr"))
             if cost is not None:
                 hourly = float(cost)
@@ -323,6 +445,14 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
                     raise RuntimeError(f"hourly cost ceiling exceeded: {hourly:.4f}")
                 if estimated > max_total:
                     raise RuntimeError(f"estimated {mode} cost ceiling exceeded: {estimated:.4f}")
+
+            bootstrap = maybe_json(client, bootstrap_key)
+            if bootstrap is not None:
+                stage = str(bootstrap.get("stage", ""))
+                if stage and stage != last_bootstrap_stage:
+                    print("INTERFACE_REPAIR_V2_BOOTSTRAP_PROGRESS_JSON " + json.dumps(bootstrap, sort_keys=True), flush=True)
+                    record["last_bootstrap"] = bootstrap
+                    last_bootstrap_stage = stage
 
             if mode == "preflight" and progress_key is not None:
                 progress = maybe_json(client, progress_key)
@@ -335,9 +465,16 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
                     if benchmark_started is None and stage in PRELIGHT_BENCHMARK_STAGES:
                         benchmark_started = time.monotonic()
                         record["benchmark_started_at_unix"] = time.time()
-                        print("INTERFACE_REPAIR_V2_BENCHMARK_CLOCK_JSON " + json.dumps({"status": "started", "stage": stage, "benchmark_wall_seconds": benchmark_wall}, sort_keys=True), flush=True)
+                        print("INTERFACE_REPAIR_V2_BENCHMARK_CLOCK_JSON " + json.dumps({
+                            "status": "started",
+                            "stage": stage,
+                            "benchmark_wall_seconds": benchmark_wall,
+                        }, sort_keys=True), flush=True)
                 if benchmark_started is None and elapsed >= bootstrap_wall:
-                    raise TimeoutError("V2 preflight bootstrap/model-init hard wall reached before benchmark start")
+                    raise TimeoutError(
+                        "V2 preflight bootstrap/model-init hard wall reached before benchmark start; "
+                        f"last_bootstrap_stage={last_bootstrap_stage!r} last_runner_stage={last_progress_stage!r}"
+                    )
                 if benchmark_started is not None and (time.monotonic() - benchmark_started) >= benchmark_wall:
                     raise TimeoutError("V2 preflight benchmark hard wall reached")
 
