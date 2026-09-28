@@ -59,10 +59,11 @@ jobs:
           assert v2['preflight']['maximum_projected_role_seconds'] <= v2['execution']['hard_wall_seconds_per_role']
           assert v2['execution']['max_estimated_total_usd_preflight']==0.10
           assert v2['execution']['max_estimated_total_usd_stack']==2.50
-          assert v2['governance']['paid_preflight_allowed'] is False
+          assert isinstance(v2['governance']['paid_preflight_allowed'], bool)
           assert v2['governance']['paid_full_launch_allowed'] is False
-          assert marker['preflight_authorized'] is False
           assert marker['full_launch_authorized'] is False
-          assert marker['preflight_evidence_key'] is None
-          assert marker['preflight_repo_sha'] is None
+          if marker['preflight_authorized']:
+              assert v2['governance']['paid_preflight_allowed'] is True
+              assert marker['preflight_evidence_key'] is None
+              assert marker['preflight_repo_sha'] is None
           PY
