@@ -7,7 +7,7 @@ on:
 permissions: {contents: read}
 concurrency:
   group: interface-repair-v1-paid
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   train:
     if: contains(github.event.head_commit.message, '[launch-interface-repair-v1]')
