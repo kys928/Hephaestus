@@ -1,0 +1,62 @@
+name: Interface Repair V2 validate
+on:
+  push:
+    branches: [experiment-interface-repair-v2]
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v2.json
+      - configs/experiments/interface_repair_v2.launch.json
+      - scripts/run_interface_repair_v2.py
+      - scripts/run_interface_repair_live_v2.py
+      - scripts/launch_interface_repair_v2.py
+      - tests/test_interface_repair_v2.py
+      - .github/workflows/interface-repair-v2-validate.yml
+      - .github/workflows/interface-repair-v2-preflight.yml
+      - .github/workflows/interface-repair-v2-paid-launch.yml
+  pull_request:
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v2.json
+      - configs/experiments/interface_repair_v2.launch.json
+      - scripts/run_interface_repair_v2.py
+      - scripts/run_interface_repair_live_v2.py
+      - scripts/launch_interface_repair_v2.py
+      - tests/test_interface_repair_v2.py
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e . pytest
+      - run: python scripts/build_interface_repair_v1.py
+      - run: python scripts/launch_interface_repair_v2.py --preflight > /tmp/v2-preflight-render.json
+      - run: python scripts/launch_interface_repair_v2.py --full > /tmp/v2-full-render.json
+      - run: python -m pytest -q tests/test_interface_repair_v1.py tests/test_interface_repair_v2.py
+      - run: python -m pytest -q
+      - run: python -m py_compile scripts/run_interface_repair_v2.py scripts/run_interface_repair_live_v2.py scripts/launch_interface_repair_v2.py
+      - name: Assert V2 is safe and scientifically unchanged
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          v1=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
+          v2=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2.json').read_text())
+          marker=json.loads(Path('configs/experiments/interface_repair_v2.launch.json').read_text())
+          assert v2['pack']==v1['pack']
+          assert v2['certification']==v1['certification']
+          assert v2['live_certification']==v1['live_certification']
+          assert v2['roles']==v1['roles']
+          assert v2['frozen_diagnosis'] is True
+          assert v2['training']['dynamic_padding'] is True
+          assert v2['execution']['gpu_type_ids']==['NVIDIA A40']
+          assert v2['execution']['parallel_training_roles']==1
+          assert v2['execution']['hard_wall_seconds_preflight']==600
+          assert v2['execution']['max_estimated_total_usd_preflight']==0.10
+          assert v2['execution']['max_estimated_total_usd_stack']==2.50
+          assert v2['governance']['paid_preflight_allowed'] is False
+          assert v2['governance']['paid_full_launch_allowed'] is False
+          assert marker['preflight_authorized'] is False
+          assert marker['full_launch_authorized'] is False
+          PY
