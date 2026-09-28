@@ -124,6 +124,8 @@
     "capacity_retry_seconds": 15,
     "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
     "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-r1",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v2/adapters",
     "evaluation_shard_size": 32,
     "structured_json_early_stop": true,
     "baseline_cache_enabled": true,
