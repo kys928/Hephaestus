@@ -1,12 +1,12 @@
 {
   "execution_path": "interface_repair_v2",
-  "preflight_authorized": false,
+  "preflight_authorized": true,
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
-  "authorized_by": null,
-  "authorized_at": null,
-  "note": "Paid execution is disabled while V2 preflight lifecycle timing is corrected. The previous adaptive preflight reached the launcher wall before producing terminal benchmark evidence. Full paid launch remains disabled and requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-28T21:22:00Z",
+  "note": "Operator explicitly authorized the repaired V2 paid preflight only. Adaptive compatible GPU fallback remains NVIDIA A40 first, then NVIDIA RTX PRO 6000 Blackwell Server Edition, then Workstation Edition, with >=44 GiB VRAM and one GPU only. Lifecycle timing is stage-aware: up to 10 minutes for bootstrap/model initialization plus up to 10 minutes for the actual benchmark, with a 20-minute absolute pod lifecycle ceiling. Preflight spend ceiling is $0.74 and hourly ceiling $2.20. Scientific benchmark remains planner role, 8 representative evaluation cases, 5 optimizer steps / 40 training examples, with projected full planner runtime required <=60 minutes. Full paid launch remains disabled and requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
 }
