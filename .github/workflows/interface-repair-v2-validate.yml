@@ -52,11 +52,17 @@ jobs:
           assert v2['training']['dynamic_padding'] is True
           assert v2['execution']['gpu_type_ids']==['NVIDIA A40']
           assert v2['execution']['parallel_training_roles']==1
+          assert v2['execution']['hard_wall_seconds_per_role']==3600
           assert v2['execution']['hard_wall_seconds_preflight']==600
+          assert v2['execution']['hard_wall_seconds_stack']==14400
+          assert v2['preflight']['maximum_projected_role_seconds']==3600
+          assert v2['preflight']['maximum_projected_role_seconds'] <= v2['execution']['hard_wall_seconds_per_role']
           assert v2['execution']['max_estimated_total_usd_preflight']==0.10
           assert v2['execution']['max_estimated_total_usd_stack']==2.50
           assert v2['governance']['paid_preflight_allowed'] is False
           assert v2['governance']['paid_full_launch_allowed'] is False
           assert marker['preflight_authorized'] is False
           assert marker['full_launch_authorized'] is False
+          assert marker['preflight_evidence_key'] is None
+          assert marker['preflight_repo_sha'] is None
           PY
