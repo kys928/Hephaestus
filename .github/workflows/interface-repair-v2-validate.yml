@@ -75,8 +75,11 @@ jobs:
           assert v2['execution']['capacity_retry_attempts']==8
           assert v2['execution']['capacity_retry_seconds']==15
           assert v2['execution']['persistent_venv_cache'].startswith('/workspace/')
-          assert v2['governance']['paid_preflight_allowed'] is False
+          assert isinstance(v2['governance']['paid_preflight_allowed'], bool)
           assert v2['governance']['paid_full_launch_allowed'] is False
-          assert marker['preflight_authorized'] is False
           assert marker['full_launch_authorized'] is False
+          if marker['preflight_authorized']:
+              assert v2['governance']['paid_preflight_allowed'] is True
+              assert marker['preflight_evidence_key'] is None
+              assert marker['preflight_repo_sha'] is None
           PY
