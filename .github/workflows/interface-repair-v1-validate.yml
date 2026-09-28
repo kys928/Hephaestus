@@ -52,7 +52,7 @@ jobs:
           assert cfg['governance']['production_promotion_allowed'] is False
           assert cfg['governance']['automatic_role_dispatch_allowed'] is False
           assert cfg['governance']['source_phase_i_adapter_mutation_allowed'] is False
-          assert cfg['governance']['paid_launch_allowed'] is True
+          assert cfg['governance']['paid_launch_allowed'] is False
           assert cfg['pack']['phase_ii_v1_cases_reused_for_certification'] is False
           assert ex['parallel_training_roles'] == 1
           assert ex['gpu_type_ids'] == ['NVIDIA A40']
