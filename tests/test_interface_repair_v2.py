@@ -11,6 +11,12 @@ MARKER = ROOT / "configs/experiments/interface_repair_v2.launch.json"
 LAUNCHER = ROOT / "scripts/launch_interface_repair_v2.py"
 RUNNER = ROOT / "scripts/run_interface_repair_v2.py"
 
+EXPECTED_GPU_FALLBACK = [
+    "NVIDIA A40",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+]
+
 
 def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -51,7 +57,10 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     marker = load(MARKER)
     ex = cfg["execution"]
     assert cfg["training"]["dynamic_padding"] is True
-    assert ex["gpu_type_ids"] == ["NVIDIA A40"]
+    assert ex["preferred_gpu_type_id"] == "NVIDIA A40"
+    assert ex["gpu_type_ids"] == EXPECTED_GPU_FALLBACK
+    assert ex["compatible_fallback_gpu_type_ids"] == EXPECTED_GPU_FALLBACK[1:]
+    assert ex["capacity_fallback_policy"] == "preferred_then_cheapest_compatible"
     assert ex["parallel_training_roles"] == 1
     assert ex["minimum_gpu_memory_gib"] == 44
     assert ex["structured_json_early_stop"] is True
@@ -60,8 +69,11 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert ex["hard_wall_seconds_per_role"] == 3600
     assert ex["hard_wall_seconds_preflight"] == 600
     assert ex["hard_wall_seconds_stack"] == 14400
-    assert ex["max_estimated_total_usd_preflight"] == 0.10
+    assert ex["max_hourly_usd_per_pod"] == 2.20
+    assert ex["max_estimated_total_usd_preflight"] == 0.37
     assert ex["max_estimated_total_usd_stack"] == 2.50
+    assert ex["capacity_retry_attempts"] == 8
+    assert ex["capacity_retry_seconds"] == 15
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
     assert isinstance(cfg["governance"]["paid_preflight_allowed"], bool)
@@ -79,7 +91,7 @@ def test_v2_launcher_mounts_volume_and_reuses_one_pod() -> None:
     launcher = import_file(LAUNCHER, "interface_repair_v2_launcher")
     cfg = load(V2)
     rendered = launcher.request_body(cfg, "deadbeef", "dry-run", "full", real_env=False)
-    assert rendered["gpuTypeIds"] == ["NVIDIA A40"]
+    assert rendered["gpuTypeIds"] == EXPECTED_GPU_FALLBACK
     assert rendered["gpuCount"] == 1
     assert rendered["networkVolumeId"] == "<volume>"
     assert rendered["volumeMountPath"] == "/workspace"
