@@ -67,27 +67,28 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert ex["evaluation_shard_size"] == 32
     assert ex["baseline_cache_enabled"] is True
     assert ex["hard_wall_seconds_per_role"] == 3600
-    assert ex["hard_wall_seconds_preflight"] == 600
+    assert ex["hard_wall_seconds_preflight"] == 1200
+    assert ex["hard_wall_seconds_preflight_benchmark"] == 600
+    assert ex["hard_wall_seconds_preflight_bootstrap"] == 600
+    assert ex["hard_wall_seconds_preflight_total"] == 1200
     assert ex["hard_wall_seconds_stack"] == 14400
     assert ex["max_hourly_usd_per_pod"] == 2.20
-    assert ex["max_estimated_total_usd_preflight"] == 0.37
+    assert ex["max_estimated_total_usd_preflight"] == 0.74
     assert ex["max_estimated_total_usd_stack"] == 2.50
     assert ex["capacity_retry_attempts"] == 8
     assert ex["capacity_retry_seconds"] == 15
+    assert ex["persistent_venv_cache"].startswith("/workspace/")
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
-    assert isinstance(cfg["governance"]["paid_preflight_allowed"], bool)
+    assert cfg["governance"]["paid_preflight_allowed"] is False
     assert cfg["governance"]["paid_full_launch_allowed"] is False
     assert cfg["governance"]["production_promotion_allowed"] is False
     assert cfg["governance"]["automatic_role_dispatch_allowed"] is False
+    assert marker["preflight_authorized"] is False
     assert marker["full_launch_authorized"] is False
-    if marker["preflight_authorized"]:
-        assert cfg["governance"]["paid_preflight_allowed"] is True
-        assert marker["preflight_evidence_key"] is None
-        assert marker["preflight_repo_sha"] is None
 
 
-def test_v2_launcher_mounts_volume_and_reuses_one_pod() -> None:
+def test_v2_launcher_mounts_volume_reuses_one_pod_and_caches_environment() -> None:
     launcher = import_file(LAUNCHER, "interface_repair_v2_launcher")
     cfg = load(V2)
     rendered = launcher.request_body(cfg, "deadbeef", "dry-run", "full", real_env=False)
@@ -99,6 +100,19 @@ def test_v2_launcher_mounts_volume_and_reuses_one_pod() -> None:
     assert "planner evaluator judge controller" in shell
     assert "run_interface_repair_live_v2.py" in shell
     assert "/workspace/hephaestus-cache/huggingface" in shell
+    assert cfg["execution"]["persistent_venv_cache"] in shell
+    assert ".hephaestus-ready" in shell
+
+
+def test_v2_launcher_is_stage_aware_and_reports_safe_pod_metadata() -> None:
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "PRELIGHT_BENCHMARK_STAGES" in text
+    assert "preflight_evaluation_started" in text
+    assert "hard_wall_seconds_preflight_benchmark" in text
+    assert "hard_wall_seconds_preflight_bootstrap" in text
+    assert "INTERFACE_REPAIR_V2_PROGRESS_JSON" in text
+    assert "INTERFACE_REPAIR_V2_POD_METADATA_JSON" in text
+    assert "safe_pod_metadata" in text
 
 
 def test_v2_runner_contains_contract_stop_shards_and_dynamic_lengths() -> None:
@@ -120,4 +134,5 @@ def test_preflight_is_small_and_cannot_auto_launch_full_run() -> None:
     assert cfg["preflight"]["optimizer_steps"] * cfg["training"]["gradient_accumulation_steps"] == 40
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= cfg["execution"]["hard_wall_seconds_per_role"]
+    assert cfg["execution"]["hard_wall_seconds_preflight_benchmark"] == 600
     assert cfg["governance"]["paid_full_launch_allowed"] is False
