@@ -36,15 +36,25 @@ jobs:
           from pathlib import Path
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v2.launch.json').read_text())
+          expected=[
+              'NVIDIA A40',
+              'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+              'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
+          ]
           assert cfg['governance']['paid_preflight_allowed'] is True
           assert cfg['governance']['paid_full_launch_allowed'] is False
           assert marker['preflight_authorized'] is True
           assert marker['full_launch_authorized'] is False
-          assert cfg['execution']['gpu_type_ids']==['NVIDIA A40']
+          assert cfg['execution']['preferred_gpu_type_id']=='NVIDIA A40'
+          assert cfg['execution']['gpu_type_ids']==expected
+          assert cfg['execution']['compatible_fallback_gpu_type_ids']==expected[1:]
+          assert cfg['execution']['capacity_fallback_policy']=='preferred_then_cheapest_compatible'
+          assert cfg['execution']['minimum_gpu_memory_gib']==44
           assert cfg['execution']['hard_wall_seconds_preflight']==600
           assert cfg['execution']['hard_wall_seconds_per_role']==3600
           assert cfg['preflight']['maximum_projected_role_seconds']==3600
           assert cfg['preflight']['maximum_projected_role_seconds'] <= cfg['execution']['hard_wall_seconds_per_role']
-          assert cfg['execution']['max_estimated_total_usd_preflight']==0.10
+          assert cfg['execution']['max_hourly_usd_per_pod']==2.20
+          assert cfg['execution']['max_estimated_total_usd_preflight']==0.37
           PY
       - run: python scripts/launch_interface_repair_v2.py --preflight --execute
