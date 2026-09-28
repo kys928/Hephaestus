@@ -119,7 +119,7 @@
     "role": "planner",
     "evaluation_cases": 8,
     "optimizer_steps": 5,
-    "maximum_projected_role_seconds": 5400,
+    "maximum_projected_role_seconds": 3600,
     "require_complete_json_rate": 1.0,
     "require_no_deadline_hits": true
   },
