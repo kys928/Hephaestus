@@ -38,6 +38,8 @@ jobs:
           marker=json.loads(Path('configs/experiments/interface_repair_v2.launch.json').read_text())
           assert cfg['governance']['paid_full_launch_allowed'] is True
           assert marker['full_launch_authorized'] is True
+          assert marker['preflight_evidence_key']
+          assert marker['preflight_repo_sha']
           assert cfg['frozen_diagnosis'] is True
           assert cfg['governance']['production_promotion_allowed'] is False
           assert cfg['governance']['automatic_role_dispatch_allowed'] is False
