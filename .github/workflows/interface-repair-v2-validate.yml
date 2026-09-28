@@ -44,21 +44,33 @@ jobs:
           v1=json.loads(Path('configs/experiments/hephaestus_interface_repair_v1.json').read_text())
           v2=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v2.launch.json').read_text())
+          expected=[
+              'NVIDIA A40',
+              'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+              'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
+          ]
           assert v2['pack']==v1['pack']
           assert v2['certification']==v1['certification']
           assert v2['live_certification']==v1['live_certification']
           assert v2['roles']==v1['roles']
           assert v2['frozen_diagnosis'] is True
           assert v2['training']['dynamic_padding'] is True
-          assert v2['execution']['gpu_type_ids']==['NVIDIA A40']
+          assert v2['execution']['preferred_gpu_type_id']=='NVIDIA A40'
+          assert v2['execution']['gpu_type_ids']==expected
+          assert v2['execution']['compatible_fallback_gpu_type_ids']==expected[1:]
+          assert v2['execution']['capacity_fallback_policy']=='preferred_then_cheapest_compatible'
           assert v2['execution']['parallel_training_roles']==1
+          assert v2['execution']['minimum_gpu_memory_gib']==44
           assert v2['execution']['hard_wall_seconds_per_role']==3600
           assert v2['execution']['hard_wall_seconds_preflight']==600
           assert v2['execution']['hard_wall_seconds_stack']==14400
           assert v2['preflight']['maximum_projected_role_seconds']==3600
           assert v2['preflight']['maximum_projected_role_seconds'] <= v2['execution']['hard_wall_seconds_per_role']
-          assert v2['execution']['max_estimated_total_usd_preflight']==0.10
+          assert v2['execution']['max_hourly_usd_per_pod']==2.20
+          assert v2['execution']['max_estimated_total_usd_preflight']==0.37
           assert v2['execution']['max_estimated_total_usd_stack']==2.50
+          assert v2['execution']['capacity_retry_attempts']==8
+          assert v2['execution']['capacity_retry_seconds']==15
           assert isinstance(v2['governance']['paid_preflight_allowed'], bool)
           assert v2['governance']['paid_full_launch_allowed'] is False
           assert marker['full_launch_authorized'] is False
