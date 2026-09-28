@@ -146,7 +146,7 @@
     "automatic_role_dispatch_allowed": false,
     "source_phase_i_adapter_mutation_allowed": false,
     "diagnosis_weight_mutation_allowed": false,
-    "paid_launch_allowed": false,
+    "paid_launch_allowed": true,
     "explicit_launch_authorization_required": true
   }
 }
