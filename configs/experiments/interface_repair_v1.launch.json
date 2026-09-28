@@ -4,5 +4,5 @@
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V1",
   "authorized_by": "kys928",
   "authorized_at": "2026-09-28T07:25:00Z",
-  "note": "Operator explicitly approved launch on 2026-09-28. Frozen compute: exactly one NVIDIA A40 pod at a time, 48 GB class / minimum 44 GiB, no GPU substitution, sequential roles planner -> evaluator -> judge -> controller, five-hour role wall, four-hour live-certification wall, $0.60/hour pod ceiling, $2.50 per training role, $2.00 live certification, and $12.00 whole-experiment ceiling. Scientific protocol, data pack, seed, LoRA settings, certification gates, frozen diagnosis, disabled production promotion, and disabled automatic role dispatch remain unchanged."
+  "note": "Cancellation trigger recorded on 2026-09-28 after operator stopped the active run for execution inefficiency. The experiment config now has paid_launch_allowed=false, so this marker update is not a launch authorization and must not start paid compute."
 }
