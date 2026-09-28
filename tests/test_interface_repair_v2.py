@@ -10,6 +10,8 @@ V2 = ROOT / "configs/experiments/hephaestus_interface_repair_v2.json"
 MARKER = ROOT / "configs/experiments/interface_repair_v2.launch.json"
 LAUNCHER = ROOT / "scripts/launch_interface_repair_v2.py"
 RUNNER = ROOT / "scripts/run_interface_repair_v2.py"
+CACHED_RUNNER = ROOT / "scripts/run_interface_repair_v2_cached.py"
+BOOTSTRAP_HELPER = ROOT / "scripts/interface_repair_v2_bootstrap.py"
 
 EXPECTED_GPU_FALLBACK = [
     "NVIDIA A40",
@@ -77,7 +79,10 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert ex["max_estimated_total_usd_stack"] == 2.50
     assert ex["capacity_retry_attempts"] == 8
     assert ex["capacity_retry_seconds"] == 15
+    assert ex["persistent_hf_cache"].startswith("/workspace/")
     assert ex["persistent_venv_cache"].startswith("/workspace/")
+    assert ex["persistent_pip_cache"].startswith("/workspace/")
+    assert ex["persistent_adapter_cache"].startswith("/workspace/")
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
     assert isinstance(cfg["governance"]["paid_preflight_allowed"], bool)
@@ -89,6 +94,8 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
         assert cfg["governance"]["paid_preflight_allowed"] is True
         assert marker["preflight_evidence_key"] is None
         assert marker["preflight_repo_sha"] is None
+    else:
+        assert cfg["governance"]["paid_preflight_allowed"] is False
 
 
 def test_v2_launcher_mounts_volume_reuses_one_pod_and_caches_environment() -> None:
@@ -102,12 +109,19 @@ def test_v2_launcher_mounts_volume_reuses_one_pod_and_caches_environment() -> No
     shell = rendered["dockerStartCmd"][2]
     assert "planner evaluator judge controller" in shell
     assert "run_interface_repair_live_v2.py" in shell
+    assert "run_interface_repair_v2_cached.py" in shell
     assert "/workspace/hephaestus-cache/huggingface" in shell
     assert cfg["execution"]["persistent_venv_cache"] in shell
+    assert cfg["execution"]["persistent_pip_cache"] in shell
+    assert cfg["execution"]["persistent_adapter_cache"] in shell
     assert ".hephaestus-ready" in shell
+    assert 'rm -rf "$VENV"' not in shell
+    assert "PIP_CACHE_DIR" in shell
+    assert "environment_install_started" in shell
+    assert "environment_ready" in shell
 
 
-def test_v2_launcher_is_stage_aware_and_reports_safe_pod_metadata() -> None:
+def test_v2_launcher_is_stage_aware_and_reports_bootstrap_and_pod_metadata() -> None:
     text = LAUNCHER.read_text(encoding="utf-8")
     assert "PRELIGHT_BENCHMARK_STAGES" in text
     assert "preflight_evaluation_started" in text
@@ -115,7 +129,21 @@ def test_v2_launcher_is_stage_aware_and_reports_safe_pod_metadata() -> None:
     assert "hard_wall_seconds_preflight_bootstrap" in text
     assert "INTERFACE_REPAIR_V2_PROGRESS_JSON" in text
     assert "INTERFACE_REPAIR_V2_POD_METADATA_JSON" in text
+    assert "INTERFACE_REPAIR_V2_BOOTSTRAP_PROGRESS_JSON" in text
     assert "safe_pod_metadata" in text
+    assert "last_bootstrap_stage" in text
+
+
+def test_v2_persistent_materializer_avoids_per_run_model_copy_and_verifies_adapter() -> None:
+    helper = BOOTSTRAP_HELPER.read_text(encoding="utf-8")
+    cached_runner = CACHED_RUNNER.read_text(encoding="utf-8")
+    assert "local_files_only=True" in helper
+    assert "snapshot_download(repo_id=model_id, revision=revision)" in helper
+    assert "local_dir=" not in helper
+    assert "_verified_archive" in helper
+    assert "expected_sha" in helper
+    assert "HEPHAESTUS_V2_ADAPTER_CACHE" in helper
+    assert "v2.v1.materialize_parent = materialize_parent_cached" in cached_runner
 
 
 def test_v2_runner_contains_contract_stop_shards_and_dynamic_lengths() -> None:
