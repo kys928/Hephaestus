@@ -1,0 +1,10 @@
+{
+  "execution_path": "interface_repair_v2",
+  "preflight_authorized": false,
+  "full_launch_authorized": false,
+  "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
+  "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
+  "authorized_by": null,
+  "authorized_at": null,
+  "note": "V2 is prepared but all paid execution remains disabled until explicit operator authorization. Preflight and full launch are separate approval boundaries."
+}
