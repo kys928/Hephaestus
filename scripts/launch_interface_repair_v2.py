@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,13 @@ CFG_PATH = ROOT / "configs/experiments/hephaestus_interface_repair_v2.json"
 MARKER_PATH = ROOT / "configs/experiments/interface_repair_v2.launch.json"
 AUTH_ENV = "HEPHAESTUS_INTERFACE_REPAIR_V2_AUTHORIZED"
 TERMINAL = {"EXITED", "FAILED", "TERMINATED", "STOPPED"}
+PRELIGHT_BENCHMARK_STAGES = {
+    "preflight_evaluation_started",
+    "preflight_eval_progress",
+    "preflight_training_started",
+    "training_progress",
+    "preflight_complete",
+}
 
 
 def required(name: str) -> str:
@@ -59,7 +67,7 @@ def authorize(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> None:
         raise RuntimeError(f"Interface Repair V2 {mode} authorization phrase missing or mismatched")
 
 
-def pod_shell(mode: str) -> str:
+def pod_shell(mode: str, venv_cache: str) -> str:
     if mode == "preflight":
         body = '''export HEPHAESTUS_REPAIR_ROLE=planner
 "$PY" scripts/run_interface_repair_v2.py --preflight'''
@@ -72,6 +80,7 @@ unset HEPHAESTUS_REPAIR_ROLE
 "$PY" scripts/run_interface_repair_live_v2.py'''
     else:
         raise ValueError(mode)
+    quoted_venv = shlex.quote(venv_cache)
     return rf'''set -Eeuo pipefail
 export HF_HOME=/workspace/hephaestus-cache/huggingface
 export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
@@ -80,23 +89,30 @@ export XDG_CACHE_HOME=/workspace/hephaestus-cache/xdg
 export TMPDIR=/workspace/hephaestus-tmp
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=0
-mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+VENV={quoted_venv}
+READY="$VENV/.hephaestus-ready"
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" "$TMPDIR" "$(dirname "$VENV")"
 nvidia-smi --query-gpu=driver_version,name,memory.total,uuid,compute_cap --format=csv,noheader
-if ! command -v git >/dev/null 2>&1; then
+if ! command -v git >/dev/null 2>&1 || ! python -m venv --help >/dev/null 2>&1; then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates python3-venv
   rm -rf /var/lib/apt/lists/*
 fi
-rm -rf /opt/hephaestus-src /opt/hephaestus-venv
+rm -rf /opt/hephaestus-src
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /opt/hephaestus-src
 cd /opt/hephaestus-src
 git checkout --detach "$HEPHAESTUS_REPO_SHA"
-python -m venv --system-site-packages /opt/hephaestus-venv
-PY=/opt/hephaestus-venv/bin/python
-"$PY" -m pip install --no-cache-dir --disable-pip-version-check -e '.[s3]' \
-  'transformers==5.17.0' 'accelerate==1.15.0' 'safetensors==0.8.0' \
-  'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
-"$PY" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+if [ ! -f "$READY" ]; then
+  rm -rf "$VENV"
+  python -m venv --system-site-packages "$VENV"
+  "$VENV/bin/python" -m pip install --no-cache-dir --disable-pip-version-check -e '.[s3]' \
+    'transformers==5.17.0' 'accelerate==1.15.0' 'safetensors==0.8.0' \
+    'huggingface-hub==1.31.0' 'peft==0.21.0' 'mistral-common==1.11.7'
+  "$VENV/bin/python" -m pip uninstall -y hf-xet >/dev/null 2>&1 || true
+  touch "$READY"
+fi
+PY="$VENV/bin/python"
+"$PY" -m pip install --disable-pip-version-check --no-deps -e . >/dev/null
 "$PY" -m py_compile scripts/run_interface_repair_v2.py scripts/run_interface_repair_live_v2.py scripts/launch_interface_repair_v2.py
 "$PY" scripts/build_interface_repair_v1.py
 {body}
@@ -133,7 +149,7 @@ def request_body(cfg: dict[str, Any], repo_sha: str, run_id: str, mode: str, *, 
         "containerDiskInGb": int(ex["container_disk_gb"]),
         "networkVolumeId": volume,
         "volumeMountPath": "/workspace",
-        "dockerStartCmd": ["bash", "-lc", pod_shell(mode)],
+        "dockerStartCmd": ["bash", "-lc", pod_shell(mode, str(ex["persistent_venv_cache"]))],
         "interruptible": False,
         "env": env,
     }
@@ -196,7 +212,39 @@ def create_with_capacity_retries(execution: RunPodExecutionAdapter, body: dict[s
             print("INTERFACE_REPAIR_V2_CAPACITY_JSON " + json.dumps({"attempt": attempt, "status": "unavailable"}, sort_keys=True), flush=True)
             if attempt < attempts:
                 time.sleep(delay)
-    raise RuntimeError(f"A40 capacity unavailable after {attempts} attempts: {last}") from last
+    raise RuntimeError(f"compatible GPU capacity unavailable after {attempts} attempts: {last}") from last
+
+
+def safe_pod_metadata(snapshot: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key in (
+        "id", "name", "desiredStatus", "createdAt", "lastStartedAt",
+        "costPerHr", "adjustedCostPerHr", "gpuTypeId", "gpuType", "gpuDisplayName", "gpuName",
+        "memoryInGb", "vcpuCount", "dataCenterId",
+    ):
+        value = snapshot.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            if value is not None:
+                safe[key] = value
+    gpu = snapshot.get("gpu")
+    if isinstance(gpu, dict):
+        safe_gpu = {
+            key: gpu[key]
+            for key in ("id", "name", "displayName", "memoryInGb", "memoryInGB", "securePrice", "communityPrice")
+            if key in gpu and isinstance(gpu[key], (str, int, float, bool))
+        }
+        if safe_gpu:
+            safe["gpu"] = safe_gpu
+    machine = snapshot.get("machine")
+    if isinstance(machine, dict):
+        safe_machine = {
+            key: machine[key]
+            for key in ("id", "dataCenterId", "gpuTypeId", "gpuDisplayName")
+            if key in machine and isinstance(machine[key], (str, int, float, bool))
+        }
+        if safe_machine:
+            safe["machine"] = safe_machine
+    return safe
 
 
 def delete_with_retries(execution: RunPodExecutionAdapter, pod_id: str) -> dict[str, object]:
@@ -221,12 +269,18 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
     run_id = os.environ.get("HEPHAESTUS_INTERFACE_REPAIR_RUN_ID", f"interface-repair-v2-{mode}-{github_run_id}")
     prefix = f"{str(cfg['execution']['s3_prefix']).rstrip('/')}/{run_id}"
     if mode == "preflight":
-        result_key = f"{prefix}/preflight/{cfg['preflight']['role']}/result.json"
-        wall = int(cfg["execution"]["hard_wall_seconds_preflight"])
+        role = str(cfg["preflight"]["role"])
+        result_key = f"{prefix}/preflight/{role}/result.json"
+        progress_key = f"{prefix}/preflight/{role}/progress.json"
+        wall = int(cfg["execution"]["hard_wall_seconds_preflight_total"])
+        bootstrap_wall = int(cfg["execution"]["hard_wall_seconds_preflight_bootstrap"])
+        benchmark_wall = int(cfg["execution"]["hard_wall_seconds_preflight_benchmark"])
         max_total = float(cfg["execution"]["max_estimated_total_usd_preflight"])
     else:
         result_key = f"{prefix}/live/result.json"
+        progress_key = None
         wall = int(cfg["execution"]["hard_wall_seconds_stack"])
+        bootstrap_wall = benchmark_wall = 0
         max_total = float(cfg["execution"]["max_estimated_total_usd_stack"])
 
     client = s3_client()
@@ -236,6 +290,9 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
     body = request_body(cfg, repo_sha, run_id, mode, real_env=True)
     pod_id: str | None = None
     started: float | None = None
+    benchmark_started: float | None = None
+    last_progress_stage: str | None = None
+    metadata_printed = False
     record: dict[str, Any] = {
         "mode": mode, "run_id": run_id, "repo_sha": repo_sha, "status": "starting", "result_key": result_key,
         "preflight_evidence_key": marker.get("preflight_evidence_key") if mode == "full" else None,
@@ -250,8 +307,13 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
         while True:
             elapsed = time.monotonic() - started
             if elapsed >= wall:
-                raise TimeoutError(f"V2 {mode} hard wall reached")
+                raise TimeoutError(f"V2 {mode} total hard wall reached")
             snapshot = execution.get_pod(pod_id)
+            metadata = safe_pod_metadata(snapshot)
+            if metadata and not metadata_printed:
+                print("INTERFACE_REPAIR_V2_POD_METADATA_JSON " + json.dumps(metadata, sort_keys=True), flush=True)
+                record["pod_metadata"] = metadata
+                metadata_printed = True
             cost = snapshot.get("adjustedCostPerHr", snapshot.get("costPerHr"))
             if cost is not None:
                 hourly = float(cost)
@@ -261,6 +323,24 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
                     raise RuntimeError(f"hourly cost ceiling exceeded: {hourly:.4f}")
                 if estimated > max_total:
                     raise RuntimeError(f"estimated {mode} cost ceiling exceeded: {estimated:.4f}")
+
+            if mode == "preflight" and progress_key is not None:
+                progress = maybe_json(client, progress_key)
+                if progress is not None:
+                    stage = str(progress.get("stage", ""))
+                    if stage and stage != last_progress_stage:
+                        print("INTERFACE_REPAIR_V2_PROGRESS_JSON " + json.dumps(progress, sort_keys=True), flush=True)
+                        record["last_progress"] = progress
+                        last_progress_stage = stage
+                    if benchmark_started is None and stage in PRELIGHT_BENCHMARK_STAGES:
+                        benchmark_started = time.monotonic()
+                        record["benchmark_started_at_unix"] = time.time()
+                        print("INTERFACE_REPAIR_V2_BENCHMARK_CLOCK_JSON " + json.dumps({"status": "started", "stage": stage, "benchmark_wall_seconds": benchmark_wall}, sort_keys=True), flush=True)
+                if benchmark_started is None and elapsed >= bootstrap_wall:
+                    raise TimeoutError("V2 preflight bootstrap/model-init hard wall reached before benchmark start")
+                if benchmark_started is not None and (time.monotonic() - benchmark_started) >= benchmark_wall:
+                    raise TimeoutError("V2 preflight benchmark hard wall reached")
+
             terminal = maybe_json(client, result_key)
             if terminal is not None:
                 record["result"] = terminal
