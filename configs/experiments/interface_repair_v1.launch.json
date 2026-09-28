@@ -3,6 +3,6 @@
   "authorized": true,
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V1",
   "authorized_by": "kys928",
-  "authorized_at": "2026-09-24T12:42:00Z",
-  "note": "Authorized targeted Phase-II interface-repair training and certification. Production promotion and automatic dispatch remain disabled. Relaunched after operator confirmed funds restored on 2026-09-26. Scientific protocol remains frozen; infrastructure-only changes add bounded RunPod capacity retries, verified >=48 GiB GPU fallbacks, six-hour role wall, seven-hour GitHub runner envelope, and restored hard spend caps."
+  "authorized_at": "2026-09-28T07:25:00Z",
+  "note": "Operator explicitly approved launch on 2026-09-28. Frozen compute: exactly one NVIDIA A40 pod at a time, 48 GB class / minimum 44 GiB, no GPU substitution, sequential roles planner -> evaluator -> judge -> controller, five-hour role wall, four-hour live-certification wall, $0.60/hour pod ceiling, $2.50 per training role, $2.00 live certification, and $12.00 whole-experiment ceiling. Scientific protocol, data pack, seed, LoRA settings, certification gates, frozen diagnosis, disabled production promotion, and disabled automatic role dispatch remain unchanged."
 }
