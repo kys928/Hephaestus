@@ -12,7 +12,7 @@ jobs:
   preflight:
     if: contains(github.event.head_commit.message, '[launch-interface-repair-v2-preflight]')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       PYTHONPATH: src:scripts
       HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v2-preflight-${{ github.run_id }}
@@ -50,11 +50,15 @@ jobs:
           assert cfg['execution']['compatible_fallback_gpu_type_ids']==expected[1:]
           assert cfg['execution']['capacity_fallback_policy']=='preferred_then_cheapest_compatible'
           assert cfg['execution']['minimum_gpu_memory_gib']==44
-          assert cfg['execution']['hard_wall_seconds_preflight']==600
+          assert cfg['execution']['hard_wall_seconds_preflight']==1200
+          assert cfg['execution']['hard_wall_seconds_preflight_benchmark']==600
+          assert cfg['execution']['hard_wall_seconds_preflight_bootstrap']==600
+          assert cfg['execution']['hard_wall_seconds_preflight_total']==1200
           assert cfg['execution']['hard_wall_seconds_per_role']==3600
           assert cfg['preflight']['maximum_projected_role_seconds']==3600
           assert cfg['preflight']['maximum_projected_role_seconds'] <= cfg['execution']['hard_wall_seconds_per_role']
           assert cfg['execution']['max_hourly_usd_per_pod']==2.20
-          assert cfg['execution']['max_estimated_total_usd_preflight']==0.37
+          assert cfg['execution']['max_estimated_total_usd_preflight']==0.74
+          assert cfg['execution']['persistent_venv_cache'].startswith('/workspace/')
           PY
       - run: python scripts/launch_interface_repair_v2.py --preflight --execute
