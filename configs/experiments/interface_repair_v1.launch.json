@@ -4,5 +4,5 @@
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V1",
   "authorized_by": "kys928",
   "authorized_at": "2026-09-28T07:25:00Z",
-  "note": "Cancellation trigger recorded on 2026-09-28 after operator stopped the active run for execution inefficiency. The experiment config now has paid_launch_allowed=false, so this marker update is not a launch authorization and must not start paid compute."
+  "note": "Operator stopped the active run for execution inefficiency. paid_launch_allowed=false in the experiment config. This marker update triggers only explicit cleanup verification for orphaned pod ri18wxnya0f5ji; it is not a launch authorization."
 }
