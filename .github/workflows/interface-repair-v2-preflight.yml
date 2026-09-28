@@ -1,0 +1,47 @@
+name: Interface Repair V2 preflight
+on:
+  push:
+    branches: [experiment-interface-repair-v2]
+    paths:
+      - configs/experiments/interface_repair_v2.launch.json
+permissions: {contents: read}
+concurrency:
+  group: interface-repair-v2-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: contains(github.event.head_commit.message, '[launch-interface-repair-v2-preflight]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src:scripts
+      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: interface-repair-v2-preflight-${{ github.run_id }}
+      HEPHAESTUS_INTERFACE_REPAIR_V2_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - name: Verify explicit V2 preflight authorization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2.json').read_text())
+          marker=json.loads(Path('configs/experiments/interface_repair_v2.launch.json').read_text())
+          assert cfg['governance']['paid_preflight_allowed'] is True
+          assert cfg['governance']['paid_full_launch_allowed'] is False
+          assert marker['preflight_authorized'] is True
+          assert marker['full_launch_authorized'] is False
+          assert cfg['execution']['gpu_type_ids']==['NVIDIA A40']
+          assert cfg['execution']['hard_wall_seconds_preflight']==600
+          assert cfg['execution']['max_estimated_total_usd_preflight']==0.10
+          PY
+      - run: python scripts/launch_interface_repair_v2.py --preflight --execute
