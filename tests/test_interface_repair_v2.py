@@ -58,10 +58,13 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert ex["structured_json_early_stop"] is True
     assert ex["evaluation_shard_size"] == 32
     assert ex["baseline_cache_enabled"] is True
+    assert ex["hard_wall_seconds_per_role"] == 3600
     assert ex["hard_wall_seconds_preflight"] == 600
     assert ex["hard_wall_seconds_stack"] == 14400
     assert ex["max_estimated_total_usd_preflight"] == 0.10
     assert ex["max_estimated_total_usd_stack"] == 2.50
+    assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
+    assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
     assert cfg["governance"]["paid_preflight_allowed"] is False
     assert cfg["governance"]["paid_full_launch_allowed"] is False
     assert cfg["governance"]["production_promotion_allowed"] is False
@@ -101,4 +104,6 @@ def test_preflight_is_small_and_cannot_auto_launch_full_run() -> None:
     assert cfg["preflight"]["evaluation_cases"] == 8
     assert cfg["preflight"]["optimizer_steps"] == 5
     assert cfg["preflight"]["optimizer_steps"] * cfg["training"]["gradient_accumulation_steps"] == 40
+    assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
+    assert cfg["preflight"]["maximum_projected_role_seconds"] <= cfg["execution"]["hard_wall_seconds_per_role"]
     assert cfg["governance"]["paid_full_launch_allowed"] is False
