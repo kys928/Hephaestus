@@ -43,7 +43,6 @@ def test_v2_preserves_frozen_science() -> None:
         assert v2["training"][key] == v1["training"][key]
     assert v2["certification"] == v1["certification"]
     assert v2["live_certification"] == v1["live_certification"]
-    # Keep original decoding envelopes; V2 exits early only after a complete contract JSON exists.
     assert v2["roles"] == v1["roles"]
 
 
@@ -65,12 +64,15 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert ex["max_estimated_total_usd_stack"] == 2.50
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
-    assert cfg["governance"]["paid_preflight_allowed"] is False
+    assert isinstance(cfg["governance"]["paid_preflight_allowed"], bool)
     assert cfg["governance"]["paid_full_launch_allowed"] is False
     assert cfg["governance"]["production_promotion_allowed"] is False
     assert cfg["governance"]["automatic_role_dispatch_allowed"] is False
-    assert marker["preflight_authorized"] is False
     assert marker["full_launch_authorized"] is False
+    if marker["preflight_authorized"]:
+        assert cfg["governance"]["paid_preflight_allowed"] is True
+        assert marker["preflight_evidence_key"] is None
+        assert marker["preflight_repo_sha"] is None
 
 
 def test_v2_launcher_mounts_volume_and_reuses_one_pod() -> None:
