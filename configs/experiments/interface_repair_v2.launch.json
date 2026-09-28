@@ -1,12 +1,12 @@
 {
   "execution_path": "interface_repair_v2",
-  "preflight_authorized": false,
+  "preflight_authorized": true,
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
-  "authorized_by": null,
-  "authorized_at": null,
-  "note": "V2 is prepared but all paid execution remains disabled until explicit operator authorization. Preflight and full launch are separate approval boundaries. A full launch additionally requires a persisted successful preflight result bound to the exact repository SHA."
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-28T17:02:00Z",
+  "note": "Operator explicitly authorized the V2 paid preflight only. Frozen benchmark compute: exactly one NVIDIA A40, minimum 44 GiB, no GPU substitution, 10-minute hard wall, $0.60/hour pod ceiling, $0.10 absolute preflight spend ceiling, planner role, 8 representative evaluation cases, 5 optimizer steps / 40 training examples, and projected full planner runtime must be <=60 minutes. Full paid launch remains disabled and requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
 }
