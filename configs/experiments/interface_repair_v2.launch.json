@@ -7,6 +7,6 @@
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
   "authorized_by": "kys928",
-  "authorized_at": "2026-09-28T17:02:00Z",
-  "note": "Operator explicitly authorized the V2 paid preflight only. Frozen benchmark compute: exactly one NVIDIA A40, minimum 44 GiB, no GPU substitution, 10-minute hard wall, $0.60/hour pod ceiling, $0.10 absolute preflight spend ceiling, planner role, 8 representative evaluation cases, 5 optimizer steps / 40 training examples, and projected full planner runtime must be <=60 minutes. Full paid launch remains disabled and requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
+  "authorized_at": "2026-09-28T20:08:00Z",
+  "note": "Operator explicitly authorized the V2 paid preflight only and approved adaptive capacity fallback. Preferred GPU is NVIDIA A40. If unavailable, the ordered compatible fallback pool is NVIDIA RTX PRO 6000 Blackwell Server Edition then NVIDIA RTX PRO 6000 Blackwell Workstation Edition. Minimum VRAM remains 44 GiB, one GPU only, 10-minute hard wall, $2.20/hour pod ceiling, $0.37 absolute preflight spend ceiling, planner role, 8 representative evaluation cases, 5 optimizer steps / 40 training examples, and projected full planner runtime must be <=60 minutes. Full paid launch remains disabled and requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
 }
