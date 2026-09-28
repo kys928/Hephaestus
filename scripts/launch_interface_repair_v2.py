@@ -47,6 +47,8 @@ def authorize(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> None:
         allowed = cfg["governance"].get("paid_full_launch_allowed")
         marked = marker.get("full_launch_authorized")
         phrase = str(marker.get("authorization_phrase_full", ""))
+        if not marker.get("preflight_evidence_key") or not marker.get("preflight_repo_sha"):
+            raise RuntimeError("full V2 launch requires persisted preflight evidence bound to a repository SHA")
     else:
         raise ValueError(mode)
     if not allowed:
@@ -163,6 +165,23 @@ def maybe_json(client: Any, key: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def verify_preflight_evidence(client: Any, marker: dict[str, Any], repo_sha: str) -> dict[str, Any]:
+    key = str(marker.get("preflight_evidence_key") or "")
+    bound_sha = str(marker.get("preflight_repo_sha") or "")
+    if not key or not bound_sha:
+        raise RuntimeError("missing preflight evidence binding")
+    if bound_sha != repo_sha:
+        raise RuntimeError(f"preflight repository SHA mismatch: {bound_sha} != {repo_sha}")
+    result = maybe_json(client, key)
+    if result is None:
+        raise RuntimeError("bound preflight evidence does not exist")
+    if result.get("status") != "completed" or result.get("approved_for_full_run") is not True:
+        raise RuntimeError("bound preflight did not approve a full run")
+    if str(result.get("repo_sha", "")) != repo_sha:
+        raise RuntimeError("preflight result is not for the exact full-run repository SHA")
+    return result
+
+
 def create_with_capacity_retries(execution: RunPodExecutionAdapter, body: dict[str, object], attempts: int, delay: float) -> dict[str, Any]:
     last: BaseException | None = None
     for attempt in range(1, attempts + 1):
@@ -212,11 +231,16 @@ def execute(cfg: dict[str, Any], marker: dict[str, Any], mode: str) -> dict[str,
 
     client = s3_client()
     client.head_bucket(Bucket=required("RUNPOD_NETWORK_VOLUME_ID"))
+    preflight_evidence = verify_preflight_evidence(client, marker, repo_sha) if mode == "full" else None
     execution = RunPodExecutionAdapter(RunPodConfig.from_env(), EnvironmentSecretsProvider())
     body = request_body(cfg, repo_sha, run_id, mode, real_env=True)
     pod_id: str | None = None
     started: float | None = None
-    record: dict[str, Any] = {"mode": mode, "run_id": run_id, "repo_sha": repo_sha, "status": "starting", "result_key": result_key}
+    record: dict[str, Any] = {
+        "mode": mode, "run_id": run_id, "repo_sha": repo_sha, "status": "starting", "result_key": result_key,
+        "preflight_evidence_key": marker.get("preflight_evidence_key") if mode == "full" else None,
+        "preflight_projection_seconds": preflight_evidence.get("projected_full_role_seconds") if preflight_evidence else None,
+    }
     try:
         pod = create_with_capacity_retries(execution, body, int(cfg["execution"]["capacity_retry_attempts"]), float(cfg["execution"]["capacity_retry_seconds"]))
         pod_id = str(pod["id"])
@@ -278,12 +302,16 @@ def main() -> int:
         "request": request_body(cfg, repo_sha, run_id, mode, real_env=False),
         "execution": cfg["execution"],
         "governance": cfg["governance"],
+        "preflight_evidence_key": marker.get("preflight_evidence_key"),
+        "preflight_repo_sha": marker.get("preflight_repo_sha"),
     }
     if not args.execute:
         print(json.dumps(rendered, indent=2, sort_keys=True))
         return 0
     result = execute(cfg, marker, mode)
     print("INTERFACE_REPAIR_V2_LAUNCH_RESULT_JSON " + json.dumps(result, sort_keys=True), flush=True)
+    if result.get("status") == "preflight_rejected":
+        return 2
     return 0
 
 
