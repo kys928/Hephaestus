@@ -94,7 +94,17 @@
   },
   "execution": {
     "parallel_training_roles": 1,
-    "gpu_type_ids": ["NVIDIA A40"],
+    "preferred_gpu_type_id": "NVIDIA A40",
+    "compatible_fallback_gpu_type_ids": [
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "capacity_fallback_policy": "preferred_then_cheapest_compatible",
     "minimum_gpu_memory_gib": 44,
     "cloud_type": "SECURE",
     "image": "pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
@@ -103,12 +113,12 @@
     "hard_wall_seconds_per_role": 3600,
     "hard_wall_seconds_preflight": 600,
     "hard_wall_seconds_stack": 14400,
-    "max_hourly_usd_per_pod": 0.6,
-    "max_estimated_total_usd_preflight": 0.10,
+    "max_hourly_usd_per_pod": 2.20,
+    "max_estimated_total_usd_preflight": 0.37,
     "max_estimated_total_usd_stack": 2.50,
     "s3_prefix": "hephaestus/scientific/v2/interface_repair",
-    "capacity_retry_attempts": 40,
-    "capacity_retry_seconds": 30,
+    "capacity_retry_attempts": 8,
+    "capacity_retry_seconds": 15,
     "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
     "evaluation_shard_size": 32,
     "structured_json_early_stop": true,
