@@ -5,148 +5,19 @@
   "hypothesis": "Phase-II V1 failure is primarily missing interface curriculum rather than insufficient base-model capability.",
   "frozen_diagnosis": true,
   "trainable_roles": ["planner", "evaluator", "judge", "controller"],
-  "source_phase_i_stack": {
-    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
-    "required_source_run_id": "role-mastery-v1-35596791201",
-    "production_certified_required": true
-  },
+  "source_phase_i_stack": {"registry_path": "configs/models/hephaestus_role_model_stack_v1.json", "required_source_run_id": "role-mastery-v1-35596791201", "production_certified_required": true},
   "source_phase_ii_run": "interface-mastery-v1-35734212862",
-  "pack": {
-    "builder_path": "scripts/build_interface_repair_v1.py",
-    "canonical_sha256": "495aaaa6663939cd2d9f89f8f0ce1702cbdf59f25e9406ececbc649c6aa78b2e",
-    "interface_fraction": 0.75,
-    "rehearsal_fraction": 0.25,
-    "certification_cases_per_role": 128,
-    "regression_cases_per_role": 128,
-    "live_cases_per_interface": 32,
-    "phase_ii_v1_cases_reused_for_certification": false
-  },
-  "training": {
-    "method": "continue_existing_lora",
-    "precision": "bfloat16",
-    "seed": 20260924,
-    "lora_rank": 16,
-    "lora_alpha": 32,
-    "lora_dropout": 0,
-    "optimizer": "AdamW",
-    "learning_rate": 0.00001,
-    "weight_decay": 0,
-    "micro_batch_size": 1,
-    "gradient_accumulation_steps": 8,
-    "max_sequence_length": 2048,
-    "dynamic_padding": true,
-    "gradient_checkpointing": true,
-    "max_grad_norm": 1,
-    "assistant_only_loss": true,
-    "optimizer_steps": {"planner": 160, "evaluator": 160, "judge": 256, "controller": 160}
-  },
+  "pack": {"builder_path": "scripts/build_interface_repair_v1.py", "canonical_sha256": "495aaaa6663939cd2d9f89f8f0ce1702cbdf59f25e9406ececbc649c6aa78b2e", "interface_fraction": 0.75, "rehearsal_fraction": 0.25, "certification_cases_per_role": 128, "regression_cases_per_role": 128, "live_cases_per_interface": 32, "phase_ii_v1_cases_reused_for_certification": false},
+  "training": {"method": "continue_existing_lora", "precision": "bfloat16", "seed": 20260924, "lora_rank": 16, "lora_alpha": 32, "lora_dropout": 0, "optimizer": "AdamW", "learning_rate": 0.00001, "weight_decay": 0, "micro_batch_size": 1, "gradient_accumulation_steps": 8, "max_sequence_length": 2048, "dynamic_padding": true, "gradient_checkpointing": true, "max_grad_norm": 1, "assistant_only_loss": true, "optimizer_steps": {"planner": 160, "evaluator": 160, "judge": 256, "controller": 160}},
   "roles": {
-    "planner": {
-      "load_kind": "mistral3",
-      "lora_target_regex": "^base_model\\.model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^base_model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": true, "temperature": 0.7, "top_p": 0.95},
-      "reasoning_projection": ["[/THINK]", "</think>"],
-      "max_new_tokens": 1024
-    },
-    "evaluator": {
-      "load_kind": "causal_lm",
-      "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
-      "max_new_tokens": 512
-    },
-    "judge": {
-      "load_kind": "causal_lm",
-      "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
-      "max_new_tokens": 512
-    },
-    "controller": {
-      "load_kind": "causal_lm",
-      "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
-      "decoding": {"do_sample": false},
-      "reasoning_projection": ["</think>"],
-      "max_new_tokens": 384
-    }
+    "planner": {"load_kind": "mistral3", "lora_target_regex": "^base_model\\.model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^base_model\\.model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.language_model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$", "decoding": {"do_sample": true, "temperature": 0.7, "top_p": 0.95}, "reasoning_projection": ["[/THINK]", "</think>"], "max_new_tokens": 1024},
+    "evaluator": {"load_kind": "causal_lm", "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$", "decoding": {"do_sample": false}, "reasoning_projection": ["</think>"], "max_new_tokens": 512},
+    "judge": {"load_kind": "causal_lm", "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(qkv_proj|o_proj)$", "decoding": {"do_sample": false}, "reasoning_projection": ["</think>"], "max_new_tokens": 512},
+    "controller": {"load_kind": "causal_lm", "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$", "decoding": {"do_sample": false}, "reasoning_projection": ["</think>"], "max_new_tokens": 384}
   },
-  "certification": {
-    "minimum_interface_quality_100": 95,
-    "minimum_interface_exact_contract_pass_rate": 0.95,
-    "schema_compliance_required": 1,
-    "minimum_evidence_grounding": 0.99,
-    "maximum_hallucination_rate": 0.01,
-    "maximum_semantic_escalation_rate": 0,
-    "minimum_regression_quality_100": 97,
-    "maximum_regression_quality_drop_100": 2,
-    "minimum_regression_exact_contract_pass_rate": 0.9
-  },
-  "live_certification": {
-    "minimum_overall_quality_100": 95,
-    "minimum_interface_quality_100": 90,
-    "schema_compliance_required": 1,
-    "minimum_evidence_grounding": 0.99,
-    "minimum_consumer_exact_contract_pass_rate": 0.9,
-    "deterministic_boundary_pass_rate_required": 1,
-    "maximum_hallucination_rate": 0.01,
-    "maximum_semantic_escalation_rate": 0,
-    "maximum_upstream_copy_violation_rate": 0
-  },
-  "execution": {
-    "parallel_training_roles": 1,
-    "preferred_gpu_type_id": "NVIDIA A40",
-    "compatible_fallback_gpu_type_ids": [
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
-    ],
-    "gpu_type_ids": [
-      "NVIDIA A40",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
-    ],
-    "capacity_fallback_policy": "preferred_then_cheapest_compatible",
-    "minimum_gpu_memory_gib": 44,
-    "cloud_type": "SECURE",
-    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
-    "container_disk_gb": 180,
-    "poll_seconds": 10,
-    "hard_wall_seconds_per_role": 3600,
-    "hard_wall_seconds_preflight": 1200,
-    "hard_wall_seconds_preflight_benchmark": 600,
-    "hard_wall_seconds_preflight_bootstrap": 600,
-    "hard_wall_seconds_preflight_total": 1200,
-    "hard_wall_seconds_stack": 14400,
-    "max_hourly_usd_per_pod": 2.20,
-    "max_estimated_total_usd_preflight": 0.74,
-    "max_estimated_total_usd_stack": 2.50,
-    "s3_prefix": "hephaestus/scientific/v2/interface_repair",
-    "capacity_retry_attempts": 8,
-    "capacity_retry_seconds": 15,
-    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
-    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
-    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
-    "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v2/adapters",
-    "evaluation_shard_size": 32,
-    "structured_json_early_stop": true,
-    "baseline_cache_enabled": true,
-    "baseline_cache_prefix": "hephaestus/scientific/v2/interface_repair/baseline-cache"
-  },
-  "preflight": {
-    "role": "planner",
-    "evaluation_cases": 8,
-    "optimizer_steps": 5,
-    "maximum_projected_role_seconds": 3600,
-    "require_complete_json_rate": 1.0,
-    "require_no_deadline_hits": true
-  },
-  "governance": {
-    "training_approved": true,
-    "production_promotion_allowed": false,
-    "automatic_role_dispatch_allowed": false,
-    "source_phase_i_adapter_mutation_allowed": false,
-    "diagnosis_weight_mutation_allowed": false,
-    "paid_preflight_allowed": true,
-    "paid_full_launch_allowed": false,
-    "explicit_launch_authorization_required": true
-  }
+  "certification": {"minimum_interface_quality_100": 95, "minimum_interface_exact_contract_pass_rate": 0.95, "schema_compliance_required": 1, "minimum_evidence_grounding": 0.99, "maximum_hallucination_rate": 0.01, "maximum_semantic_escalation_rate": 0, "minimum_regression_quality_100": 97, "maximum_regression_quality_drop_100": 2, "minimum_regression_exact_contract_pass_rate": 0.9},
+  "live_certification": {"minimum_overall_quality_100": 95, "minimum_interface_quality_100": 90, "schema_compliance_required": 1, "minimum_evidence_grounding": 0.99, "minimum_consumer_exact_contract_pass_rate": 0.9, "deterministic_boundary_pass_rate_required": 1, "maximum_hallucination_rate": 0.01, "maximum_semantic_escalation_rate": 0, "maximum_upstream_copy_violation_rate": 0},
+  "execution": {"parallel_training_roles": 1, "preferred_gpu_type_id": "NVIDIA A40", "compatible_fallback_gpu_type_ids": ["NVIDIA RTX PRO 6000 Blackwell Server Edition", "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"], "gpu_type_ids": ["NVIDIA A40", "NVIDIA RTX PRO 6000 Blackwell Server Edition", "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"], "capacity_fallback_policy": "preferred_then_cheapest_compatible", "minimum_gpu_memory_gib": 44, "cloud_type": "SECURE", "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime", "container_disk_gb": 180, "poll_seconds": 10, "hard_wall_seconds_per_role": 3600, "hard_wall_seconds_preflight": 1200, "hard_wall_seconds_preflight_benchmark": 600, "hard_wall_seconds_preflight_bootstrap": 600, "hard_wall_seconds_preflight_total": 1200, "hard_wall_seconds_stack": 14400, "max_hourly_usd_per_pod": 2.20, "max_estimated_total_usd_preflight": 0.74, "max_estimated_total_usd_stack": 2.50, "s3_prefix": "hephaestus/scientific/v2/interface_repair", "capacity_retry_attempts": 8, "capacity_retry_seconds": 15, "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface", "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2", "persistent_pip_cache": "/workspace/hephaestus-cache/pip", "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v2/adapters", "evaluation_shard_size": 32, "structured_json_early_stop": true, "baseline_cache_enabled": true, "baseline_cache_prefix": "hephaestus/scientific/v2/interface_repair/baseline-cache"},
+  "preflight": {"role": "planner", "evaluation_cases": 8, "optimizer_steps": 5, "maximum_projected_role_seconds": 3600, "require_complete_json_rate": 1.0, "require_no_deadline_hits": true},
+  "governance": {"training_approved": true, "production_promotion_allowed": false, "automatic_role_dispatch_allowed": false, "source_phase_i_adapter_mutation_allowed": false, "diagnosis_weight_mutation_allowed": false, "paid_preflight_allowed": false, "paid_full_launch_allowed": true, "explicit_launch_authorization_required": true}
 }
