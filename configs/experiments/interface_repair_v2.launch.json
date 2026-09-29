@@ -7,6 +7,6 @@
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
   "authorized_by": "kys928",
-  "authorized_at": "2026-09-29T07:41:00Z",
-  "note": "Operator explicitly authorized the repaired V2 preflight and conditional full process. Relaunch after fixing RunPod S3 verification: the endpoint may omit custom SHA metadata from HEAD, so V2 now preserves integrity by checking ContentLength, using matching SHA metadata when available, and falling back to one GET plus SHA-256 readback when metadata is absent. The certified Phase-I registry compatibility fix remains active. Frozen science, model revisions, adapters, seeds, LoRA settings, certification gates, and production boundaries are unchanged. Full launch remains locked until this preflight produces persisted completed evidence with approved_for_full_run=true."
+  "authorized_at": "2026-09-29T17:13:00Z",
+  "note": "Operator explicitly authorized the repaired V2 preflight and conditional full process. Relaunch after verified storage recovery: the RunPod Network Volume was expanded to 100 GB and only approved disposable temp/pip/XDG objects plus zero-byte stale HF markers were removed; scientific evidence, persistent venv, certified adapters, and the persistent frozen model cache were preserved. RunPod S3 verification remains ContentLength-first with SHA metadata when available and one GET plus SHA-256 fallback when metadata is absent. The certified Phase-I registry compatibility fix and quota-safe ephemeral model-cache fallback remain active. Frozen science, model revisions, adapters, seeds, LoRA settings, certification gates, and production boundaries are unchanged. Full launch remains locked until this preflight produces persisted completed evidence with approved_for_full_run=true."
 }
