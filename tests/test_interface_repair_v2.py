@@ -9,6 +9,7 @@ V1 = ROOT / "configs/experiments/hephaestus_interface_repair_v1.json"
 V2 = ROOT / "configs/experiments/hephaestus_interface_repair_v2.json"
 MARKER = ROOT / "configs/experiments/interface_repair_v2.launch.json"
 LAUNCHER = ROOT / "scripts/launch_interface_repair_v2.py"
+FULL_LAUNCHER = ROOT / "scripts/launch_interface_repair_v2_full_from_preflight.py"
 RUNNER = ROOT / "scripts/run_interface_repair_v2.py"
 CACHED_RUNNER = ROOT / "scripts/run_interface_repair_v2_cached.py"
 BOOTSTRAP_HELPER = ROOT / "scripts/interface_repair_v2_bootstrap.py"
@@ -86,16 +87,21 @@ def test_v2_compute_efficiency_and_governance_are_frozen() -> None:
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= ex["hard_wall_seconds_per_role"]
     assert isinstance(cfg["governance"]["paid_preflight_allowed"], bool)
-    assert cfg["governance"]["paid_full_launch_allowed"] is False
+    assert isinstance(cfg["governance"]["paid_full_launch_allowed"], bool)
     assert cfg["governance"]["production_promotion_allowed"] is False
     assert cfg["governance"]["automatic_role_dispatch_allowed"] is False
-    assert marker["full_launch_authorized"] is False
+
     if marker["preflight_authorized"]:
         assert cfg["governance"]["paid_preflight_allowed"] is True
-        assert marker["preflight_evidence_key"] is None
-        assert marker["preflight_repo_sha"] is None
     else:
         assert cfg["governance"]["paid_preflight_allowed"] is False
+
+    if marker["full_launch_authorized"]:
+        assert cfg["governance"]["paid_full_launch_allowed"] is True
+        assert marker["preflight_evidence_key"]
+        assert marker["preflight_repo_sha"]
+    else:
+        assert cfg["governance"]["paid_full_launch_allowed"] is False
 
 
 def test_v2_launcher_mounts_volume_reuses_one_pod_and_caches_environment() -> None:
@@ -134,6 +140,17 @@ def test_v2_launcher_is_stage_aware_and_reports_bootstrap_and_pod_metadata() -> 
     assert "last_bootstrap_stage" in text
 
 
+def test_v2_full_launcher_accepts_only_authorization_only_child_commit() -> None:
+    text = FULL_LAUNCHER.read_text(encoding="utf-8")
+    assert "merge-base" in text
+    assert "--is-ancestor" in text
+    assert "ALLOWED_CHANGED_FILES" in text
+    assert "paid_preflight_allowed" in text
+    assert "paid_full_launch_allowed" in text
+    assert "scientific or execution configuration changed after preflight" in text
+    assert "preflight evidence repository SHA does not match the bound preflight commit" in text
+
+
 def test_v2_persistent_materializer_avoids_per_run_model_copy_and_verifies_adapter() -> None:
     helper = BOOTSTRAP_HELPER.read_text(encoding="utf-8")
     cached_runner = CACHED_RUNNER.read_text(encoding="utf-8")
@@ -157,8 +174,9 @@ def test_v2_runner_contains_contract_stop_shards_and_dynamic_lengths() -> None:
     assert "padded_training_token_slots" not in text
 
 
-def test_preflight_is_small_and_cannot_auto_launch_full_run() -> None:
+def test_preflight_is_small_and_full_launch_requires_bound_success() -> None:
     cfg = load(V2)
+    marker = load(MARKER)
     assert cfg["preflight"]["role"] == "planner"
     assert cfg["preflight"]["evaluation_cases"] == 8
     assert cfg["preflight"]["optimizer_steps"] == 5
@@ -166,4 +184,7 @@ def test_preflight_is_small_and_cannot_auto_launch_full_run() -> None:
     assert cfg["preflight"]["maximum_projected_role_seconds"] == 3600
     assert cfg["preflight"]["maximum_projected_role_seconds"] <= cfg["execution"]["hard_wall_seconds_per_role"]
     assert cfg["execution"]["hard_wall_seconds_preflight_benchmark"] == 600
-    assert cfg["governance"]["paid_full_launch_allowed"] is False
+    if cfg["governance"]["paid_full_launch_allowed"]:
+        assert marker["full_launch_authorized"] is True
+        assert marker["preflight_evidence_key"]
+        assert marker["preflight_repo_sha"]
