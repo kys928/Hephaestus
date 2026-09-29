@@ -1,6 +1,6 @@
 name: RunPod scientific volume inventory
 
-# Manual read-only inventory retrigger for storage-quota audit (2026-09-29).
+# One-shot approved cache cleanup + read-only verification for storage-quota recovery (2026-09-29).
 on:
   push:
     branches: [feature/first-scientific-manifest]
@@ -8,6 +8,7 @@ on:
       - .github/workflows/runpod-volume-inventory.yml
       - scripts/runpod_volume_inventory.py
       - scripts/runpod_verify_scientific_state.py
+      - scripts/runpod_safe_storage_cleanup.py
   workflow_dispatch:
 
 permissions:
@@ -35,13 +36,16 @@ jobs:
           python-version: '3.12'
       - name: Install S3 client
         run: python -m pip install 'boto3>=1.35,<2'
-      - name: Inventory volume read-only
+      - name: Delete only approved disposable storage
+        run: python scripts/runpod_safe_storage_cleanup.py
+      - name: Inventory volume after cleanup
         run: python scripts/runpod_volume_inventory.py
-      - name: Upload read-only inventory
+      - name: Upload cleanup and verification evidence
         uses: actions/upload-artifact@v4
         with:
-          name: runpod-storage-audit
+          name: runpod-storage-cleanup
           path: |
+            safe_storage_cleanup.json
             volume_inventory.json
             full_object_index.json
             candidate_paths.txt
