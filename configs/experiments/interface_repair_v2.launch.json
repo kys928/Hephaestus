@@ -1,12 +1,12 @@
 {
   "execution_path": "interface_repair_v2",
-  "preflight_authorized": true,
-  "full_launch_authorized": false,
+  "preflight_authorized": false,
+  "full_launch_authorized": true,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
-  "preflight_evidence_key": null,
-  "preflight_repo_sha": null,
+  "preflight_evidence_key": "hephaestus/scientific/v2/interface_repair/interface-repair-v2-preflight-36624540971/preflight/planner/result.json",
+  "preflight_repo_sha": "6a5b20a22887beb61392eb645c477bbb79e3fa38",
   "authorized_by": "kys928",
-  "authorized_at": "2026-09-29T20:11:00Z",
-  "note": "Operator explicitly authorized correction of the Interface Repair protocol so continue_existing_lora inherits the certified Phase-I parent adapter geometry: LoRA rank 16 and alpha 32. This is the only scientific-protocol correction in this relaunch; data pack, model revisions, seed, dropout, optimizer, learning rate, weight decay, batch geometry, sequence length, optimizer-step counts, certification gates, live-certification gates, production promotion, and automatic role dispatch remain unchanged. Validation run 36624424254 passed at commit 4f4a41cbdc375c74b978ec7b5492690ea2a54050. Storage recovery, S3 verification compatibility, certified Phase-I registry compatibility, quota-safe ephemeral model fallback, and Blackwell CUDA-13 runtime repairs remain active. Full launch remains locked until this fresh preflight persists completed evidence with approved_for_full_run=true."
+  "authorized_at": "2026-09-29T20:34:00Z",
+  "note": "Full launch is authorized from persisted completed preflight evidence for interface-repair-v2-preflight-36624540971. The preflight completed with approved_for_full_run=true, complete_contract_json_rate=1.0, deadline_hits=0, and projected_full_role_seconds=1516.6033841371536, below the frozen 3600-second role ceiling. Exact evidence key and exact preflight repo SHA are bound above. LoRA rank 16 / alpha 32 is the explicitly authorized parent-compatible repair geometry; all other scientific settings and certification gates remain frozen. Production promotion and automatic role dispatch remain disabled."
 }
