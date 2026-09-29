@@ -2,19 +2,29 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import sys
 from io import BytesIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ENTRYPOINT = ROOT / "scripts/run_interface_repair_v2_cached.py"
+SCRIPTS = ROOT / "scripts"
+ENTRYPOINT = SCRIPTS / "run_interface_repair_v2_cached.py"
 
 
 def import_entrypoint():
-    spec = importlib.util.spec_from_file_location("interface_repair_v2_cached_test", ENTRYPOINT)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    scripts = str(SCRIPTS)
+    inserted = scripts not in sys.path
+    if inserted:
+        sys.path.insert(0, scripts)
+    try:
+        spec = importlib.util.spec_from_file_location("interface_repair_v2_cached_test", ENTRYPOINT)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if inserted:
+            sys.path.remove(scripts)
 
 
 class _Body:
