@@ -1,12 +1,13 @@
 name: RunPod scientific volume inventory
 
-# Manual read-only inventory for storage-quota audit (2026-09-29).
+# Manual read-only inventory retrigger for storage-quota audit (2026-09-29).
 on:
   push:
     branches: [feature/first-scientific-manifest]
     paths:
       - .github/workflows/runpod-volume-inventory.yml
       - scripts/runpod_volume_inventory.py
+      - scripts/runpod_verify_scientific_state.py
   workflow_dispatch:
 
 permissions:
