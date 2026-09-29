@@ -163,6 +163,17 @@ def test_v2_persistent_materializer_avoids_per_run_model_copy_and_verifies_adapt
     assert "v2.v1.materialize_parent = materialize_parent_cached" in cached_runner
 
 
+def test_v2_compatible_stack_loader_accepts_certified_registry_schema() -> None:
+    helper = import_file(BOOTSTRAP_HELPER, "interface_repair_v2_bootstrap_test")
+    cfg = load(V2)
+    stack = helper.load_stack_compatible(cfg)
+    assert stack["source_run_id"] == cfg["source_phase_i_stack"]["required_source_run_id"]
+    assert stack["source_experiment"]["run_id"] == stack["source_run_id"]
+    assert stack["production_certified"] is True
+    cached_runner = CACHED_RUNNER.read_text(encoding="utf-8")
+    assert "v2.v1.load_stack = load_stack_compatible" in cached_runner
+
+
 def test_v2_runner_contains_contract_stop_shards_and_dynamic_lengths() -> None:
     text = RUNNER.read_text(encoding="utf-8")
     assert "class ContractComplete" in text
