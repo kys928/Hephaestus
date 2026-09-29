@@ -151,15 +151,18 @@ def test_v2_full_launcher_accepts_only_authorization_only_child_commit() -> None
     assert "preflight evidence repository SHA does not match the bound preflight commit" in text
 
 
-def test_v2_persistent_materializer_avoids_per_run_model_copy_and_verifies_adapter() -> None:
+def test_v2_materializer_uses_persistent_read_then_ephemeral_quota_safe_fallback() -> None:
     helper = BOOTSTRAP_HELPER.read_text(encoding="utf-8")
     cached_runner = CACHED_RUNNER.read_text(encoding="utf-8")
     assert "local_files_only=True" in helper
-    assert "snapshot_download(repo_id=model_id, revision=revision)" in helper
+    assert 'cache_dir=str(ephemeral_hf)' in helper
+    assert 'HEPHAESTUS_V2_EPHEMERAL_HF_CACHE' in helper
+    assert '"/opt/hephaestus-hf-cache"' in helper
     assert "local_dir=" not in helper
     assert "_verified_archive" in helper
     assert "expected_sha" in helper
     assert "HEPHAESTUS_V2_ADAPTER_CACHE" in helper
+    assert 'adapter_source = "ephemeral"' in helper
     assert "v2.v1.materialize_parent = materialize_parent_cached" in cached_runner
 
 
