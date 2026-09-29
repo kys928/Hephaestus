@@ -8,11 +8,14 @@ per-run /opt tree. Scientific inputs, revisions and adapter digests stay frozen.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import time
 from pathlib import Path
 from typing import Any, Mapping
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _sha256(path: Path) -> str:
@@ -25,6 +28,32 @@ def _sha256(path: Path) -> str:
 
 def _verified_archive(path: Path, *, expected_bytes: int, expected_sha256: str) -> bool:
     return path.is_file() and path.stat().st_size == expected_bytes and _sha256(path) == expected_sha256
+
+
+def load_stack_compatible(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the certified Phase-I stack using its actual registry schema.
+
+    Historical V1 execution expected a now-obsolete top-level ``source_run_id``.
+    The certified registry stores the same immutable identifier at
+    ``source_experiment.run_id``. Normalize only in memory so V2 can consume the
+    certified registry without mutating it or changing any scientific input.
+    """
+    path = ROOT / str(cfg["source_phase_i_stack"]["registry_path"])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    source = data.get("source_experiment")
+    observed = data.get("source_run_id")
+    if not observed and isinstance(source, dict):
+        observed = source.get("run_id")
+    expected = cfg["source_phase_i_stack"]["required_source_run_id"]
+    if observed != expected:
+        raise RuntimeError(f"source Phase-I run mismatch: {observed!r} != {expected!r}")
+    if cfg["source_phase_i_stack"].get("production_certified_required") and not data.get("production_certified"):
+        raise RuntimeError("source Phase-I stack is not production certified")
+    if data.get("automatic_role_dispatch_enabled"):
+        raise RuntimeError("interface repair requires automatic role dispatch to remain disabled")
+    normalized = dict(data)
+    normalized["source_run_id"] = str(observed)
+    return normalized
 
 
 def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: Path) -> tuple[Path, Path]:
@@ -41,8 +70,6 @@ def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: P
     model_id = str(role_spec["model_id"])
     revision = str(role_spec["revision"])
 
-    # Fast path: resolve the exact immutable revision without network access and
-    # without copying model shards into a new per-run local_dir.
     try:
         snapshot = snapshot_download(repo_id=model_id, revision=revision, local_files_only=True)
     except Exception:
@@ -80,7 +107,6 @@ def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: P
         shutil.rmtree(staging, ignore_errors=True)
         try:
             observed = v1.safe_extract(archive, staging)
-            # Normalize the persistent layout so future runs have one deterministic path.
             if observed.name != "adapter" or observed.parent != staging:
                 normalized = staging / "adapter"
                 if normalized.exists():
