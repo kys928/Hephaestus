@@ -1,5 +1,6 @@
 name: RunPod scientific volume inventory
 
+# Manual read-only inventory retrigger for storage-quota audit (2026-09-29).
 on:
   push:
     branches: [feature/first-scientific-manifest]
