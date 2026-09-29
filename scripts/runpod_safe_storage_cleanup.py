@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import boto3
@@ -43,19 +44,19 @@ def main() -> None:
     access_key = required("RUNPOD_S3_ACCESS_KEY_ID")
     secret_key = required("RUNPOD_S3_SECRET_ACCESS_KEY")
 
-    client = boto3.client(
+    session = boto3.session.Session()
+    client = session.client(
         "s3",
         endpoint_url=endpoint,
         region_name=region,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        config=Config(retries={"mode": "standard", "max_attempts": 10}),
+        config=Config(retries={"mode": "standard", "max_attempts": 10}, max_pool_connections=16),
     )
     client.head_bucket(Bucket=bucket)
     paginator = client.get_paginator("list_objects_v2")
 
     candidates: dict[str, int] = {}
-    reason: dict[str, str] = {}
 
     for prefix in APPROVED_PREFIXES:
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix, PaginationConfig={"PageSize": 1000}):
@@ -66,7 +67,6 @@ def main() -> None:
                 if key.startswith(FORBIDDEN_PREFIXES):
                     raise RuntimeError(f"guardrail violation: {key}")
                 candidates[key] = int(item.get("Size", 0))
-                reason[key] = f"approved_prefix:{prefix}"
 
     # Preserve all HF model data. Remove only zero-byte stale lock/incomplete markers.
     for page in paginator.paginate(Bucket=bucket, Prefix=HF_PREFIX, PaginationConfig={"PageSize": 1000}):
@@ -78,26 +78,27 @@ def main() -> None:
             lower = key.lower()
             if lower.endswith(".lock") or lower.endswith(".incomplete"):
                 candidates[key] = 0
-                reason[key] = "zero_byte_hf_marker"
 
     keys = sorted(candidates)
-    deleted = 0
-    deleted_bytes = 0
     errors: list[dict[str, object]] = []
-    for start in range(0, len(keys), 1000):
-        batch = keys[start:start + 1000]
-        response = client.delete_objects(
-            Bucket=bucket,
-            Delete={"Objects": [{"Key": key} for key in batch], "Quiet": False},
-        )
-        deleted_keys = {str(row.get("Key")) for row in (response.get("Deleted") or [])}
-        for key in deleted_keys:
-            deleted += 1
-            deleted_bytes += candidates.get(key, 0)
-        for row in response.get("Errors") or []:
-            errors.append(dict(row))
+    deleted_keys: set[str] = set()
 
-    # Verify every candidate is now absent. No broad delete verification is allowed.
+    def delete_one(key: str) -> str:
+        # RunPod's S3 endpoint has returned 307 for DeleteObjects; use the
+        # standard single-object operation instead.
+        client.delete_object(Bucket=bucket, Key=key)
+        return key
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(delete_one, key): key for key in keys}
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                deleted_keys.add(future.result())
+            except Exception as exc:
+                errors.append({"key": key, "error_type": type(exc).__name__, "error": str(exc)[:500]})
+
+    # Verify every candidate is now absent. No broad-delete verification.
     remaining: list[str] = []
     for prefix in APPROVED_PREFIXES:
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix, PaginationConfig={"PageSize": 1000}):
@@ -111,8 +112,9 @@ def main() -> None:
             if key in candidates:
                 remaining.append(key)
 
+    deleted_bytes = sum(candidates.get(key, 0) for key in deleted_keys if key not in remaining)
     report = {
-        "cleanup_version": "runpod-safe-storage-cleanup.v1",
+        "cleanup_version": "runpod-safe-storage-cleanup.v2",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "volume_id": bucket,
         "approved_prefixes": list(APPROVED_PREFIXES),
@@ -120,8 +122,9 @@ def main() -> None:
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
         "candidate_objects": len(keys),
         "candidate_bytes": sum(candidates.values()),
-        "deleted_objects": deleted,
-        "deleted_bytes": deleted_bytes,
+        "delete_requests_completed": len(deleted_keys),
+        "verified_deleted_objects": len(keys) - len(set(remaining)),
+        "verified_deleted_bytes": deleted_bytes,
         "remaining_candidates": sorted(set(remaining)),
         "errors": errors,
         "success": not errors and not remaining,
