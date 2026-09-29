@@ -10,6 +10,7 @@ on:
       - scripts/interface_repair_v2_bootstrap.py
       - scripts/run_interface_repair_live_v2.py
       - scripts/launch_interface_repair_v2.py
+      - scripts/launch_interface_repair_v2_full_from_preflight.py
       - tests/test_interface_repair_v2.py
       - .github/workflows/interface-repair-v2-validate.yml
       - .github/workflows/interface-repair-v2-preflight.yml
@@ -23,6 +24,7 @@ on:
       - scripts/interface_repair_v2_bootstrap.py
       - scripts/run_interface_repair_live_v2.py
       - scripts/launch_interface_repair_v2.py
+      - scripts/launch_interface_repair_v2_full_from_preflight.py
       - tests/test_interface_repair_v2.py
 permissions: {contents: read}
 jobs:
@@ -39,7 +41,7 @@ jobs:
       - run: python scripts/launch_interface_repair_v2.py --full > /tmp/v2-full-render.json
       - run: python -m pytest -q tests/test_interface_repair_v1.py tests/test_interface_repair_v2.py
       - run: python -m pytest -q
-      - run: python -m py_compile scripts/run_interface_repair_v2.py scripts/run_interface_repair_v2_cached.py scripts/interface_repair_v2_bootstrap.py scripts/run_interface_repair_live_v2.py scripts/launch_interface_repair_v2.py
+      - run: python -m py_compile scripts/run_interface_repair_v2.py scripts/run_interface_repair_v2_cached.py scripts/interface_repair_v2_bootstrap.py scripts/run_interface_repair_live_v2.py scripts/launch_interface_repair_v2.py scripts/launch_interface_repair_v2_full_from_preflight.py
       - name: Assert V2 is safe and scientifically unchanged
         run: |
           python - <<'PY'
@@ -81,12 +83,17 @@ jobs:
           for key in ('persistent_hf_cache','persistent_venv_cache','persistent_pip_cache','persistent_adapter_cache'):
               assert v2['execution'][key].startswith('/workspace/')
           assert isinstance(v2['governance']['paid_preflight_allowed'], bool)
-          assert v2['governance']['paid_full_launch_allowed'] is False
-          assert marker['full_launch_authorized'] is False
+          assert isinstance(v2['governance']['paid_full_launch_allowed'], bool)
+          assert v2['governance']['production_promotion_allowed'] is False
+          assert v2['governance']['automatic_role_dispatch_allowed'] is False
           if marker['preflight_authorized']:
               assert v2['governance']['paid_preflight_allowed'] is True
-              assert marker['preflight_evidence_key'] is None
-              assert marker['preflight_repo_sha'] is None
           else:
               assert v2['governance']['paid_preflight_allowed'] is False
+          if marker['full_launch_authorized']:
+              assert v2['governance']['paid_full_launch_allowed'] is True
+              assert marker['preflight_evidence_key']
+              assert marker['preflight_repo_sha']
+          else:
+              assert v2['governance']['paid_full_launch_allowed'] is False
           PY
