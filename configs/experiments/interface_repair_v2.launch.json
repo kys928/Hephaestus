@@ -1,12 +1,12 @@
 {
   "execution_path": "interface_repair_v2",
-  "preflight_authorized": false,
+  "preflight_authorized": true,
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V2_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V2_FULL",
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
-  "authorized_by": null,
-  "authorized_at": null,
-  "note": "Paid execution is disabled while the V2 bootstrap path is repaired and verified. The latest preflight provisioned a compatible GPU successfully but exceeded the bootstrap/model-init wall before benchmark start. Full paid launch remains disabled and still requires separate explicit authorization plus persisted successful preflight evidence bound to the exact repository SHA."
+  "authorized_by": "kys928",
+  "authorized_at": "2026-09-29T07:20:00Z",
+  "note": "Operator explicitly authorized the repaired V2 preflight and conditional full process. This commit launches preflight only. Full launch remains locked until this exact preflight produces persisted completed evidence with approved_for_full_run=true. The full-launch wrapper permits only an authorization-only descendant commit with unchanged scientific and execution configuration."
 }
