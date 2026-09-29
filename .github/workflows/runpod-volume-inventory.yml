@@ -1,13 +1,12 @@
 name: RunPod scientific volume inventory
 
-# Manual read-only inventory retrigger for storage-quota audit (2026-09-29).
+# Manual read-only inventory for storage-quota audit (2026-09-29).
 on:
   push:
     branches: [feature/first-scientific-manifest]
     paths:
       - .github/workflows/runpod-volume-inventory.yml
       - scripts/runpod_volume_inventory.py
-      - scripts/runpod_verify_scientific_state.py
   workflow_dispatch:
 
 permissions:
@@ -35,19 +34,15 @@ jobs:
           python-version: '3.12'
       - name: Install S3 client
         run: python -m pip install 'boto3>=1.35,<2'
-      - name: Inventory scientific namespaces
+      - name: Inventory volume read-only
         run: python scripts/runpod_volume_inventory.py
-      - name: Verify artifact bytes and reconstruct first experiment bindings
-        run: python scripts/runpod_verify_scientific_state.py
-      - name: Upload inventory and verification evidence
+      - name: Upload read-only inventory
         uses: actions/upload-artifact@v4
         with:
-          name: runpod-scientific-state
+          name: runpod-storage-audit
           path: |
             volume_inventory.json
             full_object_index.json
             candidate_paths.txt
-            artifact_verification.json
-            first_scientific_experiment_reconstruction.json
           if-no-files-found: error
           retention-days: 7
