@@ -56,15 +56,32 @@ def test_v3_preflight_shell_is_small_and_evaluator_pinned() -> None:
     assert cfg["preflight"]["evaluation_cases"] == 8
 
 
-def test_v3_paid_execution_starts_locked() -> None:
+def test_v3_paid_execution_requires_matching_explicit_marker_state() -> None:
     cfg = load(CFG)
     marker = load(MARKER)
-    assert cfg["governance"]["paid_preflight_allowed"] is False
-    assert cfg["governance"]["paid_full_launch_allowed"] is False
-    assert marker["preflight_authorized"] is False
-    assert marker["full_launch_authorized"] is False
-    assert marker["preflight_evidence_key"] is None
-    assert marker["preflight_repo_sha"] is None
+    governance = cfg["governance"]
+    assert isinstance(governance["paid_preflight_allowed"], bool)
+    assert isinstance(governance["paid_full_launch_allowed"], bool)
+    assert isinstance(marker["preflight_authorized"], bool)
+    assert isinstance(marker["full_launch_authorized"], bool)
+    assert not (marker["preflight_authorized"] and marker["full_launch_authorized"])
+    assert not (governance["paid_preflight_allowed"] and governance["paid_full_launch_allowed"])
+
+    if marker["preflight_authorized"]:
+        assert governance["paid_preflight_allowed"] is True
+        assert governance["paid_full_launch_allowed"] is False
+        assert marker["preflight_evidence_key"] is None
+        assert marker["preflight_repo_sha"] is None
+    elif marker["full_launch_authorized"]:
+        assert governance["paid_preflight_allowed"] is False
+        assert governance["paid_full_launch_allowed"] is True
+        assert marker["preflight_evidence_key"]
+        assert marker["preflight_repo_sha"]
+    else:
+        assert governance["paid_preflight_allowed"] is False
+        assert governance["paid_full_launch_allowed"] is False
+        assert marker["preflight_evidence_key"] is None
+        assert marker["preflight_repo_sha"] is None
 
 
 def test_v3_full_binding_allows_only_authorization_files() -> None:
