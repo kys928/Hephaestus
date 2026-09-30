@@ -1,11 +1,17 @@
-name: Interface Repair V3.1 neutral holdout prepare
+name: Interface Repair V3.1 neutral holdout validate
 
 on:
   push:
     branches: [experiment-interface-repair-v3-neutral-holdout]
     paths:
+      - configs/experiments/hephaestus_interface_repair_v3_1_neutral_holdout.json
+      - configs/experiments/interface_repair_v3_1_neutral_holdout.launch.json
       - scripts/build_interface_repair_v3_1_neutral_holdout.py
+      - scripts/run_interface_repair_v3_1_neutral_holdout.py
+      - scripts/launch_interface_repair_v3_1_neutral_holdout.py
+      - tests/test_interface_repair_v3_1_neutral_holdout.py
       - .github/workflows/interface-repair-v3-neutral-holdout-prepare.yml
+      - .github/workflows/interface-repair-v3-neutral-holdout-paid-launch.yml
 
 permissions: {contents: read}
 
@@ -13,14 +19,44 @@ env:
   PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}
 
 jobs:
-  prepare:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - name: Build and validate neutral holdout
+      - name: Install project and tests
+        run: python -m pip install -e . pytest
+      - name: Build and validate paired neutral holdout
         run: python scripts/build_interface_repair_v3_1_neutral_holdout.py
-      - name: Compile builder
-        run: python -m py_compile scripts/build_interface_repair_v3_1_neutral_holdout.py
+      - name: Render guarded launch without spending
+        run: python scripts/launch_interface_repair_v3_1_neutral_holdout.py > /tmp/neutral-launch-render.json
+      - name: Targeted neutral holdout tests
+        run: python -m pytest -q tests/test_interface_repair_v3_1_neutral_holdout.py tests/test_evaluator_boundary.py tests/test_deterministic_role_boundary.py
+      - name: Full repository tests
+        run: python -m pytest -q
+      - name: Compile neutral diagnostic path
+        run: |
+          python -m py_compile \
+            scripts/build_interface_repair_v3_1_neutral_holdout.py \
+            scripts/run_interface_repair_v3_1_neutral_holdout.py \
+            scripts/launch_interface_repair_v3_1_neutral_holdout.py
+      - name: Assert launch remains locked after preparation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v3_1_neutral_holdout.json').read_text())
+          marker=json.loads(Path('configs/experiments/interface_repair_v3_1_neutral_holdout.launch.json').read_text())
+          assert cfg['source_v31_adapter']['sha256']=='913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed'
+          assert cfg['pack']['canonical_sha256']=='0bae520eda2b59f9317baacfd9d77a24f51f0b7c4a2b5e7e057e0a8cee2d7492'
+          assert cfg['governance']['training_allowed'] is False
+          assert cfg['governance']['adapter_mutation_allowed'] is False
+          assert cfg['governance']['production_promotion_allowed'] is False
+          assert cfg['governance']['automatic_role_dispatch_allowed'] is False
+          assert cfg['governance']['certification_claim_allowed'] is False
+          assert isinstance(cfg['governance']['paid_launch_allowed'], bool)
+          assert isinstance(marker['launch_authorized'], bool)
+          PY
