@@ -20,6 +20,7 @@ MARKER_PATH = ROOT / "configs/experiments/interface_repair_v3_evaluator.launch.j
 AUTH_ENV = "HEPHAESTUS_INTERFACE_REPAIR_V3_EVALUATOR_AUTHORIZED"
 PREFLIGHT_PHRASE = "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_PREFLIGHT"
 FULL_PHRASE = "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_FULL"
+ORIGINAL_V2_POD_SHELL = base.pod_shell
 ALLOWED_AUTH_CHANGED_FILES = {
     "configs/experiments/hephaestus_interface_repair_v3_evaluator.json",
     "configs/experiments/interface_repair_v3_evaluator.launch.json",
@@ -66,7 +67,10 @@ def authorize(cfg: MappingLike, marker: MappingLike, mode: str) -> None:
 def pod_shell(mode: str, venv_cache: str, pip_cache: str, adapter_cache: str) -> str:
     # Reuse the already-debugged V2 CUDA/venv/bootstrap shell, but execute exactly
     # one Evaluator V3 role and build the fresh V3 pack instead of the V1/V2 pack.
-    shell = base.pod_shell("preflight", venv_cache, pip_cache, adapter_cache)
+    # Keep an immutable handle to V2's original function: request_body temporarily
+    # installs this V3 adapter into the V2 module, so looking it up dynamically here
+    # would recurse back into this function.
+    shell = ORIGINAL_V2_POD_SHELL("preflight", venv_cache, pip_cache, adapter_cache)
     old_body = 'export HEPHAESTUS_REPAIR_ROLE=planner\n"$PY" scripts/run_interface_repair_v2_cached.py --preflight'
     run_flag = " --preflight" if mode == "preflight" else ""
     new_body = f'export HEPHAESTUS_REPAIR_ROLE=evaluator\n"$PY" scripts/run_interface_repair_v3_evaluator.py{run_flag}'
