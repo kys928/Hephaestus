@@ -35,10 +35,12 @@ def test_v3_launcher_is_evaluator_only_and_reuses_safe_bootstrap() -> None:
     assert rendered["volumeMountPath"] == "/workspace"
     shell = rendered["dockerStartCmd"][2]
     assert "export HEPHAESTUS_REPAIR_ROLE=evaluator" in shell
-    assert "run_interface_repair_v3_evaluator.py" in shell
+    assert '"$PY" scripts/run_interface_repair_v3_evaluator.py' in shell
     assert "build_interface_repair_v3_evaluator.py" in shell
     assert "for ROLE in planner evaluator judge controller" not in shell
-    assert "run_interface_repair_live_v2.py" not in shell
+    # V2's inherited compile list may mention the legacy live script, but V3 must
+    # never execute that stack as part of its evaluator-only paid body.
+    assert '"$PY" scripts/run_interface_repair_live_v2.py' not in shell
     assert cfg["execution"]["persistent_venv_cache"] in shell
     assert cfg["execution"]["persistent_adapter_cache"] in shell
 
