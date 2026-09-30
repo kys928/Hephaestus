@@ -11,8 +11,11 @@ on:
       - configs/experiments/interface_repair_v3_evaluator.launch.json
       - configs/models/hephaestus_phase_ii_repair_candidates_v1.json
       - scripts/build_interface_repair_v3_evaluator.py
+      - scripts/build_interface_repair_v3_1_evaluator.py
       - scripts/run_interface_repair_v3_evaluator.py
+      - scripts/run_interface_repair_v3_1_evaluator.py
       - scripts/launch_interface_repair_v3_evaluator.py
+      - scripts/launch_interface_repair_v3_1_evaluator.py
       - tests/test_evaluator_boundary.py
       - tests/test_interface_repair_v3_evaluator.py
       - tests/test_interface_repair_v3_launch.py
@@ -27,9 +30,9 @@ on:
       - src/hephaestus/control/deterministic_role_boundary.py
       - configs/experiments/hephaestus_interface_repair_v3_evaluator.json
       - configs/experiments/interface_repair_v3_evaluator.launch.json
-      - scripts/build_interface_repair_v3_evaluator.py
-      - scripts/run_interface_repair_v3_evaluator.py
-      - scripts/launch_interface_repair_v3_evaluator.py
+      - scripts/build_interface_repair_v3_1_evaluator.py
+      - scripts/run_interface_repair_v3_1_evaluator.py
+      - scripts/launch_interface_repair_v3_1_evaluator.py
       - tests/test_evaluator_boundary.py
       - tests/test_interface_repair_v3_evaluator.py
       - tests/test_interface_repair_v3_launch.py
@@ -49,25 +52,28 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install -e . pytest
-      - name: Build and validate fresh V3 pack
-        run: python scripts/build_interface_repair_v3_evaluator.py
+      - name: Build and validate fresh V3.1 pack
+        run: python scripts/build_interface_repair_v3_1_evaluator.py
       - name: Render guarded preflight and full launch requests without spending
         run: |
-          python scripts/launch_interface_repair_v3_evaluator.py --preflight > /tmp/v3-preflight-render.json
-          python scripts/launch_interface_repair_v3_evaluator.py --full > /tmp/v3-full-render.json
+          python scripts/launch_interface_repair_v3_1_evaluator.py --preflight > /tmp/v31-preflight-render.json
+          python scripts/launch_interface_repair_v3_1_evaluator.py --full > /tmp/v31-full-render.json
       - name: Targeted V3 tests
         run: python -m pytest -q tests/test_evaluator_boundary.py tests/test_interface_repair_v3_evaluator.py tests/test_interface_repair_v3_launch.py tests/test_deterministic_role_boundary.py
       - name: Full repository tests
         run: python -m pytest -q
-      - name: Compile V3 execution path
+      - name: Compile V3.1 execution path
         run: |
           python -m py_compile \
             src/hephaestus/control/evaluator_boundary.py \
             src/hephaestus/control/deterministic_role_boundary.py \
             scripts/build_interface_repair_v3_evaluator.py \
+            scripts/build_interface_repair_v3_1_evaluator.py \
             scripts/run_interface_repair_v3_evaluator.py \
-            scripts/launch_interface_repair_v3_evaluator.py
-      - name: Assert V3 governance, lineage and holdout hygiene
+            scripts/run_interface_repair_v3_1_evaluator.py \
+            scripts/launch_interface_repair_v3_evaluator.py \
+            scripts/launch_interface_repair_v3_1_evaluator.py
+      - name: Assert V3.1 governance, lineage and holdout hygiene
         run: |
           python - <<'PY'
           import importlib.util, json
@@ -76,7 +82,7 @@ jobs:
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v3_evaluator.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v3_evaluator.launch.json').read_text())
           candidates=json.loads(Path('configs/models/hephaestus_phase_ii_repair_candidates_v1.json').read_text())
-          spec=importlib.util.spec_from_file_location('v3pack','scripts/build_interface_repair_v3_evaluator.py')
+          spec=importlib.util.spec_from_file_location('v31pack','scripts/build_interface_repair_v3_1_evaluator.py')
           assert spec and spec.loader
           mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
           pack=mod.build_pack(); mod.validate(pack)
@@ -84,6 +90,7 @@ jobs:
           assert mod.canonical_sha256(pack)==cfg['pack']['canonical_sha256']
           assert cfg['trainable_roles']==['evaluator']
           assert cfg['training']['optimizer_steps']['evaluator'] * cfg['training']['gradient_accumulation_steps']==len(pack['partitions']['evaluator']['train'])
+          assert len(pack['partitions']['evaluator']['preflight'])==8
           assert cfg['source_evaluator_adapter']['sha256']=='cd675321340f831351710f9af122cd2a7e3741dc087955a43671bd6d0eff724e'
           assert cfg['source_evaluator_adapter']['status']=='diagnostic_uncertified_v2_candidate'
           assert cfg['preserved_planner_candidate']['sha256']=='6f6b8d9d50917cda52b3554d849d71d9cb295435b480d8d25e6a06d2784e0c71'
@@ -99,8 +106,10 @@ jobs:
           assert candidates['automatic_role_dispatch_enabled'] is False
           assert pack['diagnostic_burned_sets']['reused_in_v3_certification'] is False
           assert pack['diagnostic_burned_sets']['reused_in_v3_regression'] is False
-          train={x['context'] for x in pack['partitions']['evaluator']['train']}
-          cert={x['context'] for x in pack['partitions']['evaluator']['certification']}
-          reg={x['context'] for x in pack['partitions']['evaluator']['regression']}
-          assert train.isdisjoint(cert) and train.isdisjoint(reg) and cert.isdisjoint(reg)
+          assert pack['diagnostic_burned_sets']['v3_sampled_certification_cases_reused_in_v31'] is False
+          groups={k:{x['context'] for x in pack['partitions']['evaluator'][k]} for k in ('train','preflight','certification','regression')}
+          names=list(groups)
+          for i,left in enumerate(names):
+              for right in names[i+1:]:
+                  assert groups[left].isdisjoint(groups[right])
           PY
