@@ -7,6 +7,6 @@
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
   "authorized_by": "kys928",
-  "authorization_basis": "User explicitly authorized the end-to-end scientific run on 2026-09-30. V3.1 validation run 36707272910 passed with fresh sealed holdouts, dedicated preflight isolation, bounded target-free format retry, preserved Planner, and unchanged certification gates. This commit authorizes only the evaluator V3.1 paid preflight; full launch remains locked pending approved persisted evidence.",
-  "authorized_at": "2026-09-30T11:15:00Z"
+  "authorization_basis": "User explicitly authorized raising only the V3.1 full-run execution budget ceiling from $1.35 to $1.50 and instructed revalidation, fresh preflight binding, and full scientific launch on 2026-09-30. Validation run 36738077055 passed at budget-adjusted commit b58f531d9195daf9a9f83aabac4b03f44d3015ea. Science, data, LoRA geometry, decoding, and certification gates remain unchanged; production promotion and automatic dispatch remain disabled. This commit authorizes only the fresh paid preflight under the budget-adjusted configuration.",
+  "authorized_at": "2026-09-30T15:38:00Z"
 }
