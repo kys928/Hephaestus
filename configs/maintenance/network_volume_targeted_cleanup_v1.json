@@ -1,0 +1,38 @@
+{
+  "cleanup_id": "network_volume_targeted_cleanup_v1",
+  "volume_id": "cviwpryzao",
+  "datacenter_id": "EU-CZ-1",
+  "basis": {
+    "s3_inventory_run_id": 34965135436,
+    "s3_inventory_artifact_id": 10395271782,
+    "s3_inventory_artifact_sha256": "4152b05ba2e7e29f2572de3bb41fd2ce3cafcd351c6b5220b929604ae399bd44",
+    "inventory_total_bytes": 49661856845,
+    "reviewed_at_utc": "2026-09-15T11:47:36Z"
+  },
+  "protected_active_run_id": "adaptation-elasticity-v1-34961824753",
+  "delete_exact_prefixes": [
+    {
+      "path": "/workspace/hephaestus/scientific/v1/model_cache/huggingface",
+      "s3_prefix": "hephaestus/scientific/v1/model_cache/huggingface/",
+      "s3_observed_bytes": 16346512582,
+      "reason": "reconstructable persistent Hugging Face cache; immutable model identities and scientific manifests/evidence are preserved elsewhere"
+    },
+    {
+      "path": "/workspace/hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34104954995/hf_cache",
+      "s3_prefix": "hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34104954995/hf_cache/",
+      "s3_observed_bytes": 29741590413,
+      "reason": "reconstructable Hugging Face download cache from completed old promotion proof; surrounding generation/cycle/result/manifests remain preserved"
+    }
+  ],
+  "expected_reclaim_bytes": 46088102995,
+  "safety": {
+    "delete_only_exact_allowlist": true,
+    "target_root_must_not_be_symlink": true,
+    "never_delete_active_run": true,
+    "never_delete_checkpoints": true,
+    "never_delete_adapters": true,
+    "never_delete_lineage": true,
+    "never_delete_results_or_manifests_outside_allowlisted_cache_trees": true,
+    "post_delete_s3_rescan_required": true
+  }
+}
