@@ -1,0 +1,12 @@
+{
+  "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
+  "preflight_authorized": false,
+  "full_launch_authorized": false,
+  "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_PREFLIGHT",
+  "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_FULL",
+  "preflight_evidence_key": null,
+  "preflight_repo_sha": null,
+  "authorized_by": "kys928",
+  "authorization_basis": "User authorized full implementation of the agreed V3 Evaluator deterministic-boundary and contrastive-repair design on 2026-09-30. Paid execution remains locked until validation passes and this marker is explicitly advanced.",
+  "authorized_at": null
+}
