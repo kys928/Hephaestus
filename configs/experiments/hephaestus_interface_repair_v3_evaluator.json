@@ -1,8 +1,9 @@
 {
   "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
-  "execution_path_version": 3,
+  "protocol_revision": "3.1",
+  "execution_path_version": 4,
   "phase": "phase_ii_evaluator_residual_repair",
-  "hypothesis": "The V2 evaluator failure is a residual finite policy-boundary generalization error: scientific state inference is largely correct while improved/equivalent action projections are systematically confused. A crossed contrastive evaluator-only curriculum plus a deterministic state-to-action boundary should preserve scientific judgment while eliminating executable semantic escalation.",
+  "hypothesis": "The V2 evaluator failure is a residual finite policy-boundary generalization error: scientific state inference is largely correct while improved/equivalent action projections are systematically confused. A crossed contrastive evaluator-only curriculum plus a deterministic state-to-action boundary should preserve scientific judgment while eliminating executable semantic escalation. V3.1 additionally treats incomplete JSON as a bounded format-reliability problem, uses one target-free retry, and isolates preflight from sealed certification data.",
   "frozen_diagnosis": true,
   "trainable_roles": ["evaluator"],
   "source_phase_i_stack": {
@@ -37,13 +38,15 @@
     "retrain_in_v3": false
   },
   "pack": {
-    "builder_path": "scripts/build_interface_repair_v3_evaluator.py",
-    "canonical_sha256": "35f26b93527cc919ca65e5b3e5a83e614dd601afb40ce598fc9345aacc7d7098",
+    "builder_path": "scripts/build_interface_repair_v3_1_evaluator.py",
+    "canonical_sha256": "8e1d1e689c1497b1ee57d0fca834dd0e486518b2e9b8da5c12ff5ab23f686407",
     "training_cases": 1536,
+    "preflight_cases": 8,
     "certification_cases_per_role": 128,
     "regression_cases_per_role": 128,
     "v2_burned_cases_reused_for_certification": false,
-    "v2_burned_cases_reused_for_regression": false
+    "v2_burned_cases_reused_for_regression": false,
+    "v3_sampled_certification_cases_reused_in_v31": false
   },
   "training": {
     "method": "continue_existing_lora",
@@ -92,7 +95,9 @@
     "report_only": {
       "model_action_agreement_rate": true,
       "model_semantic_escalation_rate": true,
-      "upstream_copy_violation_rate": true
+      "upstream_copy_violation_rate": true,
+      "format_retry_attempt_rate": true,
+      "format_retry_success_rate": true
     }
   },
   "execution": {
@@ -131,11 +136,14 @@
     "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v3-evaluator/adapters",
     "evaluation_shard_size": 32,
     "structured_json_early_stop": true,
+    "format_retry_max_attempts": 1,
+    "format_retry_target_free": true,
     "baseline_cache_enabled": true,
     "baseline_cache_prefix": "hephaestus/scientific/v3/interface_repair_evaluator/baseline-cache"
   },
   "preflight": {
     "role": "evaluator",
+    "partition": "preflight",
     "evaluation_cases": 8,
     "optimizer_steps": 5,
     "maximum_projected_role_seconds": 4200,
@@ -149,7 +157,7 @@
     "source_phase_i_adapter_mutation_allowed": false,
     "preserved_planner_mutation_allowed": false,
     "diagnosis_weight_mutation_allowed": false,
-    "paid_preflight_allowed": true,
+    "paid_preflight_allowed": false,
     "paid_full_launch_allowed": false,
     "explicit_launch_authorization_required": true
   }
