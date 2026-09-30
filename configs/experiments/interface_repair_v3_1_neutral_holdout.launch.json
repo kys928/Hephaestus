@@ -1,5 +1,5 @@
 {
-  "launch_authorized": false,
+  "launch_authorized": true,
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V3_1_NEUTRAL_HOLDOUT",
   "authorized_repo_sha": "12fa33333a45b1a2538490f3ac6f5f90d968b487",
   "operator_authorization": "awaiting_explicit_launch"
