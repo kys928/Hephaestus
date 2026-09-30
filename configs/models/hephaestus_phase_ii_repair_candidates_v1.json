@@ -1,0 +1,59 @@
+{
+  "registry_id": "hephaestus-phase-ii-repair-candidates-v1",
+  "status": "research_candidates_not_production_promoted",
+  "source_run_id": "interface-repair-v2-full-36627393869",
+  "source_repo_sha": "430ce074976f7572458298bdc519697f2e9861c9",
+  "production_certified": false,
+  "automatic_role_dispatch_enabled": false,
+  "roles": {
+    "planner": {
+      "status": "certified_phase_ii_candidate_frozen",
+      "retrain_in_v3": false,
+      "adapter": {
+        "s3_key": "hephaestus/scientific/v2/interface_repair/interface-repair-v2-full-36627393869/roles/planner/selected-adapter.tar.gz",
+        "sha256": "6f6b8d9d50917cda52b3554d849d71d9cb295435b480d8d25e6a06d2784e0c71",
+        "bytes": 53604336
+      },
+      "certification": {
+        "passed": true,
+        "post_interface_quality_100": 100.0,
+        "post_interface_exact_contract_pass_rate": 1.0,
+        "post_regression_quality_100": 100.0,
+        "post_regression_exact_contract_pass_rate": 1.0,
+        "schema_compliance": 1.0,
+        "evidence_grounding": 1.0,
+        "hallucination_rate": 0.0,
+        "semantic_escalation_rate": 0.0
+      }
+    },
+    "evaluator": {
+      "status": "rejected_v2_candidate_diagnostic_parent_for_v3",
+      "adapter": {
+        "s3_key": "hephaestus/scientific/v2/interface_repair/interface-repair-v2-full-36627393869/roles/evaluator/selected-adapter.tar.gz",
+        "sha256": "cd675321340f831351710f9af122cd2a7e3741dc087955a43671bd6d0eff724e",
+        "bytes": 61520192
+      },
+      "certification": {
+        "passed": false,
+        "post_interface_quality_100": 84.140625,
+        "post_interface_exact_contract_pass_rate": 0.7578125,
+        "post_regression_quality_100": 83.75,
+        "post_regression_exact_contract_pass_rate": 0.75,
+        "post_interface_schema_compliance": 1.0,
+        "post_interface_evidence_grounding": 0.9921875,
+        "post_interface_hallucination_rate": 0.0078125,
+        "post_interface_semantic_escalation_rate": 0.125,
+        "post_regression_semantic_escalation_rate": 0.125
+      },
+      "diagnosed_failure": {
+        "decision_confusion_count": 0,
+        "primary_variable_confusion_count": 0,
+        "improved_action_confusion": "continue_from_checkpoint -> continue_lineage_best",
+        "equivalent_action_confusion": "continue_lineage_best -> certify_candidate",
+        "v2_certification_sets_burned_for_future_claims": true
+      },
+      "successor_protocol": "hephaestus_interface_repair_v3_evaluator_boundary"
+    }
+  },
+  "activation_boundary": "This registry preserves research evidence only. It does not enable production promotion or automatic role dispatch."
+}
