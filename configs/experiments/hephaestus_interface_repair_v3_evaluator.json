@@ -157,8 +157,8 @@
     "source_phase_i_adapter_mutation_allowed": false,
     "preserved_planner_mutation_allowed": false,
     "diagnosis_weight_mutation_allowed": false,
-    "paid_preflight_allowed": true,
-    "paid_full_launch_allowed": false,
+    "paid_preflight_allowed": false,
+    "paid_full_launch_allowed": true,
     "explicit_launch_authorization_required": true
   }
 }
