@@ -1,12 +1,12 @@
 {
   "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
-  "preflight_authorized": false,
+  "preflight_authorized": true,
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_FULL",
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
   "authorized_by": "kys928",
-  "authorization_basis": "V3.0 preflight revealed a format-reliability issue and sampled its certification partition. V3.1 introduces one target-free format retry plus a dedicated preflight split and fresh sealed certification/regression contexts. Paid execution is relocked until V3.1 validation passes. User explicitly authorized the end-to-end scientific run on 2026-09-30.",
-  "authorized_at": null
+  "authorization_basis": "User explicitly authorized the end-to-end scientific run on 2026-09-30. V3.1 validation run 36707272910 passed with fresh sealed holdouts, dedicated preflight isolation, bounded target-free format retry, preserved Planner, and unchanged certification gates. This commit authorizes only the evaluator V3.1 paid preflight; full launch remains locked pending approved persisted evidence.",
+  "authorized_at": "2026-09-30T11:15:00Z"
 }
