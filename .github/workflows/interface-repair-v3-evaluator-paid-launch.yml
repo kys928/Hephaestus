@@ -33,13 +33,14 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install -e '.[s3]'
-      - name: Verify authorization state
+      - name: Verify V3.1 full authorization state
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v3_evaluator.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v3_evaluator.launch.json').read_text())
+          assert cfg['protocol_revision']=='3.1'
           assert cfg['trainable_roles']==['evaluator']
           assert cfg['governance']['paid_preflight_allowed'] is False
           assert cfg['governance']['paid_full_launch_allowed'] is True
@@ -50,5 +51,7 @@ jobs:
           assert marker['full_launch_authorized'] is True
           assert marker['preflight_evidence_key']
           assert marker['preflight_repo_sha']
+          assert cfg['execution']['format_retry_max_attempts']==1
+          assert cfg['execution']['format_retry_target_free'] is True
           PY
-      - run: python scripts/launch_interface_repair_v3_evaluator.py --full --execute
+      - run: python scripts/launch_interface_repair_v3_1_evaluator.py --full --execute
