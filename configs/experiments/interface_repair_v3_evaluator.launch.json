@@ -1,12 +1,12 @@
 {
   "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
-  "preflight_authorized": true,
-  "full_launch_authorized": false,
+  "preflight_authorized": false,
+  "full_launch_authorized": true,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_FULL",
-  "preflight_evidence_key": null,
-  "preflight_repo_sha": null,
+  "preflight_evidence_key": "hephaestus/scientific/v3/interface_repair_evaluator/interface-repair-v3-evaluator-preflight-36738208318/preflight/evaluator/result.json",
+  "preflight_repo_sha": "e08a5098368b8a90a29bc01974edda1d26a1160c",
   "authorized_by": "kys928",
-  "authorization_basis": "User explicitly authorized raising only the V3.1 full-run execution budget ceiling from $1.35 to $1.50 and instructed revalidation, fresh preflight binding, and full scientific launch on 2026-09-30. Validation run 36738077055 passed at budget-adjusted commit b58f531d9195daf9a9f83aabac4b03f44d3015ea. Science, data, LoRA geometry, decoding, and certification gates remain unchanged; production promotion and automatic dispatch remain disabled. This commit authorizes only the fresh paid preflight under the budget-adjusted configuration.",
-  "authorized_at": "2026-09-30T15:38:00Z"
+  "authorization_basis": "User explicitly authorized the V3.1 full scientific run with the full-run budget ceiling raised from $1.35 to $1.50. Budget-adjusted validation run 36738077055 passed. Fresh paid preflight run 36738208318 completed successfully at repo SHA e08a5098368b8a90a29bc01974edda1d26a1160c with approved_for_full_run=true, complete_contract_json_rate=1.0, deadline_hits=0, projected_full_role_seconds=2353.2327903151513, and verified clean pod teardown. This marker binds the exact persisted preflight result for the guarded evaluator-only full run. Production promotion and automatic dispatch remain disabled.",
+  "authorized_at": "2026-09-30T15:42:00Z"
 }
