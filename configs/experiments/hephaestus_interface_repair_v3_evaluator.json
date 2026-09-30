@@ -1,0 +1,156 @@
+{
+  "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
+  "execution_path_version": 3,
+  "phase": "phase_ii_evaluator_residual_repair",
+  "hypothesis": "The V2 evaluator failure is a residual finite policy-boundary generalization error: scientific state inference is largely correct while improved/equivalent action projections are systematically confused. A crossed contrastive evaluator-only curriculum plus a deterministic state-to-action boundary should preserve scientific judgment while eliminating executable semantic escalation.",
+  "frozen_diagnosis": true,
+  "trainable_roles": ["evaluator"],
+  "source_phase_i_stack": {
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201",
+    "production_certified_required": true
+  },
+  "source_v2_run": {
+    "run_id": "interface-repair-v2-full-36627393869",
+    "repo_sha": "430ce074976f7572458298bdc519697f2e9861c9",
+    "scientific_status": "partial_terminal_evidence_evaluator_rejected",
+    "burned_certification_sets_are_diagnostic_only": true
+  },
+  "source_evaluator_adapter": {
+    "status": "diagnostic_uncertified_v2_candidate",
+    "model_id": "ibm-granite/granite-3.3-8b-instruct",
+    "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+    "s3_key": "hephaestus/scientific/v2/interface_repair/interface-repair-v2-full-36627393869/roles/evaluator/selected-adapter.tar.gz",
+    "sha256": "cd675321340f831351710f9af122cd2a7e3741dc087955a43671bd6d0eff724e",
+    "bytes": 61520192
+  },
+  "preserved_planner_candidate": {
+    "status": "certified_phase_ii_candidate_frozen",
+    "source_run_id": "interface-repair-v2-full-36627393869",
+    "s3_key": "hephaestus/scientific/v2/interface_repair/interface-repair-v2-full-36627393869/roles/planner/selected-adapter.tar.gz",
+    "sha256": "6f6b8d9d50917cda52b3554d849d71d9cb295435b480d8d25e6a06d2784e0c71",
+    "bytes": 53604336,
+    "post_interface_quality_100": 100.0,
+    "post_regression_quality_100": 100.0,
+    "post_interface_exact_contract_pass_rate": 1.0,
+    "post_regression_exact_contract_pass_rate": 1.0,
+    "retrain_in_v3": false
+  },
+  "pack": {
+    "builder_path": "scripts/build_interface_repair_v3_evaluator.py",
+    "canonical_sha256": "35f26b93527cc919ca65e5b3e5a83e614dd601afb40ce598fc9345aacc7d7098",
+    "training_cases": 1536,
+    "certification_cases_per_role": 128,
+    "regression_cases_per_role": 128,
+    "v2_burned_cases_reused_for_certification": false,
+    "v2_burned_cases_reused_for_regression": false
+  },
+  "training": {
+    "method": "continue_existing_lora",
+    "precision": "bfloat16",
+    "seed": 20260930,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "optimizer": "AdamW",
+    "learning_rate": 0.000005,
+    "weight_decay": 0,
+    "micro_batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "max_sequence_length": 2048,
+    "dynamic_padding": true,
+    "gradient_checkpointing": true,
+    "max_grad_norm": 1,
+    "assistant_only_loss": true,
+    "optimizer_steps": {"evaluator": 192}
+  },
+  "roles": {
+    "evaluator": {
+      "load_kind": "causal_lm",
+      "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "decoding": {"do_sample": false},
+      "reasoning_projection": ["</think>"],
+      "max_new_tokens": 512
+    }
+  },
+  "certification": {
+    "model": {
+      "minimum_interface_semantic_quality_100": 95,
+      "minimum_interface_semantic_exact_pass_rate": 0.95,
+      "minimum_regression_semantic_quality_100": 95,
+      "minimum_regression_semantic_exact_pass_rate": 0.95,
+      "schema_compliance_required": 1,
+      "minimum_evidence_grounding": 0.99,
+      "maximum_hallucination_rate": 0.01,
+      "maximum_regression_semantic_quality_drop_100": 2
+    },
+    "system": {
+      "boundary_projection_rate_required": 1,
+      "system_action_exact_pass_rate_required": 1,
+      "maximum_system_semantic_escalation_rate": 0
+    },
+    "report_only": {
+      "model_action_agreement_rate": true,
+      "model_semantic_escalation_rate": true,
+      "upstream_copy_violation_rate": true
+    }
+  },
+  "execution": {
+    "parallel_training_roles": 1,
+    "preferred_gpu_type_id": "NVIDIA A40",
+    "compatible_fallback_gpu_type_ids": [
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "gpu_type_ids": [
+      "NVIDIA A40",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "capacity_fallback_policy": "preferred_then_cheapest_compatible",
+    "minimum_gpu_memory_gib": 44,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds_per_role": 4200,
+    "hard_wall_seconds_preflight": 1200,
+    "hard_wall_seconds_preflight_benchmark": 600,
+    "hard_wall_seconds_preflight_bootstrap": 600,
+    "hard_wall_seconds_preflight_total": 1200,
+    "hard_wall_seconds_stack": 4200,
+    "max_hourly_usd_per_pod": 2.20,
+    "max_estimated_total_usd_preflight": 0.50,
+    "max_estimated_total_usd_stack": 1.35,
+    "s3_prefix": "hephaestus/scientific/v3/interface_repair_evaluator",
+    "capacity_retry_attempts": 8,
+    "capacity_retry_seconds": 15,
+    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
+    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v3-evaluator/adapters",
+    "evaluation_shard_size": 32,
+    "structured_json_early_stop": true,
+    "baseline_cache_enabled": true,
+    "baseline_cache_prefix": "hephaestus/scientific/v3/interface_repair_evaluator/baseline-cache"
+  },
+  "preflight": {
+    "role": "evaluator",
+    "evaluation_cases": 8,
+    "optimizer_steps": 5,
+    "maximum_projected_role_seconds": 4200,
+    "require_complete_json_rate": 1.0,
+    "require_no_deadline_hits": true
+  },
+  "governance": {
+    "training_approved": true,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false,
+    "source_phase_i_adapter_mutation_allowed": false,
+    "preserved_planner_mutation_allowed": false,
+    "diagnosis_weight_mutation_allowed": false,
+    "paid_preflight_allowed": false,
+    "paid_full_launch_allowed": false,
+    "explicit_launch_authorization_required": true
+  }
+}
