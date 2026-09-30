@@ -6,13 +6,16 @@ facts such as whether an approval is valid, an artifact hash matches, a checkpoi
 belongs to a lineage, a stage permits an action, a recheck is complete, or an
 idempotency key has already reached terminal state.
 
-This module turns those responsibilities into typed deterministic checks.
+Evaluator outputs receive an additional boundary: the model may classify scientific
+state, but its role-local action is deterministically projected from that state and
+verified machine facts. The model-proposed Evaluator action remains telemetry only.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
+from hephaestus.control.evaluator_boundary import project_evaluator_action
 from hephaestus.policy.action_registry import canonical_action_name, evaluate_action_boundary
 
 
@@ -61,6 +64,9 @@ class DeterministicRoleGate:
     failures: tuple[str, ...]
     verified_facts: Mapping[str, object]
     validated_evidence_refs: tuple[str, ...]
+    policy_source: str = "model_proposal"
+    model_action_agrees: bool | None = None
+    policy_reasons: tuple[str, ...] = ()
 
 
 class EvidenceRegistry:
@@ -137,6 +143,7 @@ _MACHINE_FACTS = {
     "stage_action_allowed",
     "tokenizer_identity_match",
     "training_config_identity_match",
+    "variance_risk",
 }
 
 _REQUIRED_TRUE_BY_ACTION: dict[str, tuple[str, ...]] = {
@@ -207,16 +214,16 @@ def guard_role_output(
     context: DeterministicRoleContext,
     evidence_registry: EvidenceRegistry,
 ) -> DeterministicRoleGate:
-    """Validate the executable portion of a role-model proposal.
+    """Validate the governed portion of a role-model proposal.
 
-    The model remains free to reason about hypotheses, trade-offs, uncertainty, and
-    scientific interpretation. Any action that contradicts verified machine facts is
-    blocked before it can mutate state.
+    For most roles the model's proposed action is checked against deterministic
+    governance. For Evaluator, the model's ``action`` is advisory only: Hephaestus
+    deterministically projects the scientific ``decision`` and verified machine
+    facts into a role-local effective action before anything is passed downstream.
     """
 
-    requested_action = canonical_action_name(
-        str(output.get("action") or output.get("next_action") or "").strip()
-    )
+    role_name = str(role).strip().lower()
+    raw_requested_action = str(output.get("action") or output.get("next_action") or "").strip()
     refs_obj = output.get("evidence_refs", ())
     refs = (
         tuple(str(x) for x in refs_obj)
@@ -238,36 +245,62 @@ def guard_role_output(
         else:
             facts[key] = value
 
-    if not requested_action:
-        failures.append("missing_action")
-    else:
-        boundary = evaluate_action_boundary(
-            requested_action,
-            {"approval_status": context.approval_status},
-        )
-        if not bool(boundary["allowed"]):
-            for reason in boundary["reasons"]:
-                failures.append(f"action_boundary:{reason}")
+    policy_source = "model_proposal"
+    model_action_agrees: bool | None = None
+    policy_reasons: tuple[str, ...] = ()
 
-        if context.stage_allowed_actions:
-            stage_allowed = requested_action in {
-                canonical_action_name(x) for x in context.stage_allowed_actions
-            }
+    if role_name == "evaluator":
+        projection = project_evaluator_action(
+            str(output.get("decision") or ""),
+            facts,
+            model_proposed_action=raw_requested_action,
+        )
+        requested_action = raw_requested_action
+        effective_action = projection.effective_action
+        policy_source = "deterministic_evaluator_boundary"
+        model_action_agrees = projection.model_action_agrees
+        policy_reasons = projection.reasons
+        if projection.blocked or not effective_action:
+            failures.extend(projection.reasons or ("evaluator_policy_projection_blocked",))
+
+        if context.stage_allowed_actions and effective_action:
+            stage_allowed = effective_action in {str(x) for x in context.stage_allowed_actions}
             facts["stage_action_allowed"] = stage_allowed
             if not stage_allowed:
-                failures.append(f"stage_disallows_action:{requested_action}")
+                failures.append(f"stage_disallows_action:{effective_action}")
+    else:
+        requested_action = canonical_action_name(raw_requested_action)
+        effective_action = requested_action or None
+        if not requested_action:
+            failures.append("missing_action")
+        else:
+            boundary = evaluate_action_boundary(
+                requested_action,
+                {"approval_status": context.approval_status},
+            )
+            if not bool(boundary["allowed"]):
+                for reason in boundary["reasons"]:
+                    failures.append(f"action_boundary:{reason}")
 
-        for fact_name in _REQUIRED_TRUE_BY_ACTION.get(requested_action, ()):
-            if facts.get(fact_name) is not True:
-                failures.append(f"required_verified_fact_not_true:{fact_name}")
+            if context.stage_allowed_actions:
+                stage_allowed = requested_action in {
+                    canonical_action_name(x) for x in context.stage_allowed_actions
+                }
+                facts["stage_action_allowed"] = stage_allowed
+                if not stage_allowed:
+                    failures.append(f"stage_disallows_action:{requested_action}")
 
-        idempotency_key = str(output.get("idempotency_key") or "").strip()
-        if (
-            requested_action in _MUTATING_ACTIONS
-            and idempotency_key
-            and idempotency_key in context.terminal_action_keys
-        ):
-            failures.append(f"terminal_action_already_recorded:{idempotency_key}")
+            for fact_name in _REQUIRED_TRUE_BY_ACTION.get(requested_action, ()):
+                if facts.get(fact_name) is not True:
+                    failures.append(f"required_verified_fact_not_true:{fact_name}")
+
+            idempotency_key = str(output.get("idempotency_key") or "").strip()
+            if (
+                requested_action in _MUTATING_ACTIONS
+                and idempotency_key
+                and idempotency_key in context.terminal_action_keys
+            ):
+                failures.append(f"terminal_action_already_recorded:{idempotency_key}")
 
     for hard_fact in (
         "artifact_hash_match",
@@ -284,9 +317,12 @@ def guard_role_output(
     return DeterministicRoleGate(
         role=str(role),
         requested_action=requested_action,
-        effective_action=requested_action if allowed else None,
+        effective_action=effective_action if allowed else None,
         allowed=allowed,
         failures=tuple(failures),
         verified_facts=dict(sorted(facts.items())),
         validated_evidence_refs=validation.valid_refs,
+        policy_source=policy_source,
+        model_action_agrees=model_action_agrees,
+        policy_reasons=policy_reasons,
     )
