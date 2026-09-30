@@ -1,0 +1,26 @@
+name: Interface Repair V3.1 neutral holdout prepare
+
+on:
+  push:
+    branches: [experiment-interface-repair-v3-neutral-holdout]
+    paths:
+      - scripts/build_interface_repair_v3_1_neutral_holdout.py
+      - .github/workflows/interface-repair-v3-neutral-holdout-prepare.yml
+
+permissions: {contents: read}
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Build and validate neutral holdout
+        run: python scripts/build_interface_repair_v3_1_neutral_holdout.py
+      - name: Compile builder
+        run: python -m py_compile scripts/build_interface_repair_v3_1_neutral_holdout.py
