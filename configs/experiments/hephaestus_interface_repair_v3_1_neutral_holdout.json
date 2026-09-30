@@ -1,0 +1,108 @@
+{
+  "protocol_id": "hephaestus_interface_repair_v3_1_neutral_holdout",
+  "protocol_revision": "1.0",
+  "phase": "phase_ii_evaluator_causal_diagnostic",
+  "hypothesis": "V3.1 regression performance was materially depressed by model-visible evaluation-namespace identifiers containing regression semantics. Holding the trained adapter and all scientific case semantics fixed while replacing only those identifiers with opaque tokens should remove that lexical shortcut if the hypothesis is correct.",
+  "diagnostic_only": true,
+  "training_performed": false,
+  "source_phase_i_stack": {
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201",
+    "production_certified_required": true
+  },
+  "source_v31_adapter": {
+    "status": "frozen_scientifically_rejected_v3_1_candidate",
+    "source_run_id": "interface-repair-v3-evaluator-full-36738914957",
+    "model_id": "ibm-granite/granite-3.3-8b-instruct",
+    "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+    "s3_key": "hephaestus/scientific/v3/interface_repair_evaluator/interface-repair-v3-evaluator-full-36738914957/roles/evaluator/selected-adapter.tar.gz",
+    "sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+    "bytes": 61533241
+  },
+  "source_reference": {
+    "source_partition": "V3.1 post_regression",
+    "sample_count": 128,
+    "semantic_quality_100": 92.109375,
+    "semantic_exact_pass_rate": 0.84375,
+    "decision_exact_pass_rate": 0.859375,
+    "primary_variable_exact_pass_rate": 0.921875,
+    "schema_compliance": 1.0,
+    "evidence_grounding": 1.0,
+    "hallucination_rate": 0.0,
+    "boundary_projection_rate": 1.0,
+    "system_action_exact_pass_rate": 0.96875,
+    "system_semantic_escalation_rate": 0.0,
+    "observed_wrong_decisions": 18,
+    "observed_wrong_decisions_to_regressed": 18
+  },
+  "pack": {
+    "builder_path": "scripts/build_interface_repair_v3_1_neutral_holdout.py",
+    "canonical_sha256": "0bae520eda2b59f9317baacfd9d77a24f51f0b7c4a2b5e7e057e0a8cee2d7492",
+    "partition": "neutral_holdout",
+    "cases": 128,
+    "paired_source_partition_is_burned_diagnostic_only": true,
+    "certification_claim_allowed": false
+  },
+  "model_protocol": {
+    "precision": "bfloat16",
+    "seed": 20260930,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "weights_frozen_for_diagnostic": true
+  },
+  "roles": {
+    "evaluator": {
+      "load_kind": "causal_lm",
+      "lora_target_regex": "^base_model\\.model\\.model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$|^model\\.layers\\.\\d+\\.self_attn\\.(q_proj|k_proj|v_proj|o_proj)$",
+      "decoding": {"do_sample": false},
+      "reasoning_projection": ["</think>"],
+      "max_new_tokens": 512
+    }
+  },
+  "diagnostic_gates": {
+    "minimum_semantic_quality_100": 95,
+    "minimum_semantic_exact_pass_rate": 0.95,
+    "minimum_decision_exact_pass_rate": 0.95,
+    "schema_compliance_required": 1.0,
+    "minimum_evidence_grounding": 0.99,
+    "maximum_hallucination_rate": 0.01,
+    "boundary_projection_rate_required": 1.0,
+    "system_action_exact_pass_rate_required": 1.0,
+    "maximum_system_semantic_escalation_rate": 0.0
+  },
+  "execution": {
+    "gpu_type_ids": ["NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+    "preferred_gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compatible_fallback_gpu_type_ids": [],
+    "capacity_fallback_policy": "exact_gpu_only_for_causal_diagnostic",
+    "minimum_gpu_memory_gib": 90,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 1200,
+    "max_hourly_usd_per_pod": 2.10,
+    "max_estimated_total_usd": 0.50,
+    "s3_prefix": "hephaestus/scientific/v3/neutral_holdout",
+    "capacity_retry_attempts": 8,
+    "capacity_retry_seconds": 15,
+    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
+    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/interface-repair-v3-neutral/adapters",
+    "evaluation_shard_size": 32,
+    "structured_json_early_stop": true,
+    "format_retry_max_attempts": 1,
+    "format_retry_target_free": true
+  },
+  "governance": {
+    "paid_launch_allowed": false,
+    "explicit_launch_authorization_required": true,
+    "training_allowed": false,
+    "adapter_mutation_allowed": false,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false,
+    "certification_claim_allowed": false
+  }
+}
