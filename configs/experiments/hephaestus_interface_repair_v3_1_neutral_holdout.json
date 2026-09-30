@@ -97,7 +97,7 @@
     "format_retry_target_free": true
   },
   "governance": {
-    "paid_launch_allowed": true,
+    "paid_launch_allowed": false,
     "explicit_launch_authorization_required": true,
     "training_allowed": false,
     "adapter_mutation_allowed": false,
