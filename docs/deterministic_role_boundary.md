@@ -1,6 +1,6 @@
 # Deterministic Role Boundary
 
-Status: implemented v1  
+Status: implemented v1; Evaluator state-to-action projection added 2026-09-30  
 Date: 2026-09-21
 
 ## Why
@@ -57,6 +57,39 @@ A model saying that a hard gate passed does not make it true. A model citing a
 nonexistent approval does not create an approval. A model repeating an action whose
 idempotency key is already terminal cannot trigger a duplicate mutation.
 
+## Evaluator-specific projection
+
+Interface Repair V2 showed a narrower failure mode: the Evaluator could infer the
+correct scientific state while still selecting the wrong finite role-local action.
+That is not an ambiguity worth delegating to a language model.
+
+For Evaluator outputs, `guard_role_output` therefore treats the model's `action` as
+advisory telemetry. The effective role-local action is projected by
+`src/hephaestus/control/evaluator_boundary.py` from the model's scientific `decision`
+and verified machine facts.
+
+The base mapping is:
+
+- `scientific_rejection -> reject_candidate`
+- `incomplete_evidence -> request_recheck`
+- `improved -> continue_from_checkpoint`
+- `regressed -> continue_lineage_best`
+- `equivalent -> continue_lineage_best`
+- `inconclusive -> hold_candidate`
+- `recheck_required -> request_recheck`
+- `certification_ready -> certify_candidate`
+
+Machine facts retain precedence. A verified hard-gate failure forces rejection;
+incomplete evidence forces recheck; invalid provenance forces hold; and certification
+cannot be emitted unless deterministic-gate, completeness, provenance, and required
+recheck facts are explicitly true.
+
+This is a role-local policy projection, not permission to mutate runtime state.
+Mutation-capable actions still cross the normal Controller/governance boundary.
+
+The model-proposed action is persisted so model policy understanding remains
+measurable. A disagreement is not hidden; it simply cannot become the system action.
+
 ## Training consequence
 
 Future role hardening must not train the models to become checksum comparators,
@@ -75,8 +108,18 @@ The frozen 600-case post-training red-team pack remains an untouched holdout. Ne
 hardening data must use neighboring scenarios and must not copy its exact cases or
 outputs.
 
+For Evaluator V3, certification is split into model and system claims. Model
+certification measures scientific-state inference. System certification separately
+requires deterministic action projection to be exact with zero semantic escalation.
+Burned V2 diagnostic cases are not reused as V3 certification evidence.
+
 ## CI
 
 Tests must cover the deterministic boundary separately from model quality. CI should
 fail if unknown evidence, wrong-lineage evidence, invalid hashes, missing approvals,
 stage-forbidden actions, or terminal duplicate actions can cross the boundary.
+
+Evaluator tests additionally assert that `equivalent` cannot become
+`certify_candidate`, `improved` deterministically maps to
+`continue_from_checkpoint`, and model action disagreement cannot override the
+projected effective action.
