@@ -1,12 +1,12 @@
 {
   "protocol_id": "hephaestus_interface_repair_v3_evaluator_boundary",
-  "preflight_authorized": true,
+  "preflight_authorized": false,
   "full_launch_authorized": false,
   "authorization_phrase_preflight": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_PREFLIGHT",
   "authorization_phrase_full": "LAUNCH_INTERFACE_REPAIR_V3_EVALUATOR_FULL",
   "preflight_evidence_key": null,
   "preflight_repo_sha": null,
   "authorized_by": "kys928",
-  "authorization_basis": "User authorized full implementation of the agreed V3 Evaluator deterministic-boundary and contrastive-repair design on 2026-09-30. Authorized state passed Interface Repair V3 validation run 36686932796; this commit requests the evaluator-only paid preflight. Production promotion and automatic dispatch remain disabled.",
-  "authorized_at": "2026-09-30T08:01:00Z"
+  "authorization_basis": "V3.0 preflight revealed a format-reliability issue and sampled its certification partition. V3.1 introduces one target-free format retry plus a dedicated preflight split and fresh sealed certification/regression contexts. Paid execution is relocked until V3.1 validation passes. User explicitly authorized the end-to-end scientific run on 2026-09-30.",
+  "authorized_at": null
 }
