@@ -11,6 +11,12 @@ from .autonomous_experiment import (
     TruthNormalizingEvidenceAdapter,
     normalize_diagnostic_truth_values,
 )
+from .evaluator_boundary import (
+    DECISION_TO_ACTION,
+    EvaluatorPolicyProjection,
+    action_for_evaluator_decision,
+    project_evaluator_action,
+)
 from .production_autonomy import ProductionAutonomyCoordinator
 from .staged_autonomous import (
     GovernedStagedOrchestrator,
@@ -43,6 +49,10 @@ __all__ = [
     "ProductionAutonomyCoordinator",
     "TruthNormalizingEvidenceAdapter",
     "normalize_diagnostic_truth_values",
+    "DECISION_TO_ACTION",
+    "EvaluatorPolicyProjection",
+    "action_for_evaluator_decision",
+    "project_evaluator_action",
     "GOVERNED_AUTONOMOUS_MODE",
     "PHASE_SUBSTEPS",
     "GovernedStagedOrchestrator",
