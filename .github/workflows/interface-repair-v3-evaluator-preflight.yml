@@ -34,13 +34,14 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install -e '.[s3]'
-      - name: Verify explicit V3 evaluator preflight authorization
+      - name: Verify explicit V3.1 evaluator preflight authorization
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
           cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v3_evaluator.json').read_text())
           marker=json.loads(Path('configs/experiments/interface_repair_v3_evaluator.launch.json').read_text())
+          assert cfg['protocol_revision']=='3.1'
           assert cfg['trainable_roles']==['evaluator']
           assert cfg['governance']['paid_preflight_allowed'] is True
           assert cfg['governance']['paid_full_launch_allowed'] is False
@@ -52,9 +53,12 @@ jobs:
           assert marker['preflight_evidence_key'] is None
           assert marker['preflight_repo_sha'] is None
           assert cfg['preflight']['role']=='evaluator'
+          assert cfg['preflight']['partition']=='preflight'
           assert cfg['preflight']['optimizer_steps']==5
           assert cfg['preflight']['evaluation_cases']==8
+          assert cfg['execution']['format_retry_max_attempts']==1
+          assert cfg['execution']['format_retry_target_free'] is True
           assert cfg['execution']['max_hourly_usd_per_pod']==2.20
           assert cfg['execution']['max_estimated_total_usd_preflight']==0.50
           PY
-      - run: python scripts/launch_interface_repair_v3_evaluator.py --preflight --execute
+      - run: python scripts/launch_interface_repair_v3_1_evaluator.py --preflight --execute
