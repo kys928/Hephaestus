@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,14 @@ def get_json(key: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def get_text(key: str) -> str:
+    r = client.get_object(Bucket=bucket, Key=key)
+    try:
+        return r["Body"].read().decode("utf-8")
+    finally:
+        r["Body"].close()
+
+
 def compact_result(value: dict[str, Any] | None) -> dict[str, Any] | None:
     if value is None:
         return None
@@ -71,6 +80,72 @@ def compact_result(value: dict[str, Any] | None) -> dict[str, Any] | None:
         "adapter_sha256": adapter.get("sha256"),
         "adapter_s3_key": adapter.get("s3_key"),
     }
+
+
+def parse_contract(text: str) -> dict[str, Any] | None:
+    text = str(text or "").strip()
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else None
+    except Exception:
+        pass
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            value = json.loads(text[start : end + 1])
+            return value if isinstance(value, dict) else None
+        except Exception:
+            return None
+    return None
+
+
+def analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    false_counts: Counter[str] = Counter()
+    true_counts: Counter[str] = Counter()
+    decision_confusion: Counter[str] = Counter()
+    action_confusion: Counter[str] = Counter()
+    variable_confusion: Counter[str] = Counter()
+    wrong_examples: list[dict[str, Any]] = []
+    score_value_counts: dict[str, Counter[str]] = defaultdict(Counter)
+
+    for row in rows:
+        score = row.get("score") if isinstance(row.get("score"), dict) else {}
+        for key, value in score.items():
+            if isinstance(value, bool):
+                (true_counts if value else false_counts)[key] += 1
+            elif isinstance(value, (str, int, float)) or value is None:
+                score_value_counts[key][str(value)] += 1
+
+        expected = row.get("expected") if isinstance(row.get("expected"), dict) else {}
+        generation = row.get("generation") if isinstance(row.get("generation"), dict) else {}
+        observed = parse_contract(str(generation.get("projected_output", ""))) or {}
+        for field, counter in (("decision", decision_confusion), ("action", action_confusion), ("primary_variable", variable_confusion)):
+            e, o = str(expected.get(field)), str(observed.get(field))
+            if e != o:
+                counter[f"{e} -> {o}"] += 1
+
+        failed = [k for k, v in score.items() if isinstance(v, bool) and not v]
+        if failed and len(wrong_examples) < 20:
+            wrong_examples.append({
+                "case_id": row.get("case_id"),
+                "kind": row.get("kind"),
+                "failed_boolean_scores": failed,
+                "score": score,
+                "expected": {k: expected.get(k) for k in ("decision", "action", "primary_variable", "confidence_min", "confidence_max")},
+                "observed": {k: observed.get(k) for k in ("decision", "action", "primary_variable", "confidence", "evidence_refs")},
+            })
+
+    return {
+        "rows": len(rows),
+        "false_boolean_scores": dict(false_counts.most_common()),
+        "true_boolean_scores": dict(true_counts.most_common()),
+        "decision_confusion": dict(decision_confusion.most_common()),
+        "action_confusion": dict(action_confusion.most_common()),
+        "primary_variable_confusion": dict(variable_confusion.most_common()),
+        "scalar_score_distributions": {k: dict(v.most_common(20)) for k, v in score_value_counts.items()},
+        "representative_failures": wrong_examples,
+    }
+
 
 out: dict[str, Any] = {"run_id": RUN_ID, "prefix": prefix, "roles": {}}
 for role in roles:
@@ -102,5 +177,21 @@ while True:
 out["object_count"] = len(objects)
 out["object_bytes"] = sum(x["bytes"] for x in objects)
 out["notable_objects"] = [x for x in objects if x["key"].endswith(("result.json", "progress.json", "selected-adapter.tar.gz"))]
+
+evaluator_analysis: dict[str, Any] = {}
+for phase in ("post_interface", "post_regression"):
+    marker = f"{prefix}roles/evaluator/samples/{phase}/"
+    shard_keys = sorted(x["key"] for x in objects if x["key"].startswith(marker) and x["key"].endswith(".jsonl"))
+    rows: list[dict[str, Any]] = []
+    for key in shard_keys:
+        for line in get_text(key).splitlines():
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            if isinstance(value, dict):
+                rows.append(value)
+    evaluator_analysis[phase] = {"shards": shard_keys, **analyze_rows(rows)}
+out["evaluator_failure_analysis"] = evaluator_analysis
+
 Path("interface_repair_v2_recovery_inspect.json").write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 print(json.dumps(out, sort_keys=True))
