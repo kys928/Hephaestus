@@ -51,6 +51,9 @@ def compact_result(value: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     cert = value.get("certification") if isinstance(value.get("certification"), dict) else {}
     adapter = value.get("adapter") if isinstance(value.get("adapter"), dict) else {}
+    def summary(name: str) -> dict[str, Any] | None:
+        item = value.get(name)
+        return dict(item) if isinstance(item, dict) else None
     return {
         "status": value.get("status"),
         "role": value.get("role"),
@@ -58,9 +61,13 @@ def compact_result(value: dict[str, Any] | None) -> dict[str, Any] | None:
         "completed_at_unix": value.get("completed_at_unix"),
         "error_type": value.get("error_type"),
         "error": value.get("error"),
-        "certified": cert.get("certified"),
-        "post_interface_quality_100": (value.get("post_interface") or {}).get("quality_100") if isinstance(value.get("post_interface"), dict) else None,
-        "post_regression_quality_100": (value.get("post_regression") or {}).get("quality_100") if isinstance(value.get("post_regression"), dict) else None,
+        "certification": dict(cert),
+        "pre_interface": summary("pre_interface"),
+        "post_interface": summary("post_interface"),
+        "pre_regression": summary("pre_regression"),
+        "post_regression": summary("post_regression"),
+        "interface_quality_gain_100": value.get("interface_quality_gain_100"),
+        "training": summary("training"),
         "adapter_sha256": adapter.get("sha256"),
         "adapter_s3_key": adapter.get("s3_key"),
     }
@@ -78,7 +85,6 @@ for candidate in ("live/result.json", "result.json"):
     if value is not None:
         out[candidate] = value
 
-# Small object index for recovery diagnostics, without downloading large shards/adapters.
 objects: list[dict[str, Any]] = []
 token = None
 while True:
