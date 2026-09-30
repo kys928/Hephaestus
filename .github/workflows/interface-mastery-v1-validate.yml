@@ -1,0 +1,64 @@
+name: Phase II Interface Mastery validate
+on:
+  push:
+    paths:
+      - configs/experiments/hephaestus_interface_mastery_v1.json
+      - configs/experiments/interface_mastery_v1.launch.json
+      - scripts/build_interface_mastery_v1.py
+      - scripts/run_interface_mastery_v1.py
+      - scripts/launch_interface_mastery_v1.py
+      - src/hephaestus/schemas/interface_mastery_contract.py
+      - src/hephaestus/evaluation/interface_mastery.py
+      - tests/test_interface_mastery_v1.py
+      - docs/phase_ii_interface_mastery.md
+      - docs/evidence/interface-mastery-v1/PREFLIGHT.md
+      - .github/workflows/interface-mastery-v1-validate.yml
+      - .github/workflows/interface-mastery-v1-paid-launch.yml
+  pull_request:
+    paths:
+      - configs/experiments/hephaestus_interface_mastery_v1.json
+      - configs/experiments/interface_mastery_v1.launch.json
+      - scripts/build_interface_mastery_v1.py
+      - scripts/run_interface_mastery_v1.py
+      - scripts/launch_interface_mastery_v1.py
+      - src/hephaestus/schemas/interface_mastery_contract.py
+      - src/hephaestus/evaluation/interface_mastery.py
+      - tests/test_interface_mastery_v1.py
+      - docs/phase_ii_interface_mastery.md
+      - docs/evidence/interface-mastery-v1/PREFLIGHT.md
+      - .github/workflows/interface-mastery-v1-validate.yml
+      - .github/workflows/interface-mastery-v1-paid-launch.yml
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e . pytest
+      - run: python scripts/build_interface_mastery_v1.py
+      - run: python scripts/launch_interface_mastery_v1.py > /tmp/interface-mastery-render.json
+      - run: python -m pytest -q tests/test_interface_mastery_v1.py tests/test_certified_role_stack.py
+      - run: python -m pytest -q
+      - run: python -m py_compile scripts/build_interface_mastery_v1.py scripts/run_interface_mastery_v1.py scripts/launch_interface_mastery_v1.py src/hephaestus/schemas/interface_mastery_contract.py src/hephaestus/evaluation/interface_mastery.py
+      - name: Assert preparation boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_mastery_v1.json').read_text())
+          marker=json.loads(Path('configs/experiments/interface_mastery_v1.launch.json').read_text())
+          assert marker['authorization_phrase']=='LAUNCH_PHASE_II_INTERFACE_MASTERY_V1'
+          if marker['authorized'] is True:
+              assert marker['authorized_by']
+              assert marker['authorized_at']
+          else:
+              assert marker['authorized_by'] is None
+              assert marker['authorized_at'] is None
+          assert cfg['governance']['weights_mutation_allowed'] is False
+          assert cfg['governance']['production_promotion_allowed'] is False
+          assert cfg['governance']['automatic_role_dispatch_allowed'] is False
+          assert cfg['governance']['targeted_repair_training_allowed'] is False
+          PY

@@ -69,7 +69,13 @@ class RunPodExecutionAdapter:
         body: dict[str, object] | None = None,
     ) -> tuple[int, dict[str, Any] | None]:
         api_key = self.secrets.resolve(self.config.api_key_ref)
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            # RunPod's Cloudflare edge can reject Python urllib's default
+            # signature with 403/1010. Use a stable browser-compatible agent.
+            "User-Agent": "Mozilla/5.0 (compatible; Hephaestus-RunPod/1.0)",
+        }
         if body is not None:
             headers["Content-Type"] = "application/json"
         return self.transport.request(
