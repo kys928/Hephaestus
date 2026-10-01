@@ -36,6 +36,24 @@
     },
     "implementation_commit": "98cf21ac3ac68777f105f66361ae312032b3d834"
   },
+  "sealed_evidence": {
+    "status": "frozen_unseen",
+    "builder_path": "scripts/build_evaluator_certification_sealed_v1.py",
+    "pack_id": "hephaestus-evaluator-sealed-certification-v1",
+    "canonical_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25",
+    "preflight_cases": 8,
+    "certification_cases": 128,
+    "regression_cases": 128,
+    "certification_cases_per_state": 16,
+    "regression_cases_per_state": 16,
+    "case_bodies_reviewed_after_freeze": false,
+    "opaque_model_visible_identifiers": true,
+    "fresh_fact_wording": true,
+    "burned_case_reuse": false,
+    "certification_and_regression_disjoint": true,
+    "validation_workflow_run_id": 36927024623,
+    "validation_repo_sha": "6e7ac6286592d513045b48ec40b30098fe9a3c0a"
+  },
   "approved_cleanup_evidence": {
     "readiness_audit": {
       "repo_record": "docs/evidence/interface-repair-v3-1/readiness-audit-v1.md",
@@ -70,9 +88,9 @@
       }
     },
     "validation": {
-      "workflow_run_id": 36926270732,
-      "targeted_tests_passed": 24,
-      "full_tests_passed": 503,
+      "workflow_run_id": 36927024623,
+      "targeted_tests_passed": 27,
+      "full_tests_passed": 506,
       "full_tests_skipped": 6
     }
   },
