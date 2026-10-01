@@ -1,0 +1,6 @@
+{
+  "launch_authorized": false,
+  "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V2_NEUTRAL_BENCHMARK",
+  "authorized_repo_sha": null,
+  "operator_authorization": "explicit_user_request_parent_benchmark"
+}

@@ -1,0 +1,68 @@
+name: Interface Repair V2 neutral benchmark validate
+
+on:
+  push:
+    branches: [experiment-interface-repair-v2-neutral-benchmark]
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v2_neutral_benchmark.json
+      - configs/experiments/interface_repair_v2_neutral_benchmark.launch.json
+      - scripts/run_interface_repair_v2_neutral_benchmark.py
+      - scripts/launch_interface_repair_v2_neutral_benchmark.py
+      - .github/workflows/interface-repair-v2-neutral-benchmark-validate.yml
+      - .github/workflows/interface-repair-v2-neutral-benchmark-paid.yml
+
+permissions: {contents: read}
+env:
+  PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]' pytest
+      - name: Validate source artifact exists
+        run: |
+          python - <<'PY'
+          import json, os, boto3
+          from pathlib import Path
+          from botocore.config import Config
+          cfg=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2_neutral_benchmark.json').read_text())
+          c=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'].rstrip('/'),region_name=os.environ['RUNPOD_DATACENTER_ID'],aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],config=Config(retries={'mode':'standard','max_attempts':10}))
+          h=c.head_object(Bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID'],Key=cfg['source_v2_adapter']['s3_key'])
+          assert int(h['ContentLength']) > 0
+          print(json.dumps({'source_adapter_bytes':int(h['ContentLength']),'source_adapter_sha256_expected':cfg['source_v2_adapter']['sha256']},sort_keys=True))
+          PY
+      - name: Validate neutral pack and dry-run launcher
+        run: |
+          python scripts/build_interface_repair_v3_1_neutral_holdout.py
+          python scripts/launch_interface_repair_v2_neutral_benchmark.py >/tmp/v2-neutral-launch.json
+      - name: Full repository tests
+        run: python -m pytest -q
+      - name: Compile benchmark path
+        run: python -m py_compile scripts/run_interface_repair_v2_neutral_benchmark.py scripts/launch_interface_repair_v2_neutral_benchmark.py
+      - name: Assert governance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2_neutral_benchmark.json').read_text())
+          m=json.loads(Path('configs/experiments/interface_repair_v2_neutral_benchmark.launch.json').read_text())
+          assert c['pack']['canonical_sha256']=='0bae520eda2b59f9317baacfd9d77a24f51f0b7c4a2b5e7e057e0a8cee2d7492'
+          assert c['source_v2_adapter']['sha256']=='cd675321340f831351710f9af122cd2a7e3741dc087955a43671bd6d0eff724e'
+          assert c['governance']['training_allowed'] is False
+          assert c['governance']['adapter_mutation_allowed'] is False
+          assert c['governance']['production_promotion_allowed'] is False
+          assert isinstance(c['governance']['paid_launch_allowed'], bool)
+          assert isinstance(m['launch_authorized'], bool)
+          PY

@@ -1,0 +1,53 @@
+name: Interface Repair V2 neutral benchmark paid
+
+on:
+  push:
+    branches: [experiment-interface-repair-v2-neutral-benchmark]
+    paths:
+      - configs/experiments/hephaestus_interface_repair_v2_neutral_benchmark.json
+      - configs/experiments/interface_repair_v2_neutral_benchmark.launch.json
+
+permissions: {contents: read}
+concurrency:
+  group: interface-repair-v2-neutral-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: contains(github.event.head_commit.message, '[launch-interface-repair-v2-neutral-benchmark]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}
+      HEPHAESTUS_INTERFACE_REPAIR_RUN_ID: v2-neutral-benchmark-${{ github.run_id }}
+      HEPHAESTUS_INTERFACE_REPAIR_V2_NEUTRAL_AUTHORIZED: LAUNCH_INTERFACE_REPAIR_V2_NEUTRAL_BENCHMARK
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3]'
+      - name: Verify frozen benchmark authorization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c=json.loads(Path('configs/experiments/hephaestus_interface_repair_v2_neutral_benchmark.json').read_text())
+          m=json.loads(Path('configs/experiments/interface_repair_v2_neutral_benchmark.launch.json').read_text())
+          assert c['diagnostic_only'] is True and c['training_performed'] is False
+          assert c['governance']['paid_launch_allowed'] is True
+          assert c['governance']['training_allowed'] is False
+          assert c['governance']['adapter_mutation_allowed'] is False
+          assert c['governance']['production_promotion_allowed'] is False
+          assert m['launch_authorized'] is True
+          assert m['authorized_repo_sha']
+          PY
+      - name: Run frozen V2 neutral benchmark
+        run: python scripts/launch_interface_repair_v2_neutral_benchmark.py --execute
