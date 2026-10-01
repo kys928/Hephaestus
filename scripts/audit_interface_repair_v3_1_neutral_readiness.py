@@ -14,7 +14,6 @@ from typing import Any
 
 import build_interface_repair_v3_1_neutral_holdout as builder
 import run_interface_repair_v1 as v1
-import run_interface_repair_v2 as v2
 from hephaestus.control.evaluator_boundary import project_evaluator_action
 
 RUN_ID = "v3-neutral-holdout-36766350227"
@@ -201,15 +200,16 @@ def main() -> int:
         "cases": audited,
     }
     key = f"{PREFIX}/readiness-audit-v1.json"
-    v2.put_json(client, key, audit)
-    print("V31_READINESS_AUDIT_JSON " + json.dumps({
+    public = {
         "result_key": key,
         "sample_count": len(rows),
         "residual_case_count": len(audited),
         "class_counts": dict(sorted(class_counts.items())),
         "overlap": overlap,
         "cases": audited,
-    }, sort_keys=True), flush=True)
+    }
+    print("V31_READINESS_AUDIT_JSON " + json.dumps(public, sort_keys=True), flush=True)
+    v1.put_json(client, key, audit)
     return 0
 
 
