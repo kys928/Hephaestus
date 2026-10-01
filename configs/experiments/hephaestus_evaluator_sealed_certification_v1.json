@@ -1,0 +1,113 @@
+{
+  "protocol_id": "hephaestus_evaluator_sealed_certification_v1",
+  "protocol_revision": "1.0",
+  "phase": "phase_ii_evaluator_model_and_system_certification",
+  "candidate_manifest": "configs/experiments/hephaestus_evaluator_certification_candidate_v1.json",
+  "required_candidate_id": "evaluator-v3.1-boundary-v1",
+  "source_phase_i_stack": {
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201",
+    "production_certified_required": true
+  },
+  "pack": {
+    "builder_path": "scripts/build_evaluator_certification_sealed_v1.py",
+    "canonical_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25",
+    "preflight_partition": "preflight",
+    "certification_partition": "certification",
+    "regression_partition": "regression",
+    "preflight_cases": 8,
+    "certification_cases": 128,
+    "regression_cases": 128,
+    "burned_diagnostic_reuse_forbidden": true,
+    "case_bodies_human_reviewed_after_freeze": false
+  },
+  "model_protocol": {
+    "precision": "bfloat16",
+    "seed": 20261001,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "weights_frozen_for_certification": true
+  },
+  "training": {
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "optimizer_steps": 0
+  },
+  "roles": {
+    "evaluator": {
+      "load_kind": "causal_lm",
+      "decoding": {"do_sample": false},
+      "reasoning_projection": ["</think>"],
+      "max_new_tokens": 512
+    }
+  },
+  "preflight": {
+    "require_complete_contract_json_rate": 1.0,
+    "require_schema_compliance": 1.0,
+    "certification_or_regression_metrics_may_not_be_read_before_preflight_pass": true
+  },
+  "certification": {
+    "model": {
+      "minimum_certification_semantic_quality_100": 95.0,
+      "minimum_certification_semantic_exact_pass_rate": 0.95,
+      "minimum_regression_semantic_quality_100": 95.0,
+      "minimum_regression_semantic_exact_pass_rate": 0.95,
+      "schema_compliance_required": 1.0,
+      "minimum_evidence_grounding": 0.99,
+      "maximum_hallucination_rate": 0.01,
+      "maximum_certification_to_regression_semantic_quality_drop_100": 2.0
+    },
+    "system": {
+      "primary_variable_projection_rate_required": 1.0,
+      "boundary_projection_rate_required": 1.0,
+      "system_action_exact_pass_rate_required": 1.0,
+      "maximum_system_semantic_escalation_rate": 0.0
+    },
+    "report_only": {
+      "model_primary_variable_exact_pass_rate": true,
+      "model_action_agreement_rate": true,
+      "model_semantic_escalation_rate": true,
+      "upstream_copy_violation_rate": true,
+      "evidence_ref_canonicalization_case_rate": true,
+      "decision_confusion": true,
+      "per_state_decision_accuracy": true
+    }
+  },
+  "execution": {
+    "gpu_type_ids": ["NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+    "preferred_gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compatible_fallback_gpu_type_ids": [],
+    "capacity_fallback_policy": "exact_gpu_only_for_sealed_certification",
+    "minimum_gpu_memory_gib": 90,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds": 1800,
+    "max_hourly_usd_per_pod": 2.10,
+    "max_estimated_total_usd": 0.75,
+    "s3_prefix": "hephaestus/scientific/v4/evaluator_certification",
+    "capacity_retry_attempts": 8,
+    "capacity_retry_seconds": 15,
+    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
+    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/evaluator-certification-v1/adapters",
+    "evaluation_shard_size": 32,
+    "structured_json_early_stop": true,
+    "format_retry_max_attempts": 1,
+    "format_retry_target_free": true
+  },
+  "governance": {
+    "paid_launch_allowed": false,
+    "explicit_launch_authorization_required": true,
+    "training_allowed": false,
+    "adapter_mutation_allowed": false,
+    "candidate_weights_mutation_allowed": false,
+    "certification_claim_allowed_only_if_all_gates_pass": true,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false,
+    "identical_rerun_after_scientific_failure_allowed": false
+  }
+}
