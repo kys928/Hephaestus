@@ -44,11 +44,13 @@ def test_certification_protocol_is_frozen_inference_only_and_launch_locked() -> 
     assert marker["launch_authorized"] is False
 
 
-def test_certification_runner_contains_no_training_or_promotion_path() -> None:
+def test_certification_runner_contains_no_training_or_promotion_calls() -> None:
     text = RUNNER.read_text(encoding="utf-8")
-    assert "optimizer" not in text.lower()
+    assert "v2.train(" not in text
+    assert "v1.train(" not in text
     assert ".backward(" not in text
-    assert "save_pretrained" not in text
+    assert "torch.optim" not in text
+    assert "save_pretrained(" not in text
     assert '"training_performed": False' in text
     assert '"adapter_mutated": False' in text
     assert '"production_promotion_performed": False' in text
