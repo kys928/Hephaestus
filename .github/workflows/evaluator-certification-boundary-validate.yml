@@ -9,12 +9,18 @@ on:
       - 'src/hephaestus/control/evaluator_evidence_refs.py'
       - 'scripts/run_interface_repair_v3_evaluator.py'
       - 'scripts/build_evaluator_certification_sealed_v1.py'
+      - 'scripts/run_evaluator_sealed_certification_v1.py'
+      - 'scripts/launch_evaluator_sealed_certification_v1.py'
       - 'tests/test_evaluator_certification_boundary.py'
       - 'tests/test_evaluator_certification_sealed_pack.py'
+      - 'tests/test_evaluator_sealed_certification_runtime.py'
       - 'tests/test_interface_repair_v3_evaluator.py'
       - 'configs/experiments/hephaestus_evaluator_certification_candidate_v1.json'
+      - 'configs/experiments/hephaestus_evaluator_sealed_certification_v1.json'
+      - 'configs/experiments/hephaestus_evaluator_sealed_certification_v1.launch.json'
       - 'configs/experiments/hephaestus_interface_repair_v3_1_neutral_holdout.json'
       - 'configs/experiments/interface_repair_v3_1_neutral_holdout.launch.json'
+      - '.github/workflows/evaluator-sealed-certification-paid.yml'
       - '.github/workflows/evaluator-certification-boundary-validate.yml'
   workflow_dispatch:
 
@@ -33,11 +39,26 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e '.[test]'
-      - name: Compile boundary, scorer, and sealed builder
-        run: python -m py_compile src/hephaestus/control/evaluator_boundary.py src/hephaestus/control/evaluator_evidence_refs.py scripts/run_interface_repair_v3_evaluator.py scripts/build_evaluator_certification_sealed_v1.py
+      - name: Compile certification boundary and runtime
+        run: >-
+          python -m py_compile
+          src/hephaestus/control/evaluator_boundary.py
+          src/hephaestus/control/evaluator_evidence_refs.py
+          scripts/run_interface_repair_v3_evaluator.py
+          scripts/build_evaluator_certification_sealed_v1.py
+          scripts/run_evaluator_sealed_certification_v1.py
+          scripts/launch_evaluator_sealed_certification_v1.py
       - name: Validate sealed pack without exposing case bodies
         run: python scripts/build_evaluator_certification_sealed_v1.py
-      - name: Run targeted boundary and sealed-pack tests
-        run: python -m pytest -q tests/test_evaluator_certification_boundary.py tests/test_evaluator_certification_sealed_pack.py tests/test_interface_repair_v3_evaluator.py tests/test_interface_repair_v3_1_neutral_holdout.py
+      - name: Dry-render locked paid request
+        run: python scripts/launch_evaluator_sealed_certification_v1.py >/tmp/evaluator-certification-dry-run.json
+      - name: Run targeted boundary, sealed-pack, and runtime tests
+        run: >-
+          python -m pytest -q
+          tests/test_evaluator_certification_boundary.py
+          tests/test_evaluator_certification_sealed_pack.py
+          tests/test_evaluator_sealed_certification_runtime.py
+          tests/test_interface_repair_v3_evaluator.py
+          tests/test_interface_repair_v3_1_neutral_holdout.py
       - name: Run full repository tests
         run: python -m pytest -q
