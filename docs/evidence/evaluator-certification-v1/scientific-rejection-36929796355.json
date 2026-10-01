@@ -1,0 +1,73 @@
+{
+  "evidence_version": "hephaestus-evaluator-sealed-certification-rejection.v1",
+  "candidate_id": "evaluator-v3.1-boundary-v1",
+  "workflow_run_id": 36929796355,
+  "repo_sha": "f9754ab6b54e5e55ba00aa89ebb836eb68a96bad",
+  "run_id": "evaluator-sealed-cert-36929796355",
+  "status": "scientifically_rejected",
+  "certified": false,
+  "identical_rerun_allowed": false,
+  "candidate_adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+  "sealed_pack_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25",
+  "result_s3_key": "hephaestus/scientific/v4/evaluator_certification/evaluator-sealed-cert-36929796355/result.json",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "cost_per_hour_usd": 2.09,
+  "estimated_total_cost_usd": 0.4764941420607805,
+  "preflight": {
+    "passed": true,
+    "sample_count": 8,
+    "schema_compliance": 1.0,
+    "final_complete_contract_json_rate": 1.0
+  },
+  "certification": {
+    "sample_count": 128,
+    "semantic_quality_100": 84.21875,
+    "semantic_exact_pass_rate": 0.78125,
+    "decision_exact_pass_rate": 0.78125,
+    "schema_compliance": 0.9375,
+    "evidence_grounding": 0.984375,
+    "hallucination_rate": 0.015625,
+    "primary_variable_projection_rate": 0.953125,
+    "boundary_projection_rate": 0.953125,
+    "system_action_exact_pass_rate": 0.828125,
+    "system_semantic_escalation_rate": 0.0,
+    "upstream_copy_violation_rate": 0.15625,
+    "wrong_decision_count": 28
+  },
+  "regression": {
+    "sample_count": 128,
+    "semantic_quality_100": 81.09375,
+    "semantic_exact_pass_rate": 0.734375,
+    "decision_exact_pass_rate": 0.734375,
+    "schema_compliance": 0.9296875,
+    "evidence_grounding": 0.984375,
+    "hallucination_rate": 0.015625,
+    "primary_variable_projection_rate": 0.9453125,
+    "boundary_projection_rate": 0.9453125,
+    "system_action_exact_pass_rate": 0.765625,
+    "system_semantic_escalation_rate": 0.0,
+    "upstream_copy_violation_rate": 0.15625,
+    "wrong_decision_count": 34
+  },
+  "certification_to_regression_semantic_quality_drop_100": 3.125,
+  "dominant_failure_modes": {
+    "fresh_wording_generalization_failure": true,
+    "scientific_state_confusion": true,
+    "cross_field_action_token_in_decision_field_observed": true,
+    "equivalent_to_certification_ready_false_positive_observed": true,
+    "improved_state_instability_observed": true,
+    "recheck_and_inconclusive_state_instability_observed": true,
+    "deterministic_boundary_prevented_system_semantic_escalation": true,
+    "evidence_reference_canonicalizer_fail_closed_as_designed": true
+  },
+  "governance_outcome": {
+    "training_performed": false,
+    "adapter_mutated": false,
+    "production_promotion_performed": false,
+    "automatic_role_dispatch_performed": false,
+    "pod_deleted": true,
+    "pod_teardown_verified_absent": true,
+    "paid_launch_relocked": true,
+    "launch_marker_relocked": true
+  }
+}
