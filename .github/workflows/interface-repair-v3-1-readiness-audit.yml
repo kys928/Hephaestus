@@ -20,9 +20,9 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-      RUNPOD_S3_ENDPOINT_URL: ${{ secrets.RUNPOD_S3_ENDPOINT_URL }}
-      RUNPOD_DATACENTER_ID: ${{ secrets.RUNPOD_DATACENTER_ID }}
-      RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
