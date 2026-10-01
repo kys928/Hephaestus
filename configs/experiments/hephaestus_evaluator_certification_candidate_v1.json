@@ -51,8 +51,8 @@
     "fresh_fact_wording": true,
     "burned_case_reuse": false,
     "certification_and_regression_disjoint": true,
-    "validation_workflow_run_id": 36927024623,
-    "validation_repo_sha": "6e7ac6286592d513045b48ec40b30098fe9a3c0a"
+    "validation_workflow_run_id": 36928127509,
+    "validation_repo_sha": "159e7c800d15717267a42cfb5f54d0fae65d7679"
   },
   "approved_cleanup_evidence": {
     "readiness_audit": {
@@ -88,9 +88,9 @@
       }
     },
     "validation": {
-      "workflow_run_id": 36927024623,
-      "targeted_tests_passed": 27,
-      "full_tests_passed": 506,
+      "workflow_run_id": 36928127509,
+      "targeted_tests_passed": 32,
+      "full_tests_passed": 511,
       "full_tests_skipped": 6
     }
   },
@@ -103,7 +103,7 @@
       "schema_compliance_required": 1.0,
       "minimum_evidence_grounding": 0.99,
       "maximum_hallucination_rate": 0.01,
-      "maximum_regression_semantic_quality_drop_100": 2.0
+      "maximum_certification_to_regression_semantic_quality_drop_100": 2.0
     },
     "system": {
       "primary_variable_projection_rate_required": 1.0,
