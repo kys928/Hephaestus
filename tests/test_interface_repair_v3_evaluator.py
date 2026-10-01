@@ -121,6 +121,8 @@ def test_v31_runner_separates_model_and_system_certification_and_reports_retry()
     text = RUNNER.read_text(encoding="utf-8")
     v3_text = (ROOT / "scripts/run_interface_repair_v3_evaluator.py").read_text(encoding="utf-8")
     assert "project_evaluator_action" in v3_text
+    assert "project_evaluator_primary_variable" in v3_text
+    assert "canonicalize_evaluator_evidence_refs" in v3_text
     assert '"semantic_exact_pass_rate"' in v3_text
     assert '"model_action_agreement_rate"' in v3_text
     assert '"system_action_exact_pass_rate"' in v3_text
@@ -135,7 +137,7 @@ def test_v31_runner_separates_model_and_system_certification_and_reports_retry()
     assert '"preflight_partition": "dedicated_preflight"' in text
 
 
-def test_v3_system_boundary_is_not_gated_on_model_action_agreement() -> None:
+def test_v3_system_boundary_is_not_gated_on_model_action_or_primary_agreement() -> None:
     runner = import_file(ROOT / "scripts/run_interface_repair_v3_evaluator.py", "interface_repair_v3_runner")
     cfg = load(CFG)
     post = {
@@ -144,6 +146,9 @@ def test_v3_system_boundary_is_not_gated_on_model_action_agreement() -> None:
         "schema_compliance": 1.0,
         "evidence_grounding": 1.0,
         "hallucination_rate": 0.0,
+        "model_primary_variable_exact_pass_rate": 0.0,
+        "primary_variable_projection_rate": 1.0,
+        "evidence_ref_canonicalization_case_rate": 0.5,
         "model_action_agreement_rate": 0.0,
         "model_semantic_escalation_rate": 1.0,
         "upstream_copy_violation_rate": 0.0,
@@ -155,5 +160,6 @@ def test_v3_system_boundary_is_not_gated_on_model_action_agreement() -> None:
     assert result["model_certification"]["passed"] is True
     assert result["system_certification"]["passed"] is True
     assert result["certified"] is True
+    assert result["report_only"]["interface_model_primary_variable_exact_pass_rate"] == 0.0
     assert result["report_only"]["interface_model_action_agreement_rate"] == 0.0
     assert result["report_only"]["interface_model_semantic_escalation_rate"] == 1.0
