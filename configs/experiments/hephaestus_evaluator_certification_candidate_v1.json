@@ -1,0 +1,127 @@
+{
+  "candidate_id": "evaluator-v3.1-boundary-v1",
+  "candidate_status": "frozen_pending_fresh_sealed_certification",
+  "candidate_kind": "immutable_model_plus_deterministic_boundary",
+  "weights_lineage": "v3.1",
+  "training_performed_for_boundary_revision": false,
+  "model": {
+    "model_id": "ibm-granite/granite-3.3-8b-instruct",
+    "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+    "adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+    "adapter_bytes": 61533241,
+    "adapter_s3_key": "hephaestus/scientific/v3/interface_repair_evaluator/interface-repair-v3-evaluator-full-36738914957/roles/evaluator/selected-adapter.tar.gz",
+    "source_run_id": "interface-repair-v3-evaluator-full-36738914957",
+    "decoding": {
+      "do_sample": false,
+      "max_new_tokens": 512,
+      "reasoning_projection": ["</think>"]
+    }
+  },
+  "architecture": {
+    "scientific_state_authority": "model",
+    "confidence_authority": "model",
+    "uncertainty_authority": "model",
+    "positive_certification_state_authority": "model",
+    "model_proposed_action": "telemetry_only",
+    "authoritative_action": "deterministic_projection",
+    "model_proposed_primary_variable": "telemetry_only",
+    "authoritative_primary_variable": "deterministic_from_scientific_state",
+    "evidence_reference_policy": "exact_or_unique_optional_E_prefix_repair_fail_closed",
+    "fuzzy_evidence_reference_matching_allowed": false,
+    "positive_auto_promotion_from_non_certification_state_allowed": false,
+    "code_blobs": {
+      "evaluator_boundary.py": "244f1dbeae12c28d1fc8527a14f45cd5999ef28b",
+      "evaluator_evidence_refs.py": "75ae720065f160cdbed4cbe079e460af3da68f1c",
+      "run_interface_repair_v3_evaluator.py": "ddc07eb38adad509b565b5c354b42389c73192ef"
+    },
+    "implementation_commit": "98cf21ac3ac68777f105f66361ae312032b3d834"
+  },
+  "approved_cleanup_evidence": {
+    "readiness_audit": {
+      "repo_record": "docs/evidence/interface-repair-v3-1/readiness-audit-v1.md",
+      "s3_key": "hephaestus/scientific/v3/neutral_holdout/v3-neutral-holdout-36766350227/readiness-audit-v1.json"
+    },
+    "burned_replay": {
+      "workflow_run_id": 36926498692,
+      "s3_key": "hephaestus/scientific/v3/neutral_holdout/v3-neutral-holdout-36766350227/boundary-cleanup-replay-v1.json",
+      "new_inference_performed": false,
+      "sample_count": 128,
+      "semantic_quality_100": 98.4765625,
+      "semantic_exact_pass_rate": 0.9765625,
+      "decision_exact_pass_rate": 0.9765625,
+      "model_primary_variable_exact_pass_rate": 0.96875,
+      "authoritative_primary_variable_exact_pass_rate": 0.9765625,
+      "primary_variable_projection_rate": 1.0,
+      "schema_compliance": 1.0,
+      "evidence_grounding": 1.0,
+      "hallucination_rate": 0.0,
+      "boundary_projection_rate": 1.0,
+      "system_action_exact_pass_rate": 0.9921875,
+      "system_semantic_escalation_rate": 0.0,
+      "evidence_ref_normalization_case_count": 1,
+      "evidence_ref_normalization_count": 4,
+      "unresolved_evidence_case_count": 0,
+      "wrong_decision_count": 3,
+      "system_action_error_count": 1,
+      "remaining_decision_errors": {
+        "scientific_rejection -> recheck_required": 1,
+        "scientific_rejection -> regressed": 1,
+        "certification_ready -> equivalent": 1
+      }
+    },
+    "validation": {
+      "workflow_run_id": 36926270732,
+      "targeted_tests_passed": 24,
+      "full_tests_passed": 503,
+      "full_tests_skipped": 6
+    }
+  },
+  "certification_gates": {
+    "model": {
+      "minimum_certification_semantic_quality_100": 95.0,
+      "minimum_certification_semantic_exact_pass_rate": 0.95,
+      "minimum_regression_semantic_quality_100": 95.0,
+      "minimum_regression_semantic_exact_pass_rate": 0.95,
+      "schema_compliance_required": 1.0,
+      "minimum_evidence_grounding": 0.99,
+      "maximum_hallucination_rate": 0.01,
+      "maximum_regression_semantic_quality_drop_100": 2.0
+    },
+    "system": {
+      "primary_variable_projection_rate_required": 1.0,
+      "boundary_projection_rate_required": 1.0,
+      "system_action_exact_pass_rate_required": 1.0,
+      "maximum_system_semantic_escalation_rate": 0.0
+    },
+    "report_only": {
+      "model_primary_variable_exact_pass_rate": true,
+      "model_action_agreement_rate": true,
+      "model_semantic_escalation_rate": true,
+      "upstream_copy_violation_rate": true,
+      "evidence_ref_canonicalization_case_rate": true
+    }
+  },
+  "required_next_evidence": {
+    "fresh_sealed_certification_cases": 128,
+    "fresh_sealed_regression_cases": 128,
+    "opaque_model_visible_identifiers_required": true,
+    "burned_diagnostic_reuse_forbidden": true,
+    "certification_and_regression_partitions_must_be_disjoint": true,
+    "certification_ready_boundary_must_be_explicitly_challenged": true,
+    "scientific_rejection_boundary_must_be_explicitly_challenged": true,
+    "direct_no_upstream_cases_required": true,
+    "handoff_cases_required": true,
+    "post_model_system_handoff_certification_required": true,
+    "production_registry_promotion_requires_all_prior_gates": true,
+    "production_canary_or_shadow_required_before_authoritative_dispatch": true
+  },
+  "governance": {
+    "weights_frozen": true,
+    "training_allowed": false,
+    "adapter_mutation_allowed": false,
+    "paid_certification_launch_allowed": false,
+    "certification_claim_allowed": false,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false
+  }
+}
