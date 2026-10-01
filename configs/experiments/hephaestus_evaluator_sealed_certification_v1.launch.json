@@ -1,6 +1,6 @@
 {
-  "launch_authorized": true,
+  "launch_authorized": false,
   "authorization_phrase": "LAUNCH_HEPHAESTUS_EVALUATOR_SEALED_CERTIFICATION_V1",
   "authorized_repo_sha": "4a13ec6bc79c50d48a06c0ed70064fce3b7c9ad2",
-  "operator_authorization": "explicit_user_launch_2026-10-01"
+  "operator_authorization": "scientifically_rejected_run_36929796355_no_identical_rerun"
 }
