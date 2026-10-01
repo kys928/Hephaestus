@@ -1,12 +1,9 @@
-"""Deterministic projection from Evaluator scientific state to role-local action.
+"""Deterministic projections for the Evaluator's governed output boundary.
 
-The Evaluator model is responsible for scientific interpretation. It is not trusted
-to independently choose the governed action associated with a finite scientific
-state. This module projects the model's scientific decision plus machine-verified
-facts into the only role-local action Hephaestus will pass downstream.
-
-The model-proposed action is retained as advisory telemetry so disagreement remains
-measurable, but it never overrides this projection.
+The Evaluator model owns scientific interpretation. It does not independently own
+finite policy consequences that can be derived exactly from that interpretation.
+The model-proposed action and primary variable remain observable telemetry, while
+Hephaestus projects authoritative action and primary-variable values in code.
 """
 from __future__ import annotations
 
@@ -23,6 +20,17 @@ DECISION_TO_ACTION: dict[str, str] = {
     "inconclusive": "hold_candidate",
     "recheck_required": "request_recheck",
     "certification_ready": "certify_candidate",
+}
+
+DECISION_TO_PRIMARY_VARIABLE: dict[str, str] = {
+    "scientific_rejection": "hard_gate_status",
+    "incomplete_evidence": "runtime_evidence",
+    "improved": "candidate_quality",
+    "regressed": "candidate_regression",
+    "equivalent": "effect_size",
+    "inconclusive": "evaluation_integrity",
+    "recheck_required": "variance_risk",
+    "certification_ready": "certification_state",
 }
 
 _CERTIFICATION_REQUIRED_TRUE = (
@@ -45,10 +53,60 @@ class EvaluatorPolicyProjection:
     verified_facts: Mapping[str, object]
 
 
+@dataclass(frozen=True, slots=True)
+class EvaluatorPrimaryVariableProjection:
+    scientific_decision: str
+    model_proposed_primary_variable: str
+    effective_primary_variable: str | None
+    model_primary_variable_agrees: bool
+    blocked: bool
+    reasons: tuple[str, ...]
+
+
 def action_for_evaluator_decision(scientific_decision: str) -> str | None:
     """Return the finite role-local policy action for a known scientific state."""
 
     return DECISION_TO_ACTION.get(str(scientific_decision).strip())
+
+
+def primary_variable_for_evaluator_decision(scientific_decision: str) -> str | None:
+    """Return the authoritative primary variable for a known scientific state."""
+
+    return DECISION_TO_PRIMARY_VARIABLE.get(str(scientific_decision).strip())
+
+
+def project_evaluator_primary_variable(
+    scientific_decision: str,
+    *,
+    model_proposed_primary_variable: str = "",
+) -> EvaluatorPrimaryVariableProjection:
+    """Project scientific state into the only authoritative primary variable.
+
+    This projection intentionally does not infer or repair an unknown scientific
+    decision. Unknown decisions fail closed. The model-proposed value is retained as
+    telemetry only and never becomes authoritative by itself.
+    """
+
+    decision = str(scientific_decision).strip()
+    proposed = str(model_proposed_primary_variable).strip()
+    effective = primary_variable_for_evaluator_decision(decision)
+    if effective is None:
+        return EvaluatorPrimaryVariableProjection(
+            scientific_decision=decision,
+            model_proposed_primary_variable=proposed,
+            effective_primary_variable=None,
+            model_primary_variable_agrees=False,
+            blocked=True,
+            reasons=(f"unknown_evaluator_scientific_decision:{decision or '<missing>'}",),
+        )
+    return EvaluatorPrimaryVariableProjection(
+        scientific_decision=decision,
+        model_proposed_primary_variable=proposed,
+        effective_primary_variable=effective,
+        model_primary_variable_agrees=bool(proposed and proposed == effective),
+        blocked=False,
+        reasons=(),
+    )
 
 
 def project_evaluator_action(
@@ -64,6 +122,10 @@ def project_evaluator_action(
     invalid provenance forces a hold. A model may claim ``certification_ready`` but
     ``certify_candidate`` is emitted only when every required certification fact is
     explicitly true.
+
+    The projection remains intentionally asymmetric: code may conservatively block or
+    downgrade an unsafe model state, but it never upgrades a non-certification model
+    decision into ``certify_candidate``.
     """
 
     decision = str(scientific_decision).strip()
