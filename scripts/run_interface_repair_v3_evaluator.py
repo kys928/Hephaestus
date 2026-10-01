@@ -2,13 +2,15 @@
 """Evaluator-only Interface Repair V3 runner.
 
 V3 continues from the persisted V2 Evaluator adapter, trains only the Evaluator on
-fresh crossed/contrastive data, and separates two questions during certification:
+fresh crossed/contrastive data, and separates three questions during certification:
 
 1. Can the model infer the correct scientific state?
-2. Does the deterministic Evaluator boundary project that state into the correct
-   role-local Hephaestus action?
+2. Can strict evidence-reference handling keep citations grounded without fuzzy repair?
+3. Do deterministic Evaluator boundaries project state into the authoritative
+   primary variable and role-local Hephaestus action?
 
-The model's proposed action is measured but is never the system effective action.
+The model's proposed action and primary variable are retained as telemetry but are
+never authoritative system outputs.
 """
 from __future__ import annotations
 
@@ -19,7 +21,11 @@ from typing import Any, Mapping, Sequence
 import run_interface_repair_v1 as v1
 import run_interface_repair_v2 as v2
 from interface_repair_v2_bootstrap import load_stack_compatible, materialize_parent_cached
-from hephaestus.control.evaluator_boundary import project_evaluator_action
+from hephaestus.control.evaluator_boundary import (
+    project_evaluator_action,
+    project_evaluator_primary_variable,
+)
+from hephaestus.control.evaluator_evidence_refs import canonicalize_evaluator_evidence_refs
 
 ROOT = v2.ROOT
 CFG_PATH = ROOT / "configs/experiments/hephaestus_interface_repair_v3_evaluator.json"
@@ -128,8 +134,20 @@ def score_case_v3(pack: Mapping[str, Any], case: Mapping[str, Any], role: str, r
     expected = case["expected"]
     schema = _schema_valid(pack, obj)
 
-    decision_exact = bool(obj is not None and str(obj.get("decision")) == str(expected["decision"]))
-    primary_exact = bool(obj is not None and str(obj.get("primary_variable")) == str(expected["primary_variable"]))
+    decision = str(obj.get("decision", "")) if obj is not None else ""
+    model_primary = str(obj.get("primary_variable", "")) if obj is not None else ""
+    decision_exact = bool(obj is not None and decision == str(expected["decision"]))
+    model_primary_exact = bool(obj is not None and model_primary == str(expected["primary_variable"]))
+    primary_projection = project_evaluator_primary_variable(
+        decision,
+        model_proposed_primary_variable=model_primary,
+    )
+    primary_projected = not primary_projection.blocked and primary_projection.effective_primary_variable is not None
+    primary_exact = bool(
+        primary_projected
+        and primary_projection.effective_primary_variable == str(expected["primary_variable"])
+    )
+
     try:
         confidence = float(obj.get("confidence", -1)) if obj is not None else -1.0
     except Exception:
@@ -138,7 +156,6 @@ def score_case_v3(pack: Mapping[str, Any], case: Mapping[str, Any], role: str, r
     semantic_exact = decision_exact and primary_exact and confidence_ok
     model_action_agrees = bool(obj is not None and str(obj.get("action")) == str(expected["action"]))
 
-    allowed = {str(x) for x in case["allowed_evidence_refs"]}
     cited = [
         str(x) for x in (
             obj.get("evidence_refs", [])
@@ -146,8 +163,9 @@ def score_case_v3(pack: Mapping[str, Any], case: Mapping[str, Any], role: str, r
             else []
         )
     ]
-    hallucinated = sorted({x for x in cited if x not in allowed})
-    grounded = not hallucinated
+    evidence_projection = canonicalize_evaluator_evidence_refs(cited, case["allowed_evidence_refs"])
+    hallucinated = sorted(set(evidence_projection.unresolved_refs) | set(evidence_projection.ambiguous_refs))
+    grounded = evidence_projection.grounded
 
     forbidden = {str(x) for x in case.get("forbidden_actions", [])}
     model_action = str(obj.get("action", "")) if obj is not None else ""
@@ -161,7 +179,7 @@ def score_case_v3(pack: Mapping[str, Any], case: Mapping[str, Any], role: str, r
                 upstream_copy = True
 
     projection = project_evaluator_action(
-        str(obj.get("decision", "")) if obj is not None else "",
+        decision,
         case.get("verified_facts", {}),
         model_proposed_action=model_action,
     )
@@ -184,9 +202,18 @@ def score_case_v3(pack: Mapping[str, Any], case: Mapping[str, Any], role: str, r
         "exact_contract": semantic_exact,
         "decision_exact": decision_exact,
         "primary_variable_exact": primary_exact,
+        "model_primary_variable_exact": model_primary_exact,
+        "primary_variable_projected": primary_projected,
+        "system_effective_primary_variable": primary_projection.effective_primary_variable,
+        "model_primary_variable_agreement": primary_projection.model_primary_variable_agrees,
+        "primary_variable_projection_reasons": list(primary_projection.reasons),
         "confidence_in_band": confidence_ok,
         "schema_compliant": schema,
         "evidence_grounded": grounded,
+        "raw_evidence_refs": list(evidence_projection.raw_refs),
+        "canonical_evidence_refs": list(evidence_projection.canonical_refs),
+        "normalized_evidence_ref_pairs": [list(pair) for pair in evidence_projection.normalized_pairs],
+        "ambiguous_evidence_refs": list(evidence_projection.ambiguous_refs),
         "hallucinated_evidence_refs": hallucinated,
         "model_action_agreement": model_action_agrees,
         "model_semantic_escalation": model_escalation,
@@ -212,6 +239,8 @@ def summarize_v3(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
         return sum(float(score[field]) for score in scores) / len(scores)
 
     hallucinations = sum(len(score["hallucinated_evidence_refs"]) for score in scores)
+    canonicalized_refs = sum(len(score.get("normalized_evidence_ref_pairs", [])) for score in scores)
+    canonicalized_cases = sum(bool(score.get("normalized_evidence_ref_pairs")) for score in scores)
     semantic_quality = mean("semantic_quality_100")
     semantic_exact = mean("semantic_exact")
     return {
@@ -222,9 +251,13 @@ def summarize_v3(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
         "exact_contract_pass_rate": semantic_exact,
         "decision_exact_pass_rate": mean("decision_exact"),
         "primary_variable_exact_pass_rate": mean("primary_variable_exact"),
+        "model_primary_variable_exact_pass_rate": mean("model_primary_variable_exact"),
+        "primary_variable_projection_rate": mean("primary_variable_projected"),
         "schema_compliance": mean("schema_compliant"),
         "evidence_grounding": mean("evidence_grounded"),
         "hallucination_rate": hallucinations / max(1, len(rows)),
+        "evidence_ref_canonicalization_case_rate": canonicalized_cases / len(rows),
+        "canonicalized_evidence_ref_count": float(canonicalized_refs),
         "model_action_agreement_rate": mean("model_action_agreement"),
         "model_semantic_escalation_rate": mean("model_semantic_escalation"),
         "semantic_escalation_rate": mean("model_semantic_escalation"),
@@ -261,6 +294,8 @@ def certify_v3(
         "regression_drop": regression_drop <= float(model_gates["maximum_regression_semantic_quality_drop_100"]),
     }
     system_checks = {
+        "interface_primary_variable_projection": post_interface["primary_variable_projection_rate"] >= 1.0,
+        "regression_primary_variable_projection": post_regression["primary_variable_projection_rate"] >= 1.0,
         "interface_boundary_projection": post_interface["boundary_projection_rate"] >= float(system_gates["boundary_projection_rate_required"]),
         "regression_boundary_projection": post_regression["boundary_projection_rate"] >= float(system_gates["boundary_projection_rate_required"]),
         "interface_system_action_exact": post_interface["system_action_exact_pass_rate"] >= float(system_gates["system_action_exact_pass_rate_required"]),
@@ -276,6 +311,10 @@ def certify_v3(
         "system_certification": {"passed": system_passed, "checks": system_checks},
         "regression_semantic_quality_drop_100": regression_drop,
         "report_only": {
+            "interface_model_primary_variable_exact_pass_rate": post_interface["model_primary_variable_exact_pass_rate"],
+            "regression_model_primary_variable_exact_pass_rate": post_regression["model_primary_variable_exact_pass_rate"],
+            "interface_evidence_ref_canonicalization_case_rate": post_interface["evidence_ref_canonicalization_case_rate"],
+            "regression_evidence_ref_canonicalization_case_rate": post_regression["evidence_ref_canonicalization_case_rate"],
             "interface_model_action_agreement_rate": post_interface["model_action_agreement_rate"],
             "regression_model_action_agreement_rate": post_regression["model_action_agreement_rate"],
             "interface_model_semantic_escalation_rate": post_interface["model_semantic_escalation_rate"],
