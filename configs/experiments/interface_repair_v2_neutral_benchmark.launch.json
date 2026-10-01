@@ -1,5 +1,5 @@
 {
-  "launch_authorized": false,
+  "launch_authorized": true,
   "authorization_phrase": "LAUNCH_INTERFACE_REPAIR_V2_NEUTRAL_BENCHMARK",
   "authorized_repo_sha": "2a45aa8b711e5ff6f7d13ccf385003c8e636f554",
   "operator_authorization": "explicit_user_request_parent_benchmark"
