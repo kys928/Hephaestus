@@ -1,92 +1,49 @@
 {
   "protocol_id": "hephaestus_evaluator_semantic_invariance_repair_v1",
   "protocol_revision": "1.0",
-  "status": "curriculum_built_training_not_authorized",
-  "objective": "Repair V3.1 scientific-state semantic invariance without memorizing the burned sealed certification evidence.",
-  "source_parent": {
-    "candidate_id": "evaluator-v3.1-boundary-v1",
-    "model_id": "ibm-granite/granite-3.3-8b-instruct",
-    "model_revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
-    "adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
-    "adapter_s3_key": "hephaestus/scientific/v3/interface_repair_evaluator/interface-repair-v3-evaluator-full-36738914957/roles/evaluator/selected-adapter.tar.gz",
-    "parent_remains_immutable": true
+  "phase": "phase_ii_evaluator_semantic_invariance_repair",
+  "parent_candidate_manifest": "configs/experiments/hephaestus_evaluator_certification_candidate_v1.json",
+  "required_parent_candidate_id": "evaluator-v3.1-boundary-v1",
+  "required_parent_adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+  "source_phase_i_stack": {
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201",
+    "production_certified_required": true
   },
-  "diagnostic_basis": {
-    "burned_certification_run_id": "evaluator-sealed-cert-36929796355",
-    "burned_pack_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25",
-    "burned_cases_are_diagnostic_only": true,
-    "burned_cases_used_as_training_rows": false,
-    "burned_cases_used_for_checkpoint_selection": false,
-    "burned_cases_may_never_certify_again": true,
-    "autopsy_s3_key": "hephaestus/scientific/v4/evaluator_certification/evaluator-sealed-cert-36929796355/burned-autopsy-v1.json",
-    "conditional_autopsy_s3_key": "hephaestus/scientific/v4/evaluator_certification/evaluator-sealed-cert-36929796355/burned-autopsy-conditionals-v1.json",
-    "weak_states": ["improved", "equivalent", "inconclusive", "recheck_required"],
-    "robust_states": ["certification_ready", "incomplete_evidence", "regressed", "scientific_rejection"]
-  },
-  "curriculum": {
+  "pack": {
     "builder_path": "scripts/build_evaluator_semantic_invariance_repair_v1.py",
     "canonical_sha256": "0d01fe1853742d1259a333fa9a92dec46e8789b69f2019ed34e17d815fc01a3c",
-    "train_cases": 1536,
+    "training_cases_total": 1536,
+    "selected_training_cases": 768,
     "preflight_cases": 8,
     "development_diagnostic_cases": 256,
-    "train_cases_per_state": 192,
-    "development_cases_per_state": 32,
-    "train_interface_cases": 768,
-    "train_rehearsal_cases": 768,
-    "families": {
-      "factorial_generalization": 768,
-      "minimal_contrast": 512,
-      "precedence_and_field_isolation": 256
-    },
-    "factorized_latent_variables": [
-      "deterministic_gate_passed",
-      "evidence_complete",
-      "provenance_valid",
-      "effect_class",
-      "variance_stable",
-      "recheck_satisfied"
-    ],
-    "scientific_precedence": [
-      "hard_gate_failure -> scientific_rejection",
-      "incomplete_evidence -> incomplete_evidence",
-      "invalid_provenance -> inconclusive",
-      "high_variance -> recheck_required",
-      "material_negative_effect -> regressed",
-      "neutral_effect -> equivalent",
-      "material_positive_effect + satisfied_recheck -> certification_ready",
-      "otherwise_material_positive_effect -> improved"
-    ],
-    "critical_contrast_boundaries": [
-      "improved <-> equivalent",
-      "improved <-> certification_ready",
-      "equivalent <-> certification_ready",
-      "inconclusive <-> recheck_required",
-      "inconclusive <-> incomplete_evidence",
-      "recheck_required <-> scientific_rejection",
-      "scientific_rejection <-> regressed"
-    ],
-    "anti_shortcut_properties": {
-      "opaque_model_visible_identifiers": true,
-      "old_exact_evidence_sentence_reuse": false,
-      "development_wording_disjoint_from_training": true,
-      "development_contexts_disjoint_from_training": true,
-      "direct_handoff_balance_per_state": true,
-      "upstream_advice_balanced_or_pair_constant": true,
-      "contrast_pair_upstream_advice_identical_between_pair_members": true,
-      "decision_field_requires_scientific_state_not_action_token": true
-    }
+    "development_diagnostic_sha256": "ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912",
+    "development_case_order_sha256": "b52cbc157855da02c43bd136c972f87ee8a8a7e1ba4725c076d153360cfd5abd",
+    "burned_sealed_partition_reuse_forbidden": true
   },
-  "proposed_training": {
-    "training_authorized": false,
-    "paid_launch_allowed": false,
+  "baseline": {
+    "run_id": "evaluator-v3-1-dev-baseline-36998587411",
+    "s3_key": "hephaestus/scientific/v4/evaluator_development_baseline/evaluator-v3-1-dev-baseline-36998587411/result.json",
+    "decision_exact_pass_rate": 0.390625,
+    "semantic_exact_pass_rate": 0.390625
+  },
+  "model_protocol": {
     "precision": "bfloat16",
     "seed": 20261002,
     "lora_rank": 16,
     "lora_alpha": 32,
-    "lora_dropout": 0.0,
-    "optimizer": "adamw",
-    "learning_rate": 0.000002,
-    "weight_decay": 0.0,
+    "lora_dropout": 0
+  },
+  "training": {
+    "method": "continue_existing_lora",
+    "precision": "bfloat16",
+    "seed": 20261002,
+    "lora_rank": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "optimizer": "AdamW",
+    "learning_rate": 2e-06,
+    "weight_decay": 0,
     "micro_batch_size": 1,
     "gradient_accumulation_steps": 8,
     "max_sequence_length": 2048,
@@ -96,32 +53,95 @@
     "assistant_only_loss": true,
     "maximum_optimizer_steps": 96,
     "checkpoint_steps": [16, 32, 48, 64, 80, 96],
-    "rationale": "Use a deliberately conservative pull from the strong V3.1 parent; checkpoint early and select on lexically disjoint development evidence instead of continuing blindly."
+    "selection_policy": {
+      "retain_all_minimal_contrast_cases": true,
+      "factorial_generalization_cases_per_state": 16,
+      "precedence_and_field_isolation_cases_per_state": 16,
+      "selected_cases_per_state": 96,
+      "selected_direct_cases_per_state": 48,
+      "selected_handoff_cases_per_state": 48,
+      "checkpoint_block_cases_per_state": 16
+    }
   },
-  "pre_training_baseline_requirement": {
-    "required": true,
-    "candidate": "frozen V3.1 parent",
-    "partition": "development_diagnostic",
-    "cases": 256,
-    "purpose": "Establish a fresh, non-certification baseline on the same development distribution before any weight update.",
-    "burned_sealed_evidence_may_not_be_used": true
+  "roles": {
+    "evaluator": {
+      "load_kind": "causal_lm",
+      "decoding": {"do_sample": false},
+      "reasoning_projection": ["</think>"],
+      "max_new_tokens": 512
+    }
   },
-  "checkpoint_selection": {
-    "partition": "development_diagnostic",
-    "certification_claim_allowed": false,
-    "minimum_overall_decision_exact_pass_rate": 0.95,
-    "minimum_overall_semantic_exact_pass_rate": 0.95,
+  "development_gates": {
+    "minimum_overall_decision_exact": 0.95,
+    "minimum_overall_semantic_exact": 0.95,
     "schema_compliance_required": 1.0,
     "minimum_evidence_grounding": 0.99,
     "maximum_hallucination_rate": 0.01,
-    "primary_variable_projection_rate_required": 1.0,
-    "boundary_projection_rate_required": 1.0,
-    "system_action_exact_pass_rate_required": 1.0,
+    "primary_variable_projection_required": 1.0,
+    "boundary_projection_required": 1.0,
+    "system_action_exact_required": 1.0,
     "maximum_system_semantic_escalation_rate": 0.0,
     "maximum_upstream_copy_violation_rate": 0.01,
-    "minimum_each_weak_state_decision_exact_pass_rate": 0.90,
-    "minimum_each_robust_state_decision_exact_pass_rate": 0.95,
-    "selection_rule": "Choose the earliest checkpoint clearing every gate and improving over the frozen parent development baseline; otherwise choose no checkpoint.",
+    "minimum_previously_weak_state_accuracy": 0.9,
+    "minimum_previously_robust_state_accuracy": 0.95
+  },
+  "execution": {
+    "gpu_type_ids": ["NVIDIA RTX PRO 6000 Blackwell Server Edition"],
+    "preferred_gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compatible_fallback_gpu_type_ids": [],
+    "capacity_fallback_policy": "exact_gpu_for_comparable_development_evaluation",
+    "minimum_gpu_memory_gib": 90,
+    "cloud_type": "SECURE",
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "container_disk_gb": 180,
+    "poll_seconds": 10,
+    "hard_wall_seconds_train": 3600,
+    "hard_wall_seconds_evaluate": 2400,
+    "max_hourly_usd_per_pod": 2.1,
+    "max_estimated_total_usd_train": 1.6,
+    "max_estimated_total_usd_evaluate": 0.9,
+    "s3_prefix": "hephaestus/scientific/v4/evaluator_semantic_invariance_repair",
+    "capacity_retry_attempts": 12,
+    "capacity_retry_seconds": 15,
+    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
+    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/evaluator-semantic-invariance-repair-v1/adapters",
+    "evaluation_shard_size": 32,
+    "structured_json_early_stop": true,
+    "format_retry_max_attempts": 1,
+    "format_retry_target_free": true
+  },
+  "governance": {
+    "training_approved": true,
+    "explicit_launch_authorization_required": true,
+    "paid_training_allowed": true,
+    "paid_checkpoint_evaluation_allowed": true,
+    "parent_adapter_mutation_allowed": false,
+    "burned_sealed_partition_use_allowed": false,
+    "fresh_certification_generation_allowed_during_repair": false,
+    "certification_claim_allowed": false,
+    "production_promotion_allowed": false,
+    "automatic_role_dispatch_allowed": false
+  },
+  "status": "training_authorized_launching",
+  "objective": "Repair frozen V3.1 scientific-state semantic invariance without using burned sealed evidence for training or checkpoint selection.",
+  "source_parent": {
+    "candidate_id": "evaluator-v3.1-boundary-v1",
+    "adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+    "parent_remains_immutable": true
+  },
+  "diagnostic_basis": {
+    "burned_certification_run_id": "evaluator-sealed-cert-36929796355",
+    "burned_pack_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25",
+    "burned_cases_are_diagnostic_only": true,
+    "burned_cases_used_as_training_rows": false,
+    "burned_cases_used_for_checkpoint_selection": false
+  },
+  "checkpoint_selection": {
+    "partition": "development_diagnostic",
+    "rule": "Select the earliest checkpoint clearing every recorded development gate; otherwise select no checkpoint.",
+    "certification_claim_allowed": false,
     "no_checkpoint_clears_gate_outcome": "scientifically_reject_this_repair_protocol_without_blind_continuation"
   },
   "future_certification": {
@@ -129,27 +149,8 @@
     "must_be_generated_only_after_checkpoint_selection": true,
     "fresh_sealed_certification_cases": 128,
     "fresh_sealed_regression_cases": 128,
-    "opaque_identifiers_required": true,
-    "wording_and_template_families_must_be_disjoint_from_training_and_development": true,
     "burned_v1_sealed_case_reuse_forbidden": true,
-    "same_existing_production_certification_gates_required": true,
     "live_handoff_certification_required_after_model_and_system_certification": true,
     "production_canary_or_shadow_required_before_authoritative_dispatch": true
-  },
-  "execution_proposal": {
-    "preferred_gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-    "minimum_gpu_memory_gib": 90,
-    "cloud_type": "SECURE",
-    "max_estimated_total_usd": 1.5,
-    "exact_gpu_preferred": true
-  },
-  "governance": {
-    "training_allowed": false,
-    "paid_launch_allowed": false,
-    "adapter_mutation_allowed": false,
-    "production_promotion_allowed": false,
-    "automatic_role_dispatch_allowed": false,
-    "identical_scientific_failure_rerun_allowed": false,
-    "fresh_certification_evidence_required_after_selection": true
   }
 }
