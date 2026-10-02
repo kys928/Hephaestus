@@ -1,0 +1,29 @@
+name: Evaluator semantic invariance curriculum validate
+
+on:
+  push:
+    branches:
+      - diagnostic/evaluator-sealed-v1-autopsy
+    paths:
+      - 'scripts/build_evaluator_semantic_invariance_repair_v1.py'
+      - '.github/workflows/evaluator-semantic-invariance-curriculum-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}/src:${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile curriculum builder
+        run: python -m py_compile scripts/build_evaluator_semantic_invariance_repair_v1.py
+      - name: Build and validate curriculum
+        run: python scripts/build_evaluator_semantic_invariance_repair_v1.py
