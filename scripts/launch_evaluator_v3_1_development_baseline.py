@@ -21,6 +21,7 @@ AUTH_PHRASE = "LAUNCH_HEPHAESTUS_EVALUATOR_V3_1_DEV_BASELINE"
 S3_ROOT = "hephaestus/scientific/v4/evaluator_development_baseline"
 EXPECTED_CANDIDATE_ID = "evaluator-v3.1-boundary-v1"
 EXPECTED_ADAPTER_SHA256 = "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed"
+ORIGINAL_POD_SHELL = base.pod_shell
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -51,7 +52,7 @@ def authorize(cfg: dict[str, Any], candidate: dict[str, Any]) -> None:
 
 
 def pod_shell(_mode: str, venv_cache: str, pip_cache: str, adapter_cache: str) -> str:
-    shell = base.pod_shell("preflight", venv_cache, pip_cache, adapter_cache)
+    shell = ORIGINAL_POD_SHELL("preflight", venv_cache, pip_cache, adapter_cache)
     old_body = 'export HEPHAESTUS_REPAIR_ROLE=planner\n"$PY" scripts/run_interface_repair_v2_cached.py --preflight'
     new_body = '"$PY" scripts/run_evaluator_v3_1_development_baseline.py'
     if old_body not in shell:
