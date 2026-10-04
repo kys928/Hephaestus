@@ -1,0 +1,134 @@
+{
+  "candidates": [
+    {
+      "architecture": "Qwen3ForCausalLM",
+      "estimated_runtime_memory_gib": 14,
+      "evidence_refs": [
+        "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+        "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/commit/cdbee75f17c01a7cc42f958dc650907174af0554"
+      ],
+      "license": "apache-2.0",
+      "loader": "AutoModelForCausalLM",
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "model_type": "qwen3",
+      "parameter_ceiling": 4500000000,
+      "rank": 1,
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "selection_reason": "Native non-thinking model with reported IFEval 83.4 and BFCL-v3 61.9; small full-precision footprint. These are admission hypotheses, not evidence of passing Hephaestus gates.",
+      "source_dtype": "bfloat16"
+    },
+    {
+      "architecture": "Mistral3ForConditionalGeneration",
+      "estimated_runtime_memory_gib": 38,
+      "evidence_refs": [
+        "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-BF16",
+        "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-BF16/commit/3cea74c1ebaf5ce5f5a2553de470e2ceab825142",
+        "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512"
+      ],
+      "license": "apache-2.0",
+      "loader": "AutoModelForImageTextToText",
+      "model_id": "mistralai/Ministral-3-14B-Instruct-2512-BF16",
+      "model_type": "mistral3",
+      "parameter_ceiling": 15000000000,
+      "rank": 2,
+      "revision": "3cea74c1ebaf5ce5f5a2553de470e2ceab825142",
+      "selection_reason": "Independent non-thinking model family with native function calling/JSON emphasis. Use original BF16 weights cast to the frozen FP16 execution dtype; no FP8 or constrained decoding. Text-only native conditional-generation loader is required.",
+      "source_dtype": "bfloat16"
+    }
+  ],
+  "considered": [
+    {
+      "disposition": "deferred_current_protocol",
+      "model_id": "Qwen/Qwen3.5-4B",
+      "reason": "Thinking by default; requires a different explicit template-mode choice for the 96-token budget. Preserve the current candidate-only wave.",
+      "source": "https://huggingface.co/Qwen/Qwen3.5-4B"
+    },
+    {
+      "disposition": "deferred_current_protocol",
+      "model_id": "Qwen/Qwen3.5-9B",
+      "reason": "Thinking by default; instruction benchmarks do not establish behavior under the frozen user-only/96-token protocol.",
+      "source": "https://huggingface.co/Qwen/Qwen3.5-9B"
+    },
+    {
+      "disposition": "not_admitted",
+      "model_id": "LiquidAI/LFM2.5-1.2B-Instruct",
+      "reason": "Model card declares lfm1.0, outside the current Apache-2.0/MIT permissive allowlist.",
+      "source": "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct"
+    },
+    {
+      "disposition": "reserve_not_executed",
+      "model_id": "allenai/Olmo-3-7B-Instruct",
+      "reason": "Apache-2.0, native olmo3 and function-calling post-training; retained as an alternative but two V5 candidates are bounded before targeted repair.",
+      "source": "https://huggingface.co/allenai/Olmo-3-7B-Instruct"
+    }
+  ],
+  "on_exhaustion": "Compare strongest near-miss and perform an uncontaminated bounded capability-repair experiment; never blindly replay the same deterministic wave.",
+  "prior_evidence": {
+    "artifact_id": 10322163864,
+    "collector_run_id": "34773242936",
+    "cycles": [
+      {
+        "disposition": "scientific_rejection",
+        "failed_checks": [
+          "instruction_exact",
+          "brief_length",
+          "continuation_termination"
+        ],
+        "model_id": "ibm-granite/granite-3.3-8b-instruct",
+        "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+        "score": 0.7944444444444444,
+        "summary_key": "hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34772003742/cycles/cycle-01/cycle_summary.json",
+        "summary_sha256": "451af0ef1ff707bd431092148cd23214b4f892dc8093da4d8822dab60afe6b7c"
+      },
+      {
+        "disposition": "scientific_rejection",
+        "failed_checks": [
+          "continuation_termination",
+          "planet_json"
+        ],
+        "model_id": "allenai/OLMo-2-1124-13B-Instruct",
+        "revision": "3a5c85baefbb1896a54d56fe2e76c0395627ddf4",
+        "score": 0.85,
+        "summary_key": "hephaestus/scientific/v1/positive_promotion/positive-real-model-promotion-001-34772003742/cycles/cycle-02/cycle_summary.json",
+        "summary_sha256": "8bf1cc86961699de8c8cd78ae8d7ebaba42c6871da6ed840176b3345e455dd5b"
+      }
+    ],
+    "inspection_run_id": "34875964225",
+    "run_id": "34772003742"
+  },
+  "protocol": {
+    "candidate_repetitions": 3,
+    "content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad",
+    "decoding_config": {
+      "max_new_tokens": 96,
+      "seeds": [
+        11,
+        29,
+        47
+      ],
+      "temperature": 0,
+      "top_p": 1
+    },
+    "pack_name": "semantic_behavior_v1",
+    "scientific_variable": "candidate_model_identity"
+  },
+  "researched_at": "2026-09-14",
+  "reviewer": {
+    "license": "apache-2.0",
+    "model_id": "Qwen/Qwen2.5-1.5B-Instruct",
+    "revision": "582efe62d7cfafd242bffca71ecbde1bcecc1bcc"
+  },
+  "runtime": {
+    "cloud": "SECURE",
+    "container_image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "datacenter": "EU-CZ-1",
+    "dtype": "float16",
+    "gpu_count": 1,
+    "max_memory_gib": 44,
+    "minimum_gpu_class_gb": 48,
+    "model_offload": false,
+    "quantization": false,
+    "transformers": "5.17.0"
+  },
+  "wave_id": "model-selection-v5"
+}

@@ -1,0 +1,99 @@
+{
+  "protocol_id": "hephaestus_distance_to_role_v1",
+  "protocol_version": 1,
+  "purpose": "Measure the minimum cumulative role-specialization intervention required for each admitted model to approach target Hephaestus role behavior while exposing general semantic regression.",
+  "scientific_variable": "cumulative_optimizer_step_dose_under_fixed_role_lora_trajectory",
+  "sources": {
+    "topology_run_id": "cognitive-topology-v1-34953477882",
+    "topology_protocol_id": "hephaestus_cognitive_topology_v1",
+    "topology_protocol_sha256": "007fdf739d1ebbf0e92a5fd41d45aa1b1543586431766de453a0854dec7119d0",
+    "elasticity_run_id": "adaptation-elasticity-v1-34961824753",
+    "elasticity_protocol_id": "hephaestus_adaptation_elasticity_v1",
+    "elasticity_protocol_sha256": "d45c361b6f3ac17d668b5b796307d6e168840b90acb09b8c70e3ad15fdead69d",
+    "elasticity_result_sha256": "9226ac8f5e9c29db70b2398cf32a5f5a4348f1bb24fde125bcd7a9ce0ab337a4",
+    "elasticity_admission_repo_sha": "4e0eaf66745386df644400d9643736fc167136a3",
+    "training_dataset_sha256": "3f4ad28d8ab1dc9ec2b2ba84492cbac5bbad17e20110ad0a6d4d1f703fdfca3c",
+    "semantic_pack_path": "configs/eval_packs/semantic_behavior_v1.yaml",
+    "semantic_pack_id": "semantic_behavior_v1",
+    "semantic_content_hash": "ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad"
+  },
+  "roles": ["diagnosis", "planner", "evaluator", "judge", "controller"],
+  "training": {
+    "method": "lora",
+    "peft_version": "0.20.0",
+    "precision": "bfloat16",
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "bias": "none",
+    "target_module_suffixes": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    "learning_rate": 0.00005,
+    "weight_decay": 0.0,
+    "micro_batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "max_seq_length": 1024,
+    "warmup_ratio": 0.1,
+    "max_grad_norm": 1.0,
+    "optimizer": "adamw_torch",
+    "shuffle_seed": 314159,
+    "model_seed": 271828,
+    "gradient_checkpointing": true,
+    "train_only_assistant_tokens": true,
+    "examples_per_role": 48,
+    "max_epochs": 4,
+    "expected_optimizer_steps_per_epoch": 12,
+    "dose_optimizer_steps": [3, 6, 12, 24, 36, 48]
+  },
+  "role_screening": {
+    "frozen_protocol_path": "configs/eval_packs/hephaestus_cognitive_topology_v1.json",
+    "seeds": [11],
+    "max_new_tokens": 256,
+    "temperature": 0.0,
+    "do_sample": false,
+    "full_confirmation_seeds": [11, 29, 47],
+    "quality_thresholds_100": [60, 70, 80, 90],
+    "threshold_hard_gates": {"schema_compliance": 1.0, "hallucination_rate": 0.0},
+    "dose_zero_source": "recomputed_same_runtime_and_verified_against_frozen_topology_v1"
+  },
+  "semantic_regression": {
+    "use_frozen_pack": true,
+    "decoding_temperature": 0.0,
+    "decoding_top_p": 1.0,
+    "max_new_tokens": 96,
+    "seeds": [11, 29, 47],
+    "strict_non_regression": {"allow_new_hard_failures": false, "minimum_score_delta": 0.0},
+    "bounded_non_regression": {"allow_new_hard_failures": false, "minimum_score_delta": -0.03},
+    "prompt_serialization": "tokenizer_chat_template:user_only",
+    "evaluate_all_dose_checkpoints": true
+  },
+  "distance_outputs": {
+    "distance_to_ideal_quality_points": true,
+    "minimum_optimizer_steps_to_thresholds": true,
+    "minimum_supervised_tokens_to_thresholds": true,
+    "strict_safe_role_frontier": true,
+    "bounded_safe_role_frontier": true,
+    "peak_role_quality_checkpoint": true,
+    "strict_safe_threshold_distances": true,
+    "bounded_safe_threshold_distances": true,
+    "full_seed_confirmation_of_peak_strict_and_bounded_checkpoints": true
+  },
+  "execution": {
+    "model_shards": {
+      "olmo-granite": ["allenai/OLMo-2-1124-13B-Instruct", "ibm-granite/granite-3.3-8b-instruct"],
+      "qwen-ministral": ["Qwen/Qwen3-4B-Instruct-2507", "mistralai/Ministral-3-14B-Instruct-2512-BF16"]
+    },
+    "gpu_count_per_shard": 1,
+    "minimum_gpu_memory_gib": 75,
+    "persistent_model_cache_allowed": false,
+    "checkpoint_retention": "preserve_all_dose_adapters_until_final_S3_verification_then_allow_targeted_cleanup"
+  },
+  "governance": {
+    "training_is_experimentally_approved": true,
+    "approval_source": "user_directive_2026-09-16_distance_to_role",
+    "promotion_allowed": false,
+    "lineage_mutation_allowed": false,
+    "frozen_eval_mutation_allowed": false,
+    "source_dataset_mutation_allowed": false,
+    "model_revision_substitution_allowed": false
+  }
+}
