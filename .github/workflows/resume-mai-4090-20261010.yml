@@ -30,7 +30,7 @@ jobs:
           pod_id=os.getenv("MAI_POD_ID")
           if not token:
               raise SystemExit("RUNPOD_API_KEY secret is missing: no action taken")
-          base=f"https://api.runpod.io/v2/pods/{pod_id}"
+          base=f"https://rest.runpod.io/v1/pods/{pod_id}"
           def api(method, path="", body=None):
               data = json.dumps(body).encode() if body is not None else None
               req=urllib.request.Request(base+path, data=data, method=method, headers={
@@ -45,13 +45,13 @@ jobs:
           pod=api("GET")
           if pod.get("id") != pod_id:
               raise SystemExit("Unexpected pod ID returned by RunPod; no action taken")
-          print("Pod:",pod.get("id"),"GPU:",pod.get("gpu"),"desiredStatus:",pod.get("desiredStatus"),"runtimeStatus:",pod.get("runtimeStatus"))
+          print("Pod:",pod.get("id"),"GPU:",pod.get("gpuTypeId",pod.get("gpuTypeIds",pod.get("gpu"))),"desiredStatus:",pod.get("desiredStatus"),"runtimeStatus:",pod.get("runtimeStatus"))
           status=str(pod.get("desiredStatus","")).upper()
           if status=="RUNNING":
               print("Pod was already requested RUNNING. No mutation needed.")
           else:
               print("Requesting START on existing MAI Pod only; no new Pod will be created.")
-              answer=api("POST","/action",{"action":"start"})
+              answer=api("POST","/start",{})
               print("START response:",{k:answer.get(k) for k in ("id","desiredStatus","runtimeStatus","gpu")})
           time.sleep(5)
           pod=api("GET")
