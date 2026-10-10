@@ -1,0 +1,59 @@
+name: Resume existing MAI RTX 4090 (one-time, 2026-10-10)
+
+on:
+  push:
+    branches: [ops/resume-mai-4090-20261010]
+    paths:
+      - .github/workflows/resume-mai-4090-20261010.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mai-pod-resume-20261010
+  cancel-in-progress: false
+
+jobs:
+  resume-existing-mai-pod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      MAI_POD_ID: 40hz6p7mdrimcn
+    steps:
+      - name: Resume the existing MAI Pod without replacing its storage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.request, urllib.error
+          token=os.getenv("RUNPOD_API_KEY", "")
+          pod_id=os.getenv("MAI_POD_ID")
+          if not token:
+              raise SystemExit("RUNPOD_API_KEY secret is missing: no action taken")
+          base=f"https://api.runpod.io/v2/pods/{pod_id}"
+          def api(method, path="", body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req=urllib.request.Request(base+path, data=data, method=method, headers={
+                  "Authorization":"Bearer "+token, "Content-Type":"application/json"
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      return json.load(resp)
+              except urllib.error.HTTPError as exc:
+                  print(f"RunPod API {method} returned HTTP {exc.code}; no response body logged")
+                  raise
+          pod=api("GET")
+          if pod.get("id") != pod_id:
+              raise SystemExit("Unexpected pod ID returned by RunPod; no action taken")
+          print("Pod:",pod.get("id"),"GPU:",pod.get("gpu"),"desiredStatus:",pod.get("desiredStatus"),"runtimeStatus:",pod.get("runtimeStatus"))
+          status=str(pod.get("desiredStatus","")).upper()
+          if status=="RUNNING":
+              print("Pod was already requested RUNNING. No mutation needed.")
+          else:
+              print("Requesting START on existing MAI Pod only; no new Pod will be created.")
+              answer=api("POST","/action",{"action":"start"})
+              print("START response:",{k:answer.get(k) for k in ("id","desiredStatus","runtimeStatus","gpu")})
+          time.sleep(5)
+          pod=api("GET")
+          print("VERIFIED:",{k:pod.get(k) for k in ("id","desiredStatus","runtimeStatus","gpu")})
+          PY
