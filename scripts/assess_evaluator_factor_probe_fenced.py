@@ -94,7 +94,32 @@ def main():
             "checkpoint_sha256":row["checkpoint_sha256"],
             "raw_factors":parsed if parsed is not None else ""
         })
-    score=evaluate_reports(panel(),normalized,old)
+    records=panel()
+    score=evaluate_reports(records,normalized,old)
+    from collections import Counter,defaultdict
+    from evaluator_semantic_factor_probe_protocol import parse_factor_json
+    state_factor=defaultdict(Counter)
+    value_confusion=defaultdict(Counter)
+    reference={r["case_id"]:r for r in records}
+    for entry in normalized:
+        ref=reference[entry["case_id"]]
+        report=parse_factor_json(entry["raw_factors"])
+        if report is None:
+            continue
+        state=ref["target_state"]
+        for factor in ("gate_pass","complete","provenance_valid","effect","variance_stable","recheck_satisfied"):
+            wanted=getattr(ref["reference_factors"],factor)
+            observed=getattr(report,factor)
+            state_factor[state][(factor,"total")]+=1
+            state_factor[state][(factor,"correct")]+=int(wanted==observed)
+            value_confusion[factor][str(wanted)+" -> "+str(observed)]+=1
+    score["per_state_per_factor"]={
+        state:{factor:dict(
+            correct=state_factor[state][(factor,"correct")],
+            total=state_factor[state][(factor,"total")]
+        ) for factor in ("gate_pass","complete","provenance_valid","effect","variance_stable","recheck_satisfied")}
+        for state in sorted(state_factor)}
+    score["factor_value_confusion"]={factor:dict(sorted(matrix.items())) for factor,matrix in sorted(value_confusion.items())}
     score.update({
         "label":"exploratory_exact_fence_normalized_saved_factor_reports",
         "original_strict_valid_json":0,
@@ -112,7 +137,8 @@ def main():
     Path("evaluator-factor-probe-fence-normalized.json").write_text(json.dumps(score,sort_keys=True,indent=2)+"\n")
     compact={k:score[k] for k in ("total","original_strict_valid_json","exact_object_fence_normalizable","fenced_singleton_array_normalizable",
         "factor_report_valid_json","all_six_factors_correct","saved_D_decisions_correct",
-        "per_factor","by_state","observable_mismatch_categories","by_handoff")}
+        "per_factor","by_state","observable_mismatch_categories","by_handoff",
+        "per_state_per_factor","factor_value_confusion")}
     print("EVALUATOR_FACTOR_FENCE_NORMALIZED "+json.dumps(compact,sort_keys=True))
     return score
 
