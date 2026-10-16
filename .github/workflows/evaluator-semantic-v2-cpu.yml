@@ -1,7 +1,7 @@
 name: Evaluator Semantic V2 CPU evidence and validation
 on:
   push:
-    branches: [repair/evaluator-semantic-v2]
+    branches: [repair/evaluator-semantic-v2, repair/evaluator-semantic-v2-D]
   workflow_dispatch:
 permissions:
   contents: read
