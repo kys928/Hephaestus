@@ -54,7 +54,7 @@ class StopOnComplete:
             self.deadline_hit=True
             return True
         tokens=input_ids[0][self.starting_width:]
-        n=int(tokens.shape[0])
+        n=len(tokens)
         if n>=7 and n-self.last_check>=3:
             self.last_check=n
             raw=self.tokenizer.decode(tokens,skip_special_tokens=True).strip()
@@ -94,7 +94,6 @@ def generate(model,tok,settings,prompt,seed,deadline):
 def run(config,client,run_id,repo_sha):
     authorize(config,run_id,repo_sha)
     cfg, pack, _, _ = prepare("D")
-    source=runtime.load_stack if False else None  # no source stack loading
     source_result=curriculum.common.s3_json(client,D_RESULT)
     if source_result.get("repo_sha")!=D_SOURCE_SHA or source_result.get("status")!="training_complete":
         raise RuntimeError("D source training lineage or completion mismatch")
