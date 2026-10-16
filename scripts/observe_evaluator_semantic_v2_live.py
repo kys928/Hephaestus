@@ -18,7 +18,7 @@ for suffix in ('training/bootstrap/progress.json','training/progress.json','trai
     records[suffix]=infra.maybe_json(client,root+'/'+suffix)
 print('V2_LIVE_OBSERVATION '+json.dumps(dict(run_id=run_id,pods=safe,records=records,pod_allocations=0,s3_writes=0),sort_keys=True))
 
-if (records.get('checkpoints/step-096/evaluation/result.json') or {}).get('status')=='evaluation_complete':
+if not safe or (records.get('checkpoints/step-096/evaluation/result.json') or {}).get('status')=='evaluation_complete':
     from assess_evaluator_semantic_v2_run import assess
     assess()
 
