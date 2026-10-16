@@ -13,3 +13,7 @@ No new GPU inference or changes to checkpoints or scientific gates are authorize
 ## Exact-wrapper normalization outcome
 
 The first conservative normalizer could not validate a complete opening-and-closing Markdown wrapper on any of 64 responses. Original strict score stays 0/64. An additional read-only delimiter audit will characterize precisely what precedes and follows the embedded JSON object before any exploratory factor-value scoring; no GPU rerun authorized.
+
+## Actual saved wrapper identified
+
+Independent delimiter audit [#38963653286](https://github.com/kys928/Hephaestus/actions/runs/38963653286) confirmed the exact structure was a Markdown JSON fence containing **one JSON array with one object**, not the previously expected directly fenced object. This explains why the conservative object-only normalizer accepted 0/64. A second, explicitly exploratory normalization accepts only this *complete singleton-array* envelope with all six typed keys. The original strict-failure result stays unchanged; the next CPU audit will determine factor accuracy.
