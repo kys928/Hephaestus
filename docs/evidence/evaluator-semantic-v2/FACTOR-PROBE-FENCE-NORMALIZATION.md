@@ -17,3 +17,7 @@ The first conservative normalizer could not validate a complete opening-and-clos
 ## Actual saved wrapper identified
 
 Independent delimiter audit [#38963653286](https://github.com/kys928/Hephaestus/actions/runs/38963653286) confirmed the exact structure was a Markdown JSON fence containing **one JSON array with one object**, not the previously expected directly fenced object. This explains why the conservative object-only normalizer accepted 0/64. A second, explicitly exploratory normalization accepts only this *complete singleton-array* envelope with all six typed keys. The original strict-failure result stays unchanged; the next CPU audit will determine factor accuracy.
+
+## Exploratory scientific signal
+
+A complete, exact singleton-array Markdown wrapper was normalized on 64/64 original raw completions; the original strict-format result remains 0/64. Factor truth recovery after structural normalization was 23/64 all-six correct, with provenance 64/64, confirmation 64/64, completeness 63/64, gates 61/64, variance 45/64, and effect 28/64. The enhanced CPU rescore will now also report factor-value and per-scientific-state confusion so this result can be interpreted without overclaiming internal reasoning.
