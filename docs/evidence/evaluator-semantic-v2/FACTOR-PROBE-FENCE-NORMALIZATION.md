@@ -1,0 +1,12 @@
+# Factor-only inference: strict JSON versus fenced JSON
+
+The paid probe completed 64/64 reports but **0/64** passed the strict raw-JSON contract. An independent CPU-only structural audit [#38963204051](https://github.com/kys928/Hephaestus/actions/runs/38963204051) determined:
+
+- All 64 began with a Markdown code fence.
+- All 64 included a complete JSON object with **exactly six factor keys**.
+- None reached the token limit or inference deadline.
+- The old seven-field Evaluator schema was not emitted.
+
+The original score of 0/64 remains authoritative for *strict formatting*. A distinct exploratory CPU-only scorer will accept **only complete JSON objects surrounded by exactly one Markdown JSON fence**, without changing any field or using expected labels for repair. That scorer will test whether the six values match independent frozen reference evidence, then pair results with saved D decisions.
+
+No new GPU inference or changes to checkpoints or scientific gates are authorized by this audit.
