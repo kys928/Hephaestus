@@ -6,7 +6,7 @@ import build_evaluator_semantic_invariance_repair_v1 as frozen
 from hephaestus.schemas.evaluator_factors import ScientificFactors, combination_space
 from hephaestus.policy.evaluator_semantic_oracle import scientific_state
 from evaluator_semantic_factor_attribution import (
-    FIELDS, reference_factors, nearest_counterfactuals, analyze_observed,
+    FIELDS, reference_factors, decode_frozen_development_evidence, nearest_counterfactuals, analyze_observed,
     paired_comparison, score_explicit_factor_probe,
 )
 
@@ -114,3 +114,22 @@ def test_factor_probe_rejects_incomplete_contract(dev):
     assert score_explicit_factor_probe(f,{"decision":"equivalent"})["status"]=="invalid_probe_contract"
     raw=f.to_dict();raw.pop("effect")
     assert score_explicit_factor_probe(f,{"factors":raw,"decision":"equivalent"})["status"]=="invalid_probe_contract"
+
+
+def test_all_frozen_development_facts_decode_without_label_lookup(dev):
+    assert len(dev) == 256
+    for case in dev:
+        parsed = decode_frozen_development_evidence(case)
+        assert parsed == reference_factors(case)
+
+
+def test_template_decoder_rejects_unknown_or_contradictory_observation(dev):
+    from copy import deepcopy
+    bad=deepcopy(dev[0])
+    bad["evidence"][0]["fact"]="An uninterpretable test observation."
+    with pytest.raises(ValueError,match="unrecognized"):
+        decode_frozen_development_evidence(bad)
+    bad=deepcopy(dev[0])
+    bad["evidence"][0]["fact"]=bad["evidence"][1]["fact"]
+    with pytest.raises(ValueError,match="contradictory/repeated"):
+        decode_frozen_development_evidence(bad)
