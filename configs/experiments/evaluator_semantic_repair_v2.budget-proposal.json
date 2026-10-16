@@ -1,0 +1,17 @@
+{
+  "status": "proposal_only_not_authorized",
+  "scope": "One C proof-of-concept training run and one predeclared step-96 checkpoint evaluation on the unchanged 256-case development diagnostic",
+  "training_maximum_usd": 1.60,
+  "evaluation_maximum_usd": 0.90,
+  "consolidated_maximum_usd": 2.50,
+  "maximum_hourly_usd": 2.10,
+  "hardware": "NVIDIA RTX PRO 6000 Blackwell Server Edition, >=90 GiB; preserve original hardware/precision comparison",
+  "training_wall_seconds": 3600,
+  "evaluation_wall_seconds": 2400,
+  "wall_policy": "Also stop at the earlier cost deadline; startup, downloads, execution and teardown count toward the same run ceiling",
+  "launch_condition": "New explicit user budget approval, reviewed governed launcher and current capacity/price verification",
+  "pod_policy": "One pod at a time; fail closed on missing price; hard runtime limits; finally-delete and verify absence",
+  "additional_ablation_runs_authorized": false,
+  "B_paid_training_justified": false,
+  "certification_or_production_changes_authorized": false
+}
