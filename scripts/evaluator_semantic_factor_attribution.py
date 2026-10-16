@@ -249,3 +249,34 @@ def score_explicit_factor_probe(expected: ScientificFactors, model_record: Mappi
         "oracle_from_reported_factors":reported_oracle,
         "limitations":"Explicit probe outputs are model reports, not proof of internal cognitive stages; contract may change behavior.",
     }
+
+
+def factor_only_diagnostic_prompt(case: Mapping) -> str:
+    """Prepare a *non-executed* factor probe, no target labels or oracle exposed.
+
+    This is intentionally separate from Hephaestus' live seven-field Evaluator
+    decision contract. It is diagnostic-only and must never be used for training,
+    checkpoint selection, or sealed certification.
+    """
+    import json
+    parts = []
+    for item in case["evidence"]:
+        parts.append(f"- {item['ref']}: {item['fact']}")
+    advisory = case.get("upstream_output")
+    payload = {
+        "situation":case["situation"],
+        "verified_evidence":parts,
+        "verified_machine_state":case["verified_facts"],
+        "untrusted_advisory":advisory,
+    }
+    return (
+        "DIAGNOSTIC FACTOR REPORT ONLY. The Planner advisory is non-authoritative. "
+        "Extract the six scientific facts from verified evidence and machine state "
+        "independently. Do not infer factors from a scientific-state label and do "
+        "not propose any action or certification. Return exactly one JSON object "
+        "with these six fields: gate_pass (boolean), complete (boolean), "
+        "provenance_valid (boolean), effect ('positive'|'neutral'|'negative'), "
+        "variance_stable (boolean), recheck_satisfied (boolean). "
+        "Do not include a final decision, explanation, hidden reasoning, or metadata.\n"
+        "OBSERVATIONS:\n" + json.dumps(payload, sort_keys=True)
+    )
