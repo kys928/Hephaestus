@@ -6,9 +6,14 @@
 explicit supervision, offline oracle, validation and reporting are implemented.
 No V2 8B training or inference has been purchased. The checked-in protocol refuses
 paid training/evaluation, certification, promotion and authoritative dispatch.
-A reviewed paid launcher with hard cost monitoring and verified teardown remains a
-prerequisite to the next experiment; the V2 trainer is a gated library entrypoint,
-not a replacement for the governed RunPod launcher.
+The dry-run-first V2 launcher and remote training/evaluation entrypoints are
+implemented and disabled by the checked-in approval flags. An explicit-marker-only workflow reuses existing GitHub secrets; it cannot buy
+compute under the checked-in flags and null budget approval ID. The launcher enforces
+price/time limits, reserves teardown time, and requires actual HTTP 404 evidence
+of deletion. A transport failure does not establish absence. Conditional S3 launch
+claims, scoped to a unique budget approval ID rather than a run ID, reject
+duplicate/concurrent paid attempts and reuse of a spent approval; if the storage endpoint rejects
+conditional writes, allocation fails closed.
 
 ## Verified evidence and corrected diagnosis
 
@@ -110,6 +115,7 @@ pytest -q
 python scripts/validate_evaluator_semantic_repair_v2.py
 python scripts/check_evaluator_semantic_v2_tokenizer.py --output tokenizer-proof.json
 python scripts/prepare_evaluator_semantic_repair_v2.py --arm C --output manifest-C.json
+python scripts/launch_evaluator_semantic_repair_v2.py --mode train # dry run only
 python scripts/prepare_evaluator_semantic_repair_v2.py --arm E --matched-handoff-control --output manifest-D-matched.json
 python scripts/evaluate_evaluator_semantic_v2_outputs.py --inputs shard-0001.jsonl shard-0002.jsonl --output rescored.json
 ```
@@ -128,9 +134,13 @@ new training. The proposal file requests at most **$2.50 total** for one C train
 run (cap $1.60) and one predeclared step-96 development evaluation (cap $0.90),
 retaining the stricter configured $2.10/hour ceiling. These are spending caps,
 not a guarantee the job will finish within them. Startup/download/teardown time
-counts; current capacity/price and a governed launcher must be checked before
-allocation. No additional arms launch automatically. Stop and diagnose a negative
+counts; current capacity/price must be checked before allocation. The implemented launcher is covered by mocked
+lifecycle/failure tests; its full 8B execution remains pending this approval. No additional arms launch automatically. Stop and diagnose a negative
 result; do not silently extend the budget, change model families, or relax gates.
+
+CPU validation run 38930553151 passed on GitHub, including the S3 rescoring, full
+repository suite, real tokenizer proof and all immutable manifest preparations.
+The subsequent launcher hardening is verified by the final PR-head CPU run.
 
 Next action: approve or decline this bounded C experiment after reviewing the PR.
 Until then the scientific verdict remains unproven and production remains blocked.

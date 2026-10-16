@@ -189,9 +189,14 @@ def schedule(pack, cfg):
             by_state = {s: sorted([r for r in selected if r['semantic_root'] == s], key=difficulty) for s in STATE_ORDER}
             selected = [r for block in range(6) for s in STATE_ORDER for r in by_state[s][block*16:(block+1)*16]]
             meta['selected_case_order_sha256'] = digest([r['case_id'] for r in selected])
+            meta['checkpoint_blocks'] = [dict(block=i+1, optimizer_steps_through=16*(i+1),
+                case_count=len(block), state_counts=dict(Counter(r['semantic_root'] for r in block)),
+                family_counts=dict(Counter(r['curriculum_family'] for r in block)),
+                kind_counts=dict(Counter(r['kind'] for r in block)))
+                for i in range(6) for block in [selected[i*128:(i+1)*128]]] 
         return selected, meta
     rows = pack['partitions']['evaluator']['train']
-    blocks = [[], [], []]
+    blocks = [[] for _ in range(6)]
     if arm == 'D':
         for state in STATE_ORDER:
             for stage, family in enumerate(common.FAMILIES):
@@ -211,15 +216,19 @@ def schedule(pack, cfg):
         for state in STATE_ORDER:
             candidates = sorted([g for g in groups.values() if g[0]['semantic_root'] == state],
                                 key=lambda g: digest(g[0]['handoff_group']))
-            blocks[0] += [r for r in rows if r['semantic_root'] == state and r['curriculum_family'] == 'minimal_contrast']
-            blocks[1] += [r for g in candidates[:4] for r in g]
-            blocks[2] += [r for g in candidates[4:8] for r in g]
+            controlled = common.stable([r for r in rows if r['semantic_root'] == state and r['curriculum_family'] == 'minimal_contrast'], 'v2-pair-progression')
+            for stage in range(4):
+                blocks[stage] += controlled[stage*16:(stage+1)*16]
+            blocks[4] += [r for g in candidates[:4] for r in g]
+            blocks[5] += [r for g in candidates[4:8] for r in g]
     selected = [r for block in blocks for r in block]
     if len(selected) != 768 or len({r['case_id'] for r in selected}) != 768:
         raise ValueError('schedule geometry drift')
     return selected, dict(selected_case_count=len(selected), selected_case_order_sha256=digest([r['case_id'] for r in selected]),
                          selected_state_counts=dict(Counter(r['semantic_root'] for r in selected)),
-                         progression=['straightforward', 'counterfactual', 'adversarial'])
+                         progression=['single_variable_contrasts']*4 + ['matched_advisory_quartets']*2,
+                         checkpoint_blocks=[dict(block=i+1, case_count=len(block),
+                             state_counts=dict(Counter(r['semantic_root'] for r in block))) for i,block in enumerate(blocks)])
 
 
 def matched_handoff_control(selected):

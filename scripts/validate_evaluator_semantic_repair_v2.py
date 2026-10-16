@@ -89,6 +89,7 @@ def validate_pack(pack):
     # Intentional same-evidence quartets and controlled pairs are declared; report
     # other exact duplicates rather than claiming canonical-state diversity.
     counts = Counter(tuple(e['fact'] for e in r['evidence']) for r in rows if 'handoff_group' not in r)
+    require(not any(v > 1 for v in counts.values()), 'uncontrolled duplicate evidence bundle')
     return dict(pack_sha256=b.digest(pack), development_sha256=b.digest(frozen), train_cases=len(rows),
                 contrast_pairs=len(pairs), handoff_groups=len(groups),
                 factorial_combinations=96 if arm in ('D','E') else None,
@@ -102,11 +103,18 @@ def validate_config(cfg, parent):
     require(cfg['required_parent_adapter_sha256'] == old['required_parent_adapter_sha256'] == parent['model']['adapter_sha256'], 'parent adapter drift')
     require(cfg['required_base_revision'] == parent['model']['revision'] == '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b', 'base revision drift')
     require(parent['governance']['weights_frozen'] is True, 'parent must remain frozen')
+    require(cfg['required_parent_candidate_id'] == parent['candidate_id'] == old['required_parent_candidate_id'], 'parent candidate drift')
+    require(cfg['model_protocol'] == old['model_protocol'] and cfg['roles'] == old['roles'], 'decoding/model protocol drift')
+    require(cfg['source_phase_i_stack'] == old['source_phase_i_stack'], 'source stack drift')
+    for key in ('max_hourly_usd_per_pod','max_estimated_total_usd_train','max_estimated_total_usd_evaluate','hard_wall_seconds_train','hard_wall_seconds_evaluate'):
+        require(cfg['execution'][key] == old['execution'][key], f'initial approved-budget proposal drift: {key}')
     for k in ('learning_rate','weight_decay','seed','lora_rank','lora_alpha','lora_dropout','precision','maximum_optimizer_steps','gradient_accumulation_steps','max_sequence_length','checkpoint_steps'):
         require(cfg['training'][k] == old['training'][k], f'training comparison drift: {k}')
     require(cfg['development_gates'] == old['development_gates'], 'scientific acceptance gates changed')
-    require(cfg['governance']['paid_training_allowed'] is False, 'new paid training requires approval')
-    require(cfg['governance']['paid_checkpoint_evaluation_allowed'] is False, 'new paid evaluation requires approval')
+    for key in ('training_approved','paid_training_allowed','paid_checkpoint_evaluation_allowed'):
+        require(type(cfg['governance'].get(key)) is bool, f'invalid approval flag: {key}')
+    # Validation is not execution authorization. The launcher requires separate
+    # explicit authorization and the checked-in flags remain false.
     for k in ('parent_adapter_mutation_allowed','burned_sealed_partition_use_allowed','certification_claim_allowed','production_promotion_allowed','automatic_role_dispatch_allowed'):
         require(cfg['governance'][k] is False, f'governance drift: {k}')
     return True

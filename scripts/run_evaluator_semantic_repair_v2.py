@@ -23,6 +23,10 @@ def authorize(cfg, manifest):
         raise PermissionError('V2 paid training is not approved; frozen V1/recovery approval does not authorize it')
     if os.environ.get('HEPHAESTUS_EVALUATOR_V2_AUTHORIZED') != 'LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2':
         raise PermissionError('V2 explicit execution authorization is missing')
+    import re
+    approval_id=cfg['governance'].get('budget_approval_id')
+    if not isinstance(approval_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',approval_id):
+        raise PermissionError('unique explicit V2 budget approval identity is required')
     if manifest['arm'] == 'B':
         raise PermissionError('B is a CPU equivalence audit; do not buy duplicate training')
     for k in ('parent_adapter_mutation_allowed','burned_sealed_partition_use_allowed','certification_claim_allowed','production_promotion_allowed','automatic_role_dispatch_allowed'):
@@ -51,6 +55,8 @@ def train(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha, ro
     spec = b.common.parent_spec(cfg,parent)
     base, adapter = materialize_parent_cached(client,spec,root/'model')
     model,tok,info = runtime.load_model('evaluator',cfg,spec,base,adapter)
+    if info['gpu'] not in cfg['execution']['gpu_type_ids']:
+        raise ValueError('actual GPU differs from frozen scientific comparison')
     if info['revision'] != cfg['required_base_revision']:
         raise ValueError('loaded base revision mismatch')
     params = [(n,p) for n,p in model.named_parameters() if p.requires_grad]
@@ -106,9 +112,79 @@ def train(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha, ro
     return result
 
 
-if __name__ == '__main__':
-    # Preparation and evaluation are separate from paid resource orchestration.
-    # Default path stops before importing torch, contacting S3 or loading weights.
-    cfg, pack, selected, manifest=prepare('C')
+def evaluate(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha, root, step=96):
+    from evaluator_semantic_v2_metrics import score, summarize
+    import run_interface_repair_v3_1_evaluator as generation
+    # Evaluation is a separate spending permission from training.
+    if cfg['governance'].get('paid_checkpoint_evaluation_allowed') is not True:
+        raise PermissionError('V2 paid evaluation is not approved')
     authorize(cfg,manifest)
-    raise RuntimeError('Use a reviewed governed launcher with hard cost ceilings and verified teardown')
+    if step != 96:
+        raise ValueError('initial C proof predeclares step 96; no checkpoint shopping')
+    prefix=cfg['execution']['s3_prefix']+'/'+run_id
+    record=b.common.s3_json(client,prefix+'/training/result.json')
+    if (record['repo_sha']!=repo_sha or record['status']!='training_complete'
+        or record['parent_adapter_sha256']!=cfg['required_parent_adapter_sha256']
+        or record['training_manifest_sha256']!=b.digest(manifest)):
+        raise ValueError('training/evaluation lineage mismatch')
+    artifact=next(r['artifact'] for r in record['checkpoint_artifacts'] if r['optimizer_step']==step)
+    spec=dict(b.common.parent_spec(cfg,parent));spec['adapter']=artifact
+    root.mkdir(parents=True,exist_ok=False)
+    deadline=time.monotonic()+cfg['execution']['hard_wall_seconds_evaluate']
+    base,adapter=materialize_parent_cached(client,spec,root/'model')
+    model,tok,info=runtime.load_model('evaluator',cfg,spec,base,adapter)
+    if info['gpu'] not in cfg['execution']['gpu_type_ids']:
+        raise ValueError('actual GPU differs from frozen scientific comparison')
+    for param in model.parameters():param.requires_grad_(False)
+    model.eval()
+    info['trainable_parameter_count_after_freeze']=sum(p.numel() for p in model.parameters() if p.requires_grad)
+    baseline=b.common.s3_json(client,cfg['baseline']['s3_key'])
+    if baseline['development_diagnostic_sha256']!=manifest['development_diagnostic_sha256']:
+        raise ValueError('frozen diagnostic baseline mismatch')
+    rows=[]
+    cases=pack['partitions']['evaluator']['development_diagnostic']
+    ep=f'{prefix}/checkpoints/step-{step:03d}/evaluation'
+    for i,case in enumerate(cases,1):
+        if time.monotonic()>=deadline:raise TimeoutError('V2 evaluation hard wall reached')
+        output=generation.generate_v31(model,tok,cfg['roles']['evaluator'],runtime.prompt(pack,case,'evaluator'),cfg['model_protocol']['seed']+i,deadline)
+        rows.append(dict(case_id=case['case_id'],generation=output,score=score(pack,case,output['projected_output'])))
+        if i%32==0 or i==len(cases):
+            runtime.put_json(client,f'{ep}/samples/shard-{(i+31)//32:04d}.json',rows[-32:])
+            runtime.put_json(client,f'{ep}/progress.json',dict(completed=i,total=len(cases)))
+    report=summarize(cases,rows,baseline['development_analysis'])
+    result=dict(status='evaluation_complete',repo_sha=repo_sha,run_id=run_id,checkpoint_step=step,
+        checkpoint_adapter=artifact,development_diagnostic_sha256=manifest['development_diagnostic_sha256'],
+        runtime=info,report=report,baseline_decision_accuracy=baseline['development_summary']['decision_exact_pass_rate'],
+        decision_accuracy_gain=report['summary']['decision_exact_pass_rate']-baseline['development_summary']['decision_exact_pass_rate'],
+        scientific_improvement_demonstrated=bool(report['frozen_development_gates']['passed']),
+        certification_claim=False,production_promotion_performed=False)
+    runtime.put_json(client,ep+'/result.json',result)
+    return result
+
+
+def main():
+    import argparse
+    ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True)
+    ap.add_argument('--arm',choices=['C'],default='C');ap.add_argument('--step',type=int,default=96)
+    args=ap.parse_args()
+    cfg,pack,selected,manifest=prepare(args.arm)
+    # Stops here under the checked-in protocol, before networking or loading.
+    authorize(cfg,manifest)
+    parent=json.loads((b.common.ROOT/cfg['parent_candidate_manifest']).read_text())
+    run_id=runtime.required('HEPHAESTUS_EVALUATOR_V2_RUN_ID')
+    repo_sha=runtime.required('HEPHAESTUS_REPO_SHA')
+    kwargs=dict(client=runtime.s3_client(),run_id=run_id,repo_sha=repo_sha,
+                root=Path('/opt/hephaestus-evaluator-semantic-v2')/run_id/args.mode)
+    try:
+        result=train(cfg,parent,pack,selected,manifest,**kwargs) if args.mode=='train' else evaluate(cfg,parent,pack,selected,manifest,step=args.step,**kwargs)
+    except Exception as exc:
+        suffix='training' if args.mode=='train' else 'checkpoints/step-096/evaluation'
+        runtime.put_json(kwargs['client'],cfg['execution']['s3_prefix']+'/'+run_id+'/'+suffix+'/result.json',
+            dict(status='failed',repo_sha=repo_sha,run_id=run_id,error_type=type(exc).__name__,error=str(exc)[:500]))
+        raise
+    print('EVALUATOR_SEMANTIC_V2_RESULT '+json.dumps(result,sort_keys=True))
+    return 0
+
+
+if __name__=='__main__':
+    raise SystemExit(main())

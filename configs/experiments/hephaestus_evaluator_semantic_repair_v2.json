@@ -21,7 +21,7 @@
     "E": {
       "comparison": "Compare to D_matched control with identical selected evidence, sample multiplicity and order; only advisory records differ. Ordinary D comparison is descriptive, not causal.",
       "pack_sha256": "b1aa589da121177e552e46425a7dbcb3af7617413af1a973c8f69117f110f1a2",
-      "schedule_sha256": "95dd7b16d1a3d0c138c3efcac5e46254895ef7d4f832216d3ec18ab1beca3909",
+      "schedule_sha256": "abf21e6f4909ef58bc474c7984b9a1485f604d9d3987dedb7a9c45467a2b6031",
       "selected_cases": 768
     }
   },
@@ -106,6 +106,7 @@
   },
   "governance": {
     "automatic_role_dispatch_allowed": false,
+    "budget_approval_id": null,
     "burned_sealed_partition_use_allowed": false,
     "certification_claim_allowed": false,
     "explicit_launch_authorization_required": true,
@@ -116,7 +117,7 @@
     "production_promotion_allowed": false,
     "training_approved": false
   },
-  "matched_handoff_control_sha256": "f588991295858e00da54c883afaeb5bf3519b52bc8d7403240dc0375ced801a9",
+  "matched_handoff_control_sha256": "2f8e1b8243c860fcb23ddbf4c60a04417d8f9fb05e6826f703d94596eb825bf8",
   "model_protocol": {
     "lora_alpha": 32,
     "lora_dropout": 0,
@@ -126,15 +127,15 @@
   },
   "objective": "Repair frozen V3.1 scientific-state semantic invariance without using burned sealed evidence for training or checkpoint selection.",
   "pack": {
-    "builder_path": "scripts/build_evaluator_semantic_invariance_repair_v1.py",
+    "builder_path": "scripts/build_evaluator_semantic_repair_v2.py",
     "burned_sealed_partition_reuse_forbidden": true,
-    "canonical_sha256": "0d01fe1853742d1259a333fa9a92dec46e8789b69f2019ed34e17d815fc01a3c",
     "development_case_order_sha256": "b52cbc157855da02c43bd136c972f87ee8a8a7e1ba4725c076d153360cfd5abd",
     "development_diagnostic_cases": 256,
     "development_diagnostic_sha256": "ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912",
+    "frozen_reference_pack_sha256": "0d01fe1853742d1259a333fa9a92dec46e8789b69f2019ed34e17d815fc01a3c",
+    "per_arm_hashes": "arms",
     "preflight_cases": 8,
-    "selected_training_cases": 768,
-    "training_cases_total": 1536
+    "selected_training_cases": 768
   },
   "parent_candidate_manifest": "configs/experiments/hephaestus_evaluator_certification_candidate_v1.json",
   "phase": "phase_ii_evaluator_semantic_invariance_repair",

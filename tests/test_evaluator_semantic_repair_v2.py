@@ -212,3 +212,130 @@ def test_hidden_target_and_factor_metadata_do_not_enter_prompt(packs):
     case['curriculum_family']='SENTINEL_FAMILY'
     assert supervision.v1.prompt(packs['C'],case,'evaluator')==prompt
     assert 'SENTINEL' not in prompt
+
+
+@pytest.mark.parametrize('mode',['train','evaluate'])
+def test_launcher_dry_requests_route_only_v2_without_real_secrets(cfg,mode):
+    from launch_evaluator_semantic_repair_v2 import request
+    body=request(cfg,'a'*40,'v2-test',mode,real_env=False)
+    shell=body['dockerStartCmd'][-1]
+    assert f'run_evaluator_semantic_repair_v2.py --mode {mode}' in shell
+    assert 'run_evaluator_semantic_invariance_repair_v1.py' not in shell
+    assert body['env']['RUNPOD_S3_SECRET_ACCESS_KEY']=='<secret>'
+    assert body['env']['HEPHAESTUS_EVALUATOR_V2_RUN_ID']=='v2-test'
+
+
+@pytest.mark.parametrize('price',[None,0,-1,float('nan'),2.50])
+def test_missing_invalid_or_excessive_price_fails_closed(cfg,price):
+    from launch_evaluator_semantic_repair_v2 import bounded_cost
+    with pytest.raises(ValueError):bounded_cost({'costPerHr':price},1,cfg,'train')
+
+
+def test_per_run_cost_ceiling_reserves_teardown(cfg):
+    from launch_evaluator_semantic_repair_v2 import bounded_cost
+    assert bounded_cost({'costPerHr':2.1},10,cfg,'train')['estimated_cost_usd']>0
+    with pytest.raises(TimeoutError):bounded_cost({'costPerHr':2.1},2740,cfg,'train')
+    with pytest.raises(TimeoutError):bounded_cost({'costPerHr':2.1},1540,cfg,'evaluate')
+
+
+def test_teardown_requires_actual_not_found_not_any_exception(monkeypatch):
+    import launch_evaluator_semantic_repair_v2 as launch
+    from hephaestus.providers.runpod.execution import RunPodApiError
+    class Pod:
+        def __init__(self,error):self.error=error;self.deletes=0
+        def delete_pod(self,pod):self.deletes+=1
+        def get_pod(self,pod):raise self.error
+    monkeypatch.setattr(launch.time,'sleep',lambda _:None)
+    outage=Pod(RunPodApiError('transport layer failure'))
+    assert not launch.delete_verified(outage,'pod')['verified_absent']
+    assert outage.deletes==5
+    missing=Pod(RunPodApiError('unexpected get-Pod response status: 404'))
+    assert launch.delete_verified(missing,'pod')['verified_absent']
+
+
+@pytest.mark.parametrize('failure',['missing_price','timeout','terminal_mismatch','success'])
+def test_launcher_always_deletes_allocated_pod(cfg,monkeypatch,failure):
+    import launch_evaluator_semantic_repair_v2 as launch
+    approved=copy.deepcopy(cfg)
+    approved['governance'].update(training_approved=True,paid_training_allowed=True,budget_approval_id='test-approval')
+    manifest=dict(arm='C',scientific_config_sha256=b.digest(approved))
+    monkeypatch.setenv('HEPHAESTUS_EVALUATOR_V2_AUTHORIZED','LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2')
+    monkeypatch.setenv('RUNPOD_NETWORK_VOLUME_ID','test-bucket')
+    monkeypatch.setattr(launch,'request',lambda *a,**kw:{'safe':'mock request'})
+    reads=[];claims=[];deleted=[]
+    def read(client,key):
+        reads.append(key)
+        if len(reads)==1:return None
+        return dict(status='training_complete',repo_sha=('b' if failure=='terminal_mismatch' else 'a')*40,run_id='test')
+    monkeypatch.setattr(launch.infra,'maybe_json',read)
+    monkeypatch.setattr(launch,'delete_verified',lambda execution,pod:(deleted.append(pod) or dict(verified_absent=True)))
+    class Client:
+        def put_object(self,**kw):claims.append(kw)
+    class Pod:
+        def _create_pod(self,body):return {'id':'mock-pod'}
+        def get_pod(self,pod):return dict(costPerHr=None if failure=='missing_price' else 2.1,desiredStatus='RUNNING')
+    if failure=='timeout':
+        ticks=iter([0,4000,4001]);monkeypatch.setattr(launch.time,'monotonic',lambda:next(ticks))
+    if failure=='success':
+        assert launch.execute(approved,manifest,'train',execution=Pod(),client=Client(),repo_sha='a'*40,run_id='test')['status']=='training_complete'
+    else:
+        with pytest.raises((ValueError,TimeoutError)):
+            launch.execute(approved,manifest,'train',execution=Pod(),client=Client(),repo_sha='a'*40,run_id='test')
+    assert deleted==['mock-pod']
+    assert claims[0]['IfNoneMatch']=='*'
+
+
+def test_checked_in_flags_refuse_paid_launcher_before_any_io(cfg):
+    from launch_evaluator_semantic_repair_v2 import execute
+    with pytest.raises(PermissionError):execute(cfg,{'arm':'C'},'train',execution=None,client=None,repo_sha='a'*40,run_id='test')
+
+
+def test_conditional_claim_failure_prevents_allocation(cfg,monkeypatch):
+    import launch_evaluator_semantic_repair_v2 as launch
+    approved=copy.deepcopy(cfg);approved['governance'].update(training_approved=True,paid_training_allowed=True,budget_approval_id='test-approval')
+    manifest=dict(arm='C',scientific_config_sha256=b.digest(approved))
+    monkeypatch.setenv('HEPHAESTUS_EVALUATOR_V2_AUTHORIZED','LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2')
+    monkeypatch.setenv('RUNPOD_NETWORK_VOLUME_ID','test-bucket')
+    monkeypatch.setattr(launch,'request',lambda *a,**kw:{})
+    monkeypatch.setattr(launch.infra,'maybe_json',lambda *a:None)
+    class Claim:
+        def put_object(self,**kw):raise RuntimeError('conditional claim rejected')
+    class NoPod:
+        def _create_pod(self,*a):pytest.fail('claim failure must prevent allocation')
+    with pytest.raises(RuntimeError,match='conditional claim rejected'):
+        launch.execute(approved,manifest,'train',execution=NoPod(),client=Claim(),repo_sha='a'*40,run_id='test')
+
+
+def test_checkpoint_evaluation_is_separately_gated(cfg):
+    from run_evaluator_semantic_repair_v2 import evaluate
+    with pytest.raises(PermissionError,match='evaluation is not approved'):
+        evaluate(cfg,None,None,None,None,client=None,run_id='test',repo_sha='a'*40,root=None)
+
+
+@pytest.mark.parametrize('arm',list('BCDE'))
+def test_each_checkpoint_block_preserves_state_balance(packs,cfg,arm):
+    selected,meta=b.schedule(packs[arm],cfg)
+    for index in range(6):
+        block=selected[index*128:(index+1)*128]
+        assert Counter(r['semantic_root'] for r in block)==Counter({s:16 for s in b.STATE_ORDER})
+        if 'checkpoint_blocks' in meta:
+            declared=meta['checkpoint_blocks'][index]
+            assert declared['state_counts']==dict(Counter(r['semantic_root'] for r in block))
+            if 'family_counts' in declared:
+                assert declared['family_counts']==dict(Counter(r['curriculum_family'] for r in block))
+
+
+def test_paid_flags_alone_do_not_authorize_a_new_budget(cfg,monkeypatch):
+    from run_evaluator_semantic_repair_v2 import authorize
+    approved=copy.deepcopy(cfg);approved['governance'].update(training_approved=True,paid_training_allowed=True)
+    monkeypatch.setenv('HEPHAESTUS_EVALUATOR_V2_AUTHORIZED','LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2')
+    with pytest.raises(PermissionError,match='budget approval identity'):
+        authorize(approved,dict(arm='C',scientific_config_sha256=b.digest(approved)))
+
+
+def test_new_workflow_is_explicit_marker_only_and_default_protocol_disabled(cfg):
+    workflow=(b.common.ROOT/'.github/workflows/evaluator-semantic-v2-approved-proof.yml').read_text()
+    assert "if: contains(github.event.head_commit.message, '[launch-approved-evaluator-semantic-v2-C]')" in workflow
+    assert 'workflow_dispatch' not in workflow and 'matrix:' not in workflow
+    assert not any(cfg['governance'][k] for k in ('training_approved','paid_training_allowed','paid_checkpoint_evaluation_allowed'))
+    assert cfg['governance']['budget_approval_id'] is None
