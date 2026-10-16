@@ -104,6 +104,26 @@ jobs:
           set -euo pipefail
           sha=18613e00a798ddd98bf3c4050fe92ebf408fb3c8
           test "$(git rev-parse HEAD)" = "$sha"
+          # Operator approved raising the evaluation-only hourly ceiling to $2.49.
+          # Modify only this ephemeral GitHub runner config, NOT the frozen
+          # scientific Git SHA checked out by the RunPod evaluation worker.
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('configs/experiments/hephaestus_evaluator_semantic_invariance_repair_v1.json')
+          cfg = json.loads(path.read_text(encoding='utf-8'))
+          execution = cfg['execution']
+          assert execution['max_hourly_usd_per_pod'] == 2.1
+          assert execution['max_estimated_total_usd_evaluate'] == 0.9
+          assert execution['gpu_type_ids'] == ['NVIDIA RTX PRO 6000 Blackwell Server Edition']
+          assert cfg['training']['checkpoint_steps'] == [16, 32, 48, 64, 80, 96]
+          assert cfg['governance']['burned_sealed_partition_use_allowed'] is False
+          assert cfg['governance']['certification_claim_allowed'] is False
+          assert cfg['governance']['production_promotion_allowed'] is False
+          execution['max_hourly_usd_per_pod'] = 2.49
+          path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+          print('RECOVERY_PRICE_CAP_APPROVED hourly_usd=2.49 per_evaluation_usd=0.90 training_unchanged=true', flush=True)
+          PY
           for attempt in 1 2 3 4; do
             echo "RECOVERY_EVALUATION_ATTEMPT step=${{ matrix.step }} attempt=$attempt"
             set +e
