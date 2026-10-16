@@ -1,0 +1,21 @@
+{
+  "protocol": "evaluator-six-factor-D-v1",
+  "approval_id": "heph-eval-factor-D-probe-20261016-2220",
+  "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "max_hourly_usd": 2.49,
+  "initial_estimated_ceiling_usd": 0.75,
+  "exceptional_hard_ceiling_usd": 1.5,
+  "pod_count_max": 1,
+  "allow_capacity_retries": false,
+  "allow_retraining": false,
+  "use_existing_saved_D_checkpoint_only": true,
+  "runner_hard_wall_seconds": 1900,
+  "launcher_hard_wall_seconds": 1950,
+  "poll_seconds": 10,
+  "minimum_progress_for_contingency": 16,
+  "teardown_reserve_seconds": 120,
+  "s3_prefix": "hephaestus/scientific/v5/evaluator_factor_only_probe_v1",
+  "paid_execution_default_enabled": false,
+  "scientific_outputs_only": true,
+  "repeated_run_authorized": false
+}
