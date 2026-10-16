@@ -1,0 +1,116 @@
+name: Evaluator error anatomy audit (read only)
+
+on:
+  push:
+    branches:
+      - diagnostic/evaluator-sealed-v1-autopsy
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[audit-evaluator-errors-v1]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}/scripts:${{ github.workspace }}/src:${{ github.workspace }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 18613e00a798ddd98bf3c4050fe92ebf408fb3c8
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[s3]'
+      - name: Audit persisted development outputs without GPU or S3 writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from collections import Counter, defaultdict
+          import build_evaluator_semantic_invariance_repair_v1 as c
+          import run_interface_repair_v1 as v1
+
+          prefix = 'hephaestus/scientific/v4/evaluator_semantic_invariance_repair/evaluator-semantic-repair-37005231044'
+          bucket = v1.bucket()
+          client = v1.s3_client()
+          client.head_bucket(Bucket=bucket)
+          pack = c.build_pack()
+          c.validate(pack)
+          cases = {x['case_id']: x for x in pack['partitions']['evaluator']['development_diagnostic']}
+          assert len(cases) == 256
+          steps = [16, 32, 48, 64, 80, 96]
+          rows_by_step = {}
+          for step in steps:
+              rows = []
+              for shard in range(1, 9):
+                  key = f'{prefix}/checkpoints/step-{step:03d}/evaluation/samples/development_diagnostic/shard-{shard:04d}.jsonl'
+                  obj = client.get_object(Bucket=bucket, Key=key)
+                  try:
+                      rows.extend(json.loads(line) for line in obj['Body'].read().decode('utf-8').splitlines() if line.strip())
+                  finally:
+                      obj['Body'].close()
+              assert len(rows) == 256, (step, len(rows))
+              assert set(x['case_id'] for x in rows) == set(cases)
+              rows_by_step[step] = {x['case_id']: x for x in rows}
+
+          def analyze(step):
+              confusion = Counter()
+              kind = Counter()
+              upstream = Counter()
+              adv = Counter()
+              wrong_by_kind = Counter()
+              predicted = Counter()
+              wrong_inconclusive_by_state = Counter()
+              state_by_kind = Counter()
+              violations = Counter()
+              for caseid, row in rows_by_step[step].items():
+                  case = cases[caseid]
+                  score = row['score']
+                  parsed = score.get('parsed')
+                  got = str(parsed.get('decision', '<invalid>')) if isinstance(parsed, dict) else '<invalid>'
+                  want = str(case['expected']['decision'])
+                  right = got == want
+                  k = case['kind']
+                  has_up = isinstance(case.get('upstream_output'), dict)
+                  uc = (case['upstream_output']['action'] == case['expected']['action']) if has_up else False
+                  stratum = 'no_upstream' if not has_up else ('upstream_action_correct' if uc else 'upstream_action_wrong')
+                  kind[(k,'total')] += 1
+                  kind[(k,'correct')] += int(right)
+                  upstream[(stratum,'total')] += 1
+                  upstream[(stratum,'correct')] += int(right)
+                  predicted[got] += 1
+                  confusion[(want,got)] += 1
+                  state_by_kind[(want,k,'total')] += 1
+                  state_by_kind[(want,k,'correct')] += int(right)
+                  if not right:
+                      wrong_by_kind[k] += 1
+                  if not right and got == 'inconclusive':
+                      wrong_inconclusive_by_state[want] += 1
+                  if score.get('upstream_copy_violation'):
+                      violations[k] += 1
+              return {
+                'step':step,
+                'accuracy_by_kind': {k:{'correct':kind[(k,'correct')],'total':kind[(k,'total')]} for k in ['rehearsal','interface']},
+                'accuracy_by_upstream_action': {k:{'correct':upstream[(k,'correct')],'total':upstream[(k,'total')]} for k in ['no_upstream','upstream_action_correct','upstream_action_wrong']},
+                'predicted_distribution':dict(sorted(predicted.items())),
+                'wrong_to_inconclusive_by_expected_state':dict(sorted(wrong_inconclusive_by_state.items())),
+                'upstream_copy_violations_by_kind':dict(sorted(violations.items())),
+                'accuracy_by_state_and_kind':{state:{kind:{'correct':state_by_kind[(state,kind,'correct')],'total':state_by_kind[(state,kind,'total')]} for kind in ['rehearsal','interface']} for state in sorted(set(x['semantic_root'] for x in cases.values()))},
+              }
+
+          print('EVALUATOR_READ_ONLY_ERROR_AUDIT ' + json.dumps({'step16':analyze(16),'step64':analyze(64),'step96':analyze(96)},sort_keys=True), flush=True)
+          flips = Counter()
+          for cid in cases:
+              a = rows_by_step[16][cid]['score']['decision_exact']
+              b = rows_by_step[96][cid]['score']['decision_exact']
+              flips[('correct' if a else 'wrong')+' -> '+('correct' if b else 'wrong')] += 1
+          print('EVALUATOR_CASE_FLIPS_16_TO_96 '+json.dumps(dict(flips),sort_keys=True), flush=True)
+          PY
