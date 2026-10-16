@@ -1,0 +1,30 @@
+name: Evaluator factor-only probe preflight (CPU no GPU)
+on:
+  push:
+    branches: [diagnostic/evaluator-factor-probe-protocol-v1]
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: scripts:src:.
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install test-only dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Compile frozen probe and scoring code
+        run: python -m compileall -q scripts/evaluator_semantic_factor_probe_protocol.py scripts/preflight_evaluator_factor_probe.py
+      - name: Validate all six factors, lineage and CPU-only scoring
+        run: pytest -q tests/test_evaluator_semantic_factor_probe_protocol.py tests/test_evaluator_semantic_factor_attribution.py
+      - name: Validate no-spend inference runner, GPU identity and budget guards
+        run: |
+          python -m compileall -q scripts/run_evaluator_factor_probe.py scripts/launch_evaluator_factor_probe.py
+          pytest -q tests/test_evaluator_factor_probe_paid_guard.py
+          python scripts/launch_evaluator_factor_probe.py
+      - name: Emit safe identity-only preflight manifest
+        run: python scripts/preflight_evaluator_factor_probe.py
