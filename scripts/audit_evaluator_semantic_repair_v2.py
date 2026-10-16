@@ -6,6 +6,7 @@ from pathlib import Path
 import evaluator_semantic_repair_common as c
 import build_evaluator_semantic_invariance_repair_v1 as old
 import run_interface_repair_v1 as runtime
+from evaluate_evaluator_semantic_v2_outputs import evaluate_outputs
 
 
 def audit(client, bucket, cfg):
@@ -53,10 +54,11 @@ def audit(client, bucket, cfg):
             raise ValueError('checkpoint size mismatch')
         results[str(step)] = dict(summary=result['development_summary'], confusion=confusion,
             gates=result['checkpoint_selection_gates'], adapter=art,
+            v2_rescored=evaluate_outputs(pack, 'development_diagnostic', rows, baseline['development_analysis']),
             sample_decision_accuracy=sum(row['score']['decision_exact'] for row in rows) / len(rows))
     return dict(version=2, baseline_summary=baseline['development_summary'],
         baseline_analysis=baseline['development_analysis'], checkpoints=results, object_reads=reads,
-        original_training_repo_sha=training['repo_sha'], development_sha256=dsha,
+        original_training_repo_sha=training['repo_sha'], original_training_summary=training.get('training'), development_sha256=dsha,
         s3_writes=0, gpu_allocations=0, verdict='no_checkpoint_passed' if not any(r['gates']['passed'] for r in results.values()) else 'inspect_passed_checkpoint')
 
 

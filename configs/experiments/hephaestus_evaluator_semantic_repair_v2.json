@@ -1,0 +1,205 @@
+{
+  "arms": {
+    "B": {
+      "comparison": "CPU equivalence audit only: actual V1 import path already supervises state-specific rationale; do not buy a duplicate training run.",
+      "pack_sha256": "196366ce8b691eafb8caae1f486ebfd3bc1db44399cce4c051dc2cf2ff920722",
+      "schedule_sha256": "d99bd896c64766aa245c3b1944280a9aea373ebe15cb6846c77dd1be0a82e600",
+      "selected_cases": 768
+    },
+    "C": {
+      "comparison": "Same frozen parent, hyperparameters, dose and families; replace the false V1 contrasts with genuine single-variable contrasts.",
+      "pack_sha256": "dd310418d9e680987779e82351274b99299911e0c02c8fd0076c0be30ed5de9c",
+      "schedule_sha256": "cacee73b103e95153d006d680d5f820e16df28bba8606cb5ca655d97a71edb89",
+      "selected_cases": 768
+    },
+    "D": {
+      "comparison": "C plus true factorial/precedence observations and ordered difficulty. This measures the combined data-and-progression intervention.",
+      "pack_sha256": "c6755973c63f345c06b7d0834544c8216959a9dca33f5a663ed038292564bc5d",
+      "schedule_sha256": "212cb79d8b617a8b94475df34e4431ebab82784c1a9f4c72c58231bb32a116d2",
+      "selected_cases": 768
+    },
+    "E": {
+      "comparison": "Compare to D_matched control with identical selected evidence, sample multiplicity and order; only advisory records differ. Ordinary D comparison is descriptive, not causal.",
+      "pack_sha256": "b1aa589da121177e552e46425a7dbcb3af7617413af1a973c8f69117f110f1a2",
+      "schedule_sha256": "95dd7b16d1a3d0c138c3efcac5e46254895ef7d4f832216d3ec18ab1beca3909",
+      "selected_cases": 768
+    }
+  },
+  "baseline": {
+    "decision_exact_pass_rate": 0.390625,
+    "run_id": "evaluator-v3-1-dev-baseline-36998587411",
+    "s3_key": "hephaestus/scientific/v4/evaluator_development_baseline/evaluator-v3-1-dev-baseline-36998587411/result.json",
+    "semantic_exact_pass_rate": 0.390625
+  },
+  "checkpoint_selection": {
+    "certification_claim_allowed": false,
+    "no_checkpoint_clears_gate_outcome": "scientifically_reject_this_repair_protocol_without_blind_continuation",
+    "partition": "development_diagnostic",
+    "rule": "Select the earliest checkpoint clearing every recorded development gate; otherwise select no checkpoint."
+  },
+  "development_gates": {
+    "boundary_projection_required": 1.0,
+    "maximum_hallucination_rate": 0.01,
+    "maximum_system_semantic_escalation_rate": 0.0,
+    "maximum_upstream_copy_violation_rate": 0.01,
+    "minimum_evidence_grounding": 0.99,
+    "minimum_overall_decision_exact": 0.95,
+    "minimum_overall_semantic_exact": 0.95,
+    "minimum_previously_robust_state_accuracy": 0.95,
+    "minimum_previously_weak_state_accuracy": 0.9,
+    "primary_variable_projection_required": 1.0,
+    "schema_compliance_required": 1.0,
+    "system_action_exact_required": 1.0
+  },
+  "diagnostic_basis": {
+    "burned_cases_are_diagnostic_only": true,
+    "burned_cases_used_as_training_rows": false,
+    "burned_cases_used_for_checkpoint_selection": false,
+    "burned_certification_run_id": "evaluator-sealed-cert-36929796355",
+    "burned_pack_sha256": "1314d28c978538ca8bb5527c24e4200d5463f7ad90b084aaae1e656d0b530d25"
+  },
+  "execution": {
+    "capacity_fallback_policy": "exact_gpu_for_comparable_development_evaluation",
+    "capacity_retry_attempts": 12,
+    "capacity_retry_seconds": 15,
+    "cloud_type": "SECURE",
+    "compatible_fallback_gpu_type_ids": [],
+    "container_disk_gb": 180,
+    "evaluation_shard_size": 32,
+    "format_retry_max_attempts": 1,
+    "format_retry_target_free": true,
+    "gpu_type_ids": [
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    ],
+    "hard_wall_seconds_evaluate": 2400,
+    "hard_wall_seconds_train": 3600,
+    "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
+    "max_estimated_total_usd_evaluate": 0.9,
+    "max_estimated_total_usd_train": 1.6,
+    "max_hourly_usd_per_pod": 2.1,
+    "minimum_gpu_memory_gib": 90,
+    "persistent_adapter_cache": "/workspace/hephaestus-cache/evaluator-semantic-invariance-repair-v1/adapters",
+    "persistent_hf_cache": "/workspace/hephaestus-cache/huggingface",
+    "persistent_pip_cache": "/workspace/hephaestus-cache/pip",
+    "persistent_venv_cache": "/workspace/hephaestus-cache/venv/interface-repair-v2-py312-cu130-r2",
+    "poll_seconds": 10,
+    "preferred_gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "s3_prefix": "hephaestus/scientific/v5/evaluator_semantic_repair_v2",
+    "structured_json_early_stop": true
+  },
+  "experiment_policy": {
+    "B_gpu_run_allowed": false,
+    "ablation_runs_launch_automatically": false,
+    "first_paid_comparison": "C versus frozen A on immutable diagnostic",
+    "fresh_sealed_certification_allowed": false,
+    "handoff_experiment": "D_matched versus E, deferred until earlier evidence warrants it",
+    "next_paid_comparison": "D only if C results justify the budget"
+  },
+  "future_certification": {
+    "burned_v1_sealed_case_reuse_forbidden": true,
+    "fresh_sealed_certification_cases": 128,
+    "fresh_sealed_regression_cases": 128,
+    "generated_now": false,
+    "live_handoff_certification_required_after_model_and_system_certification": true,
+    "must_be_generated_only_after_checkpoint_selection": true,
+    "production_canary_or_shadow_required_before_authoritative_dispatch": true
+  },
+  "governance": {
+    "automatic_role_dispatch_allowed": false,
+    "burned_sealed_partition_use_allowed": false,
+    "certification_claim_allowed": false,
+    "explicit_launch_authorization_required": true,
+    "fresh_certification_generation_allowed_during_repair": false,
+    "paid_checkpoint_evaluation_allowed": false,
+    "paid_training_allowed": false,
+    "parent_adapter_mutation_allowed": false,
+    "production_promotion_allowed": false,
+    "training_approved": false
+  },
+  "matched_handoff_control_sha256": "f588991295858e00da54c883afaeb5bf3519b52bc8d7403240dc0375ced801a9",
+  "model_protocol": {
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "lora_rank": 16,
+    "precision": "bfloat16",
+    "seed": 20261002
+  },
+  "objective": "Repair frozen V3.1 scientific-state semantic invariance without using burned sealed evidence for training or checkpoint selection.",
+  "pack": {
+    "builder_path": "scripts/build_evaluator_semantic_invariance_repair_v1.py",
+    "burned_sealed_partition_reuse_forbidden": true,
+    "canonical_sha256": "0d01fe1853742d1259a333fa9a92dec46e8789b69f2019ed34e17d815fc01a3c",
+    "development_case_order_sha256": "b52cbc157855da02c43bd136c972f87ee8a8a7e1ba4725c076d153360cfd5abd",
+    "development_diagnostic_cases": 256,
+    "development_diagnostic_sha256": "ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912",
+    "preflight_cases": 8,
+    "selected_training_cases": 768,
+    "training_cases_total": 1536
+  },
+  "parent_candidate_manifest": "configs/experiments/hephaestus_evaluator_certification_candidate_v1.json",
+  "phase": "phase_ii_evaluator_semantic_invariance_repair",
+  "protocol_id": "hephaestus_evaluator_semantic_repair_v2",
+  "protocol_revision": "2.0",
+  "required_base_revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+  "required_parent_adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+  "required_parent_candidate_id": "evaluator-v3.1-boundary-v1",
+  "roles": {
+    "evaluator": {
+      "decoding": {
+        "do_sample": false
+      },
+      "load_kind": "causal_lm",
+      "max_new_tokens": 512,
+      "reasoning_projection": [
+        "</think>"
+      ]
+    }
+  },
+  "source_parent": {
+    "adapter_sha256": "913797ddb8d9d95f83d09a244e8efe430d7bfc4383e589499c2fcc2d943487ed",
+    "candidate_id": "evaluator-v3.1-boundary-v1",
+    "parent_remains_immutable": true
+  },
+  "source_phase_i_stack": {
+    "production_certified_required": true,
+    "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
+    "required_source_run_id": "role-mastery-v1-35596791201"
+  },
+  "status": "training_authorized_launching",
+  "training": {
+    "assistant_only_loss": true,
+    "checkpoint_steps": [
+      16,
+      32,
+      48,
+      64,
+      80,
+      96
+    ],
+    "dynamic_padding": true,
+    "gradient_accumulation_steps": 8,
+    "gradient_checkpointing": true,
+    "learning_rate": 2e-06,
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "lora_rank": 16,
+    "max_grad_norm": 1.0,
+    "max_sequence_length": 2048,
+    "maximum_optimizer_steps": 96,
+    "method": "continue_existing_lora",
+    "micro_batch_size": 1,
+    "optimizer": "AdamW",
+    "precision": "bfloat16",
+    "seed": 20261002,
+    "selection_policy": {
+      "checkpoint_block_cases_per_state": 16,
+      "factorial_generalization_cases_per_state": 16,
+      "precedence_and_field_isolation_cases_per_state": 16,
+      "retain_all_minimal_contrast_cases": true,
+      "selected_cases_per_state": 96,
+      "selected_direct_cases_per_state": 48,
+      "selected_handoff_cases_per_state": 48
+    },
+    "weight_decay": 0
+  }
+}
