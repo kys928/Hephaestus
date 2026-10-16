@@ -29,6 +29,10 @@ def authorize(cfg, manifest):
         raise PermissionError('unique explicit V2 budget approval identity is required')
     if manifest['arm'] == 'B':
         raise PermissionError('B is a CPU equivalence audit; do not buy duplicate training')
+    approval_path = b.common.ROOT / cfg['governance']['approval_record_path']
+    approved = json.loads(approval_path.read_text())
+    if approved.get('arm') and approved['arm'] != manifest['arm']:
+        raise PermissionError('paid ablation differs from the specifically approved arm')
     for k in ('parent_adapter_mutation_allowed','burned_sealed_partition_use_allowed','certification_claim_allowed','production_promotion_allowed','automatic_role_dispatch_allowed'):
         if cfg['governance'].get(k) is not False:
             raise ValueError(f'forbidden authority: {k}')
@@ -114,13 +118,14 @@ def train(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha, ro
 
 def evaluate(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha, root, step=96):
     from evaluator_semantic_v2_metrics import score, summarize
+    from evaluator_semantic_v2_screen import screen_cases, verdict as screen_verdict
     import run_interface_repair_v3_1_evaluator as generation
     # Evaluation is a separate spending permission from training.
     if cfg['governance'].get('paid_checkpoint_evaluation_allowed') is not True:
         raise PermissionError('V2 paid evaluation is not approved')
     authorize(cfg,manifest)
     if step != 96:
-        raise ValueError('initial C proof predeclares step 96; no checkpoint shopping')
+        raise ValueError('C/D proof predeclares step 96; no checkpoint shopping')
     prefix=cfg['execution']['s3_prefix']+'/'+run_id
     record=b.common.s3_json(client,prefix+'/training/result.json')
     if (record['repo_sha']!=repo_sha or record['status']!='training_complete'
@@ -144,13 +149,34 @@ def evaluate(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha,
     rows=[]
     cases=pack['partitions']['evaluator']['development_diagnostic']
     ep=f'{prefix}/checkpoints/step-{step:03d}/evaluation'
-    for i,case in enumerate(cases,1):
+    # D screens eight cases from each scientific state before any further paid
+    # inference. Original case indices, and thus frozen decoding seeds, remain
+    # stable even though the execution order is deliberately balanced.
+    screen = screen_cases(cases) if manifest['arm'] == 'D' else []
+    chosen = {r['case_id'] for r in screen}
+    order = screen + [r for r in cases if r['case_id'] not in chosen] if screen else list(cases)
+    case_index = {r['case_id']: i for i,r in enumerate(cases,1)}
+    for i,case in enumerate(order,1):
         if time.monotonic()>=deadline:raise TimeoutError('V2 evaluation hard wall reached')
-        output=generation.generate_v31(model,tok,cfg['roles']['evaluator'],runtime.prompt(pack,case,'evaluator'),cfg['model_protocol']['seed']+i,deadline)
+        original_index = case_index[case['case_id']]
+        output=generation.generate_v31(model,tok,cfg['roles']['evaluator'],runtime.prompt(pack,case,'evaluator'),cfg['model_protocol']['seed']+original_index,deadline)
         rows.append(dict(case_id=case['case_id'],generation=output,score=score(pack,case,output['projected_output'])))
-        if i%32==0 or i==len(cases):
+        if i%32==0 or i==len(order):
             runtime.put_json(client,f'{ep}/samples/shard-{(i+31)//32:04d}.json',rows[-32:])
-            runtime.put_json(client,f'{ep}/progress.json',dict(completed=i,total=len(cases)))
+            runtime.put_json(client,f'{ep}/progress.json',dict(completed=i,total=len(order),
+                stage='balanced_screen' if screen and i <= len(screen) else 'full_development'))
+        if screen and i == len(screen):
+            screening = screen_verdict(screen,rows)
+            runtime.put_json(client,ep+'/screen/result.json',screening)
+            if screening['status'] == 'screen_rejected':
+                result=dict(status='screen_rejected',repo_sha=repo_sha,run_id=run_id,
+                    checkpoint_step=step,checkpoint_adapter=artifact,
+                    development_diagnostic_sha256=manifest['development_diagnostic_sha256'],
+                    screen=screening,screen_evaluated_cases=64,full_evaluation_performed=False,
+                    scientific_improvement_demonstrated=False,certification_claim=False,
+                    production_promotion_performed=False)
+                runtime.put_json(client,ep+'/result.json',result)
+                return result
     report=summarize(cases,rows,baseline['development_analysis'])
     result=dict(status='evaluation_complete',repo_sha=repo_sha,run_id=run_id,checkpoint_step=step,
         checkpoint_adapter=artifact,development_diagnostic_sha256=manifest['development_diagnostic_sha256'],
@@ -165,7 +191,7 @@ def evaluate(cfg, parent, pack, selected, manifest, *, client, run_id, repo_sha,
 def main():
     import argparse
     ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True)
-    ap.add_argument('--arm',choices=['C'],default='C');ap.add_argument('--step',type=int,default=96)
+    ap.add_argument('--arm',choices=['C','D'],default='C');ap.add_argument('--step',type=int,default=96)
     args=ap.parse_args()
     cfg,pack,selected,manifest=prepare(args.arm)
     # Stops here under the checked-in protocol, before networking or loading.
