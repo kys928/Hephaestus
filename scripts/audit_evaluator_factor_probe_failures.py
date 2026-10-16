@@ -13,7 +13,7 @@ SEVEN={"decision","action","primary_variable","confidence","evidence_refs","unce
 
 def main():
     client=storage.s3_client()
-    stats=Counter();keys=Counter();lens=Counter();rows=[]
+    stats=Counter();keys=Counter();lens=Counter();rows=[];delimiters=Counter()
     for part in range(1,9):
         obj=client.get_object(Bucket=storage.bucket(),Key=PREFIX+f"/samples/shard-{part:04d}.json")
         try:shard=json.loads(obj["Body"].read())
@@ -24,6 +24,10 @@ def main():
     for row in rows:
         raw=row["raw_factors"]
         txt=raw.strip()
+        first=txt.find("{");last=txt.rfind("}")
+        opening=repr(txt[:first])[:80] if first>=0 else "<no object>"
+        suffix=repr(txt[last+1:])[:80] if last>=0 else "<no close>"
+        delimiters[(opening,suffix)]+=1
         n=int(row["generated_tokens"])
         stats["strict_six_valid"]+=int(parse_factor_json(raw) is not None)
         stats["hit_token_limit"]+=int(n==MAX_NEW_TOKENS)
@@ -49,6 +53,7 @@ def main():
             stats["embedded_seven_field_keys"]+=int(set(embedded)==SEVEN)
     result=dict(run_id=RUN,total=64,structural=dict(sorted(stats.items())),
         token_bins=dict(sorted(lens.items())),complete_key_signatures=dict(sorted(keys.items())),
+        outer_delimiter_signatures=[dict(opening=a,suffix=b,count=n) for (a,b),n in sorted(delimiters.items())],
         strict_factor_accuracy_assessable=False,additional_gpu_allocations=0,s3_writes=0,
         caveat="Exploratory JSON detection does not change the strict contract score; all data remain the original saved generations.")
     Path("evaluator-factor-probe-format-postmortem.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
