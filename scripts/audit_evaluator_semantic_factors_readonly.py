@@ -14,8 +14,10 @@ from pathlib import Path
 import build_evaluator_semantic_invariance_repair_v1 as frozen
 import run_interface_repair_v1 as storage
 from evaluator_semantic_v2_screen import screen_cases, screen_hash
+from hephaestus.policy.evaluator_semantic_oracle import scientific_state
 from evaluator_semantic_factor_attribution import (
-    analyze_observed, paired_comparison, reference_factors, FIELDS,
+    analyze_observed, paired_comparison, reference_factors,
+    decode_frozen_development_evidence, FIELDS,
 )
 
 FROZEN_DEVELOPMENT_SHA = "ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912"
@@ -58,7 +60,10 @@ def main():
     if screen_hash(screen)!=D_SCREEN_SHA:
         raise RuntimeError("predeclared D screen selection changed")
     for case in cases:
-        reference_factors(case) # assert reference labels agree with machine facts and oracle
+        labeled = reference_factors(case)
+        decoded = decode_frozen_development_evidence(case)
+        if decoded != labeled or scientific_state(decoded) != case["expected"]["decision"]:
+            raise RuntimeError("independent frozen evidence text does not recover expected factor truth")
     client=storage.s3_client()
     client.head_bucket(Bucket=storage.bucket())
     reads=[]
@@ -117,6 +122,8 @@ def main():
     report={
         "version":"factor-attribution-observational-v1",
         "development_sha256":devhash,"screen_sha256":D_SCREEN_SHA,
+        "frozen_reference_text_decodable_cases":len(cases),
+        "frozen_reference_text_extraction_is_model_measurement":False,
         "runs":results,"same_case_comparisons":paired,
         "persisted_object_reads":reads,
         "future_explicit_factor_probe":future_probe,
