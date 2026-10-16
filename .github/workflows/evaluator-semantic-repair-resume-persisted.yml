@@ -22,6 +22,7 @@ jobs:
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
+      RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
     steps:
       - uses: actions/checkout@v4
@@ -134,6 +135,7 @@ jobs:
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
+      RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
     steps:
       - uses: actions/checkout@v4
