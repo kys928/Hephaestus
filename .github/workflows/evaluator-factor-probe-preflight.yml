@@ -21,5 +21,10 @@ jobs:
         run: python -m compileall -q scripts/evaluator_semantic_factor_probe_protocol.py scripts/preflight_evaluator_factor_probe.py
       - name: Validate all six factors, lineage and CPU-only scoring
         run: pytest -q tests/test_evaluator_semantic_factor_probe_protocol.py tests/test_evaluator_semantic_factor_attribution.py
+      - name: Validate no-spend inference runner, GPU identity and budget guards
+        run: |
+          python -m compileall -q scripts/run_evaluator_factor_probe.py scripts/launch_evaluator_factor_probe.py
+          pytest -q tests/test_evaluator_factor_probe_paid_guard.py
+          python scripts/launch_evaluator_factor_probe.py
       - name: Emit safe identity-only preflight manifest
         run: python scripts/preflight_evaluator_factor_probe.py
