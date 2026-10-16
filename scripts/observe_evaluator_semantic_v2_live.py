@@ -18,6 +18,19 @@ for suffix in ('training/bootstrap/progress.json','training/progress.json','trai
     records[suffix]=infra.maybe_json(client,root+'/'+suffix)
 print('V2_LIVE_OBSERVATION '+json.dumps(dict(run_id=run_id,pods=safe,records=records,pod_allocations=0,s3_writes=0),sort_keys=True))
 
+from hephaestus.providers.runpod.execution import RunPodApiError
+import urllib.error
+absence={}
+for pod_id in ('lji9euultcursa','xsj2mcd8uw29rl','i8m100fixm1gsy'):
+    try:
+        execution.get_pod(pod_id)
+        absence[pod_id]=False
+    except RunPodApiError as exc:
+        missing=(isinstance(exc.__cause__,urllib.error.HTTPError) and exc.__cause__.code==404) or str(exc)=='unexpected get-Pod response status: 404'
+        if not missing:raise
+        absence[pod_id]=True
+print('V2_RESOURCE_ABSENCE '+json.dumps(absence,sort_keys=True))
+
 if not safe or (records.get('checkpoints/step-096/evaluation/result.json') or {}).get('status')=='evaluation_complete':
     from assess_evaluator_semantic_v2_run import assess
     assess()
