@@ -37,6 +37,10 @@ Evaluation pod `0wcpud3152qc6m` persisted the balanced screen and terminal `scre
 
 ## Independent assessment
 
-This document records terminal launcher evidence. A separate GPU-free assessment workflow `evaluator-semantic-v2-D-assess.yml` independently rescans the persisted 64 cases, verifies their scores and identities, and compares D to the frozen V1 step-96 checkpoint on precisely those 64 cases. That comparison must remain same-case, paired and exploratory, not a full-diagnostic claim.
+Independent [GPU-free assessment #38947323158](https://github.com/kys928/Hephaestus/actions/runs/38947323158) **passed** and separately rescored the 64 saved generations against the original case identities and expected scores. The audit recorded D **33/64 (51.5625%)** versus V1 step 96 **34/64 (53.125%)** on *exactly the same* 64 cases.
+
+Paired outcomes: 31 both correct, 28 both incorrect, three V1-only correct, two D-only correct. This is not evidence of a general accuracy difference or improvement. Both `equivalent` and `recheck_required` are 0/8 for D and for V1 on this screen. D is 8/8 on `inconclusive` versus V1 7/8. The observed screen is a subset of the frozen development diagnostic, **not an independent certification partition**.
+
+The independent workflow publishes `evaluator-semantic-v2-D-independent-screen` with its JSON report. Further paid D/E experiments remain disabled pending a scientifically distinct intervention.
 
 No additional GPU experiment is authorized by this outcome. Draft PRs #70 and #71 remain unmerged.
