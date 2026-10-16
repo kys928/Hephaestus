@@ -38,6 +38,51 @@ def reference_factors(case: Mapping) -> ScientificFactors:
     return factors
 
 
+
+def decode_frozen_development_evidence(case: Mapping) -> ScientificFactors:
+    """Independently decode known frozen template sentences, not model beliefs.
+
+    This detects contradictory/missing synthetic reference facts. Template
+    decodability does not prove natural-language understanding or lack of
+    ambiguity outside this exact generated diagnostic.
+    """
+    bank = frozen.DEV_PHRASES
+    categories = {
+        "gate_pass":("gate_pass", True), "gate_fail":("gate_pass", False),
+        "complete":("complete", True), "incomplete":("complete", False),
+        "prov_valid":("provenance_valid", True),
+        "prov_invalid":("provenance_valid", False),
+        "effect_positive":("effect", "positive"),
+        "effect_neutral":("effect", "neutral"),
+        "effect_negative":("effect", "negative"),
+        "variance_stable":("variance_stable", True),
+        "variance_high":("variance_stable", False),
+        "recheck_yes":("recheck_satisfied", True),
+        "recheck_no":("recheck_satisfied", False),
+    }
+    vocabulary = {}
+    for category, value in categories.items():
+        for phrase in bank[category]:
+            if phrase in vocabulary:
+                raise ValueError("ambiguous reference vocabulary")
+            vocabulary[phrase] = value
+    extracted = {}
+    evidence = case["evidence"]
+    if len(evidence) != 6:
+        raise ValueError("frozen development case does not have six facts")
+    for record in evidence:
+        lookup = vocabulary.get(record["fact"])
+        if lookup is None:
+            raise ValueError("unrecognized frozen development evidence sentence")
+        key, value = lookup
+        if key in extracted:
+            raise ValueError("contradictory/repeated scientific factor evidence")
+        extracted[key] = value
+    if set(extracted) != set(FIELDS):
+        raise ValueError("incomplete scientific factor evidence")
+    return ScientificFactors(**extracted)
+
+
 def nearest_counterfactuals(factors: ScientificFactors, predicted_state: str) -> dict:
     """Minimal oracle input edits making a wrong decision logically possible."""
     if predicted_state not in VALID_STATES:
