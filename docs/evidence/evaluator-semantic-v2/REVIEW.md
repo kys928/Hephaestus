@@ -4,7 +4,8 @@
 
 **No-go for scientific improvement or certification.** V2 curriculum generation,
 explicit supervision, offline oracle, validation and reporting are implemented.
-No V2 8B training or inference has been purchased. The checked-in protocol refuses
+The approved C proof has now run and its step-96 checkpoint is rejected; see
+[ASSESSMENT.md](ASSESSMENT.md) for observed results, limits and costs. The checked-in protocol refuses
 paid training/evaluation, certification, promotion and authoritative dispatch.
 The dry-run-first V2 launcher and remote training/evaluation entrypoints are
 implemented and disabled by the checked-in approval flags. An explicit-marker-only workflow reuses existing GitHub secrets; it cannot buy
@@ -80,8 +81,9 @@ These defects motivate an experiment; they do not establish its outcome.
   assistant serialization, no silent truncation and assistant-only labels.
 - Real pinned Granite tokenizer verification across all 3,072 selected examples:
   maximum lengths B/C/D/E = 1252/1260/1318/1299, below the frozen 2048-token limit.
-  Tiny Granite CPU forward, shifted loss and backward work. Full 8B/PEFT loading
-  remains a GPU preflight requirement; the CPU test does not validate 8B runtime.
+  Tiny Granite CPU forward, shifted loss and backward work. The CPU test does not
+  validate full 8B runtime; the later approved C proof exercised the frozen
+  8B/PEFT loader and training, with partial development inference.
 - Enhanced reporting independently scores persisted raw generations: full decision
   confusion matrix, state accuracy, pair accuracy, state-change consistency,
   advisory invariance and invariant correctness, misleading-advice strata,
@@ -129,18 +131,19 @@ workflow artifacts, not committed as datasets/state in this PR.
 
 ## Spending boundary and next justified action
 
-The earlier $2.49/hour and $0.90/checkpoint recovery approval does not authorize
-new training. The proposal file requests at most **$2.50 total** for one C training
-run (cap $1.60) and one predeclared step-96 development evaluation (cap $0.90),
-retaining the stricter configured $2.10/hour ceiling. These are spending caps,
-not a guarantee the job will finish within them. Startup/download/teardown time
-counts; current capacity/price must be checked before allocation. The implemented launcher is covered by mocked
-lifecycle/failure tests; its full 8B execution remains pending this approval. No additional arms launch automatically. Stop and diagnose a negative
-result; do not silently extend the budget, change model families, or relax gates.
+The user approved the initial $2.50 proof, then approved a replacement at
+$2.49/hour under the same overall ceiling: $1.50 training, $0.90 evaluation,
+$0.10 prior-startup reserve. Both immutable approval records are retained.
+Training completed; evaluation stopped at its cost guard after saving 128 cases.
+Those cases already make the unchanged 95% gate mathematically unreachable.
+The final [assessment](ASSESSMENT.md) records identities, same-case reference
+comparisons, scientific limitations, cost estimates and independent pod absence.
 
-CPU validation run 38930553151 passed on GitHub, including the S3 rescoring, full
-repository suite, real tokenizer proof and all immutable manifest preparations.
-The subsequent launcher hardening is verified by the final PR-head CPU run.
+Paid flags are disabled and the active approval ID is cleared. No additional arm,
+checkpoint evaluation, production merge or certification is authorized. Review
+C's negative evidence before considering a separately budgeted D proof; buying
+more C evaluation cannot change its acceptance outcome.
 
-Next action: approve or decline this bounded C experiment after reviewing the PR.
-Until then the scientific verdict remains unproven and production remains blocked.
+The CPU workflow validates the complete suite, S3 rescoring, real frozen Granite
+tokenization, CPU loss/backward and immutable manifests. The explicit assessment
+job independently rescans the persisted C/reference outputs without GPU allocation.

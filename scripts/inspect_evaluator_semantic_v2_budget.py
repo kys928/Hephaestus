@@ -14,6 +14,9 @@ from launch_evaluator_semantic_repair_v2 import s3_client
 
 def inspect():
     cfg=json.loads(Path('configs/experiments/hephaestus_evaluator_semantic_repair_v2.json').read_text())
+    # This inspection belongs to the first, refused allocation. Later approvals
+    # must not silently change which launch claim or price limit it reports.
+    approval=json.loads(Path('configs/experiments/evaluator_semantic_repair_v2.approval.json').read_text())
     execution=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider())
     pod='lji9euultcursa'
     try:
@@ -34,12 +37,12 @@ def inspect():
     root=cfg['execution']['s3_prefix'];prefix=root+'/evaluator-semantic-v2-C-38933236763/'
     listing=s3.list_objects_v2(Bucket=bucket,Prefix=prefix,MaxKeys=100)
     objects=[dict(key=x['Key'],bytes=x['Size']) for x in listing.get('Contents',[])]
-    claim=root+'/approvals/'+cfg['governance']['budget_approval_id']+'/train-claim.json'
+    claim=root+'/approvals/'+approval['approval_id']+'/train-claim.json'
     response=s3.get_object(Bucket=bucket,Key=claim)
     try:raw=response['Body'].read()
     finally:response['Body'].close()
     result=dict(failed_workflow_run=38933236763,pod_id=pod,pod_verified_absent=absent,
-        current_catalog=catalog,approved_hourly_usd=cfg['execution']['max_hourly_usd_per_pod'],
+        current_catalog=catalog,approved_hourly_usd=approval['maximum_hourly_usd'],
         launch_claim_sha256=hashlib.sha256(raw).hexdigest(),launch_claim=json.loads(raw),run_objects=objects,
         actual_failed_pod_price_unrecorded=True,s3_writes=0,pod_allocations=0)
     Path('semantic-v2-budget-inspection.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
