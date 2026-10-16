@@ -15,6 +15,25 @@ def cfg():
     return json.loads(runner.CONFIG.read_text())
 
 
+@pytest.fixture()
+def approved_sandbox(tmp_path,monkeypatch):
+    """Simulate historical approval for unit tests; current live record is spent."""
+    original=json.loads(runner.APPROVAL.read_text())
+    assert original["status"]=="completed_spent_and_disabled"
+    copyrecord=dict(original,status="approved_for_exactly_one_inference_only_run")
+    temp=tmp_path/"mock-previous-approval.json"
+    temp.write_text(json.dumps(copyrecord))
+    monkeypatch.setattr(runner,"APPROVAL",temp)
+    monkeypatch.setattr(remote,"APPROVAL",temp)
+    return copyrecord
+
+
+def test_consumed_real_approval_refuses_any_new_pod(cfg,monkeypatch):
+    monkeypatch.setenv("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","ONE_APPROVED_FACTOR_INFERENCE_ONLY")
+    with pytest.raises(PermissionError,match="approved inference-only"):
+        runner.validate_approval(cfg)
+
+
 def test_one_exact_D_bootstrap_and_no_legacy_evaluator_training(cfg):
     body=runner.pod_request(cfg,"a"*40,"factor-only-D-dryrun",real_env=False)
     raw=json.dumps(body)
@@ -27,7 +46,7 @@ def test_one_exact_D_bootstrap_and_no_legacy_evaluator_training(cfg):
     assert "RUNPOD_API_KEY" not in raw
 
 
-def test_expected_approval_without_training_scope(cfg,monkeypatch):
+def test_expected_approval_without_training_scope(cfg,monkeypatch,approved_sandbox):
     monkeypatch.setenv("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","ONE_APPROVED_FACTOR_INFERENCE_ONLY")
     x=runner.validate_approval(cfg)
     assert not x["gpu_training_authorized"]
@@ -75,7 +94,7 @@ def test_bad_or_overpriced_gpu_rejected(cfg):
             runner.capacity_and_cost_guard(cfg,None,30,price,False)
 
 
-def test_runner_approval_excludes_training_and_wrong_checkpoint(cfg,monkeypatch):
+def test_runner_approval_excludes_training_and_wrong_checkpoint(cfg,monkeypatch,approved_sandbox):
     monkeypatch.setenv("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","ONE_APPROVED_FACTOR_INFERENCE_ONLY")
     remote.authorize(cfg,"factor-only-D-dryrun","a"*40)
     wrong=copy.deepcopy(cfg)
@@ -97,7 +116,7 @@ def test_report_json_contract_and_stop_logic_without_torch():
     assert stop.deadline_hit is False
 
 
-def test_no_replay_check_happens_before_create_pod(cfg,monkeypatch):
+def test_no_replay_check_happens_before_create_pod(cfg,monkeypatch,approved_sandbox):
     monkeypatch.setenv("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","ONE_APPROVED_FACTOR_INFERENCE_ONLY")
     class Client:
         def __init__(self):self.writes=[]
