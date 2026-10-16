@@ -1,0 +1,15 @@
+{
+  "status": "approved",
+  "approval_id": "heph-sem-v2-D-20261016-001",
+  "arm": "D",
+  "scope": "Exactly one D step-96 training allocation from frozen parent plus one bounded evaluation allocation: balanced 64-case eight-state development screen first, and full immutable 256-case development diagnostic ONLY if every scientific accuracy gate remains mathematically reachable.",
+  "maximum_hourly_usd": 2.49,
+  "maximum_training_usd": 1.5,
+  "maximum_evaluation_usd": 1.5,
+  "maximum_total_usd": 3,
+  "prior_startup_reserve_usd": 0,
+  "additional_ablation_runs_authorized": false,
+  "production_or_certification_authorized": false,
+  "source": "User explicitly requested D training and screening in project conversation; authorized $1.50 evaluation ceiling, with fallback to $2.00 only if needed; training capped at existing $1.50 limit.",
+  "user_message": "Fix D execution path, add eight-state balanced screen, train and screen D, continue if justified; evaluation ceiling $1.50, up to $2.00 if necessary."
+}
