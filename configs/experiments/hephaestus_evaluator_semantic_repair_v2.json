@@ -38,18 +38,18 @@
     "rule": "Select the earliest checkpoint clearing every recorded development gate; otherwise select no checkpoint."
   },
   "development_gates": {
-    "boundary_projection_required": 1.0,
+    "boundary_projection_required": 1,
     "maximum_hallucination_rate": 0.01,
-    "maximum_system_semantic_escalation_rate": 0.0,
+    "maximum_system_semantic_escalation_rate": 0,
     "maximum_upstream_copy_violation_rate": 0.01,
     "minimum_evidence_grounding": 0.99,
     "minimum_overall_decision_exact": 0.95,
     "minimum_overall_semantic_exact": 0.95,
     "minimum_previously_robust_state_accuracy": 0.95,
     "minimum_previously_weak_state_accuracy": 0.9,
-    "primary_variable_projection_required": 1.0,
-    "schema_compliance_required": 1.0,
-    "system_action_exact_required": 1.0
+    "primary_variable_projection_required": 1,
+    "schema_compliance_required": 1,
+    "system_action_exact_required": 1
   },
   "diagnostic_basis": {
     "burned_cases_are_diagnostic_only": true,
@@ -74,7 +74,7 @@
     "hard_wall_seconds_evaluate": 2400,
     "hard_wall_seconds_train": 3600,
     "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
-    "max_estimated_total_usd_evaluate": 0.9,
+    "max_estimated_total_usd_evaluate": 1.5,
     "max_estimated_total_usd_train": 1.5,
     "max_hourly_usd_per_pod": 2.49,
     "minimum_gpu_memory_gib": 90,
@@ -93,7 +93,7 @@
     "first_paid_comparison": "C versus frozen A on immutable diagnostic",
     "fresh_sealed_certification_allowed": false,
     "handoff_experiment": "D_matched versus E, deferred until earlier evidence warrants it",
-    "next_paid_comparison": "D only if C results justify the budget"
+    "next_paid_comparison": "One specifically approved D proof only; 64-case balanced screen first, full unchanged 256-case diagnostic only if mathematically reachable"
   },
   "future_certification": {
     "burned_v1_sealed_case_reuse_forbidden": true,
@@ -105,18 +105,18 @@
     "production_canary_or_shadow_required_before_authoritative_dispatch": true
   },
   "governance": {
-    "approval_record_path": "configs/experiments/evaluator_semantic_repair_v2.approval-replacement.json",
+    "approval_record_path": "configs/experiments/evaluator_semantic_repair_v2.approval-D.json",
     "automatic_role_dispatch_allowed": false,
-    "budget_approval_id": null,
+    "budget_approval_id": "heph-sem-v2-D-20261016-001",
     "burned_sealed_partition_use_allowed": false,
     "certification_claim_allowed": false,
     "explicit_launch_authorization_required": true,
     "fresh_certification_generation_allowed_during_repair": false,
-    "paid_checkpoint_evaluation_allowed": false,
-    "paid_training_allowed": false,
+    "paid_checkpoint_evaluation_allowed": true,
+    "paid_training_allowed": true,
     "parent_adapter_mutation_allowed": false,
     "production_promotion_allowed": false,
-    "training_approved": false
+    "training_approved": true
   },
   "matched_handoff_control_sha256": "2f8e1b8243c860fcb23ddbf4c60a04417d8f9fb05e6826f703d94596eb825bf8",
   "model_protocol": {
@@ -167,7 +167,7 @@
     "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
     "required_source_run_id": "role-mastery-v1-35596791201"
   },
-  "status": "C_step96_rejected_observed_errors_make_95pct_gate_unreachable",
+  "status": "D_single_proof_authorized_screen_first_pending_execution",
   "training": {
     "assistant_only_loss": true,
     "checkpoint_steps": [
@@ -181,11 +181,11 @@
     "dynamic_padding": true,
     "gradient_accumulation_steps": 8,
     "gradient_checkpointing": true,
-    "learning_rate": 2e-06,
+    "learning_rate": 0.000002,
     "lora_alpha": 32,
     "lora_dropout": 0,
     "lora_rank": 16,
-    "max_grad_norm": 1.0,
+    "max_grad_norm": 1,
     "max_sequence_length": 2048,
     "maximum_optimizer_steps": 96,
     "method": "continue_existing_lora",
