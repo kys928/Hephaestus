@@ -1,7 +1,7 @@
 name: Evaluator Semantic V2 explicitly approved D proof
 on:
   push:
-    branches: [repair/evaluator-semantic-v2-D]
+    branches: [experiment/evaluator-semantic-v2-D-20261016]
 permissions:
   contents: read
 concurrency:
