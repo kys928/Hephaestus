@@ -6,7 +6,7 @@ import build_evaluator_semantic_invariance_repair_v1 as frozen
 from hephaestus.schemas.evaluator_factors import ScientificFactors, combination_space
 from hephaestus.policy.evaluator_semantic_oracle import scientific_state
 from evaluator_semantic_factor_attribution import (
-    FIELDS, reference_factors, decode_frozen_development_evidence, nearest_counterfactuals, analyze_observed,
+    FIELDS, reference_factors, decode_frozen_development_evidence, factor_only_diagnostic_prompt, nearest_counterfactuals, analyze_observed,
     paired_comparison, score_explicit_factor_probe,
 )
 
@@ -133,3 +133,16 @@ def test_template_decoder_rejects_unknown_or_contradictory_observation(dev):
     bad["evidence"][0]["fact"]=bad["evidence"][1]["fact"]
     with pytest.raises(ValueError,match="contradictory/repeated"):
         decode_frozen_development_evidence(bad)
+
+
+def test_factor_only_diagnostic_has_no_gold_label_or_decision_contract(dev):
+    import json
+    case=next(x for x in dev if x["semantic_root"]=="equivalent")
+    prompt=factor_only_diagnostic_prompt(case)
+    assert "DIAGNOSTIC FACTOR REPORT ONLY" in prompt
+    assert "Do not include a final decision" in prompt
+    assert "target_rationale" not in prompt
+    assert '"expected"' not in prompt
+    assert '"semantic_root"' not in prompt
+    assert case["case_id"] not in prompt
+    assert all(record["fact"] in prompt for record in case["evidence"])
