@@ -74,7 +74,7 @@
     "hard_wall_seconds_evaluate": 2400,
     "hard_wall_seconds_train": 3600,
     "image": "pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime",
-    "max_estimated_total_usd_evaluate": 1.5,
+    "max_estimated_total_usd_evaluate": 0.9,
     "max_estimated_total_usd_train": 1.5,
     "max_hourly_usd_per_pod": 2.49,
     "minimum_gpu_memory_gib": 90,
@@ -93,7 +93,7 @@
     "first_paid_comparison": "C versus frozen A on immutable diagnostic",
     "fresh_sealed_certification_allowed": false,
     "handoff_experiment": "D_matched versus E, deferred until earlier evidence warrants it",
-    "next_paid_comparison": "One specifically approved D proof only; 64-case balanced screen first, full unchanged 256-case diagnostic only if mathematically reachable"
+    "next_paid_comparison": "No new paid ablation authorized; inspect persisted D rejection evidence before redesign"
   },
   "future_certification": {
     "burned_v1_sealed_case_reuse_forbidden": true,
@@ -105,18 +105,18 @@
     "production_canary_or_shadow_required_before_authoritative_dispatch": true
   },
   "governance": {
-    "approval_record_path": "configs/experiments/evaluator_semantic_repair_v2.approval-D.json",
+    "approval_record_path": "configs/experiments/evaluator_semantic_repair_v2.approval-replacement.json",
     "automatic_role_dispatch_allowed": false,
-    "budget_approval_id": "heph-sem-v2-D-20261016-001",
+    "budget_approval_id": null,
     "burned_sealed_partition_use_allowed": false,
     "certification_claim_allowed": false,
     "explicit_launch_authorization_required": true,
     "fresh_certification_generation_allowed_during_repair": false,
-    "paid_checkpoint_evaluation_allowed": true,
-    "paid_training_allowed": true,
+    "paid_checkpoint_evaluation_allowed": false,
+    "paid_training_allowed": false,
     "parent_adapter_mutation_allowed": false,
     "production_promotion_allowed": false,
-    "training_approved": true
+    "training_approved": false
   },
   "matched_handoff_control_sha256": "2f8e1b8243c860fcb23ddbf4c60a04417d8f9fb05e6826f703d94596eb825bf8",
   "model_protocol": {
@@ -167,7 +167,7 @@
     "registry_path": "configs/models/hephaestus_role_model_stack_v1.json",
     "required_source_run_id": "role-mastery-v1-35596791201"
   },
-  "status": "D_single_proof_authorized_screen_first_pending_execution",
+  "status": "D_step96_screen_rejected_no_checkpoint_selected",
   "training": {
     "assistant_only_loss": true,
     "checkpoint_steps": [
