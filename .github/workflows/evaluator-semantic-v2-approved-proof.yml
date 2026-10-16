@@ -11,7 +11,7 @@ jobs:
   training:
     if: contains(github.event.head_commit.message, '[launch-approved-evaluator-semantic-v2-C]')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 80
     env:
       PYTHONPATH: scripts:src:.
       HEPHAESTUS_EVALUATOR_V2_AUTHORIZED: LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2
@@ -36,7 +36,7 @@ jobs:
   evaluate:
     needs: training
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       PYTHONPATH: scripts:src:.
       HEPHAESTUS_EVALUATOR_V2_AUTHORIZED: LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2

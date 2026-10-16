@@ -22,10 +22,10 @@ def bounded_cost(snapshot, elapsed, cfg, mode):
     if not math.isfinite(hourly) or hourly<=0 or hourly>cfg['execution']['max_hourly_usd_per_pod']:
         raise ValueError('pod hourly price outside approved ceiling')
     limit=cfg['execution']['max_estimated_total_usd_train' if mode=='train' else 'max_estimated_total_usd_evaluate']
-    # Reserve two poll intervals for teardown. The launcher and remote runner
+    # Reserve six minutes for bounded API polling and five teardown attempts. The launcher and remote runner
     # enforce timeouts; verified deletion is required even after any exception.
     estimated=hourly*elapsed/3600
-    if hourly*(elapsed+2*cfg['execution']['poll_seconds'])/3600>=limit:
+    if hourly*(elapsed+360)/3600>=limit:
         raise TimeoutError('pod run cost ceiling reached')
     return dict(cost_per_hr=hourly,estimated_cost_usd=estimated)
 
@@ -139,6 +139,16 @@ def execute(cfg,manifest,mode,*,execution,client,repo_sha,run_id):
                 raise RuntimeError('V2 pod deletion could not be verified')
 
 
+def s3_client():
+    import boto3
+    from botocore.config import Config
+    return boto3.client('s3',endpoint_url=infra.required('RUNPOD_S3_ENDPOINT_URL').rstrip('/'),
+        region_name=infra.required('RUNPOD_DATACENTER_ID'),
+        aws_access_key_id=infra.required('RUNPOD_S3_ACCESS_KEY_ID'),
+        aws_secret_access_key=infra.required('RUNPOD_S3_SECRET_ACCESS_KEY'),
+        config=Config(connect_timeout=5,read_timeout=5,retries={'mode':'standard','max_attempts':2}))
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True);ap.add_argument('--execute',action='store_true');args=ap.parse_args()
     cfg,_,_,manifest=prepare('C')
@@ -150,7 +160,7 @@ def main():
     authorize(cfg,manifest)
     record=execute(cfg,manifest,args.mode,
         execution=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider()),
-        client=infra.s3_client(),repo_sha=infra.required('GITHUB_SHA'),run_id=infra.required('HEPHAESTUS_EVALUATOR_V2_RUN_ID'))
+        client=s3_client(),repo_sha=infra.required('GITHUB_SHA'),run_id=infra.required('HEPHAESTUS_EVALUATOR_V2_RUN_ID'))
     print('EVALUATOR_SEMANTIC_V2_LAUNCH '+json.dumps(record,sort_keys=True))
     return 0
 

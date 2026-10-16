@@ -9,7 +9,7 @@ paid training/evaluation, certification, promotion and authoritative dispatch.
 The dry-run-first V2 launcher and remote training/evaluation entrypoints are
 implemented and disabled by the checked-in approval flags. An explicit-marker-only workflow reuses existing GitHub secrets; it cannot buy
 compute under the checked-in flags and null budget approval ID. The launcher enforces
-price/time limits, reserves teardown time, and requires actual HTTP 404 evidence
+price/time limits, reserves six minutes for bounded polling/teardown, and requires actual HTTP 404 evidence
 of deletion. A transport failure does not establish absence. Conditional S3 launch
 claims, scoped to a unique budget approval ID rather than a run ID, reject
 duplicate/concurrent paid attempts and reuse of a spent approval; if the storage endpoint rejects
