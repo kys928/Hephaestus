@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Exploratory exact-fence normalization of already paid factor-only outputs.
+
+NOT a change to the original strict 0/64 contract score; only interprets 64
+unaltered, immutable saved generations under a separately labeled diagnostic.
+"""
+from __future__ import annotations
+import hashlib,json,re
+from pathlib import Path
+
+import run_interface_repair_v1 as s3
+from evaluator_semantic_factor_probe_protocol import (
+    panel,evaluate_reports,parse_factor_json,
+)
+
+RUN="factor-only-D-38962439250"
+ROOT="hephaestus/scientific/v5/evaluator_factor_only_probe_v1/"+RUN+"/checkpoints/step-096/evaluation"
+D_ROOT="hephaestus/scientific/v5/evaluator_semantic_repair_v2/evaluator-semantic-v2-D-38945578442/checkpoints/step-096/evaluation"
+
+def normalize_exact_fenced_object(raw: str) -> str | None:
+    """Remove only a complete Markdown JSON fence, not arbitrary surrounding text."""
+    if not isinstance(raw,str):
+        return None
+    fence=re.escape(chr(96)*3)
+    pattern=fence+r"(?:json)?[ \t]*\r?\n(\{[\s\S]*\})\r?\n"+fence+r"[ \t]*"
+    match=re.fullmatch(pattern,raw.strip(),re.IGNORECASE)
+    if match is None:
+        return None
+    candidate=match.group(1)
+    return candidate if parse_factor_json(candidate) is not None else None
+
+
+def get(client,key,receipts):
+    resp=client.get_object(Bucket=s3.bucket(),Key=key)
+    try:raw=resp["Body"].read()
+    finally:resp["Body"].close()
+    receipts.append(dict(key=key,sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw)))
+    return json.loads(raw)
+
+
+def main():
+    client=s3.s3_client();client.head_bucket(Bucket=s3.bucket())
+    receipts=[]
+    terminal=get(client,ROOT+"/result.json",receipts)
+    if terminal.get("status")!="factor_probe_complete" or terminal.get("completed")!=64:
+        raise ValueError("factor probe source result not complete")
+    source=[r for i in range(1,9) for r in get(client,ROOT+f"/samples/shard-{i:04d}.json",receipts)]
+    old=[r for i in range(1,3) for r in get(client,D_ROOT+f"/samples/shard-{i:04d}.json",receipts)]
+    if len(source)!=64 or len(old)!=64 or any(r.get("valid_json") for r in source):
+        raise ValueError("must preserve originally invalid strict formatting")
+    normalized=[]
+    exact_wrapper_valid=0
+    for row in source:
+        parsed=normalize_exact_fenced_object(row["raw_factors"])
+        exact_wrapper_valid+=parsed is not None
+        normalized.append({
+            "case_id":row["case_id"],"prompt_sha256":row["prompt_sha256"],
+            "checkpoint_sha256":row["checkpoint_sha256"],
+            "raw_factors":parsed if parsed is not None else ""
+        })
+    score=evaluate_reports(panel(),normalized,old)
+    score.update({
+        "label":"exploratory_exact_fence_normalized_saved_factor_reports",
+        "original_strict_valid_json":0,
+        "exact_fence_normalizable":exact_wrapper_valid,
+        "saved_raw_outputs_mutated":False,
+        "normalization_restriction":"exact complete markdown JSON fence only, no target-derived repair, no language-model inference",
+        "original_required_JSON_contract_passed":False,
+        "same_case_reference_decisions":33,
+        "read_receipts":receipts,
+        "gpu_allocations":0,"s3_writes":0,
+        "certification":False,
+        "limitations":"Post-hoc format tolerance is NOT strict-format compliance or independent proof of model reasoning. Previously frozen development examples and independent saved D decisions only."
+    })
+    Path("evaluator-factor-probe-fence-normalized.json").write_text(json.dumps(score,sort_keys=True,indent=2)+"\n")
+    compact={k:score[k] for k in ("total","original_strict_valid_json","exact_fence_normalizable",
+        "factor_report_valid_json","all_six_factors_correct","saved_D_decisions_correct",
+        "per_factor","by_state","observable_mismatch_categories","by_handoff")}
+    print("EVALUATOR_FACTOR_FENCE_NORMALIZED "+json.dumps(compact,sort_keys=True))
+    return score
+
+if __name__=="__main__":
+    main()
