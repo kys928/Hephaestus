@@ -20,7 +20,7 @@ def bounded_cost(snapshot, elapsed, cfg, mode):
     import math
     hourly=float(raw)
     if not math.isfinite(hourly) or hourly<=0 or hourly>cfg['execution']['max_hourly_usd_per_pod']:
-        raise ValueError('pod hourly price outside approved ceiling')
+        raise ValueError(f'pod hourly price outside approved ceiling: observed={hourly!r}, approved={cfg["execution"]["max_hourly_usd_per_pod"]}')
     limit=cfg['execution']['max_estimated_total_usd_train' if mode=='train' else 'max_estimated_total_usd_evaluate']
     # Reserve six minutes for bounded API polling and five teardown attempts. The launcher and remote runner
     # enforce timeouts; verified deletion is required even after any exception.
@@ -110,6 +110,10 @@ def execute(cfg,manifest,mode,*,execution,client,repo_sha,run_id):
             elapsed=time.monotonic()-started
             if elapsed>=wall:raise TimeoutError('V2 launcher hard wall reached')
             snapshot=execution.get_pod(pod_id)
+            raw_rate=snapshot.get('adjustedCostPerHr',snapshot.get('costPerHr'))
+            if raw_rate is not None:
+                try:record['cost_per_hr']=float(raw_rate)
+                except (ValueError,TypeError):pass
             record.update(bounded_cost(snapshot,elapsed,cfg,mode))
             bootstrap=infra.maybe_json(client,f'{prefix}/{suffix}/bootstrap/progress.json')
             if bootstrap and bootstrap.get('stage')=='bootstrap_failed':
@@ -149,6 +153,33 @@ def s3_client():
         config=Config(connect_timeout=5,read_timeout=5,retries={'mode':'standard','max_attempts':2}))
 
 
+def quote_gpu(cfg):
+    """Check the public catalog floor without allocating; the pod guard remains authoritative."""
+    import urllib.request
+    import urllib.error
+    gpu=cfg['execution']['gpu_type_ids'][0]
+    query='query { gpuTypes(input: { id: '+json.dumps(gpu)+' }) { id lowestPrice(input: { gpuCount: 1, secureCloud: true }) { stockStatus uninterruptablePrice } } }'
+    request=urllib.request.Request('https://api.runpod.io/graphql',data=json.dumps({'query':query}).encode(),
+        headers={'Content-Type':'application/json','Authorization':'Bearer '+infra.required('RUNPOD_API_KEY'),
+                 'User-Agent':'Mozilla/5.0 (compatible; Hephaestus-RunPod/1.0)'},method='POST')
+    try:
+        with urllib.request.urlopen(request,timeout=20) as response:payload=json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise ValueError(f'catalog preflight HTTP {exc.code}') from None
+    matches=payload.get('data',{}).get('gpuTypes',[])
+    if payload.get('errors') or len(matches)!=1 or matches[0].get('id')!=gpu:
+        raise ValueError('catalog preflight has no unambiguous GPU quote')
+    price=matches[0].get('lowestPrice') or {}
+    import math
+    hourly=float(price.get('uninterruptablePrice') or 0)
+    if not math.isfinite(hourly) or hourly<=0:
+        raise ValueError('catalog preflight price is invalid')
+    if hourly>cfg['execution']['max_hourly_usd_per_pod']:
+        raise ValueError(f'catalog hourly price {hourly} exceeds approved {cfg["execution"]["max_hourly_usd_per_pod"]}; no pod allocated')
+    if price.get('stockStatus')=='None':raise ValueError('catalog has no compatible GPU stock')
+    return dict(gpu_type=gpu,catalog_floor_usd_per_hour=hourly,stock_status=price.get('stockStatus'))
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True);ap.add_argument('--execute',action='store_true');args=ap.parse_args()
     cfg,_,_,manifest=prepare('C')
@@ -158,6 +189,7 @@ def main():
         print(json.dumps(dict(status='dry_run',paid_authorized=False,request=request(cfg,repo_sha,run_id,args.mode,real_env=False)),sort_keys=True,indent=2))
         return 0
     authorize(cfg,manifest)
+    print('EVALUATOR_SEMANTIC_V2_PRICE_PREFLIGHT '+json.dumps(quote_gpu(cfg),sort_keys=True))
     record=execute(cfg,manifest,args.mode,
         execution=RunPodExecutionAdapter(RunPodConfig.from_env(),EnvironmentSecretsProvider()),
         client=s3_client(),repo_sha=infra.required('GITHUB_SHA'),run_id=infra.required('HEPHAESTUS_EVALUATOR_V2_RUN_ID'))

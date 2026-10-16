@@ -357,3 +357,15 @@ def test_live_activation_matches_recorded_human_budget():
         assert live['execution']['max_hourly_usd_per_pod']==approval['maximum_hourly_usd']
         assert not approval['additional_ablation_runs_authorized']
         assert not approval['production_or_certification_authorized']
+
+
+@pytest.mark.parametrize('rate',[2.1,2.49,0,None])
+def test_catalog_preflight_prevents_overprice_before_allocation(cfg,monkeypatch,rate):
+    from launch_evaluator_semantic_repair_v2 import quote_gpu
+    import io,urllib.request
+    monkeypatch.setenv('RUNPOD_API_KEY','test-only-token')
+    data={'data':{'gpuTypes':[{'id':cfg['execution']['gpu_type_ids'][0],'lowestPrice':{'uninterruptablePrice':rate,'stockStatus':'High'}}]}}
+    monkeypatch.setattr(urllib.request,'urlopen',lambda *a,**kw:io.BytesIO(json.dumps(data).encode()))
+    if rate==2.1:assert quote_gpu(cfg)['catalog_floor_usd_per_hour']==2.1
+    else:
+        with pytest.raises(ValueError):quote_gpu(cfg)

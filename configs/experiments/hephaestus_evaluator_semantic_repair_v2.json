@@ -111,11 +111,11 @@
     "certification_claim_allowed": false,
     "explicit_launch_authorization_required": true,
     "fresh_certification_generation_allowed_during_repair": false,
-    "paid_checkpoint_evaluation_allowed": true,
-    "paid_training_allowed": true,
+    "paid_checkpoint_evaluation_allowed": false,
+    "paid_training_allowed": false,
     "parent_adapter_mutation_allowed": false,
     "production_promotion_allowed": false,
-    "training_approved": true
+    "training_approved": false
   },
   "matched_handoff_control_sha256": "2f8e1b8243c860fcb23ddbf4c60a04417d8f9fb05e6826f703d94596eb825bf8",
   "model_protocol": {
