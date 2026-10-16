@@ -1,0 +1,17 @@
+{
+  "additional_ablation_runs_authorized": false,
+  "approval_id": "heph-sem-v2-C-20261016-165339Z",
+  "approved_at": "2026-10-16T18:53:39+02:00",
+  "maximum_evaluation_usd": 0.9,
+  "maximum_hourly_usd": 2.49,
+  "maximum_total_usd": 2.5,
+  "maximum_training_usd": 1.5,
+  "previous_pod_verified_absent": true,
+  "previous_workflow_run": 38933236763,
+  "prior_startup_reserve_usd": 0.1,
+  "production_or_certification_authorized": false,
+  "scope": "One replacement C training allocation and one predeclared step-96 evaluation allocation",
+  "source": "User approval in this project conversation",
+  "status": "approved",
+  "user_message": "approved!"
+}

@@ -349,7 +349,7 @@ def test_live_activation_matches_recorded_human_budget():
     live=json.loads(CFG_PATH.read_text())
     gov=live['governance']
     if any(gov[k] for k in ('training_approved','paid_training_allowed','paid_checkpoint_evaluation_allowed')):
-        approval=json.loads((b.common.ROOT/'configs/experiments/evaluator_semantic_repair_v2.approval.json').read_text())
+        approval=json.loads((b.common.ROOT/gov.get('approval_record_path','configs/experiments/evaluator_semantic_repair_v2.approval.json')).read_text())
         assert approval['status']=='approved' and gov['budget_approval_id']==approval['approval_id']
         assert approval['maximum_total_usd']==2.50
         assert live['execution']['max_estimated_total_usd_train']==approval['maximum_training_usd']
@@ -366,6 +366,6 @@ def test_catalog_preflight_prevents_overprice_before_allocation(cfg,monkeypatch,
     monkeypatch.setenv('RUNPOD_API_KEY','test-only-token')
     data={'data':{'gpuTypes':[{'id':cfg['execution']['gpu_type_ids'][0],'lowestPrice':{'uninterruptablePrice':rate,'stockStatus':'High'}}]}}
     monkeypatch.setattr(urllib.request,'urlopen',lambda *a,**kw:io.BytesIO(json.dumps(data).encode()))
-    if rate==2.1:assert quote_gpu(cfg)['catalog_floor_usd_per_hour']==2.1
+    if rate is not None and 0<rate<=cfg['execution']['max_hourly_usd_per_pod']:assert quote_gpu(cfg)['catalog_floor_usd_per_hour']==rate
     else:
         with pytest.raises(ValueError):quote_gpu(cfg)

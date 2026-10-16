@@ -106,8 +106,22 @@ def validate_config(cfg, parent):
     require(cfg['required_parent_candidate_id'] == parent['candidate_id'] == old['required_parent_candidate_id'], 'parent candidate drift')
     require(cfg['model_protocol'] == old['model_protocol'] and cfg['roles'] == old['roles'], 'decoding/model protocol drift')
     require(cfg['source_phase_i_stack'] == old['source_phase_i_stack'], 'source stack drift')
-    for key in ('max_hourly_usd_per_pod','max_estimated_total_usd_train','max_estimated_total_usd_evaluate','hard_wall_seconds_train','hard_wall_seconds_evaluate'):
-        require(cfg['execution'][key] == old['execution'][key], f'initial approved-budget proposal drift: {key}')
+    record_path=cfg['governance'].get('approval_record_path')
+    if record_path:
+        approval=json.loads((b.common.ROOT/record_path).read_text())
+        require(approval['status']=='approved', 'budget record is not approved')
+        for key,approved in {'max_hourly_usd_per_pod':'maximum_hourly_usd',
+            'max_estimated_total_usd_train':'maximum_training_usd',
+            'max_estimated_total_usd_evaluate':'maximum_evaluation_usd'}.items():
+            require(cfg['execution'][key]==approval[approved], f'approved budget drift: {key}')
+        require(approval['maximum_training_usd']+approval['maximum_evaluation_usd']+approval.get('prior_startup_reserve_usd',0)<=approval['maximum_total_usd'], 'combined budget exceeded')
+        if cfg['governance'].get('training_approved'):
+            require(cfg['governance']['budget_approval_id']==approval['approval_id'], 'budget approval identity drift')
+    else:
+        for key in ('max_hourly_usd_per_pod','max_estimated_total_usd_train','max_estimated_total_usd_evaluate'):
+            require(cfg['execution'][key] == old['execution'][key], f'initial approved-budget proposal drift: {key}')
+    for key in ('hard_wall_seconds_train','hard_wall_seconds_evaluate'):
+        require(cfg['execution'][key] == old['execution'][key], f'execution timeout drift: {key}')
     for k in ('learning_rate','weight_decay','seed','lora_rank','lora_alpha','lora_dropout','precision','maximum_optimizer_steps','gradient_accumulation_steps','max_sequence_length','checkpoint_steps'):
         require(cfg['training'][k] == old['training'][k], f'training comparison drift: {k}')
     require(cfg['development_gates'] == old['development_gates'], 'scientific acceptance gates changed')
