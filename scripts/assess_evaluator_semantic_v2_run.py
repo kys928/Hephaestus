@@ -75,9 +75,16 @@ def assess():
     import run_interface_repair_v3_evaluator as v3
     counts=Counter(cases[k]['expected']['decision'] for k in candidate_ids)
     correct=Counter(cases[k]['expected']['decision'] for k,v in candidate.items() if v)
-    partial=dict(completed_cases=n,total_cases=256,full_diagnostic_complete=complete,
+    from evaluator_semantic_v2_metrics import summarize
+    observed_report=summarize([cases[r['case_id']] for r in crows],crows)
+    observed_report['frozen_development_gates']=result['report']['frozen_development_gates'] if complete else None
+    for state in observed_report['per_state_decision_accuracy']:
+        if not counts[state]:observed_report['per_state_decision_accuracy'][state]=None
+    partial=dict(enhanced_report=observed_report,completed_cases=n,total_cases=256,full_diagnostic_complete=complete,
         gates_assessable=complete,summary=v3.summarize_v3(crows),
         per_state={state:dict(total=counts[state],correct=correct[state],accuracy=correct[state]/counts[state] if counts[state] else None) for state in ('scientific_rejection','incomplete_evidence','inconclusive','recheck_required','regressed','equivalent','improved','certification_ready')},
+        first_case_latency_seconds=crows[0]['generation']['latency_seconds'],
+        max_case_latency_seconds=max(r['generation']['latency_seconds'] for r in crows),
         saved_generation_seconds=sum(r['generation']['latency_seconds'] for r in crows),
         saved_generated_tokens=sum(r['generation']['generated_tokens'] for r in crows),
         first_saved_case=crows[0]['case_id'],last_saved_case=crows[-1]['case_id'],
