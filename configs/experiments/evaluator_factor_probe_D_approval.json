@@ -1,0 +1,20 @@
+{
+  "protocol": "evaluator-six-factor-D-v1",
+  "status": "approved_for_exactly_one_inference_only_run",
+  "approval_id": "heph-eval-factor-D-probe-20261016-2220",
+  "approval_source": "User's explicit authorization in current Hephaestus project chat",
+  "scope": "ONE saved D step-96 model, exactly 64 factor-only generations on the frozen D development screen; no retraining; no fresh state-prediction evaluation; no certification",
+  "checkpoint_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
+  "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "max_hourly_usd": 2.49,
+  "initial_total_estimated_ceiling_usd": 0.75,
+  "exceptional_hard_ceiling_usd": 1.5,
+  "contingency_rule": "Escalate ONLY within same pod/run, only with >=16 completed persisted factor reports, if measured extrapolation predicts need above $0.75 while <=$1.50 and stopping would truncate remaining authorized cases; never extend for failed model loads, lack of GPU, inactivity, or failed science.",
+  "pod_count_max": 1,
+  "gpu_training_authorized": false,
+  "repeat_inference_authorized": false,
+  "certification_authorized": false,
+  "production_promotion_authorized": false,
+  "sealed_pack_use_authorized": false,
+  "authorization_user_message": "Authorized colleague. if the $0.75 u are allowed to go to $1.50 but only if really necessary."
+}
