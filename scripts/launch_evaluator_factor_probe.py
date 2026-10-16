@@ -87,9 +87,17 @@ def capacity_and_cost_guard(cfg,progress,elapsed,hourly,extended):
             raise ValueError("invalid progress evidence")
     # Only authorize the contingency if enough independent S3-persisted
     # generations exist and measured extrapolation exceeds $0.75.
-    if not extended and completed>=cfg["minimum_progress_for_contingency"]:
-        projected_finish=hourly*(elapsed*64/completed+reserve)/3600
-        if initial < projected_finish <= hard and completed<64:
+    if not extended and completed>=cfg["minimum_progress_for_contingency"] and completed<64:
+        generation_seconds=progress.get("total_generation_seconds")
+        if (not isinstance(generation_seconds,(int,float)) or
+            not math.isfinite(float(generation_seconds)) or generation_seconds<=0):
+            raise ValueError("missing trustworthy inference timing for contingency")
+        average_generation=float(generation_seconds)/completed
+        # Account for already paid bootstrap exactly once; forecast remaining
+        # measured inference with 30% slack and 2 s/report for persistence.
+        projected_elapsed=elapsed+(64-completed)*(average_generation*1.30+2)+reserve
+        projected_finish=hourly*projected_elapsed/3600
+        if initial < projected_finish <= hard:
             extended=True
     ceiling=hard if extended else initial
     if hourly*(elapsed+reserve)/3600 >= ceiling:
