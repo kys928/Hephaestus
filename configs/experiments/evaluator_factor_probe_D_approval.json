@@ -1,6 +1,6 @@
 {
   "protocol": "evaluator-six-factor-D-v1",
-  "status": "approved_for_exactly_one_inference_only_run",
+  "status": "completed_spent_and_disabled",
   "approval_id": "heph-eval-factor-D-probe-20261016-2220",
   "approval_source": "User's explicit authorization in current Hephaestus project chat",
   "scope": "ONE saved D step-96 model, exactly 64 factor-only generations on the frozen D development screen; no retraining; no fresh state-prediction evaluation; no certification",
@@ -16,5 +16,14 @@
   "certification_authorized": false,
   "production_promotion_authorized": false,
   "sealed_pack_use_authorized": false,
-  "authorization_user_message": "Authorized colleague. if the $0.75 u are allowed to go to $1.50 but only if really necessary."
+  "authorization_user_message": "Authorized colleague. if the $0.75 u are allowed to go to $1.50 but only if really necessary.",
+  "consumed_github_workflow_run_id": 38962439250,
+  "consumed_s3_run_id": "factor-only-D-38962439250",
+  "spending_outcome": {
+    "estimated_usd": 0.15515909405059167,
+    "contingency_used": false,
+    "pod_id": "n9nw2sr5u83qoi",
+    "pod_absence_verified": true
+  },
+  "additional_allocations_authorized": false
 }
