@@ -30,8 +30,10 @@ def bounded_cost(snapshot, elapsed, cfg, mode):
     return dict(cost_per_hr=hourly,estimated_cost_usd=estimated)
 
 
-def request(cfg,repo_sha,run_id,mode,*,real_env):
+def request(cfg,repo_sha,run_id,mode,*,real_env,arm='C'):
     # Reuse the established bootstrap/dependency pins, replacing one exact body.
+    if arm not in ('C','D'):
+        raise ValueError('only specifically governed C and D experiments are supported')
     body=previous.request_body(cfg,repo_sha,run_id,mode,96 if mode=='evaluate' else None,real_env=real_env)
     # RunPod's existing adapter uses dockerStartCmd or dockerArgs depending on
     # request normalization. Refuse to silently leave the old runner in place.
@@ -46,6 +48,7 @@ def request(cfg,repo_sha,run_id,mode,*,real_env):
                 "export BOOTSTRAP_FILE READY HUGGINGFACE_HUB_CACHE\ntrap 'write_bootstrap bootstrap_failed' ERR")
             value=value.replace('--evaluate-checkpoint "$HEPHAESTUS_EVALUATOR_REPAIR_CHECKPOINT_STEP"','--mode evaluate --step 96 --arm C')
             value=value.replace('scripts/run_evaluator_semantic_repair_v2.py --train','scripts/run_evaluator_semantic_repair_v2.py --mode train --arm C')
+            value=value.replace('--arm C', '--arm ' + arm)
             return value
         if isinstance(value,list):return [replace_strings(v) for v in value]
         if isinstance(value,dict):return {k:replace_strings(v) for k,v in value.items()}
@@ -53,7 +56,7 @@ def request(cfg,repo_sha,run_id,mode,*,real_env):
     body=replace_strings(body)
     body['env']['HEPHAESTUS_EVALUATOR_V2_AUTHORIZED']='LAUNCH_APPROVED_EVALUATOR_SEMANTIC_V2'
     body['env']['HEPHAESTUS_EVALUATOR_V2_RUN_ID']=run_id
-    body['name']=f'hephaestus-evaluator-semantic-v2-C-{mode}-{run_id}'[:180]
+    body['name']=f'hephaestus-evaluator-semantic-v2-{arm}-{mode}-{run_id}'[:180]
     return body
 
 
@@ -93,7 +96,7 @@ def execute(cfg,manifest,mode,*,execution,client,repo_sha,run_id):
         training=infra.maybe_json(client,f'{prefix}/training/result.json')
         if not training or training.get('repo_sha')!=repo_sha or training.get('status')!='training_complete':
             raise ValueError('evaluation requires completed immutable training')
-    body=request(cfg,repo_sha,run_id,mode,real_env=True)
+    body=request(cfg,repo_sha,run_id,mode,real_env=True,arm=manifest['arm'])
     # Conditional creation prevents retries/concurrent launchers from buying the
     # same approved run twice. Unsupported conditional writes fail before allocation.
     claim=dict(run_id=run_id,repo_sha=repo_sha,mode=mode,manifest_sha256=__import__('hashlib').sha256(json.dumps(manifest,sort_keys=True).encode()).hexdigest())
@@ -122,7 +125,8 @@ def execute(cfg,manifest,mode,*,execution,client,repo_sha,run_id):
             if terminal:
                 if terminal.get('repo_sha')!=repo_sha or terminal.get('run_id')!=run_id:
                     raise ValueError('terminal evidence identity mismatch')
-                if terminal.get('status')!=('training_complete' if mode=='train' else 'evaluation_complete'):
+                accepted = ('training_complete',) if mode == 'train' else ('evaluation_complete', 'screen_rejected')
+                if terminal.get('status') not in accepted:
                     raise ValueError('remote V2 run failed')
                 record.update(status=terminal['status'],result=terminal)
                 return record
@@ -181,12 +185,12 @@ def quote_gpu(cfg):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True);ap.add_argument('--execute',action='store_true');args=ap.parse_args()
-    cfg,_,_,manifest=prepare('C')
+    ap=argparse.ArgumentParser();ap.add_argument('--mode',choices=['train','evaluate'],required=True);ap.add_argument('--execute',action='store_true');ap.add_argument('--arm',choices=['C','D'],default='C');args=ap.parse_args()
+    cfg,_,_,manifest=prepare(args.arm)
     repo_sha=os.environ.get('GITHUB_SHA','0'*40)
-    run_id=os.environ.get('HEPHAESTUS_EVALUATOR_V2_RUN_ID','evaluator-v2-C-dryrun')
+    run_id=os.environ.get('HEPHAESTUS_EVALUATOR_V2_RUN_ID','evaluator-v2-'+args.arm+'-dryrun')
     if not args.execute:
-        print(json.dumps(dict(status='dry_run',paid_authorized=False,request=request(cfg,repo_sha,run_id,args.mode,real_env=False)),sort_keys=True,indent=2))
+        print(json.dumps(dict(status='dry_run',paid_authorized=False,request=request(cfg,repo_sha,run_id,args.mode,real_env=False,arm=args.arm)),sort_keys=True,indent=2))
         return 0
     authorize(cfg,manifest)
     print('EVALUATOR_SEMANTIC_V2_PRICE_PREFLIGHT '+json.dumps(quote_gpu(cfg),sort_keys=True))
