@@ -30,6 +30,38 @@ def normalize_exact_fenced_object(raw: str) -> str | None:
     return candidate if parse_factor_json(candidate) is not None else None
 
 
+
+def normalize_fenced_singleton_array(raw: str) -> str | None:
+    """Unwrap ONLY a full JSON code fence containing a single-object array.
+
+    Strict 0/64 schema score is immutable; this is a separately labeled
+    exploratory post-hoc representation normalization.
+    """
+    if not isinstance(raw,str):
+        return None
+    fence=re.escape(chr(96)*3)
+    pattern=fence+r"json[ \t]*\r?\n([\s\S]*?)\r?\n"+fence+r"[ \t]*"
+    match=re.fullmatch(pattern,raw.strip(),re.IGNORECASE)
+    if match is None:
+        return None
+    def unique(pairs):
+        out={}
+        for k,v in pairs:
+            if k in out:
+                raise ValueError("duplicate JSON key")
+            out[k]=v
+        return out
+    try:
+        value=json.loads(match.group(1),object_pairs_hook=unique,
+            parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")))
+    except ValueError:
+        return None
+    if not isinstance(value,list) or len(value)!=1 or not isinstance(value[0],dict):
+        return None
+    candidate=json.dumps(value[0],sort_keys=True,separators=(",",":"))
+    return candidate if parse_factor_json(candidate) is not None else None
+
+
 def get(client,key,receipts):
     resp=client.get_object(Bucket=s3.bucket(),Key=key)
     try:raw=resp["Body"].read()
@@ -49,10 +81,14 @@ def main():
     if len(source)!=64 or len(old)!=64 or any(r.get("valid_json") for r in source):
         raise ValueError("must preserve originally invalid strict formatting")
     normalized=[]
-    exact_wrapper_valid=0
+    exact_object_fence=0
+    singleton_array_fence=0
     for row in source:
         parsed=normalize_exact_fenced_object(row["raw_factors"])
-        exact_wrapper_valid+=parsed is not None
+        exact_object_fence+=parsed is not None
+        if parsed is None:
+            parsed=normalize_fenced_singleton_array(row["raw_factors"])
+            singleton_array_fence+=parsed is not None
         normalized.append({
             "case_id":row["case_id"],"prompt_sha256":row["prompt_sha256"],
             "checkpoint_sha256":row["checkpoint_sha256"],
@@ -62,9 +98,10 @@ def main():
     score.update({
         "label":"exploratory_exact_fence_normalized_saved_factor_reports",
         "original_strict_valid_json":0,
-        "exact_fence_normalizable":exact_wrapper_valid,
+        "exact_object_fence_normalizable":exact_object_fence,
+        "fenced_singleton_array_normalizable":singleton_array_fence,
         "saved_raw_outputs_mutated":False,
-        "normalization_restriction":"exact complete markdown JSON fence only, no target-derived repair, no language-model inference",
+        "normalization_restriction":"exact complete markdown JSON fence with either object or strictly singleton JSON array of one six-factor object; no target-derived repair, no new inference",
         "original_required_JSON_contract_passed":False,
         "same_case_reference_decisions":33,
         "read_receipts":receipts,
@@ -73,7 +110,7 @@ def main():
         "limitations":"Post-hoc format tolerance is NOT strict-format compliance or independent proof of model reasoning. Previously frozen development examples and independent saved D decisions only."
     })
     Path("evaluator-factor-probe-fence-normalized.json").write_text(json.dumps(score,sort_keys=True,indent=2)+"\n")
-    compact={k:score[k] for k in ("total","original_strict_valid_json","exact_fence_normalizable",
+    compact={k:score[k] for k in ("total","original_strict_valid_json","exact_object_fence_normalizable","fenced_singleton_array_normalizable",
         "factor_report_valid_json","all_six_factors_correct","saved_D_decisions_correct",
         "per_factor","by_state","observable_mismatch_categories","by_handoff")}
     print("EVALUATOR_FACTOR_FENCE_NORMALIZED "+json.dumps(compact,sort_keys=True))
