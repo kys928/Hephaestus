@@ -106,16 +106,16 @@
   },
   "governance": {
     "automatic_role_dispatch_allowed": false,
-    "budget_approval_id": null,
+    "budget_approval_id": "heph-sem-v2-C-20261016-163356Z",
     "burned_sealed_partition_use_allowed": false,
     "certification_claim_allowed": false,
     "explicit_launch_authorization_required": true,
     "fresh_certification_generation_allowed_during_repair": false,
-    "paid_checkpoint_evaluation_allowed": false,
-    "paid_training_allowed": false,
+    "paid_checkpoint_evaluation_allowed": true,
+    "paid_training_allowed": true,
     "parent_adapter_mutation_allowed": false,
     "production_promotion_allowed": false,
-    "training_approved": false
+    "training_approved": true
   },
   "matched_handoff_control_sha256": "2f8e1b8243c860fcb23ddbf4c60a04417d8f9fb05e6826f703d94596eb825bf8",
   "model_protocol": {

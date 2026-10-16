@@ -23,7 +23,11 @@ def packs():
 
 @pytest.fixture(scope='module')
 def cfg():
-    return json.loads(CFG_PATH.read_text())
+    # Negative authorization tests construct an unapproved scenario explicitly;
+    # the live protocol may carry a separately recorded human approval.
+    value=json.loads(CFG_PATH.read_text())
+    value['governance'].update(training_approved=False,paid_training_allowed=False,paid_checkpoint_evaluation_allowed=False,budget_approval_id=None)
+    return value
 
 
 def test_exhaustive_oracle_truth_partition_and_frozen_semantics():
@@ -339,3 +343,17 @@ def test_new_workflow_is_explicit_marker_only_and_default_protocol_disabled(cfg)
     assert 'workflow_dispatch' not in workflow and 'matrix:' not in workflow
     assert not any(cfg['governance'][k] for k in ('training_approved','paid_training_allowed','paid_checkpoint_evaluation_allowed'))
     assert cfg['governance']['budget_approval_id'] is None
+
+
+def test_live_activation_matches_recorded_human_budget():
+    live=json.loads(CFG_PATH.read_text())
+    gov=live['governance']
+    if any(gov[k] for k in ('training_approved','paid_training_allowed','paid_checkpoint_evaluation_allowed')):
+        approval=json.loads((b.common.ROOT/'configs/experiments/evaluator_semantic_repair_v2.approval.json').read_text())
+        assert approval['status']=='approved' and gov['budget_approval_id']==approval['approval_id']
+        assert approval['maximum_total_usd']==2.50
+        assert live['execution']['max_estimated_total_usd_train']==approval['maximum_training_usd']
+        assert live['execution']['max_estimated_total_usd_evaluate']==approval['maximum_evaluation_usd']
+        assert live['execution']['max_hourly_usd_per_pod']==approval['maximum_hourly_usd']
+        assert not approval['additional_ablation_runs_authorized']
+        assert not approval['production_or_certification_authorized']
