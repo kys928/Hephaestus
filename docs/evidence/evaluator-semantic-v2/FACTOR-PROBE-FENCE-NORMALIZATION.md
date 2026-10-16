@@ -10,3 +10,6 @@ The paid probe completed 64/64 reports but **0/64** passed the strict raw-JSON c
 The original score of 0/64 remains authoritative for *strict formatting*. A distinct exploratory CPU-only scorer will accept **only complete JSON objects surrounded by exactly one Markdown JSON fence**, without changing any field or using expected labels for repair. That scorer will test whether the six values match independent frozen reference evidence, then pair results with saved D decisions.
 
 No new GPU inference or changes to checkpoints or scientific gates are authorized by this audit.
+## Exact-wrapper normalization outcome
+
+The first conservative normalizer could not validate a complete opening-and-closing Markdown wrapper on any of 64 responses. Original strict score stays 0/64. An additional read-only delimiter audit will characterize precisely what precedes and follows the embedded JSON object before any exploratory factor-value scoring; no GPU rerun authorized.
