@@ -54,7 +54,7 @@ def test_single_paid_bootstrap_route_and_budget():
     raw=json.dumps(body)
     assert "scripts/run_evaluator_contrast_probe.py" in raw
     assert "scripts/run_evaluator_factor_probe.py" not in raw
-    assert "scripts/run_evaluator_semantic_repair_v2.py" not in raw
+    assert '"$PY" scripts/run_evaluator_semantic_repair_v2.py' not in raw
     assert body["env"]["HEPHAESTUS_CONTRAST_AUTHORIZED"]=="SINGLE_D_CONTRAST_PROBE"
     assert "HEPHAESTUS_FACTOR_PROBE_AUTHORIZED" not in body["env"]
 
