@@ -1,0 +1,16 @@
+{
+  "approval_id": "heph-D-contrasts-20261019-single",
+  "protocol": "evaluator-D-matched-contrasts-20261019-v1",
+  "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "max_hourly_usd": 2.49,
+  "max_total_estimated_gpu_usd": 0.75,
+  "teardown_reserve_seconds": 120,
+  "launcher_hard_wall_seconds": 930,
+  "runner_hard_wall_seconds": 850,
+  "poll_seconds": 10,
+  "generation_max_new_tokens": 112,
+  "shard_size": 8,
+  "one_pod": true,
+  "extra_runs": false,
+  "runpod_launch_enabled": false
+}
