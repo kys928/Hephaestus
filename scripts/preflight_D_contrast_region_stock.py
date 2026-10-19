@@ -31,11 +31,23 @@ def inspect_response(payload):
         raise ValueError("unrecognized stock status")
     if not isinstance(price,(int,float)) or not math.isfinite(price) or price<=0:
         raise ValueError("GPU hourly price unavailable")
-    if not isinstance(counts,list) or not all(type(n)==int and n>0 for n in counts):
-        raise ValueError("exact 1x GPU availability counts missing")
-    suitable=(stock in ("High","Medium") and 1 in counts and price<=MAX_HOURLY_USD)
+    # RunPod's availableGpuCounts is optional in the published GraphQL
+    # LowestPrice schema; live EU-CZ-1 responses may return JSON null.
+    # The lowestPrice query itself is explicitly constrained to 1 GPU,
+    # Secure Cloud, and the given datacenter. Its stockStatus is therefore
+    # already the 1-GPU regional availability signal. Do not mistake null
+    # for malformed provider data or a proof of zero GPUs.
+    if counts is not None and (
+        not isinstance(counts,list) or
+        not all(type(n)==int and n>0 for n in counts)
+    ):
+        raise ValueError("invalid GPU-count metadata")
+    one_gpu_confirmed=(counts is None or 1 in counts)
+    suitable=(stock in ("High","Medium") and one_gpu_confirmed and price<=MAX_HOURLY_USD)
     return dict(gpu_type=GPU,datacenter=DATACENTER,secure_cloud=True,
         stock_status=stock,available_gpu_counts=counts,
+        one_gpu_evidence=("regional_gpuCount_1_stock" if counts is None
+                          else "regional_stock_and_explicit_gpu_counts"),
         quoted_usd_per_hour=float(price),max_hourly_usd=MAX_HOURLY_USD,
         confident_capacity_signal=suitable)
 
