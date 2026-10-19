@@ -35,11 +35,14 @@ def test_price_or_count_schema_must_be_numeric():
 def test_constrains_request_to_network_volume_location(monkeypatch):
     class Dummy:
         def __init__(self,req,timeout):
-            payload=req.data.decode()
-            assert '"EU-CZ-1"' in payload
-            assert "secureCloud: true" in payload
-            assert "gpuCount: 1" in payload
-            assert "Blackwell Server Edition" in payload
+            import json
+            envelope=json.loads(req.data.decode())
+            assert set(envelope)=={"query"}
+            query=envelope["query"]
+            assert 'dataCenterId: "EU-CZ-1"' in query
+            assert "secureCloud: true" in query
+            assert "gpuCount: 1" in query
+            assert 'id: "NVIDIA RTX PRO 6000 Blackwell Server Edition"' in query
             self.closed=False
         def __enter__(self):return self
         def __exit__(self,*args):self.closed=True
