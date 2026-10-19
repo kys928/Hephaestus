@@ -10,7 +10,8 @@ def packet(status="High",price=2.49,counts=(1,2)):
 @pytest.mark.parametrize("status,price,counts,allowed",[
     ("High",2.49,(1,2),True),
     ("Medium",2.40,(1,),True),
-    ("Low",2.49,(1,),False),
+    ("Low",2.49,(1,),True),
+    ("Low",2.50,(1,),False),
     ("None",2.49,(),False),
     ("High",2.50,(1,),False),
     ("High",2.49,(2,),False),
@@ -29,7 +30,7 @@ def test_unknown_or_untrusted_provider_signal_fails_closed(payload):
     with pytest.raises(ValueError):stock.inspect_response(payload)
 
 @pytest.mark.parametrize("status,allowed",[
-    ("Low",False),("None",False),("Medium",True),("High",True)
+    ("Low",True),("None",False),("Medium",True),("High",True)
 ])
 def test_live_nullable_gpu_counts_are_not_a_schema_error(status,allowed):
     # RunPod GraphQL LowestPrice.availableGpuCounts is nullable. The
@@ -73,8 +74,10 @@ def test_constrains_request_to_network_volume_location(monkeypatch):
     monkeypatch.setattr(stock.urllib.request,"urlopen",lambda req,timeout:Dummy(req,timeout))
     assert stock.query()["data"]["gpuTypes"]==[]
 
-def test_low_stock_gate_does_not_trigger_gpu_request(monkeypatch):
+def test_low_stock_allows_only_one_guarantee_free_scoped_attempt(monkeypatch):
     monkeypatch.setattr(stock,"query",lambda:packet("Low"))
+    assert stock.main()==0
+    monkeypatch.setattr(stock,"query",lambda:packet("None"))
     assert stock.main()==75
     monkeypatch.setattr(stock,"query",lambda:packet("High"))
     assert stock.main()==0
@@ -89,15 +92,16 @@ def test_validation_failure_is_named_but_never_leaks_provider_message(monkeypatc
     assert "confident_capacity_signal" in observed
 
 
-def test_low_stock_with_null_count_is_capacity_blocked_not_exception(monkeypatch,capsys):
+def test_low_stock_with_null_count_is_eligible_only_for_one_attempt(monkeypatch,capsys):
     data=packet("Low",2.49,(1,))
     data["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
     monkeypatch.setattr(stock,"query",lambda:data)
-    assert stock.main()==75
+    assert stock.main()==0
     observed=capsys.readouterr().out
     assert '"stock_status": "Low"' in observed
     assert "error_type" not in observed
-    assert '"confident_capacity_signal": false' in observed
+    assert '"confident_capacity_signal": true' in observed
+    assert "limited_capacity_single_attempt_only" in observed
 
 
 @pytest.mark.parametrize("style",["all_null_quote","null_lowest_price","explicit_none_stock"])
@@ -140,3 +144,11 @@ def test_partial_missing_quote_fields_fails_closed_without_guessing():
     del p["data"]["gpuTypes"][0]["lowestPrice"]["stockStatus"]
     with pytest.raises(ValueError,match="missing expected regional quote fields"):
         stock.inspect_response(p)
+
+
+def test_low_is_not_permission_to_ignore_price_or_missing_region(monkeypatch):
+    with pytest.raises(ValueError,match="GPU hourly price unavailable"):
+        stock.inspect_response(packet("Low",None,(1,)))
+    assert stock.inspect_response(packet("Low",2.50,(1,)))["confident_capacity_signal"] is False
+    assert stock.inspect_response(packet("Low",2.49,(2,)))["confident_capacity_signal"] is False
+    assert stock.inspect_response(packet("Low",2.49,(1,)))["scarcity_warning"]=="limited_capacity_single_attempt_only"
