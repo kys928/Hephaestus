@@ -70,15 +70,10 @@ def test_requires_separate_explicit_authorization(monkeypatch):
     monkeypatch.delenv("HEPHAESTUS_CONTRAST_AUTHORIZED",raising=False)
     with pytest.raises(PermissionError):launch.authorize(cfg)
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
-    # Historical approved state is tested with a temporary fixture only:
-    # the current live record is fail-closed after no-capacity allocation.
-    approval=json.loads(launch.APPROVAL.read_text())
-    assert approval["status"]=="capacity_blocked_no_pod_allocated"
-    with pytest.raises(PermissionError):launch.authorize(cfg)
-    old_path=launch.APPROVAL
-    tmp=old_path.parent/".sample-approval-should-not-be-created"
-    from unittest.mock import mock_open,patch
-    approved=dict(approval,status="authorized_once")
-    with patch("pathlib.Path.read_text",side_effect=lambda *args,**kwargs:json.dumps(approved)):
-        a=launch.authorize(cfg)
-        assert a["previous_probe_approval_reused"] is False
+    # This branch has its own ONE-use retry approval, gated by a separate
+    # in-region availability job and the immutable S3 atomic claim.
+    record=launch.authorize(cfg)
+    assert record["status"]=="authorized_once"
+    assert record["previous_probe_approval_reused"] is False
+    assert record["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
+    assert record["max_total_estimated_gpu_usd"]==0.75
