@@ -15,9 +15,11 @@
   "runpod_launch_enabled": false,
   "required_gpu_stock_status": [
     "High",
-    "Medium"
+    "Medium",
+    "Low"
   ],
   "required_datacenter": "EU-CZ-1",
   "automated_retry_count_max": 1,
-  "capacity_check_before_S3_claim": true
+  "capacity_check_before_S3_claim": true,
+  "low_stock_allocation_attempts_max": 1
 }
