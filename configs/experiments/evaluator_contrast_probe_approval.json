@@ -20,6 +20,7 @@
     "source_sha": "3c4399ecd73218b07286db33a0d167dba7cd93f4",
     "reason": "No Blackwell Server Edition instances available before allocation"
   },
-  "capacity_condition": "NVIDIA RTX PRO 6000 Blackwell Server Edition single Secure Cloud GPU at EU-CZ-1 reports Medium or High live stock and USD <=2.49/hr; no fallback",
-  "budget_increase_authorized": false
+  "capacity_condition": "One NVIDIA RTX PRO 6000 Blackwell Server Edition Secure Cloud GPU in EU-CZ-1; stock High, Medium, or Low (scarce positive stock), never None/null; verified finite quoted rate <=$2.49/hour; no fallback.",
+  "budget_increase_authorized": false,
+  "authorization_scope_note": "User said GPU is available and explicitly requested procurement on 2026-10-19. One guarded attempt may proceed with provider Low stock under original exact identity/price/cost constraints; RunPod states Low means very few GPUs, not zero. No retries after pod create request."
 }
