@@ -70,5 +70,15 @@ def test_requires_separate_explicit_authorization(monkeypatch):
     monkeypatch.delenv("HEPHAESTUS_CONTRAST_AUTHORIZED",raising=False)
     with pytest.raises(PermissionError):launch.authorize(cfg)
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
-    a=launch.authorize(cfg)
-    assert a["previous_probe_approval_reused"] is False
+    # Historical approved state is tested with a temporary fixture only:
+    # the current live record is fail-closed after no-capacity allocation.
+    approval=json.loads(launch.APPROVAL.read_text())
+    assert approval["status"]=="capacity_blocked_no_pod_allocated"
+    with pytest.raises(PermissionError):launch.authorize(cfg)
+    old_path=launch.APPROVAL
+    tmp=old_path.parent/".sample-approval-should-not-be-created"
+    from unittest.mock import mock_open,patch
+    approved=dict(approval,status="authorized_once")
+    with patch("pathlib.Path.read_text",side_effect=lambda *args,**kwargs:json.dumps(approved)):
+        a=launch.authorize(cfg)
+        assert a["previous_probe_approval_reused"] is False
