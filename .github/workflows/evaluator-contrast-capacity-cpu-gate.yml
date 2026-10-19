@@ -1,0 +1,20 @@
+name: D Blackwell region retry CPU-only preflight
+on:
+  push:
+    branches: [experiment/evaluator-contrast-capacity-retry-20261019]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: scripts:src:.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test]'
+      - run: python -m compileall -q scripts/preflight_D_contrast_region_stock.py scripts/run_evaluator_contrast_probe.py scripts/launch_evaluator_contrast_probe.py
+      - run: pytest -q tests/test_preflight_D_contrast_region_stock.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py
+      - run: python scripts/launch_evaluator_contrast_probe.py

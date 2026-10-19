@@ -1,7 +1,7 @@
 {
-  "approval_id": "heph-D-contrasts-20261019-single",
-  "status": "capacity_blocked_no_pod_allocated",
-  "source": "User explicitly authorized the separately proposed 60-pair controlled model-inference experiment on 2026-10-19",
+  "approval_id": "heph-D-contrasts-20261019-capacity-retry-1",
+  "status": "authorized_once",
+  "source": "User explicitly authorized a capacity-triggered retry of the exact same D experiment in project conversation on 2026-10-19",
   "scope": "One read-only inference pod for newly authored 60 counterfactual pairs (120 appearances, dedup identical prompts under greedy fixed seed). No training, extra variants, replays, certification or promotion.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
   "max_gpu_hourly_usd": 2.49,
@@ -13,16 +13,14 @@
   "scientific_gates_unchanged": true,
   "model_retraining_authorized": false,
   "certification_authorized": false,
-  "launch_attempt": {
+  "additional_allocations_authorized": true,
+  "retry_requires_new_authorization": false,
+  "prior_capacity_blocker": {
     "github_actions_run_id": 39269912043,
     "source_sha": "3c4399ecd73218b07286db33a0d167dba7cd93f4",
-    "gpu_type": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-    "catalog_floor_usd_per_hour": 2.49,
-    "create_pod_response": "HTTP 500: create pod: There are no instances currently available",
-    "pod_id": null,
-    "estimated_gpu_spend_usd": 0,
-    "training_or_inference_executed": false
+    "reason": "No Blackwell Server Edition instances available before allocation"
   },
-  "additional_allocations_authorized": false,
-  "retry_requires_new_authorization": true
+  "capacity_condition": "One NVIDIA RTX PRO 6000 Blackwell Server Edition Secure Cloud GPU in EU-CZ-1; stock High, Medium, or Low (scarce positive stock), never None/null; verified finite quoted rate <=$2.49/hour; no fallback.",
+  "budget_increase_authorized": false,
+  "authorization_scope_note": "User said GPU is available and explicitly requested procurement on 2026-10-19. One guarded attempt may proceed with provider Low stock under original exact identity/price/cost constraints; RunPod states Low means very few GPUs, not zero. No retries after pod create request."
 }
