@@ -1,0 +1,28 @@
+{
+  "approval_id": "heph-D-contrasts-20261019-single",
+  "status": "capacity_blocked_no_pod_allocated",
+  "source": "User explicitly authorized the separately proposed 60-pair controlled model-inference experiment on 2026-10-19",
+  "scope": "One read-only inference pod for newly authored 60 counterfactual pairs (120 appearances, dedup identical prompts under greedy fixed seed). No training, extra variants, replays, certification or promotion.",
+  "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
+  "max_gpu_hourly_usd": 2.49,
+  "max_total_estimated_gpu_usd": 0.75,
+  "max_pods": 1,
+  "max_launch_attempts": 1,
+  "previous_probe_approval_reused": false,
+  "contingency_authorized": false,
+  "scientific_gates_unchanged": true,
+  "model_retraining_authorized": false,
+  "certification_authorized": false,
+  "launch_attempt": {
+    "github_actions_run_id": 39269912043,
+    "source_sha": "3c4399ecd73218b07286db33a0d167dba7cd93f4",
+    "gpu_type": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "catalog_floor_usd_per_hour": 2.49,
+    "create_pod_response": "HTTP 500: create pod: There are no instances currently available",
+    "pod_id": null,
+    "estimated_gpu_spend_usd": 0,
+    "training_or_inference_executed": false
+  },
+  "additional_allocations_authorized": false,
+  "retry_requires_new_authorization": true
+}
