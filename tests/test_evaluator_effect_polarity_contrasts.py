@@ -55,9 +55,10 @@ def test_explicit_state_transition_is_consistent_with_oracle(name):
     for distractor in (False,True):
         a=render(factors,distractor=distractor,phrasing="neutral_numbers")
         b=render(revised,distractor=distractor,phrasing="neutral_numbers")
-        # A sign flip legitimately changes secondary throughput too, but
-        # that is an explicitly declared NON-AUTHORITATIVE derived distractor.
-        observed=[key for key in EVIDENCE_KEYS.values() if a[key]!=b[key]]
+        # Exactly one VISIBLE measurement changes. Even nonauthoritative
+        # throughput must be held constant to avoid a two-field intervention.
+        assert set(a)==set(b)
+        observed=[key for key in a if a[key]!=b[key]]
         assert observed==[EVIDENCE_KEYS[changed]]
 
 
