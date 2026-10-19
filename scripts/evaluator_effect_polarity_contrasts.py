@@ -71,7 +71,10 @@ def render(f:ScientificFactors, *, distractor:bool, phrasing:str)->dict:
     if phrasing=="named_scientific_fields":
         entries["effect_role"]="Only primary quality controls scientific direction."
     if distractor:
-        entries["secondary_throughput_delta"]="A report-only throughput delta: "+f"{-delta:+.1f}"+", non-authoritative for quality"
+        # Hold the nonauthoritative negative throughput observation FIXED inside
+        # each contrast. Deriving it as -delta would change two visible fields
+        # when primary effect changes and destroy single-variable isolation.
+        entries["secondary_throughput_delta"]="A report-only throughput delta: -1.0, non-authoritative for quality"
     return entries
 
 
@@ -109,10 +112,16 @@ def validate_panel(rows=None):
         changes=[k for k in FACTOR_KEYS if getattr(before,k)!=getattr(after,k)]
         if changes!=[row["changed_factor"]]:
             raise ValueError("contrast changed multiple scientific factors")
-        changed_evidence=[k for k in EVIDENCE_KEYS.values()
-            if row["baseline_evidence"][k]!=row["modified_evidence"][k]]
+        # Every visible observed key, including any throughput distractor,
+        # is held identical except the single authoritative changed variable.
+        before_evidence=row["baseline_evidence"]
+        after_evidence=row["modified_evidence"]
+        if set(before_evidence)!=set(after_evidence):
+            raise ValueError("contrast evidence key set drift")
+        changed_evidence=[k for k in before_evidence
+            if before_evidence[k]!=after_evidence[k]]
         if changed_evidence!=[EVIDENCE_KEYS[row["changed_factor"]]]:
-            raise ValueError("a contrast changed extra scientific evidence fields")
+            raise ValueError("a contrast changed extra evidence fields")
         if row["throughput_distractor"]:
             for label in ("baseline_evidence","modified_evidence"):
                 evidence=row[label]
