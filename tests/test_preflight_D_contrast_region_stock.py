@@ -75,3 +75,23 @@ def test_low_stock_gate_does_not_trigger_gpu_request(monkeypatch):
     assert stock.main()==75
     monkeypatch.setattr(stock,"query",lambda:packet("High"))
     assert stock.main()==0
+
+
+def test_validation_failure_is_named_but_never_leaks_provider_message(monkeypatch,capsys):
+    monkeypatch.setattr(stock,"query",lambda:{"errors":[{"message":"TOKEN_SUPER_SECRET"}]})
+    assert stock.main()==75
+    observed=capsys.readouterr().out
+    assert "graphql_error_response" in observed
+    assert "TOKEN_SUPER_SECRET" not in observed
+    assert "confident_capacity_signal" in observed
+
+
+def test_low_stock_with_null_count_is_capacity_blocked_not_exception(monkeypatch,capsys):
+    data=packet("Low",2.49,(1,))
+    data["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
+    monkeypatch.setattr(stock,"query",lambda:data)
+    assert stock.main()==75
+    observed=capsys.readouterr().out
+    assert '"stock_status": "Low"' in observed
+    assert "error_type" not in observed
+    assert '"confident_capacity_signal": false' in observed
