@@ -1,0 +1,23 @@
+name: D Blackwell regional stock shape diagnosis (NO GPU)
+on:
+  push:
+    branches: [experiment/evaluator-contrast-capacity-retry-20261019]
+permissions:
+  contents: read
+jobs:
+  read-only-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: scripts:src:tests:.
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU testing only
+        run: python -m pip install -e '.[test]'
+      - name: Validate schema diagnostic privacy and fail-closed path
+        run: pytest -q tests/test_diagnose_D_contrast_stock.py tests/test_preflight_D_contrast_region_stock.py
+      - name: Read and summarize RunPod GPU catalog safely
+        run: python scripts/diagnose_D_contrast_stock_readonly.py
