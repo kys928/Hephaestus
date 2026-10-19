@@ -68,13 +68,30 @@ def query():
     with urllib.request.urlopen(request,timeout=18) as stream:
         return json.load(stream)
 
+# Error metadata is a closed vocabulary: never print a provider response,
+# API token, request, exception body or arbitrary remote-supplied message.
+SAFE_SCHEMA_CODES = {
+    "RunPod returned API errors or invalid response": "graphql_error_response",
+    "GPU identity ambiguous in RunPod catalog": "wrong_or_missing_gpu",
+    "data-center-specific secure-cloud quote missing": "regional_quote_missing",
+    "unrecognized stock status": "stock_status_unknown",
+    "GPU hourly price unavailable": "price_unavailable",
+    "invalid GPU-count metadata": "gpu_counts_invalid",
+}
+
 def main():
     try:
         status=inspect_response(query())
     except Exception as exc:
-        print("D_CONTRAST_IN_REGION_CAPACITY "+json.dumps(
-            dict(confident_capacity_signal=False,error_type=type(exc).__name__),
-            sort_keys=True),flush=True)
+        safe={
+            "confident_capacity_signal":False,
+            "error_type":type(exc).__name__,
+        }
+        if isinstance(exc,ValueError):
+            safe["error_code"]=SAFE_SCHEMA_CODES.get(str(exc),"provider_schema_invalid")
+        else:
+            safe["error_code"]="capacity_query_failed"
+        print("D_CONTRAST_IN_REGION_CAPACITY "+json.dumps(safe,sort_keys=True),flush=True)
         return 75
     print("D_CONTRAST_IN_REGION_CAPACITY "+json.dumps(status,sort_keys=True),flush=True)
     return 0 if status["confident_capacity_signal"] else 75
