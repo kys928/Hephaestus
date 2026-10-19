@@ -1,5 +1,5 @@
 {
-  "approval_id": "heph-D-contrasts-20261019-single",
+  "approval_id": "heph-D-contrasts-20261019-capacity-retry-1",
   "protocol": "evaluator-D-matched-contrasts-20261019-v1",
   "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
   "max_hourly_usd": 2.49,
@@ -12,5 +12,12 @@
   "shard_size": 8,
   "one_pod": true,
   "extra_runs": false,
-  "runpod_launch_enabled": false
+  "runpod_launch_enabled": false,
+  "required_gpu_stock_status": [
+    "High",
+    "Medium"
+  ],
+  "required_datacenter": "EU-CZ-1",
+  "automated_retry_count_max": 1,
+  "capacity_check_before_S3_claim": true
 }
