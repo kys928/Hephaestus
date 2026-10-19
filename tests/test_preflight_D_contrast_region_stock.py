@@ -38,8 +38,11 @@ def test_live_nullable_gpu_counts_are_not_a_schema_error(status,allowed):
     quote["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
     result=stock.inspect_response(quote)
     assert result["confident_capacity_signal"] is allowed
-    assert result["one_gpu_evidence"]=="regional_gpuCount_1_stock"
     assert result["available_gpu_counts"] is None
+    if allowed:
+        assert result["one_gpu_evidence"]=="regional_gpuCount_1_stock"
+    else:
+        assert result["availability_reason"]=="regional_stock_insufficient"
 
 
 def test_explicit_count_list_without_one_stays_unavailable():
