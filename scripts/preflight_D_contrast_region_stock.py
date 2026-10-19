@@ -21,15 +21,37 @@ def inspect_response(payload):
     items=(payload.get("data") or {}).get("gpuTypes")
     if not isinstance(items,list) or len(items)!=1 or items[0].get("id")!=GPU:
         raise ValueError("GPU identity ambiguous in RunPod catalog")
-    quote=items[0].get("lowestPrice")
+    if "lowestPrice" not in items[0]:
+        raise ValueError("data-center-specific secure-cloud quote missing")
+    quote=items[0]["lowestPrice"]
+    def unavailable(status, reason, counts=None, price=None):
+        return dict(gpu_type=GPU,datacenter=DATACENTER,secure_cloud=True,
+            stock_status=status,available_gpu_counts=counts,
+            quoted_usd_per_hour=price,max_hourly_usd=MAX_HOURLY_USD,
+            availability_reason=reason,confident_capacity_signal=False)
+    # A nullable LowestPrice object denotes no regional price/stock quotation.
+    # This is not evidence for an allocation and should not masquerade as an
+    # invalid GraphQL schema.
+    if quote is None:
+        return unavailable("None","no_regional_quote")
     if not isinstance(quote,dict):
         raise ValueError("data-center-specific secure-cloud quote missing")
-    stock=quote.get("stockStatus")
-    price=quote.get("uninterruptablePrice")
-    counts=quote.get("availableGpuCounts")
+    fields=("stockStatus","uninterruptablePrice","availableGpuCounts")
+    if any(k not in quote for k in fields):
+        raise ValueError("missing expected regional quote fields")
+    stock=quote["stockStatus"]
+    price=quote["uninterruptablePrice"]
+    counts=quote["availableGpuCounts"]
+    if stock is None and price is None and counts is None:
+        return unavailable("None","null_regional_quote")
     if stock not in ("High","Medium","Low","None"):
         raise ValueError("unrecognized stock status")
-    if not isinstance(price,(int,float)) or not math.isfinite(price) or price<=0:
+    # Price is not required to safely reject low/absent regional stock.
+    # With High/Medium it MUST be finite, numeric and under the price cap.
+    if stock in ("Low","None"):
+        safe_price=float(price) if type(price) in (int,float) and math.isfinite(price) else None
+        return unavailable(stock,"regional_stock_insufficient",counts=counts,price=safe_price)
+    if type(price) not in (int,float) or not math.isfinite(price) or price<=0:
         raise ValueError("GPU hourly price unavailable")
     # RunPod's availableGpuCounts is optional in the published GraphQL
     # LowestPrice schema; live EU-CZ-1 responses may return JSON null.
@@ -77,6 +99,7 @@ SAFE_SCHEMA_CODES = {
     "unrecognized stock status": "stock_status_unknown",
     "GPU hourly price unavailable": "price_unavailable",
     "invalid GPU-count metadata": "gpu_counts_invalid",
+    "missing expected regional quote fields": "regional_quote_fields_missing",
 }
 
 def main():
