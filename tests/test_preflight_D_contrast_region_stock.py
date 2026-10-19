@@ -95,3 +95,45 @@ def test_low_stock_with_null_count_is_capacity_blocked_not_exception(monkeypatch
     assert '"stock_status": "Low"' in observed
     assert "error_type" not in observed
     assert '"confident_capacity_signal": false' in observed
+
+
+@pytest.mark.parametrize("style",["all_null_quote","null_lowest_price","explicit_none_stock"])
+def test_no_regional_capacity_quotes_fail_closed_as_unavailable(style):
+    p=packet()
+    obj=p["data"]["gpuTypes"][0]
+    if style=="null_lowest_price":
+        obj["lowestPrice"]=None
+    elif style=="all_null_quote":
+        obj["lowestPrice"]={
+            "stockStatus":None,"uninterruptablePrice":None,
+            "availableGpuCounts":None}
+    else:
+        obj["lowestPrice"]={
+            "stockStatus":"None","uninterruptablePrice":None,
+            "availableGpuCounts":None}
+    result=stock.inspect_response(p)
+    assert result["confident_capacity_signal"] is False
+    assert result["stock_status"]=="None"
+    assert result["availability_reason"] in (
+        "no_regional_quote","null_regional_quote","regional_stock_insufficient")
+
+
+def test_live_all_null_quote_exits_as_capacity_not_schema_error(monkeypatch,capsys):
+    p=packet()
+    p["data"]["gpuTypes"][0]["lowestPrice"]={
+        "stockStatus":None,"uninterruptablePrice":None,
+        "availableGpuCounts":None}
+    monkeypatch.setattr(stock,"query",lambda:p)
+    assert stock.main()==75
+    out=capsys.readouterr().out
+    assert '"availability_reason": "null_regional_quote"' in out
+    assert '"confident_capacity_signal": false' in out
+    assert '"stock_status": "None"' in out
+    assert "error_code" not in out
+
+
+def test_partial_missing_quote_fields_fails_closed_without_guessing():
+    p=packet()
+    del p["data"]["gpuTypes"][0]["lowestPrice"]["stockStatus"]
+    with pytest.raises(ValueError,match="missing expected regional quote fields"):
+        stock.inspect_response(p)
