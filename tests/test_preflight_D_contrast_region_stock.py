@@ -28,6 +28,25 @@ def test_exact_gpu_datacenter_price_and_capacity_threshold(status,price,counts,a
 def test_unknown_or_untrusted_provider_signal_fails_closed(payload):
     with pytest.raises(ValueError):stock.inspect_response(payload)
 
+@pytest.mark.parametrize("status,allowed",[
+    ("Low",False),("None",False),("Medium",True),("High",True)
+])
+def test_live_nullable_gpu_counts_are_not_a_schema_error(status,allowed):
+    # RunPod GraphQL LowestPrice.availableGpuCounts is nullable. The
+    # query requests GPU count 1 in EU-CZ-1, so use regional stock signal.
+    quote=packet(status,2.49,(1,))
+    quote["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
+    result=stock.inspect_response(quote)
+    assert result["confident_capacity_signal"] is allowed
+    assert result["one_gpu_evidence"]=="regional_gpuCount_1_stock"
+    assert result["available_gpu_counts"] is None
+
+
+def test_explicit_count_list_without_one_stays_unavailable():
+    result=stock.inspect_response(packet("High",2.49,(2,4)))
+    assert result["confident_capacity_signal"] is False
+
+
 def test_price_or_count_schema_must_be_numeric():
     with pytest.raises(ValueError):stock.inspect_response(packet(price="2.49"))
     with pytest.raises(ValueError):stock.inspect_response(packet(counts=(True,)))
