@@ -24,8 +24,9 @@ def sha(o):
 def inference_prompt(observations):
     # All inputs use identical fixed instructions. No gold labels, no pair IDs,
     # no learned-target rationales, and no factor-oracle precedence disclosure.
-    return ("EVALUATOR SCIENTIFIC DECISION DIAGNOSTIC. Classify ONLY the primary "
-       "quality outcome using the authoritative observations. A report-only "
+    return ("EVALUATOR SCIENTIFIC DECISION DIAGNOSTIC. Classify the candidate's FINAL "
+       "scientific state using the authoritative observations. The primary quality "
+       "effect direction is a separate measurement from the final decision. A report-only "
        "throughput measurement is non-authoritative for primary quality. "
        "Use one scientific state from: "+", ".join(STATES)+". "
        "The final state must respect hard gates, required evidence completeness, "
