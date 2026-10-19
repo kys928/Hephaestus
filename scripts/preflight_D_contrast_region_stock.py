@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Zero-GPU, zero-claim RunPod stock gate for one preauthorized D contrast retry.
 
-Only medium/high secure-cloud STOCK IN THE NETWORK VOLUME DATACENTER may
-proceed; Low/None, quote drift, unknown schema or API error fail closed.
+Only positive (High/Medium/Low) in-region Secure Cloud stock with a finite,
+within-cap price may try ONE pod; None/null, drift and unknown schema fail closed.
 Exit 75 is a temporary no-capacity status suitable for future *job* reruns.
 """
 import json
@@ -46,9 +46,11 @@ def inspect_response(payload):
         return unavailable("None","null_regional_quote")
     if stock not in ("High","Medium","Low","None"):
         raise ValueError("unrecognized stock status")
-    # Price is not required to safely reject low/absent regional stock.
-    # With High/Medium it MUST be finite, numeric and under the price cap.
-    if stock in ("Low","None"):
+    # None is no capacity; Low denotes scarce but potentially real supply,
+    # per RunPod's published stock-status semantics. For a user-authorized
+    # ONE-shot attempt, Low may pass only under the exact same identity,
+    # region, cloud, count and price checks as High/Medium.
+    if stock=="None":
         safe_price=float(price) if type(price) in (int,float) and math.isfinite(price) else None
         return unavailable(stock,"regional_stock_insufficient",counts=counts,price=safe_price)
     if type(price) not in (int,float) or not math.isfinite(price) or price<=0:
@@ -65,12 +67,13 @@ def inspect_response(payload):
     ):
         raise ValueError("invalid GPU-count metadata")
     one_gpu_confirmed=(counts is None or 1 in counts)
-    suitable=(stock in ("High","Medium") and one_gpu_confirmed and price<=MAX_HOURLY_USD)
+    suitable=(stock in ("High","Medium","Low") and one_gpu_confirmed and price<=MAX_HOURLY_USD)
     return dict(gpu_type=GPU,datacenter=DATACENTER,secure_cloud=True,
         stock_status=stock,available_gpu_counts=counts,
         one_gpu_evidence=("regional_gpuCount_1_stock" if counts is None
                           else "regional_stock_and_explicit_gpu_counts"),
         quoted_usd_per_hour=float(price),max_hourly_usd=MAX_HOURLY_USD,
+        scarcity_warning=("limited_capacity_single_attempt_only" if stock=="Low" else None),
         confident_capacity_signal=suitable)
 
 def query():
