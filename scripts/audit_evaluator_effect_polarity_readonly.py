@@ -89,6 +89,8 @@ def audit():
     by_advice=defaultdict(Counter)
     confusion=Counter()
     crossings=Counter()
+    decision_map=defaultdict(Counter)
+    from hephaestus.policy.evaluator_semantic_oracle import scientific_state
     for entry in samples:
         ref=reference[entry["case_id"]]
         if entry["checkpoint_sha256"]!=D_CHECKPOINT_SHA256 or entry["prompt_sha256"]!=ref["prompt_sha256"]:
@@ -113,6 +115,14 @@ def audit():
         by_advice["advisory" if ref["has_advisory"] else "direct"]["effect_correct"]+=int(right)
         confusion[expected_effect+" -> "+observed_effect]+=1
         earlier=(indexed_decisions[entry["case_id"]]["score"]["parsed"] or {}).get("decision")
+        all_factors_correct=(fact==gold)
+        prior_decision_correct=(earlier==state)
+        oracle_from_reported=scientific_state(fact)
+        decision_map[state]["total"]+=1
+        decision_map[state]["all_reported_factors_correct"]+=int(all_factors_correct)
+        decision_map[state]["saved_decision_correct"]+=int(prior_decision_correct)
+        decision_map[state]["factor_correct_decision_wrong"]+=int(all_factors_correct and not prior_decision_correct)
+        decision_map[state]["saved_decision_disagrees_with_reported_oracle"]+=int(earlier!=oracle_from_reported)
         if expected_effect=="positive" and observed_effect=="negative":
             crossings["positive_to_negative_cases"]+=1
             crossings["positive_to_negative_with_precedence_masked"]+=int(primary_masked)
@@ -149,6 +159,7 @@ def audit():
         "precedence_masks_effect":{k:dict(v) for k,v in sorted(masked.items())},
         "by_advisory_presence":{k:dict(v) for k,v in sorted(by_advice.items())},
         "important_pairwise_observations":dict(sorted(crossings.items())),
+        "state_decision_mapping_vs_separately_reported_factors":{k:dict(v) for k,v in sorted(decision_map.items())},
         "frozen_development_template_check":dict(sorted(dev_summary.items())),
         "training_census":census_D_training(),
         "S3_read_receipts":receipts,
@@ -157,7 +168,7 @@ def audit():
     }
     Path("evaluator-effect-polarity-audit.json").write_text(json.dumps(output,indent=2,sort_keys=True)+"\n")
     summary={k:output[k] for k in ("effect_confusion","by_state","precedence_masks_effect",
-             "by_advisory_presence","important_pairwise_observations","frozen_development_template_check","training_census")}
+             "by_advisory_presence","important_pairwise_observations","state_decision_mapping_vs_separately_reported_factors","frozen_development_template_check","training_census")}
     print("EVALUATOR_EFFECT_POLARITY_AUDIT "+json.dumps(summary,sort_keys=True))
     return output
 
