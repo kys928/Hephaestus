@@ -1,0 +1,24 @@
+name: D contrast inference CPU gate (no GPU)
+on:
+  push:
+    branches: [experiment/evaluator-contrast-inference-20261019]
+permissions:
+  contents: read
+jobs:
+  cpu-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: scripts:src:.
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test]'
+      - name: Compile scientific protocol and GPU runner without loading model
+        run: python -m compileall -q scripts/evaluator_contrast_inference_protocol.py scripts/run_evaluator_contrast_probe.py scripts/launch_evaluator_contrast_probe.py
+      - name: Validate counterfactuals, source and price guards
+        run: pytest -q tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py
+      - name: Emit permitted dry-run identity, no secrets or allocation
+        run: python scripts/launch_evaluator_contrast_probe.py
