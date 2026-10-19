@@ -63,7 +63,7 @@ Implemented a separately authored panel of **60 minimal one-scientific-variable 
 - Exactly **one changed scientific variable per pair**: \`gate_pass\`, \`complete\`, \`provenance_valid\`, \`effect\`, \`variance_stable\`, or \`recheck_satisfied\`.
 - **48 pairs** expected to change scientific state under the frozen oracle.
 - **12 precedence/negative-control pairs** expected *not* to change scientific state because a lower-priority factor was modified.
-- **30 pairs** featuring a separate, report-only secondary throughput delta of opposite sign to the primary quality delta.
+- **30 pairs** featuring a fixed, report-only *negative* secondary throughput delta. Within every pair, that distractor stays byte-for-byte constant, including when the primary quality sign changes; it is opposite-signed specifically for positive primary quality cases.
 - **120 prospective unlabeled inputs** for a future separately authorized model decision probe; none has yet been sent to the D model.
 - Full independent 96-state-factor truth-table oracle checks, including the critical:
   - Neutral stable → neutral unstable: \`equivalent\` → \`recheck_required\`.
