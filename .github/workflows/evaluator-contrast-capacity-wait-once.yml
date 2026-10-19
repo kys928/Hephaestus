@@ -34,7 +34,7 @@ jobs:
         run: |
           pytest -q tests/test_preflight_D_contrast_region_stock.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py
           python scripts/launch_evaluator_contrast_probe.py
-      - name: Require Medium/High Blackwell Secure Cloud availability IN EU-CZ-1
+      - name: Require priced in-region Blackwell Secure Cloud stock (Low or higher)
         run: python scripts/preflight_D_contrast_region_stock.py
       - name: Exactly one $0.75 maximum matched-D inference allocation
         run: python scripts/launch_evaluator_contrast_probe.py --execute
