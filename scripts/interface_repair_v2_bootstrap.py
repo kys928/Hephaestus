@@ -58,7 +58,7 @@ def load_stack_compatible(cfg: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path) -> Path:
+def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path, *, observer=None) -> Path:
     import run_interface_repair_v1 as v1
 
     adapter = role_spec["adapter"]
@@ -70,9 +70,13 @@ def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path) 
     if not _verified_archive(archive, expected_bytes=expected_bytes, expected_sha256=expected_sha):
         tmp = entry / f"parent-adapter.{os.getpid()}.{time.time_ns()}.tmp"
         try:
+            if observer: observer("adapter_ephemeral_download_start",bytes=expected_bytes)
             client.download_file(v1.bucket(), str(adapter["s3_key"]), str(tmp))
+            if observer: observer("adapter_ephemeral_download_done",bytes=tmp.stat().st_size)
+            if observer: observer("adapter_archive_verify_start")
             if not _verified_archive(tmp, expected_bytes=expected_bytes, expected_sha256=expected_sha):
                 raise RuntimeError("downloaded parent adapter failed frozen byte/SHA verification")
+            if observer: observer("adapter_archive_verify_done")
             os.replace(tmp, archive)
         finally:
             tmp.unlink(missing_ok=True)
@@ -81,6 +85,7 @@ def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path) 
     adapter_dir = extracted / "adapter"
     ready = entry / ".adapter-ready"
     if not (ready.is_file() and adapter_dir.is_dir()):
+        if observer: observer("adapter_extract_start")
         staging = entry / f"extract.{os.getpid()}.{time.time_ns()}"
         shutil.rmtree(staging, ignore_errors=True)
         try:
@@ -94,6 +99,7 @@ def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path) 
                 shutil.rmtree(extracted)
             os.replace(staging, extracted)
             ready.write_text(expected_sha + "\n", encoding="utf-8")
+            if observer: observer("adapter_extract_done")
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
@@ -102,7 +108,7 @@ def _adapter_from_entry(client: Any, role_spec: Mapping[str, Any], entry: Path) 
     return adapter_dir
 
 
-def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: Path) -> tuple[Path, Path]:
+def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: Path, *, observer=None) -> tuple[Path, Path]:
     """Resolve frozen model + adapter without requiring persistent free space.
 
     Read a complete immutable model snapshot from the persistent HF cache when
@@ -118,16 +124,22 @@ def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: P
     revision = str(role_spec["revision"])
 
     cache_source = "persistent"
+    if observer: observer("hf_local_probe_start")
     try:
         snapshot = snapshot_download(repo_id=model_id, revision=revision, local_files_only=True)
+        if observer: observer("hf_local_probe_hit",cache_source="persistent")
     except Exception:
+        if observer: observer("hf_local_probe_miss",cache_source="ephemeral")
         cache_source = "ephemeral"
         ephemeral_hf = Path(os.environ.get("HEPHAESTUS_V2_EPHEMERAL_HF_CACHE", "/opt/hephaestus-hf-cache"))
         ephemeral_hf.mkdir(parents=True, exist_ok=True)
+        if observer: observer("hf_ephemeral_download_start",cache_source="ephemeral")
         snapshot = snapshot_download(repo_id=model_id, revision=revision, cache_dir=str(ephemeral_hf))
+        if observer: observer("hf_ephemeral_download_done",cache_source="ephemeral")
     base = Path(snapshot)
     if not (base / "config.json").is_file():
         raise RuntimeError(f"HF snapshot is incomplete for {model_id}@{revision}")
+    if observer: observer("hf_config_verified",cache_source=cache_source)
     print(json.dumps({
         "event": "interface_repair_v2_model_cache",
         "model_id": model_id,
@@ -138,6 +150,7 @@ def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: P
 
     adapter = role_spec["adapter"]
     expected_sha = str(adapter["sha256"])
+    if observer: observer("adapter_persistent_check_start")
     persistent_root = Path(os.environ.get(
         "HEPHAESTUS_V2_ADAPTER_CACHE",
         "/workspace/hephaestus-cache/interface-repair-v2/adapters",
@@ -155,11 +168,13 @@ def materialize_parent_cached(client: Any, role_spec: Mapping[str, Any], root: P
     ):
         adapter_dir = persistent_adapter
         adapter_source = "persistent"
+        if observer: observer("adapter_persistent_cache_hit",cache_source="persistent")
     else:
         adapter_source = "ephemeral"
         ephemeral_entry = root / "adapter-cache" / expected_sha
-        adapter_dir = _adapter_from_entry(client, role_spec, ephemeral_entry)
+        adapter_dir = _adapter_from_entry(client, role_spec, ephemeral_entry,observer=observer)
 
+    if observer: observer("adapter_ready",cache_source=adapter_source)
     print(json.dumps({
         "event": "interface_repair_v2_adapter_cache",
         "sha256": expected_sha,
