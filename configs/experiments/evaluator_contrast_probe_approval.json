@@ -1,8 +1,8 @@
 {
-  "approval_id": "heph-D-contrasts-20261019-capacity-retry-1",
-  "status": "authorized_once",
-  "source": "User explicitly authorized a capacity-triggered retry of the exact same D experiment in project conversation on 2026-10-19",
-  "scope": "One read-only inference pod for newly authored 60 counterfactual pairs (120 appearances, dedup identical prompts under greedy fixed seed). No training, extra variants, replays, certification or promotion.",
+  "approval_id": "heph-D-contrasts-instrumented-20261022-PROPOSED",
+  "status": "pending_explicit_user_launch_command",
+  "source": "Unapproved draft prepared 2026-10-22 after failed GPU run D-contrast-39299580607. Await separate explicit user authorization; prior single-use claim consumed.",
+  "scope": "Read-only D step-96 INFERENCE ONLY: 56 frozen unique prompts from 60 controlled contrast pairs, with durable load and generation timing. No training or model updates, no certification/promotion.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
   "max_gpu_hourly_usd": 2.49,
   "max_total_estimated_gpu_usd": 0.75,
@@ -13,14 +13,18 @@
   "scientific_gates_unchanged": true,
   "model_retraining_authorized": false,
   "certification_authorized": false,
-  "additional_allocations_authorized": true,
-  "retry_requires_new_authorization": false,
+  "additional_allocations_authorized": false,
+  "retry_requires_new_authorization": true,
   "prior_capacity_blocker": {
-    "github_actions_run_id": 39269912043,
-    "source_sha": "3c4399ecd73218b07286db33a0d167dba7cd93f4",
-    "reason": "No Blackwell Server Edition instances available before allocation"
+    "prior_gpu_run_id": "D-contrast-39299580607",
+    "prior_workflow_run_id": 39299580607,
+    "pod_id": "lw476giazga8e4",
+    "pod_deleted_verified": true,
+    "consumed_approval_id": "heph-D-contrasts-20261019-capacity-retry-1",
+    "estimated_gpu_usd": 0.6501000355649249,
+    "failure": "launcher_hard_wall_before_post_load_manifest"
   },
-  "capacity_condition": "One NVIDIA RTX PRO 6000 Blackwell Server Edition Secure Cloud GPU in EU-CZ-1; stock High, Medium, or Low (scarce positive stock), never None/null; verified finite quoted rate <=$2.49/hour; no fallback.",
+  "capacity_condition": "Exact NVIDIA RTX PRO 6000 Blackwell Server Edition 1x Secure Cloud EU-CZ-1 <=$2.49/hour; quote valid, even if stock Low. Only one new pod if separately approved.",
   "budget_increase_authorized": false,
-  "authorization_scope_note": "User said GPU is available and explicitly requested procurement on 2026-10-19. One guarded attempt may proceed with provider Low stock under original exact identity/price/cost constraints; RunPod states Low means very few GPUs, not zero. No retries after pod create request."
+  "authorization_scope_note": "PROPOSED ONLY; no user launch command received for this subsequent paid GPU allocation. $0.75 is a retained planning ceiling, NOT an authorization. Must account for cold-cache stall."
 }

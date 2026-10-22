@@ -135,31 +135,43 @@ def materialize_parent(client: Any, role_spec: Mapping[str, Any], root: Path) ->
     return base, adapter_dir
 
 
-def load_model(role: str, cfg: Mapping[str, Any], role_spec: Mapping[str, Any], base_dir: Path, adapter_dir: Path):
+def load_model(role: str, cfg: Mapping[str, Any], role_spec: Mapping[str, Any], base_dir: Path, adapter_dir: Path, *, observer=None):
     import torch
     from peft import PeftModel
 
+    if observer: observer("cuda_validation_start")
     if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
         raise RuntimeError("interface repair requires exactly one CUDA GPU")
     props = torch.cuda.get_device_properties(0)
     if props.total_memory / (1024 ** 3) < float(cfg["execution"]["minimum_gpu_memory_gib"]):
         raise RuntimeError("GPU is below interface repair memory floor")
 
+    if observer: observer("cuda_validation_done")
     runtime = dict(cfg["roles"][role])
     if runtime["load_kind"] == "mistral3":
         from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
+        if observer: observer("tokenizer_load_start")
         tokenizer = MistralCommonBackend.from_pretrained(str(base_dir))
+        if observer: observer("tokenizer_load_done")
+        if observer: observer("base_weights_load_start")
         base_model = Mistral3ForConditionalGeneration.from_pretrained(
             str(base_dir), torch_dtype=torch.bfloat16, device_map={"": 0}, local_files_only=True
         )
+        if observer: observer("base_weights_load_done")
     else:
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        if observer: observer("tokenizer_load_start")
         tokenizer = AutoTokenizer.from_pretrained(str(base_dir), local_files_only=True, trust_remote_code=False)
+        if observer: observer("tokenizer_load_done")
+        if observer: observer("base_weights_load_start")
         base_model = AutoModelForCausalLM.from_pretrained(
             str(base_dir), local_files_only=True, trust_remote_code=False,
             torch_dtype=torch.bfloat16, device_map={"": 0}, low_cpu_mem_usage=True
         )
+        if observer: observer("base_weights_load_done")
+    if observer: observer("lora_attach_start")
     model = PeftModel.from_pretrained(base_model, str(adapter_dir), is_trainable=True)
+    if observer: observer("lora_attach_done")
     if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token_id", None) is not None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
     for name, param in model.named_parameters():
@@ -175,6 +187,7 @@ def load_model(role: str, cfg: Mapping[str, Any], role_spec: Mapping[str, Any], 
     if int(getattr(active, "lora_alpha", -1)) != int(cfg["training"]["lora_alpha"]):
         raise RuntimeError("parent adapter LoRA alpha differs from frozen repair protocol")
     model.eval()
+    if observer: observer("model_eval_ready")
     return model, tokenizer, {
         "gpu": props.name,
         "gpu_memory_bytes": int(props.total_memory),

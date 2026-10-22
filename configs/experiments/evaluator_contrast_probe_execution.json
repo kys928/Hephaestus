@@ -1,5 +1,5 @@
 {
-  "approval_id": "heph-D-contrasts-20261019-capacity-retry-1",
+  "approval_id": "heph-D-contrasts-instrumented-20261022-PROPOSED",
   "protocol": "evaluator-D-matched-contrasts-20261019-v1",
   "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
   "max_hourly_usd": 2.49,
@@ -21,5 +21,12 @@
   "required_datacenter": "EU-CZ-1",
   "automated_retry_count_max": 1,
   "capacity_check_before_S3_claim": true,
-  "low_stock_allocation_attempts_max": 1
+  "low_stock_allocation_attempts_max": 1,
+  "prelaunch_status": "pending_new_explicit_approval; old S3 once-claim consumed",
+  "durable_timing_enabled": true,
+  "durable_timing_schema": "D-contrast-stage-timing-v1",
+  "resume_from_prior_run": false,
+  "diagnostic_reuse_of_saved_shards": false,
+  "allow_training": false,
+  "allow_replay_after_create_attempt": false
 }

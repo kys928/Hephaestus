@@ -17,7 +17,13 @@ APPROVAL=ROOT/"configs/experiments/evaluator_contrast_probe_approval.json"
 
 def authorize(cfg):
     a=json.loads(APPROVAL.read_text())
-    if (a.get("status")!="authorized_once" or a["approval_id"]!=cfg["approval_id"]
+    # Approval from the previous timed-out pod is consumed. The prepared
+    # proposal is intentionally disabled until a NEW explicit user command.
+    if cfg.get("runpod_launch_enabled") is not True:
+        raise PermissionError("new paid GPU launch not yet approved")
+    if (a.get("status")!="authorized_once"
+        or a.get("additional_allocations_authorized") is not True
+        or a["approval_id"]!=cfg["approval_id"]
         or a["max_total_estimated_gpu_usd"]!=0.75
         or cfg["max_total_estimated_gpu_usd"]!=0.75
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
