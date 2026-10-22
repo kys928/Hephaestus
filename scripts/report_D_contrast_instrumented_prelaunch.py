@@ -16,9 +16,13 @@ def assemble():
     parent=json.loads((ROOT/previous["parent_candidate_manifest"]).read_text())
     source_manifest=science.manifest()
     unique,pairs=science.panel()
-    if (execution.get("runpod_launch_enabled") is not False or
-        approval.get("status")!="pending_explicit_user_launch_command" or
-        approval.get("additional_allocations_authorized") is not False or
+    still_pending=(execution.get("runpod_launch_enabled") is False and
+                   approval.get("status")=="pending_explicit_user_launch_command" and
+                   approval.get("additional_allocations_authorized") is False)
+    newly_approved=(execution.get("runpod_launch_enabled") is True and
+                    approval.get("status")=="authorized_once" and
+                    approval.get("additional_allocations_authorized") is True)
+    if (not (still_pending or newly_approved) or
         execution["approval_id"]!=approval["approval_id"] or
         approval["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256 or
         source_manifest["unique_prompts"]!=56 or len(unique)!=56 or
@@ -31,7 +35,7 @@ def assemble():
         execution["runner_hard_wall_seconds"]>=execution["launcher_hard_wall_seconds"]):
         raise RuntimeError("bounded execution geometry drift")
     return dict(
-        status="PREPARED_BUT_NOT_AUTHORIZED",
+        status=("PREPARED_BUT_NOT_AUTHORIZED" if still_pending else "EXPLICITLY_APPROVED_FOR_ONE_RUN"),
         training_performed_in_proposed_run=False,
         operation="inference-only, read-only model weights with diagnostic output to S3",
         scientific_protocol=source_manifest,
@@ -80,8 +84,8 @@ def assemble():
             risk="Network-volume S3 timing writes incur latency; if evidence write fails the inference runner fails closed.",
         ),
         launch_boundary=dict(
-            approved=False,
-            new_explicit_user_command_required=True,
+            approved=newly_approved,
+            new_explicit_user_command_required=still_pending,
             prior_gpu_approval_consumed=approval["prior_capacity_blocker"]["consumed_approval_id"],
             cloud_type="Secure",
             gpu_type=execution["gpu_type_id"],
@@ -91,7 +95,7 @@ def assemble():
             proposed_total_gpu_budget_usd=execution["max_total_estimated_gpu_usd"],
             per_run_allocations_max=1,
             max_wall_seconds=execution["launcher_hard_wall_seconds"],
-            gpu_spend_authorized_now=0,
+            gpu_spend_authorized_now=(0 if still_pending else 1),
             note="Retaining previous $0.75 planning cap does not prove feasibility after a 940-second unsuccessful cold start."
         ),
         readiness_gates=dict(
