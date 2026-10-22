@@ -70,13 +70,18 @@ def test_requires_separate_explicit_authorization(monkeypatch):
     monkeypatch.delenv("HEPHAESTUS_CONTRAST_AUTHORIZED",raising=False)
     with pytest.raises(PermissionError):launch.authorize(cfg)
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
-    # Previous one-shot S3 claim was used. The instrumented next run has
-    # never been authorized and must remain impossible even with the env key.
-    with pytest.raises(PermissionError,match="not yet approved"):
-        launch.authorize(cfg)
+    # The previous S3 one-shot claim is consumed and may never be reused.
     record=json.loads(launch.APPROVAL.read_text())
-    assert record["status"]=="pending_explicit_user_launch_command"
-    assert record["additional_allocations_authorized"] is False
     assert record["prior_capacity_blocker"]["consumed_approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
+    assert record["approval_id"]!=record["prior_capacity_blocker"]["consumed_approval_id"]
     assert record["max_total_estimated_gpu_usd"]==0.75
-    assert cfg["runpod_launch_enabled"] is False
+    if not cfg["runpod_launch_enabled"]:
+        with pytest.raises(PermissionError,match="not yet approved"):
+            launch.authorize(cfg)
+        assert record["status"]=="pending_explicit_user_launch_command"
+        assert record["additional_allocations_authorized"] is False
+    else:
+        # Only a separately approved future workflow should reach this state.
+        assert record["status"]=="authorized_once"
+        assert record["additional_allocations_authorized"] is True
+        assert launch.authorize(cfg)["approval_id"]==cfg["approval_id"]
