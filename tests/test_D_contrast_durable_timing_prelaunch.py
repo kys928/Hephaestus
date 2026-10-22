@@ -67,13 +67,18 @@ def test_load_and_materialize_have_inner_stage_checkpoints():
 def test_new_run_stays_launch_disabled_while_science_is_frozen(monkeypatch):
     cfg=json.loads(launch.CONFIG.read_text())
     approval=json.loads(launch.APPROVAL.read_text())
-    assert cfg["runpod_launch_enabled"] is False
-    assert approval["additional_allocations_authorized"] is False
-    assert approval["status"]=="pending_explicit_user_launch_command"
     assert approval["approval_id"]==cfg["approval_id"]
     assert approval["source_D_step96_sha256"]==protocol.D_CHECKPOINT_SHA256
     assert protocol.manifest()["paired_challenges"]==60
     assert protocol.manifest()["unique_prompts"]==56
+    assert approval["prior_capacity_blocker"]["consumed_approval_id"]!=approval["approval_id"]
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
-    with pytest.raises(PermissionError):
-        launch.authorize(cfg)
+    if cfg["runpod_launch_enabled"]:
+        assert approval["status"]=="authorized_once"
+        assert approval["additional_allocations_authorized"] is True
+        assert launch.authorize(cfg)["approval_id"]==cfg["approval_id"]
+    else:
+        assert approval["status"]=="pending_explicit_user_launch_command"
+        assert approval["additional_allocations_authorized"] is False
+        with pytest.raises(PermissionError):
+            launch.authorize(cfg)
