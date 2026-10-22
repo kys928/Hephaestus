@@ -70,10 +70,13 @@ def test_requires_separate_explicit_authorization(monkeypatch):
     monkeypatch.delenv("HEPHAESTUS_CONTRAST_AUTHORIZED",raising=False)
     with pytest.raises(PermissionError):launch.authorize(cfg)
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
-    # This branch has its own ONE-use retry approval, gated by a separate
-    # in-region availability job and the immutable S3 atomic claim.
-    record=launch.authorize(cfg)
-    assert record["status"]=="authorized_once"
-    assert record["previous_probe_approval_reused"] is False
-    assert record["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
+    # Previous one-shot S3 claim was used. The instrumented next run has
+    # never been authorized and must remain impossible even with the env key.
+    with pytest.raises(PermissionError,match="not yet approved"):
+        launch.authorize(cfg)
+    record=json.loads(launch.APPROVAL.read_text())
+    assert record["status"]=="pending_explicit_user_launch_command"
+    assert record["additional_allocations_authorized"] is False
+    assert record["prior_capacity_blocker"]["consumed_approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
     assert record["max_total_estimated_gpu_usd"]==0.75
+    assert cfg["runpod_launch_enabled"] is False
