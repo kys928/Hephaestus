@@ -17,7 +17,7 @@ def test_stage_bootstrap_persisted_without_launch():
     assert "write_bootstrap container_started" in shell
     assert "write_bootstrap runner_started" in shell
     assert "HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY" in shell
-    assert "RUNPOD_S3_ENDPOINT_URL" in shell
+    assert "HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY" in r["env"]
     assert "persist_bootstrap" not in shell
     assert "BOOTSTRAP_FILE" in shell
 
