@@ -8,13 +8,13 @@ def packet(status="High",price=.59,counts=(1,2)):
         "availableGpuCounts":list(counts)}}]}}
 
 @pytest.mark.parametrize("status,price,counts,allowed",[
-    ("High",.59,(1,2),True),
-    ("Medium",.50,(1,),True),
-    ("Low",.59,(1,),True),
-    ("Low",.60,(1,),False),
-    ("None",.59,(),False),
-    ("High",.60,(1,),False),
-    ("High",.59,(2,),False),
+    ("High",2.49,(1,2),True),
+    ("Medium",2.40,(1,),True),
+    ("Low",2.49,(1,),True),
+    ("Low",2.50,(1,),False),
+    ("None",2.49,(),False),
+    ("High",2.50,(1,),False),
+    ("High",2.49,(2,),False),
 ])
 def test_exact_gpu_datacenter_price_and_capacity_threshold(status,price,counts,allowed):
     assert stock.inspect_response(packet(status,price,counts))["confident_capacity_signal"] is allowed
@@ -35,7 +35,7 @@ def test_unknown_or_untrusted_provider_signal_fails_closed(payload):
 def test_live_nullable_gpu_counts_are_not_a_schema_error(status,allowed):
     # RunPod GraphQL LowestPrice.availableGpuCounts is nullable. The
     # query requests GPU count 1 in EU-SE-1, so use regional stock signal.
-    quote=packet(status,.59,(1,))
+    quote=packet(status,2.49,(1,))
     quote["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
     result=stock.inspect_response(quote)
     assert result["confident_capacity_signal"] is allowed
@@ -47,7 +47,7 @@ def test_live_nullable_gpu_counts_are_not_a_schema_error(status,allowed):
 
 
 def test_explicit_count_list_without_one_stays_unavailable():
-    result=stock.inspect_response(packet("High",.59,(2,4)))
+    result=stock.inspect_response(packet("High",2.49,(2,4)))
     assert result["confident_capacity_signal"] is False
 
 
@@ -62,10 +62,10 @@ def test_constrains_request_to_network_volume_location(monkeypatch):
             envelope=json.loads(req.data.decode())
             assert set(envelope)=={"query"}
             query=envelope["query"]
-            assert 'dataCenterId: "EU-SE-1"' in query
+            assert 'dataCenterId: "EU-CZ-1"' in query
             assert "secureCloud: true" in query
             assert "gpuCount: 1" in query
-            assert 'id: "NVIDIA A40"' in query
+            assert 'id: "NVIDIA RTX PRO 6000 Blackwell Server Edition"' in query
             self.closed=False
         def __enter__(self):return self
         def __exit__(self,*args):self.closed=True
@@ -93,7 +93,7 @@ def test_validation_failure_is_named_but_never_leaks_provider_message(monkeypatc
 
 
 def test_low_stock_with_null_count_is_eligible_only_for_one_attempt(monkeypatch,capsys):
-    data=packet("Low",.59,(1,))
+    data=packet("Low",2.49,(1,))
     data["data"]["gpuTypes"][0]["lowestPrice"]["availableGpuCounts"]=None
     monkeypatch.setattr(stock,"query",lambda:data)
     assert stock.main()==0
@@ -149,6 +149,6 @@ def test_partial_missing_quote_fields_fails_closed_without_guessing():
 def test_low_is_not_permission_to_ignore_price_or_missing_region(monkeypatch):
     with pytest.raises(ValueError,match="GPU hourly price unavailable"):
         stock.inspect_response(packet("Low",None,(1,)))
-    assert stock.inspect_response(packet("Low",.60,(1,)))["confident_capacity_signal"] is False
-    assert stock.inspect_response(packet("Low",.59,(2,)))["confident_capacity_signal"] is False
-    assert stock.inspect_response(packet("Low",.59,(1,)))["scarcity_warning"]=="limited_capacity_single_attempt_only"
+    assert stock.inspect_response(packet("Low",2.50,(1,)))["confident_capacity_signal"] is False
+    assert stock.inspect_response(packet("Low",2.49,(2,)))["confident_capacity_signal"] is False
+    assert stock.inspect_response(packet("Low",2.49,(1,)))["scarcity_warning"]=="limited_capacity_single_attempt_only"

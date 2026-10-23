@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One user-approved, instrumented D inference. $1.90 max estimate, no retries."""
+"""One user-approved, instrumented D inference. $1.80 max estimate, no retries."""
 from __future__ import annotations
 import json,os,time,math
 from pathlib import Path
@@ -11,6 +11,7 @@ from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
 from evaluator_contrast_inference_protocol import PREFIX,PROTOCOL,manifest
 from evaluator_semantic_factor_probe_protocol import D_CHECKPOINT_SHA256
 import preflight_D_contrast_region_stock as regional
+from evaluator_D_bootstrap_instrumentation import instrument as instrument_bootstrap
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/"configs/experiments/evaluator_contrast_probe_execution.json"
@@ -25,16 +26,16 @@ def authorize(cfg):
     if (a.get("status")!="authorized_once"
         or a.get("additional_allocations_authorized") is not True
         or a["approval_id"]!=cfg["approval_id"]
-        or a["max_total_estimated_gpu_usd"]!=1.90
-        or cfg["max_total_estimated_gpu_usd"]!=1.90
+        or a["max_total_estimated_gpu_usd"]!=1.80
+        or cfg["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
-        or cfg["max_hourly_usd"]>0.59
+        or cfg["max_hourly_usd"]>2.49
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
-        or cfg.get("required_gpu_datacenter")!="EU-SE-1"
+        or cfg.get("required_gpu_datacenter")!="EU-CZ-1"
         or cfg.get("storage_datacenter")!="EU-CZ-1"
-        or cfg.get("attach_network_volume") is not False
-        or cfg.get("s3_remote_volume_access") is not True
+        or cfg.get("attach_network_volume") is not True
+        or cfg.get("s3_remote_volume_access") is not False
         or a["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
         or a.get("max_pods")!=1 or a.get("max_launch_attempts")!=1
         or a["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256
@@ -63,22 +64,34 @@ def pod_request(cfg,sha,runid,*,real_env):
     if (req.get("gpuCount")!=1 or req.get("cloudType")!="SECURE"
             or req.get("gpuTypeIds")!=["NVIDIA RTX PRO 6000 Blackwell Server Edition"]):
         raise ValueError("unexpected single-GPU bootstrap template")
-    # A network volume is bound to its original data center. The cheaper
-    # EU-SE-1 48GiB A40 runs WITHOUT a mounted volume. All frozen source
-    # artifacts and generated evidence use HTTPS S3 API to EU-CZ-1 instead.
+    # Reuse the same EU-CZ-1 volume and immutable checkpoint/model cache.
     req["gpuTypeIds"]=[cfg["gpu_type_id"]]
+    # Prefer the RunPod-maintained Blackwell-compatible CUDA 12.8 image over
+    # the previously stalled generic CUDA13 runtime. This changes only
+    # container/bootstrap infrastructure, never checkpoint or evaluation.
+    if (cfg.get("image")!="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+            or cfg.get("container_disk_gb")!=100):
+        raise ValueError("unvalidated container image or ephemeral disk")
+    req["imageName"]=cfg["image"]
+    req["containerDiskInGb"]=cfg["container_disk_gb"]
     if real_env and (req.get("dataCenterIds")!=[cfg["storage_datacenter"]]
                      or req.get("networkVolumeId")!=infra.required("RUNPOD_NETWORK_VOLUME_ID")
                      or infra.required("RUNPOD_DATACENTER_ID")!=cfg["storage_datacenter"]):
         raise ValueError("unexpected base volume or S3 storage region")
     req["dataCenterIds"]=[cfg["required_gpu_datacenter"]]
-    if cfg.get("attach_network_volume") is not False:
+    if cfg.get("attach_network_volume") is not True or cfg["required_gpu_datacenter"]!=cfg["storage_datacenter"]:
         raise ValueError("cross-region volume mount is forbidden")
-    req.pop("networkVolumeId",None)
-    req.pop("volumeMountPath",None)
+    # Preserve existing matched EU-CZ-1 network-volume mount and cached HF data.
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
-    env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
+    # Same-region mounted volume; S3 is used for immutable event receipts.
+    # CUDA12.8 base image must never inherit the CUDA13 virtualenv.
+    old_venv="interface-repair-v2-py312-cu130-r2"
+    shell=req["dockerStartCmd"][2]
+    if shell.count(old_venv)!=1:
+        raise ValueError("persistent venv bootstrap path changed")
+    req["dockerStartCmd"][2]=shell.replace(old_venv,"D-contrast-py312-cu128-torch280-r1")
+    req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):
         env.pop(key,None)
@@ -93,7 +106,7 @@ def guard(cfg,elapsed,price):
     if not isinstance(price,(int,float)) or not math.isfinite(price) or price<=0 or price>cfg["max_hourly_usd"]:
         raise ValueError("actual GPU rate unverified or too high")
     projected=price*(elapsed+cfg["teardown_reserve_seconds"])/3600
-    if projected>=cfg["max_total_estimated_gpu_usd"]:raise TimeoutError("approved $1.90 budget guard")
+    if projected>=cfg["max_total_estimated_gpu_usd"]:raise TimeoutError("approved $1.80 budget guard")
     return projected
 
 def execute(cfg,client,execution,sha,runid):
@@ -124,6 +137,8 @@ def execute(cfg,client,execution,sha,runid):
             if progress is not None and progress.get("stage")!="contrast_inference":
                 raise ValueError("unexpected progress stage")
             bootstrap_record=infra.maybe_json(client,f"{PREFIX}/{runid}/evaluation/bootstrap/progress.json")
+            if (not bootstrap_record and elapsed>=cfg["bootstrap_heartbeat_max_wait_seconds"]):
+                raise TimeoutError("no S3-visible container bootstrap in 10 minutes")
             if bootstrap_record and bootstrap_record.get("stage")=="bootstrap_failed":
                 raise RuntimeError("bootstrap failure, fail closed")
             terminal=infra.maybe_json(client,key)

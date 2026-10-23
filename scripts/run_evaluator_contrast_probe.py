@@ -26,7 +26,7 @@ def check(cfg,runid,repo_sha):
     if (a["max_total_estimated_gpu_usd"]!=cfg["max_total_estimated_gpu_usd"] or
         a["max_gpu_hourly_usd"]!=cfg["max_hourly_usd"] or
         a["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256 or
-        cfg["max_total_estimated_gpu_usd"]!=0.75):
+        cfg["max_total_estimated_gpu_usd"]!=1.80):
         raise PermissionError("scientific model or spending approval drift")
     if os.getenv("HEPHAESTUS_CONTRAST_AUTHORIZED")!="SINGLE_D_CONTRAST_PROBE":
         raise PermissionError("contrast-only environment token missing")

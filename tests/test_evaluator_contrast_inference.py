@@ -48,8 +48,8 @@ def test_perfect_oracle_decisions_score_all_60_pairs():
 
 def test_single_paid_bootstrap_route_and_budget():
     cfg=json.loads(launch.CONFIG.read_text())
-    assert cfg["max_total_estimated_gpu_usd"]==1.90
-    assert cfg["max_hourly_usd"]==0.59
+    assert cfg["max_total_estimated_gpu_usd"]==1.80
+    assert cfg["max_hourly_usd"]==2.49
     body=launch.pod_request(cfg,"a"*40,"D-contrast-dryrun",real_env=False)
     raw=json.dumps(body)
     assert "scripts/run_evaluator_contrast_probe.py" in raw
@@ -59,17 +59,21 @@ def test_single_paid_bootstrap_route_and_budget():
     assert "HEPHAESTUS_FACTOR_PROBE_AUTHORIZED" not in body["env"]
     assert body["gpuCount"]==1
     assert body["cloudType"]=="SECURE"
-    assert body["gpuTypeIds"]==["NVIDIA A40"]
-    assert body["dataCenterIds"]==["EU-SE-1"]
-    assert "networkVolumeId" not in body
-    assert "volumeMountPath" not in body
+    assert body["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+    assert body["imageName"]==cfg["image"]
+    assert body["containerDiskInGb"]==100
+    assert "persist_bootstrap container_started" in body["dockerStartCmd"][2]
+    assert "S3_BOOTSTRAP" in body["dockerStartCmd"][2] or "D_CONTRAST_S3_BOOTSTRAP" in body["dockerStartCmd"][2]
+    assert body["dataCenterIds"]==["EU-CZ-1"]
+    assert "networkVolumeId" in body
+    assert "volumeMountPath" in body
 
 def test_cost_guard():
     cfg=json.loads(launch.CONFIG.read_text())
-    for bad in (0,-1,0.60,float("nan")):
+    for bad in (0,-1,2.50,float("nan")):
         with pytest.raises(ValueError):launch.guard(cfg,10,bad)
-    with pytest.raises(TimeoutError):launch.guard(cfg,15000,0.59)
-    assert launch.guard(cfg,0,0.59)>0
+    with pytest.raises(TimeoutError):launch.guard(cfg,3000,2.49)
+    assert launch.guard(cfg,0,2.49)>0
 
 def test_requires_separate_explicit_authorization(monkeypatch):
     cfg=json.loads(launch.CONFIG.read_text())
@@ -80,7 +84,7 @@ def test_requires_separate_explicit_authorization(monkeypatch):
     record=json.loads(launch.APPROVAL.read_text())
     assert record["prior_capacity_blocker"]["consumed_approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
     assert record["approval_id"]!=record["prior_capacity_blocker"]["consumed_approval_id"]
-    assert record["max_total_estimated_gpu_usd"]==1.90
+    assert record["max_total_estimated_gpu_usd"]==1.80
     if not cfg["runpod_launch_enabled"]:
         with pytest.raises(PermissionError,match="not yet approved"):
             launch.authorize(cfg)
@@ -90,5 +94,5 @@ def test_requires_separate_explicit_authorization(monkeypatch):
         # Only a separately approved future workflow should reach this state.
         assert record["status"]=="authorized_once"
         assert record["additional_allocations_authorized"] is True
-        assert record["max_gpu_hourly_usd"]==0.59
+        assert record["max_gpu_hourly_usd"]==2.49
         assert launch.authorize(cfg)["approval_id"]==cfg["approval_id"]

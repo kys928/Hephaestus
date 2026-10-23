@@ -1,15 +1,15 @@
-name: D approved A40 remote-S3 one-shot $1.90 inference
+name: D RTX PRO 6000 Blackwell user-approved one-shot $1.80
 on:
   push:
-    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
+    branches: [experiment/D-contrast-retry-post-stall-20261023]
 permissions:
   contents: read
 concurrency:
-  group: hephaestus-D-workstation-one-shot-20261023
+  group: hephaestus-D-Blackwell-poststall-once-20261023
   cancel-in-progress: false
 jobs:
   guarded-inference:
-    # Only an explicit unique launch marker may create one A40 pod. Original
+    # Only an explicit unique launch marker may create one Blackwell pod. Original
     # S3 archive remains in EU-CZ-1 and is accessed via HTTPS, not mounted.
     if: contains(github.event.head_commit.message, '[explicit-launch-approved-D-instrumented-once]')
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
-      HEPHAESTUS_GPU_DATACENTER_ID: EU-SE-1
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-CZ-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,18 +34,18 @@ jobs:
         run: python -m pip install -e '.[s3,test]'
       - name: Verify frozen protocol, timing and spending/approval controls
         run: pytest -q tests/test_D_contrast_durable_timing_prelaunch.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py tests/test_preflight_D_contrast_region_stock.py
-      - name: Poll A40 1x EU-SE-1 Secure Cloud stock for up to 15 minutes (no claim, no pod)
+      - name: Poll RTX PRO 6000 1x EU-CZ-1 Secure Cloud stock for up to 15 minutes (no claim)
         shell: bash
         run: |
           for i in $(seq 1 30); do
-            echo "D_A40_CAPACITY_POLL attempt=$i of 30 (preallocation only)"
+            echo "D_BLACKWELL_CAPACITY_POLL attempt=$i of 30 (preallocation only)"
             if python scripts/preflight_D_contrast_region_stock.py; then
-              echo "D_A40_CAPACITY_POLL positive_verified"
+              echo "D_BLACKWELL_CAPACITY_POLL positive_verified"
               exit 0
             fi
             sleep 30
           done
-          echo "D_A40_CAPACITY_POLL exhausted_without_gpu"
+          echo "D_BLACKWELL_CAPACITY_POLL exhausted_without_gpu"
           exit 75
       - name: ONE explicitly approved GPU inference with immutable S3 timing
         run: python scripts/launch_evaluator_contrast_probe.py --execute
@@ -61,7 +61,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
-      HEPHAESTUS_GPU_DATACENTER_ID: EU-SE-1
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-CZ-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

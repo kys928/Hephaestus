@@ -1,0 +1,33 @@
+name: D Blackwell post-stall CPU-only launch gate (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-retry-post-stall-20261023]
+permissions: {contents: read}
+jobs:
+  offline-prelaunch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env: {PYTHONPATH: 'scripts:src:.'}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test]'
+      - name: Verify schema, immutable protocol, bootstrap injection, cost and one-use controls
+        run: |
+          pytest -q tests/test_D_Blackwell_poststall_bootstrap.py tests/test_D_contrast_durable_timing_prelaunch.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py tests/test_preflight_D_contrast_region_stock.py
+      - name: Compile Python, parse pod shell syntax, then dry-run without allocating
+        run: |
+          python -m py_compile scripts/evaluator_D_bootstrap_instrumentation.py scripts/launch_evaluator_contrast_probe.py scripts/run_evaluator_contrast_probe.py
+          python - <<'PY'
+          import json, subprocess
+          import launch_evaluator_contrast_probe as x
+          cfg=json.loads(x.CONFIG.read_text())
+          request=x.pod_request(cfg,"f"*40,"D-contrast-offline-check",real_env=False)
+          assert subprocess.run(["bash","-n"],input=request["dockerStartCmd"][2],text=True).returncode==0
+          assert request["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+          assert request["dataCenterIds"]==["EU-CZ-1"]
+          assert "networkVolumeId" in request
+          print("D_BLACKWELL_OFFLINE_GATE "+json.dumps({"shell_valid":True,"dry_run_paid":False,"no_allocation":True,"budget_estimate_usd":cfg["max_total_estimated_gpu_usd"]}))
+          PY
+          python scripts/launch_evaluator_contrast_probe.py
