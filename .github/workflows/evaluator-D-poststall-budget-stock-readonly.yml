@@ -1,0 +1,16 @@
+name: D post-stall read-only budget and Blackwell availability (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-retry-post-stall-20261023]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/inspect_D_poststall_budget_stock.py
