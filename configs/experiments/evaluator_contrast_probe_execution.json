@@ -1,12 +1,12 @@
 {
-  "approval_id": "heph-D-contrasts-workstation-20261023-ONE-PAID-ATTEMPT",
+  "approval_id": "heph-D-contrasts-A40-EUSE1-20261023-ONE-PAID-ATTEMPT",
   "protocol": "evaluator-D-matched-contrasts-20261019-v1",
-  "gpu_type_id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
-  "max_hourly_usd": 2.59,
+  "gpu_type_id": "NVIDIA A40",
+  "max_hourly_usd": 0.59,
   "max_total_estimated_gpu_usd": 1.9,
   "teardown_reserve_seconds": 120,
-  "launcher_hard_wall_seconds": 2420,
-  "runner_hard_wall_seconds": 2250,
+  "launcher_hard_wall_seconds": 10800,
+  "runner_hard_wall_seconds": 10450,
   "poll_seconds": 10,
   "generation_max_new_tokens": 112,
   "shard_size": 8,
@@ -18,7 +18,7 @@
     "Medium",
     "Low"
   ],
-  "required_datacenter": "EU-CZ-1",
+  "required_datacenter": "EU-SE-1",
   "automated_retry_count_max": 1,
   "capacity_check_before_S3_claim": true,
   "low_stock_allocation_attempts_max": 1,
@@ -29,6 +29,10 @@
   "diagnostic_reuse_of_saved_shards": false,
   "allow_training": false,
   "allow_replay_after_create_attempt": false,
-  "min_inference_gpu_memory_gib": 80,
-  "gpu_choice_evidence_workflow_id": 39971063105
+  "min_inference_gpu_memory_gib": 40,
+  "gpu_choice_evidence_workflow_id": 39973104184,
+  "required_gpu_datacenter": "EU-SE-1",
+  "storage_datacenter": "EU-CZ-1",
+  "attach_network_volume": false,
+  "s3_remote_volume_access": true
 }
