@@ -11,7 +11,6 @@ from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
 from evaluator_contrast_inference_protocol import PREFIX,PROTOCOL,manifest
 from evaluator_semantic_factor_probe_protocol import D_CHECKPOINT_SHA256
 import preflight_D_contrast_region_stock as regional
-from evaluator_D_bootstrap_instrumentation import instrument as instrument_bootstrap
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/"configs/experiments/evaluator_contrast_probe_execution.json"
@@ -87,7 +86,16 @@ def pod_request(cfg,sha,runid,*,real_env):
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
     env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
-    req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
+    # Co-located network-volume bootstrap already persists native stages
+    # under /workspace/<HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY>, directly visible
+    # through the EU-CZ-1 S3 API. NEVER pip-install boto3 into the image's
+    # global Python environment before the first container-start marker.
+    shell=req.get("dockerStartCmd")
+    if not (isinstance(shell,list) and len(shell)==3 and shell[:2]==["bash","-lc"]
+            and "write_bootstrap container_started" in shell[2]
+            and "write_bootstrap runner_started" in shell[2]
+            and cfg["attach_network_volume"] is True):
+        raise ValueError("native co-located bootstrap shape drift")
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):
         env.pop(key,None)
