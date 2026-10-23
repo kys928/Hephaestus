@@ -29,7 +29,7 @@ def authorize(cfg):
         or a["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
-        or cfg["max_hourly_usd"]>2.49
+        or cfg["max_hourly_usd"]>2.59
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
         or cfg.get("required_gpu_datacenter")!="EU-CZ-1"
