@@ -1,7 +1,7 @@
 name: D Blackwell post-stall CPU-only launch gate (NO GPU)
 on:
   push:
-    branches: [experiment/D-contrast-retry-post-stall-20261023]
+    branches: [experiment/D-contrast-Blackwell-Workstation-fallback-20261023]
 permissions: {contents: read}
 jobs:
   offline-prelaunch:
