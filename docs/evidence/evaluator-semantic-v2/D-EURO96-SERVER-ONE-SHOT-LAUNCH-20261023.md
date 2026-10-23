@@ -1,0 +1,13 @@
+# EU-RO-1 96GB Blackwell Server fallback — one guarded inference only
+
+User requested that when a GPU is unavailable after five minutes, search and use a compatible fallback. The exact EU-CZ-1 Workstation availability poll on GitHub run 39989491439 exhausted 15 minutes without an allocation; it failed during free capacity preflight, so its distinct approval was not spent. User subsequently showed a GPU inventory with RTX PRO 6000 Server but the **All** tab does not prove one-GPU Secure Cloud availability. A new exact RunPod quote from no-GPU job 39992345478 at 17:06:34 UTC found **NVIDIA RTX PRO 6000 Blackwell Server Edition**, **EU-RO-1**, 96GB, Secure Cloud 1x, **Low**, **$2.49/hour**.
+
+This launch pins the one available compatible 96GB GPU family with stable rate and a newly isolated S3 one-use approval `heph-D-contrasts-EURO-Server-20261023-SINGLE-FALLBACK`. The previous WK approval is consumed by prior pod 99nwphw8j8w4hr; the cancelled Server pod e6p97v9ixa3nk5 was independently deleted (204) and verified absent (404) on GitHub 39989354238. **Never reuse an old claim or launch another pod after this exact provisioning request.**
+
+No cross-region mount is attempted. EU-RO-1 provides compute, while the immutable EU-CZ-1 storage volume `cviwpryzao` remains accessible exclusively through the S3 API over HTTPS. The model image is RunPod PyTorch CUDA 12.8, with its own fresh virtual environment. The full base-model Hugging Face download and network bandwidth are unmeasured; scientific completion is not guaranteed.
+
+One 5-minute stock-poll window then one re-quote before S3 atomic claim. An additional account-credit gate requires at least $1.80, reports only Boolean. One pod create attempt, zero retries; $2.49/hour ceiling; strict $1.80 estimated GPU total with 120-second teardown reserve; 600-second absent-bootstrap guard, independent pod deletion verification, and no automatic replay.
+
+Frozen scientific scope remains IBM Granite 3.3 8B Instruct revision `51dd4bc2ade4059a6bd87649d68aa11e4fb2529b` plus D step-96 LoRA SHA256 `5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1`; 56 immutable unique greedy prompts, 60 counterfactual matched pairs, 112-token cap. No additional training, promotion, certification, production merge or experimental changes. Success requires all prompts persisted, full independent CPU 60-pair evaluation and verified pod deletion; no result if pod merely RUNNING.
+
+Branch CPU validation 39993409817 passed all tests after adjusting the approved Server GPU and EU-RO-1 no-volume contract. Any capacity or credit failure leaves the approval unclaimed and purchases no GPU.
