@@ -1,0 +1,17 @@
+name: D read-only EU-CZ-1 alternate GPUs (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
+permissions: {contents: read}
+jobs:
+  catalog-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read region-scoped Secure Cloud GPU stock and hourly prices (no pod)
+        run: python scripts/inspect_D_gpu_alternates_readonly.py
