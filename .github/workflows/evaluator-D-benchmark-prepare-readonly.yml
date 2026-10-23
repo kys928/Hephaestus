@@ -1,0 +1,16 @@
+name: D CPU-only quantify frozen training-pack prepare time (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
+permissions: {contents: read}
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env: {PYTHONPATH: 'scripts:src:.'}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test]'
+      - run: python scripts/benchmark_D_prepare_CPU_only.py
