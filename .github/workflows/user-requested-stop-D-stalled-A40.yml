@@ -1,0 +1,17 @@
+name: USER-REQUESTED DELETE stalled D A40 pod (one exact ID)
+on:
+  push:
+    branches: [diagnostic/D-contrast-39974986184-live-readonly]
+permissions: {contents: read}
+jobs:
+  terminate-stalled-pod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Stop exact stalled A40 pod and verify GET returns 404
+        run: python scripts/stop_D_stalled_A40_once.py
