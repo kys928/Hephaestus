@@ -1,6 +1,6 @@
 {
   "approval_id": "heph-D-contrasts-A40-EUSE1-20261023-ONE-PAID-ATTEMPT",
-  "status": "authorized_once",
+  "status": "pending_explicit_user_launch_command",
   "source": "User explicitly authorized fresh results-first paid D inference on 2026-10-23: alternate available GPU meeting VRAM need, approximately $2 balance and spending up to available funds, without further launch approval.",
   "scope": "Exactly one new immutable D step-96 inference-only pod for 56 frozen unique prompts / 60 paired counterfactual challenges, with durable stage timings, independently rescored on CPU; no training/retraining/certification/promotion or fallback allocation.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
@@ -13,7 +13,7 @@
   "scientific_gates_unchanged": true,
   "model_retraining_authorized": false,
   "certification_authorized": false,
-  "additional_allocations_authorized": true,
+  "additional_allocations_authorized": false,
   "retry_requires_new_authorization": true,
   "prior_capacity_blocker": {
     "prior_gpu_run_id": "D-contrast-39299580607",
@@ -29,5 +29,6 @@
   "authorization_scope_note": "User authorized alternate GPU and up to approximately $2 available funds. One A40 EU-SE-1 GPU allocation attempt, $1.90 estimated total GPU ceiling with 120s teardown reserve; same immutable D step96 adapter/protocol and independent CPU scientific verification; no automatic pod retry.",
   "gpu_datacenter": "EU-SE-1",
   "storage_datacenter": "EU-CZ-1",
-  "hardware_change_from_prior": "96GB Blackwell Server Edition -> 48GB Ampere A40; deterministic BF16 outputs may differ across hardware. Report this limitation."
+  "hardware_change_from_prior": "96GB Blackwell Server Edition -> 48GB Ampere A40; deterministic BF16 outputs may differ across hardware. Report this limitation.",
+  "prior_single_use_consumed": true
 }
