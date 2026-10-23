@@ -12,7 +12,7 @@ import sys
 import urllib.request
 
 GPU="NVIDIA RTX PRO 6000 Blackwell Server Edition"
-DATACENTER="EUR-IS-2"
+DATACENTER="EU-CZ-1"
 MAX_HOURLY_USD=2.49
 
 def inspect_response(payload):
