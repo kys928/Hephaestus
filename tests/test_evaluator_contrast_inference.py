@@ -49,7 +49,7 @@ def test_perfect_oracle_decisions_score_all_60_pairs():
 def test_single_paid_bootstrap_route_and_budget():
     cfg=json.loads(launch.CONFIG.read_text())
     assert cfg["max_total_estimated_gpu_usd"]==1.80
-    assert cfg["max_hourly_usd"]==2.59
+    assert cfg["max_hourly_usd"]==2.49
     body=launch.pod_request(cfg,"a"*40,"D-contrast-dryrun",real_env=False)
     raw=json.dumps(body)
     assert "scripts/run_evaluator_contrast_probe.py" in raw
@@ -59,14 +59,14 @@ def test_single_paid_bootstrap_route_and_budget():
     assert "HEPHAESTUS_FACTOR_PROBE_AUTHORIZED" not in body["env"]
     assert body["gpuCount"]==1
     assert body["cloudType"]=="SECURE"
-    assert body["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Workstation Edition"]
+    assert body["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
     assert body["imageName"]==cfg["image"]
     assert body["containerDiskInGb"]==100
     assert "persist_bootstrap container_started" in body["dockerStartCmd"][2]
     assert "S3_BOOTSTRAP" in body["dockerStartCmd"][2] or "D_CONTRAST_S3_BOOTSTRAP" in body["dockerStartCmd"][2]
-    assert body["dataCenterIds"]==["EU-CZ-1"]
-    assert "networkVolumeId" in body
-    assert "volumeMountPath" in body
+    assert body["dataCenterIds"]==["EU-RO-1"]
+    assert "networkVolumeId" not in body
+    assert "volumeMountPath" not in body
 
 def test_cost_guard():
     cfg=json.loads(launch.CONFIG.read_text())
@@ -94,5 +94,5 @@ def test_requires_separate_explicit_authorization(monkeypatch):
         # Only a separately approved future workflow should reach this state.
         assert record["status"]=="authorized_once"
         assert record["additional_allocations_authorized"] is True
-        assert record["max_gpu_hourly_usd"]==2.59
+        assert record["max_gpu_hourly_usd"]==2.49
         assert launch.authorize(cfg)["approval_id"]==cfg["approval_id"]

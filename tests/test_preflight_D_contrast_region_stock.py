@@ -62,10 +62,10 @@ def test_constrains_request_to_network_volume_location(monkeypatch):
             envelope=json.loads(req.data.decode())
             assert set(envelope)=={"query"}
             query=envelope["query"]
-            assert 'dataCenterId: "EU-CZ-1"' in query
+            assert 'dataCenterId: "EU-RO-1"' in query
             assert "secureCloud: true" in query
             assert "gpuCount: 1" in query
-            assert 'id: "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"' in query
+            assert 'id: "NVIDIA RTX PRO 6000 Blackwell Server Edition"' in query
             self.closed=False
         def __enter__(self):return self
         def __exit__(self,*args):self.closed=True
