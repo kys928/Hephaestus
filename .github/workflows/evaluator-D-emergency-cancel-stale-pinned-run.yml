@@ -1,0 +1,25 @@
+name: Cancel invalid pinned Blackwell run before GPU claim (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-retry-post-stall-20261023]
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cancel-stale-pinned-run:
+    if: "!contains(github.event.head_commit.message, '[explicit-launch-approved-D-instrumented-once]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Cancel broken pinned 39986151557 before allocation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/39986151557/cancel"
+          echo "Cancellation requested; inspect run outcome before any new allocation."
