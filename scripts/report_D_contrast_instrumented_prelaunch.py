@@ -29,8 +29,8 @@ def assemble():
         source_manifest["paired_challenges"]!=60 or len(pairs)!=60 or
         source_manifest["greedy_seed"]!=20261019):
         raise RuntimeError("unapproved launch or frozen scientific identity drift")
-    if (execution["max_total_estimated_gpu_usd"]!=0.75 or
-        execution["max_hourly_usd"]!=2.49 or
+    if (execution["max_total_estimated_gpu_usd"]!=1.90 or
+        execution["max_hourly_usd"]!=2.59 or
         execution["one_pod"] is not True or execution["extra_runs"] is not False or
         execution["runner_hard_wall_seconds"]>=execution["launcher_hard_wall_seconds"]):
         raise RuntimeError("bounded execution geometry drift")
@@ -96,16 +96,16 @@ def assemble():
             per_run_allocations_max=1,
             max_wall_seconds=execution["launcher_hard_wall_seconds"],
             gpu_spend_authorized_now=(0 if still_pending else 1),
-            note="Retaining previous $0.75 planning cap does not prove feasibility after a 940-second unsuccessful cold start."
+            note="Distinct user-approved one-pod $1.90 cap with $2.59/h Workstation; no guaranteed scientific completion."
         ),
         readiness_gates=dict(
             cpu_static_tests="pending workflow evidence",
             model_cache_warm="unverified; earlier S3 bootstrap only showed hf cache root, not revision complete",
             model_load_elapsed="unmeasured; earlier 15.5-minute pod left no post-load manifest",
             full_56_prompt_completion_under_cap="unproven; do not predict success or authorize budget automatically",
-            action="await fresh user launch command after review and any necessary budget/cache strategy change"
+            action=("await launch marker only; explicit one-pod user authorization received" if newly_approved else "await explicit user approval")
         ),
-        forbidden_actions=["new pod", "new GPU charge", "training", "certification",
+        forbidden_actions=["more than one new pod", "unbounded GPU charge", "training", "certification",
                           "promotion", "sealed-evidence reuse", "repeated allocation"],
     )
 
