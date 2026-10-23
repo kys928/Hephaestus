@@ -171,7 +171,25 @@ class ProductionLoopRunner:
                 store.save(state)
                 return state
 
+            # Waiting for an external job or operator approval is not a
+            # completed cycle. Never execute the Judge action or increment the
+            # scientific-cycle counter until all staged evidence is complete.
+            if result.status == "pending":
+                state.status = "waiting"
+                state.metadata["pending_cycle"] = result.to_dict()
+                store.event(program_id, "cycle_waiting", result.to_dict())
+                store.save(state)
+                return state
+            if result.status == "blocked":
+                state.status = "blocked"
+                state.stop_reason = "staged_cycle_blocked"
+                state.metadata["blocked_cycle"] = result.to_dict()
+                store.event(program_id, "cycle_blocked", result.to_dict())
+                store.save(state)
+                return state
+
             self._validate_cycle(result)
+            state.metadata.pop("pending_cycle", None)
             state.cycle_index = cycle_index
             state.latest_run_id = result.run_id
             state.latest_experiment_id = result.experiment_id
