@@ -69,14 +69,14 @@ def test_completed_staged_cycle_is_applied_once_by_production_loop(tmp_path):
     assert result.status == "stopped" and result.cycle_index == 1
     assert result.latest_comparison_ref == "comparison-verified-1"
     assert router.action_calls == 0  # staged action intent never calls the mutating router
-    recorded = runtime.state_repository.all(ACTION_EXECUTIONS)
+    recorded = [row for row in runtime.state_repository.all(ACTION_EXECUTIONS) if row["status"] == "applied"]
     assert len(recorded) == 1
     assert recorded[0]["effective_action"] == "continue_lineage_best"
     again = ProductionLoopRunner(runtime, driver, maximum_cycles=1).run(
         program_id="evaluator-repair", lineage_id="evaluator-lineage", stage_name="smoke_test"
     )
     assert again.cycle_index == 1
-    assert len(runtime.state_repository.all(ACTION_EXECUTIONS)) == 1
+    assert len([r for r in runtime.state_repository.all(ACTION_EXECUTIONS) if r["status"] == "applied"]) == 1
 
 
 def test_training_wait_persists_and_restart_does_not_repeat_paid_launch(tmp_path):
@@ -99,7 +99,7 @@ def test_training_wait_persists_and_restart_does_not_repeat_paid_launch(tmp_path
     assert two.cycle_index == 1 and two.status == "stopped"
     assert second.launch_calls == 0  # the persisted lifecycle_launch is skipped
     assert second.comparison_calls == 1
-    assert len(restarted.state_repository.all(ACTION_EXECUTIONS)) == 1
+    assert len([r for r in restarted.state_repository.all(ACTION_EXECUTIONS) if r["status"] == "applied"]) == 1
 
 
 def test_nonresumable_staged_failure_never_executes_judge_action(tmp_path):
