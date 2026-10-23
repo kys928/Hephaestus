@@ -11,6 +11,7 @@ from hephaestus.providers.runpod import RunPodConfig,RunPodExecutionAdapter
 from evaluator_contrast_inference_protocol import PREFIX,PROTOCOL,manifest
 from evaluator_semantic_factor_probe_protocol import D_CHECKPOINT_SHA256
 import preflight_D_contrast_region_stock as regional
+from evaluator_D_bootstrap_instrumentation import instrument as instrument_bootstrap
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/"configs/experiments/evaluator_contrast_probe_execution.json"
@@ -79,6 +80,7 @@ def pod_request(cfg,sha,runid,*,real_env):
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
     env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
+    req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):
         env.pop(key,None)
