@@ -12,7 +12,7 @@
   "shard_size": 8,
   "one_pod": true,
   "extra_runs": false,
-  "runpod_launch_enabled": true,
+  "runpod_launch_enabled": false,
   "required_gpu_stock_status": [
     "High",
     "Medium",
@@ -22,7 +22,7 @@
   "automated_retry_count_max": 1,
   "capacity_check_before_S3_claim": true,
   "low_stock_allocation_attempts_max": 1,
-  "prelaunch_status": "explicitly_approved_user_20261023_once",
+  "prelaunch_status": "previous A40 pod deleted; one-use claim consumed",
   "durable_timing_enabled": true,
   "durable_timing_schema": "D-contrast-stage-timing-v1",
   "resume_from_prior_run": false,
