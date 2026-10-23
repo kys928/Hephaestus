@@ -80,6 +80,11 @@ def run(cfg,runid,repo_sha,client):
     timing("source_checkpoint_verified")
     timing("curriculum_prepare_start")
     oldcfg,_,_,_=prepare("D")
+    # Runtime-only VRAM threshold for the selected 96GB Workstation device.
+    # The frozen model, adapter and training/scientific config are NOT edited.
+    oldcfg=dict(oldcfg)
+    oldcfg["execution"]=dict(oldcfg["execution"],
+        minimum_gpu_memory_gib=cfg["min_inference_gpu_memory_gib"])
     timing("curriculum_prepare_done")
     parent=json.loads((ROOT/oldcfg["parent_candidate_manifest"]).read_text())
     spec=curriculum.common.parent_spec(oldcfg,parent)
