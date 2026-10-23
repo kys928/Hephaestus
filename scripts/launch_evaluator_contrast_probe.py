@@ -32,10 +32,10 @@ def authorize(cfg):
         or cfg["max_hourly_usd"]>2.49
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
-        or cfg.get("required_gpu_datacenter")!="EUR-IS-2"
+        or cfg.get("required_gpu_datacenter")!="EU-CZ-1"
         or cfg.get("storage_datacenter")!="EU-CZ-1"
-        or cfg.get("attach_network_volume") is not False
-        or cfg.get("s3_remote_volume_access") is not True
+        or cfg.get("attach_network_volume") is not True
+        or cfg.get("s3_remote_volume_access") is not False
         or a["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
         or a.get("max_pods")!=1 or a.get("max_launch_attempts")!=1
         or a["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256
@@ -81,10 +81,9 @@ def pod_request(cfg,sha,runid,*,real_env):
                      or infra.required("RUNPOD_DATACENTER_ID")!=cfg["storage_datacenter"]):
         raise ValueError("unexpected base volume or S3 storage region")
     req["dataCenterIds"]=[cfg["required_gpu_datacenter"]]
-    if cfg.get("attach_network_volume") is not False:
+    if cfg.get("attach_network_volume") is not True or cfg["required_gpu_datacenter"]!=cfg["storage_datacenter"]:
         raise ValueError("cross-region volume mount is forbidden")
-    req.pop("networkVolumeId",None)
-    req.pop("volumeMountPath",None)
+    # Preserve existing matched EU-CZ-1 network-volume mount and cached HF data.
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
     env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
