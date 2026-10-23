@@ -35,5 +35,7 @@
   "storage_datacenter": "EU-CZ-1",
   "attach_network_volume": false,
   "s3_remote_volume_access": true,
-  "bootstrap_heartbeat_max_wait_seconds": 600
+  "bootstrap_heartbeat_max_wait_seconds": 600,
+  "image": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+  "container_disk_gb": 100
 }
