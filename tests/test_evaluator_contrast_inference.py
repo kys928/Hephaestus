@@ -62,8 +62,8 @@ def test_single_paid_bootstrap_route_and_budget():
     assert body["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Workstation Edition"]
     assert body["imageName"]==cfg["image"]
     assert body["containerDiskInGb"]==100
-    assert "persist_bootstrap container_started" in body["dockerStartCmd"][2]
-    assert "S3_BOOTSTRAP" in body["dockerStartCmd"][2] or "D_CONTRAST_S3_BOOTSTRAP" in body["dockerStartCmd"][2]
+    assert "write_bootstrap container_started" in body["dockerStartCmd"][2]
+    assert "persist_bootstrap" not in body["dockerStartCmd"][2]
     assert body["dataCenterIds"]==["EU-CZ-1"]
     assert "networkVolumeId" in body
     assert "volumeMountPath" in body
