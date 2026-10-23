@@ -1,0 +1,16 @@
+name: D exact alternate 1x Secure Cloud GPU quotes (NO GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
+permissions: {contents: read}
+jobs:
+  exact-regional-quotes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/inspect_D_exact_secure_quotes.py
