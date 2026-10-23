@@ -18,7 +18,7 @@ jobs:
           import os,time,urllib.request,urllib.error,json
           pod="e6p97v9ixa3nk5"
           uri=f"https://rest.runpod.io/v1/pods/{pod}"
-          headers={"Authorization":"Bearer "+os.environ["RUNPOD_API_KEY"],"Accept":"application/json"}
+          headers={"Authorization":"Bearer "+os.environ["RUNPOD_API_KEY"],"Accept":"application/json","User-Agent":"Mozilla/5.0 (compatible; Hephaestus-RunPod/1.0)"}
           def call(method):
               request=urllib.request.Request(uri,headers=headers,method=method)
               try:
