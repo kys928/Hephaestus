@@ -16,6 +16,7 @@ from hephaestus.production.loop import ProductionLoopRunner
 from hephaestus.production.staged_driver import StagedProductionCycleDriver
 from hephaestus.production.state import ACTION_EXECUTIONS
 from hephaestus.state.lineage_store import LineageStore
+from hephaestus.state._json_store import JsonSingleDocument
 from hephaestus.schemas.lineage_state import LineageState
 
 from test_staged_autonomous_orchestration import FakeOperationRouter, _services
@@ -201,3 +202,18 @@ def test_prepared_branch_reconciles_child_without_duplicate_parent_mutation(tmp_
     assert lineage.get_current("lineage-parent")["child_lineage_ids"] == [child["lineage_id"]]
     assert lineage.get_parent(child["lineage_id"]) == "lineage-parent"
     assert [r["status"] for r in runtime.state_repository.all(ACTION_EXECUTIONS)] == ["prepared", "applied"]
+
+
+def test_atomic_lineage_file_write_preserves_previous_json_when_replace_fails(tmp_path, monkeypatch):
+    document = JsonSingleDocument(tmp_path, "lineage_states.json")
+    document.write({"lineage-1": {"status": "before"}})
+    import hephaestus.state._json_store as store_module
+
+    def crash_before_atomic_replace(src, dst):
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(store_module.os, "replace", crash_before_atomic_replace)
+    with pytest.raises(OSError, match="injected replace failure"):
+        document.write({"lineage-1": {"status": "after"}})
+    assert document.read() == {"lineage-1": {"status": "before"}}
+    assert not list(tmp_path.glob("*.partial"))
