@@ -25,4 +25,4 @@ jobs:
       - name: Compile imported production modules
         run: python -m compileall -q src/hephaestus/production src/hephaestus/providers/models/huggingface.py
       - name: Test real composition, governance, staged interface and failure injection on CPU
-        run: pytest -q tests/test_production_loop_v1.py tests/test_staged_autonomous_orchestration.py tests/test_evaluation_generation_bridge.py tests/test_deterministic_role_boundary.py
+        run: pytest -q tests/test_production_staged_integration.py tests/test_production_loop_v1.py tests/test_staged_autonomous_orchestration.py tests/test_evaluation_generation_bridge.py tests/test_deterministic_role_boundary.py
