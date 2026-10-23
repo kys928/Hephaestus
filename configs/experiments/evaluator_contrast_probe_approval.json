@@ -1,7 +1,7 @@
 {
-  "approval_id": "heph-D-contrasts-BLACKWELL-EURIS2-20261023-SECOND-USER-AUTH",
+  "approval_id": "heph-D-contrasts-WK-EUCZ1-20261023-BOOTFIX-USER-ONE",
   "status": "authorized_once",
-  "source": "User explicitly requested termination of stalled A40 followed by a fresh NVIDIA RTX PRO 6000 Blackwell, with a suitable alternative only if unavailable. New one-pod approval, previously used A40 claim remains consumed.",
+  "source": "User requested available RTX PRO 6000 Workstation GPU on 2026-10-23 at ~18:36 Amsterdam time after prior 39987687857 run at 18:33 failed during container bootstrap; this new one-pod claim is isolated, cannot replay either previous approval.",
   "scope": "Exactly one new immutable D step-96 inference-only pod for 56 frozen unique prompts / 60 paired counterfactual challenges, with durable stage timings, independently rescored on CPU; no training/retraining/certification/promotion or fallback allocation.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
   "max_gpu_hourly_usd": 2.59,
@@ -24,12 +24,13 @@
     "estimated_gpu_usd": 0.6501000355649249,
     "failure": "launcher_hard_wall_before_post_load_manifest"
   },
-  "capacity_condition": "One 96GB NVIDIA RTX PRO 6000 Blackwell Workstation Edition Secure Cloud GPU in EU-CZ-1 at <=$2.59/hr, co-located network volume. Exactly the SAME atomic one-pod approval ID as alternate Server Edition branch; whichever claims first prohibits the other.",
+  "capacity_condition": "One NVIDIA RTX PRO 6000 Blackwell Workstation Edition 96GB EU-CZ-1, verified fresh 1x Secure Cloud stock <=$2.59/hr; matched persistent volume, no remote cross-region mount.",
   "budget_increase_authorized": true,
-  "authorization_scope_note": "User authorized RTX 6000 Blackwell or available memory-sufficient alternative. Workstation hardware variant has independent preallocation quote. Reuses one and only S3 approval ID across branches to prevent multiple GPU pods, max $1.80 estimated total. Do NOT activate if existing Server Edition pod already allocated.",
+  "authorization_scope_note": "One fresh authorized available RTX PRO 6000 Workstation attempt following earlier failed allocation and verified pod delete, same frozen model/eval; 1 create attempt, $1.80 estimated GPU ceiling, 120s teardown reserve, no training, promotion or certification. Previous approval consumed and never reused.",
   "gpu_datacenter": "EU-CZ-1",
   "storage_datacenter": "EU-CZ-1",
   "hardware_change_from_prior": "A40 48GB -> NVIDIA RTX PRO 6000 Blackwell Server Edition 96GB",
   "prior_A40_consumed_id": "heph-D-contrasts-A40-EUSE1-20261023-ONE-PAID-ATTEMPT",
-  "image_change_note": "Use the official RunPod PyTorch CUDA12.8/Torch2.8 image instead of previously stalled generic PyTorch CUDA13.0 runtime. Frozen model/adapter and greedy science unchanged."
+  "image_change_note": "Same RunPod PyTorch CUDA12.8 image; use a fresh isolated venv path distinct from original CUDA13 cached venv; record append-only early bootstrap receipts including failure.",
+  "prior_WK_consumed_id": "heph-D-contrasts-BLACKWELL-EURIS2-20261023-SECOND-USER-AUTH"
 }

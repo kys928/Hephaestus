@@ -86,7 +86,13 @@ def pod_request(cfg,sha,runid,*,real_env):
     # Preserve existing matched EU-CZ-1 network-volume mount and cached HF data.
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
-    env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
+    # Co-located volume is mounted; S3 remains the durable evidence channel.
+    # The CUDA 12.8 container cannot safely use the previously cached CUDA 13 venv.
+    old_venv="interface-repair-v2-py312-cu130-r2"
+    shell=req["dockerStartCmd"][2]
+    if shell.count(old_venv)!=1:
+        raise ValueError("persistent venv bootstrap contract changed")
+    req["dockerStartCmd"][2]=shell.replace(old_venv,"D-contrast-WK-cu128-torch280-r1")
     req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):
@@ -172,8 +178,8 @@ if __name__=="__main__":
            max_usd=cfg["max_total_estimated_gpu_usd"],actual_allocation=False),sort_keys=True))
         raise SystemExit(0)
     authorize(cfg)
-    # Requery the exact A40 1x Secure Cloud GPU in EU-SE-1 immediately
-    # before the EU-CZ-1 S3 atomic claim and single provisioning request.
+    # Requery exact RTX PRO 6000 Workstation 1x EU-CZ-1 Secure Cloud stock
+    # immediately before a fresh one-use S3 claim and create request.
     quote=regional.inspect_response(regional.query())
     print("D_CONTRAST_PRICE_PREFLIGHT "+json.dumps(quote,sort_keys=True),flush=True)
     if (not quote["confident_capacity_signal"] or quote["gpu_type"]!=cfg["gpu_type_id"]
