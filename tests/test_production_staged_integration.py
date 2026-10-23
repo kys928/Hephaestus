@@ -15,6 +15,8 @@ from hephaestus.production.composition import ProductionCompositionRoot, Product
 from hephaestus.production.loop import ProductionLoopRunner
 from hephaestus.production.staged_driver import StagedProductionCycleDriver
 from hephaestus.production.state import ACTION_EXECUTIONS
+from hephaestus.state.lineage_store import LineageStore
+from hephaestus.schemas.lineage_state import LineageState
 
 from test_staged_autonomous_orchestration import FakeOperationRouter, _services
 
@@ -125,3 +127,77 @@ def test_driver_rejects_second_side_effecting_staged_executor(tmp_path):
             runtime, StagedProductionCycleDriver(unsafe), maximum_cycles=1
         ).run(program_id="unsafe", lineage_id="evaluator-lineage", stage_name="smoke_test")
     assert runtime.state_repository.all(ACTION_EXECUTIONS) == []
+
+
+def test_prepared_judge_action_replays_exactly_once_after_controller_crash(tmp_path, monkeypatch):
+    runtime = _runtime(tmp_path)
+    executor = runtime.action_executor
+    original = LineageStore.set_current
+    crashed = False
+
+    def crash_after_lineage_write(self, record):
+        nonlocal crashed
+        original(self, record)
+        if record["lineage_id"] == "evaluator-lineage" and not crashed:
+            crashed = True
+            raise RuntimeError("injected crash after lineage write, before action receipt")
+
+    monkeypatch.setattr(LineageStore, "set_current", crash_after_lineage_write)
+    args = {
+        "lineage_id": "evaluator-lineage",
+        "run_id": "first-evaluator-run",
+        "requested_action": "reject_candidate",
+    }
+    with pytest.raises(RuntimeError, match="injected crash"):
+        executor.apply(**args)
+    prepared = runtime.state_repository.all(ACTION_EXECUTIONS)
+    assert len(prepared) == 1 and prepared[0]["status"] == "prepared"
+    assert LineageStore(runtime.settings.state_root).get_current("evaluator-lineage")["recent_failures"] == ["first-evaluator-run"]
+
+    monkeypatch.setattr(LineageStore, "set_current", original)
+    applied = executor.apply(**args)
+    repeated = executor.apply(**args)
+    assert applied["status"] == repeated["status"] == "applied"
+    assert applied["execution_id"] == repeated["execution_id"]
+    assert LineageStore(runtime.settings.state_root).get_current("evaluator-lineage")["recent_failures"] == ["first-evaluator-run"]
+    assert [r["status"] for r in runtime.state_repository.all(ACTION_EXECUTIONS)] == ["prepared", "applied"]
+
+
+def test_prepared_branch_reconciles_child_without_duplicate_parent_mutation(tmp_path, monkeypatch):
+    runtime = _runtime(tmp_path)
+    root = runtime.settings.state_root
+    lineage = LineageStore(root)
+    lineage.set_current(LineageState(
+        lineage_id="lineage-parent", stage_name="smoke_test",
+        status="active", best_checkpoint_ref="checkpoint://parent"
+    ).to_dict())
+    executor = runtime.action_executor
+    original = LineageStore.set_current
+
+    def crash_before_parent_after_child(self, record):
+        if record["lineage_id"] == "lineage-parent":
+            raise RuntimeError("injected crash after child, before parent")
+        return original(self, record)
+
+    monkeypatch.setattr(LineageStore, "set_current", crash_before_parent_after_child)
+    args = {
+        "lineage_id": "lineage-parent", "run_id": "branch-test",
+        "requested_action": "branch_new_experiment",
+        "checkpoint_ref": "checkpoint://parent",
+        "approval_status": "approved", "approval_ref": "approval://branch",
+    }
+    with pytest.raises(RuntimeError, match="injected crash"):
+        executor.apply(**args)
+    rows = runtime.state_repository.all(ACTION_EXECUTIONS)
+    assert len(rows) == 1 and rows[0]["status"] == "prepared"
+    child = rows[0]["child_after"]
+    assert child is not None
+    assert lineage.get_current(child["lineage_id"]) == child
+    assert child["lineage_id"] not in lineage.get_current("lineage-parent")["child_lineage_ids"]
+
+    monkeypatch.setattr(LineageStore, "set_current", original)
+    result = executor.apply(**args)
+    assert result["status"] == "applied"
+    assert lineage.get_current("lineage-parent")["child_lineage_ids"] == [child["lineage_id"]]
+    assert lineage.get_parent(child["lineage_id"]) == "lineage-parent"
+    assert [r["status"] for r in runtime.state_repository.all(ACTION_EXECUTIONS)] == ["prepared", "applied"]
