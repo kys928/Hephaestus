@@ -64,9 +64,7 @@ def pod_request(cfg,sha,runid,*,real_env):
     if (req.get("gpuCount")!=1 or req.get("cloudType")!="SECURE"
             or req.get("gpuTypeIds")!=["NVIDIA RTX PRO 6000 Blackwell Server Edition"]):
         raise ValueError("unexpected single-GPU bootstrap template")
-    # A network volume is bound to its original data center. The cheaper
-    # EU-SE-1 48GiB A40 runs WITHOUT a mounted volume. All frozen source
-    # artifacts and generated evidence use HTTPS S3 API to EU-CZ-1 instead.
+    # Reuse the same EU-CZ-1 volume and immutable checkpoint/model cache.
     req["gpuTypeIds"]=[cfg["gpu_type_id"]]
     # Prefer the RunPod-maintained Blackwell-compatible CUDA 12.8 image over
     # the previously stalled generic CUDA13 runtime. This changes only
@@ -86,7 +84,13 @@ def pod_request(cfg,sha,runid,*,real_env):
     # Preserve existing matched EU-CZ-1 network-volume mount and cached HF data.
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
-    env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
+    # Same-region mounted volume; S3 is used for immutable event receipts.
+    # CUDA12.8 base image must never inherit the CUDA13 virtualenv.
+    old_venv="interface-repair-v2-py312-cu130-r2"
+    shell=req["dockerStartCmd"][2]
+    if shell.count(old_venv)!=1:
+        raise ValueError("persistent venv bootstrap path changed")
+    req["dockerStartCmd"][2]=shell.replace(old_venv,"D-contrast-py312-cu128-torch280-r1")
     req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):

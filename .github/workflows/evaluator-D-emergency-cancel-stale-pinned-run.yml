@@ -1,7 +1,6 @@
 name: Cancel invalid pinned Blackwell run before GPU claim (NO GPU)
 on:
-  push:
-    branches: [experiment/D-contrast-retry-post-stall-20261023]
+  workflow_dispatch:
 permissions:
   actions: write
   contents: read
