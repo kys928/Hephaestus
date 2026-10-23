@@ -1,11 +1,11 @@
-name: D RTX PRO 6000 Blackwell Workstation fallback one-shot $1.80
+name: D 96GB Blackwell Server EU-RO-1 fallback one-shot $1.80
 on:
   push:
-    branches: [experiment/D-contrast-WK-bootstrap-repair-20261023]
+    branches: [experiment/D-contrast-EURO-server-fallback-20261023]
 permissions:
   contents: read
 concurrency:
-  group: hephaestus-D-WK-bootstrap-repair-one-shot-20261023
+  group: hephaestus-D-EURO-Server-fallback-20261023
   cancel-in-progress: false
 jobs:
   guarded-inference:
@@ -24,7 +24,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
-      HEPHAESTUS_GPU_DATACENTER_ID: EU-CZ-1
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-RO-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,7 +33,7 @@ jobs:
         run: python -m pip install -e '.[s3,test]'
       - name: Verify frozen protocol, timing and spending/approval controls
         run: pytest -q tests/test_D_Blackwell_poststall_bootstrap.py tests/test_D_contrast_durable_timing_prelaunch.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py tests/test_preflight_D_contrast_region_stock.py
-      - name: Poll RTX PRO 6000 Workstation 1x EU-CZ-1 Secure Cloud stock for up to 15 minutes (no claim)
+      - name: Poll RTX PRO 6000 Server 1x EU-RO-1 Secure Cloud stock for up to 15 minutes (no claim)
         shell: bash
         run: |
           for i in $(seq 1 30); do
@@ -60,7 +60,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
-      HEPHAESTUS_GPU_DATACENTER_ID: EU-CZ-1
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-RO-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

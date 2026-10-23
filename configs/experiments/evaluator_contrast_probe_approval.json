@@ -1,10 +1,10 @@
 {
-  "approval_id": "heph-D-contrasts-WK-EUCZ1-20261023-BOOTFIX-USER-ONE",
+  "approval_id": "heph-D-contrasts-EURO-Server-20261023-SINGLE-FALLBACK",
   "status": "authorized_once",
-  "source": "User requested available RTX PRO 6000 Workstation GPU on 2026-10-23 at ~18:36 Amsterdam time after prior 39987687857 run at 18:33 failed during container bootstrap; this new one-pod claim is isolated, cannot replay either previous approval.",
+  "source": "User requests compatible fallback if EU-CZ-1 stock unavailable after five minutes. Existing window ran 15 minutes without GPU allocation; one separate bounded EU-RO fallback.",
   "scope": "Exactly one new immutable D step-96 inference-only pod for 56 frozen unique prompts / 60 paired counterfactual challenges, with durable stage timings, independently rescored on CPU; no training/retraining/certification/promotion or fallback allocation.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
-  "max_gpu_hourly_usd": 2.59,
+  "max_gpu_hourly_usd": 2.49,
   "max_total_estimated_gpu_usd": 1.8,
   "max_pods": 1,
   "max_launch_attempts": 1,
@@ -24,13 +24,14 @@
     "estimated_gpu_usd": 0.6501000355649249,
     "failure": "launcher_hard_wall_before_post_load_manifest"
   },
-  "capacity_condition": "One NVIDIA RTX PRO 6000 Blackwell Workstation Edition 96GB EU-CZ-1, verified fresh 1x Secure Cloud stock <=$2.59/hr; matched persistent volume, no remote cross-region mount.",
+  "capacity_condition": "1x RTX PRO 6000 Blackwell Server 96GB EU-RO-1 Secure Cloud <=$2.49/hr, EU-CZ-1 S3 over HTTPS, no cross-region mount.",
   "budget_increase_authorized": true,
-  "authorization_scope_note": "One fresh authorized available RTX PRO 6000 Workstation attempt following earlier failed allocation and verified pod delete, same frozen model/eval; 1 create attempt, $1.80 estimated GPU ceiling, 120s teardown reserve, no training, promotion or certification. Previous approval consumed and never reused.",
-  "gpu_datacenter": "EU-CZ-1",
+  "authorization_scope_note": "One pod create attempt only, <=$1.80 estimated GPU with teardown reserve; no other retry after claimed S3, no training or certification.",
+  "gpu_datacenter": "EU-RO-1",
   "storage_datacenter": "EU-CZ-1",
-  "hardware_change_from_prior": "A40 48GB -> NVIDIA RTX PRO 6000 Blackwell Server Edition 96GB",
+  "hardware_change_from_prior": "96GB Blackwell Workstation EU-CZ-1 to 96GB Server EU-RO-1",
   "prior_A40_consumed_id": "heph-D-contrasts-A40-EUSE1-20261023-ONE-PAID-ATTEMPT",
   "image_change_note": "Same RunPod PyTorch CUDA12.8 image; use a fresh isolated venv path distinct from original CUDA13 cached venv; record append-only early bootstrap receipts including failure.",
-  "prior_WK_consumed_id": "heph-D-contrasts-BLACKWELL-EURIS2-20261023-SECOND-USER-AUTH"
+  "prior_WK_consumed_id": "heph-D-contrasts-WK-EUCZ1-20261023-BOOTFIX-USER-ONE",
+  "remote_storage_caveat": "Existing EU-CZ-1 volume not mountable from EU-RO-1. Frozen source data via HTTPS S3; full Hugging Face download unmeasured."
 }

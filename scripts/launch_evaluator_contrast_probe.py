@@ -29,13 +29,13 @@ def authorize(cfg):
         or a["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
-        or cfg["max_hourly_usd"]>2.59
+        or cfg["max_hourly_usd"]>2.49
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
-        or cfg.get("required_gpu_datacenter")!="EU-CZ-1"
+        or cfg.get("required_gpu_datacenter")!="EU-RO-1"
         or cfg.get("storage_datacenter")!="EU-CZ-1"
-        or cfg.get("attach_network_volume") is not True
-        or cfg.get("s3_remote_volume_access") is not False
+        or cfg.get("attach_network_volume") is not False
+        or cfg.get("s3_remote_volume_access") is not True
         or a["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
         or a.get("max_pods")!=1 or a.get("max_launch_attempts")!=1
         or a["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256
@@ -81,18 +81,19 @@ def pod_request(cfg,sha,runid,*,real_env):
                      or infra.required("RUNPOD_DATACENTER_ID")!=cfg["storage_datacenter"]):
         raise ValueError("unexpected base volume or S3 storage region")
     req["dataCenterIds"]=[cfg["required_gpu_datacenter"]]
-    if cfg.get("attach_network_volume") is not True or cfg["required_gpu_datacenter"]!=cfg["storage_datacenter"]:
+    if cfg.get("attach_network_volume") is not False or cfg["required_gpu_datacenter"]==cfg["storage_datacenter"]:
         raise ValueError("cross-region volume mount is forbidden")
-    # Preserve existing matched EU-CZ-1 network-volume mount and cached HF data.
+    req.pop("networkVolumeId",None)
+    req.pop("volumeMountPath",None)
     env=req["env"]
     env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
-    # Co-located volume is mounted; S3 remains the durable evidence channel.
-    # The CUDA 12.8 container cannot safely use the previously cached CUDA 13 venv.
+    env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
+    # Maintain a new CUDA 12.8 virtualenv for the remote ephemeral server.
     old_venv="interface-repair-v2-py312-cu130-r2"
     shell=req["dockerStartCmd"][2]
     if shell.count(old_venv)!=1:
         raise ValueError("persistent venv bootstrap contract changed")
-    req["dockerStartCmd"][2]=shell.replace(old_venv,"D-contrast-WK-cu128-torch280-r1")
+    req["dockerStartCmd"][2]=shell.replace(old_venv,"D-contrast-EURO-Server-cu128-r1")
     req["dockerStartCmd"]=instrument_bootstrap(req["dockerStartCmd"])
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):

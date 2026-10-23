@@ -7,19 +7,19 @@ import launch_evaluator_contrast_probe as launch
 def test_stage_bootstrap_persisted_without_launch():
     cfg=json.loads(launch.CONFIG.read_text())
     r=launch.pod_request(cfg,"f"*40,"D-contrast-dryrun",real_env=False)
-    assert r["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Workstation Edition"]
-    assert r["dataCenterIds"]==["EU-CZ-1"]
+    assert r["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+    assert r["dataCenterIds"]==["EU-RO-1"]
     assert r["cloudType"]=="SECURE"
     assert r["imageName"]=="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
     assert r["containerDiskInGb"]==100
-    assert r["networkVolumeId"]=="<volume>" and r["volumeMountPath"]=="/workspace"
+    assert "networkVolumeId" not in r and "volumeMountPath" not in r
     shell=r["dockerStartCmd"][2]
     assert "persist_bootstrap container_started" in shell
     assert "persist_bootstrap runner_started" in shell
     assert "HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY" in shell
     assert "RUNPOD_S3_ENDPOINT_URL" in shell
     assert "D_CONTRAST_S3_BOOTSTRAP" in shell
-    assert "D-contrast-WK-cu128-torch280-r1" in shell
+    assert "D-contrast-EURO-Server-cu128-r1" in shell
     assert "interface-repair-v2-py312-cu130-r2" not in shell
     assert "persist_bootstrap bootstrap_failed" in shell
     assert "bootstrap_failed" in instrument.BEGIN
@@ -34,7 +34,7 @@ def test_bad_shell_rejected_without_s3_or_pod_calls():
 def test_after_claim_cannot_reuse_pod_or_raise_budget(monkeypatch):
     cfg=json.loads(launch.CONFIG.read_text())
     assert cfg["max_total_estimated_gpu_usd"]==1.80
-    assert cfg["max_hourly_usd"]==2.59
+    assert cfg["max_hourly_usd"]==2.49
     assert cfg["bootstrap_heartbeat_max_wait_seconds"]==600
     assert cfg["runpod_launch_enabled"] is True
     assert cfg["allow_replay_after_create_attempt"] is False
@@ -49,9 +49,22 @@ def test_current_one_shot_cpu_runner_accepts_approved_budget(monkeypatch):
     import run_evaluator_contrast_probe as runner
     monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
     cfg=json.loads(launch.CONFIG.read_text())
-    assert cfg["required_gpu_datacenter"]=="EU-CZ-1"
-    assert cfg["gpu_type_id"]=="NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    assert cfg["required_gpu_datacenter"]=="EU-RO-1"
+    assert cfg["gpu_type_id"]=="NVIDIA RTX PRO 6000 Blackwell Server Edition"
     assert cfg["max_total_estimated_gpu_usd"]==1.80
     a=runner.check(cfg,"D-contrast-offline-check","f"*40)
     assert a["approval_id"]==cfg["approval_id"]
     assert a["prior_WK_consumed_id"]!=a["approval_id"]
+
+def test_cross_region_s3_and_one_use_runner(monkeypatch):
+    import run_evaluator_contrast_probe as runner
+    monkeypatch.setenv("HEPHAESTUS_CONTRAST_AUTHORIZED","SINGLE_D_CONTRAST_PROBE")
+    cfg=json.loads(launch.CONFIG.read_text())
+    assert cfg["storage_datacenter"]=="EU-CZ-1"
+    assert cfg["required_gpu_datacenter"]=="EU-RO-1"
+    assert cfg["attach_network_volume"] is False and cfg["s3_remote_volume_access"] is True
+    req=launch.pod_request(cfg,"f"*40,"D-contrast-EURO-offline",real_env=False)
+    assert req["dataCenterIds"]==["EU-RO-1"]
+    assert "networkVolumeId" not in req and "volumeMountPath" not in req
+    assert req["env"]["HEPHAESTUS_REMOTE_S3_MODE"]=="1"
+    assert runner.check(cfg,"D-contrast-EURO-offline","f"*40)["approval_id"]==cfg["approval_id"]

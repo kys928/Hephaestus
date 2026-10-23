@@ -1,7 +1,7 @@
 name: D Blackwell post-stall CPU-only launch gate (NO GPU)
 on:
   push:
-    branches: [experiment/D-contrast-WK-bootstrap-repair-20261023]
+    branches: [experiment/D-contrast-EURO-server-fallback-20261023]
 permissions: {contents: read}
 jobs:
   offline-prelaunch:
@@ -25,9 +25,9 @@ jobs:
           cfg=json.loads(x.CONFIG.read_text())
           request=x.pod_request(cfg,"f"*40,"D-contrast-offline-check",real_env=False)
           assert subprocess.run(["bash","-n"],input=request["dockerStartCmd"][2],text=True).returncode==0
-          assert request["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Workstation Edition"]
-          assert request["dataCenterIds"]==["EU-CZ-1"]
-          assert "networkVolumeId" in request
+          assert request["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+          assert request["dataCenterIds"]==["EU-RO-1"]
+          assert "networkVolumeId" not in request
           print("D_BLACKWELL_OFFLINE_GATE "+json.dumps({"shell_valid":True,"dry_run_paid":False,"no_allocation":True,"budget_estimate_usd":cfg["max_total_estimated_gpu_usd"]}))
           PY
           python scripts/launch_evaluator_contrast_probe.py
