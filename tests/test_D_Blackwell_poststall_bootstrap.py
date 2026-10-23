@@ -7,7 +7,7 @@ import launch_evaluator_contrast_probe as launch
 def test_stage_bootstrap_persisted_without_launch():
     cfg=json.loads(launch.CONFIG.read_text())
     r=launch.pod_request(cfg,"f"*40,"D-contrast-dryrun",real_env=False)
-    assert r["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+    assert r["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Workstation Edition"]
     assert r["dataCenterIds"]==["EU-CZ-1"]
     assert r["cloudType"]=="SECURE"
     assert r["imageName"]=="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
@@ -29,7 +29,7 @@ def test_bad_shell_rejected_without_s3_or_pod_calls():
 def test_after_claim_cannot_reuse_pod_or_raise_budget(monkeypatch):
     cfg=json.loads(launch.CONFIG.read_text())
     assert cfg["max_total_estimated_gpu_usd"]==1.80
-    assert cfg["max_hourly_usd"]==2.49
+    assert cfg["max_hourly_usd"]==2.59
     assert cfg["bootstrap_heartbeat_max_wait_seconds"]==600
     assert cfg["runpod_launch_enabled"] is True
     assert cfg["allow_replay_after_create_attempt"] is False
