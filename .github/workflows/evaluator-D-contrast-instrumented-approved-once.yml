@@ -1,4 +1,4 @@
-name: D approved Workstation one-shot $1.90 capped inference
+name: D approved A40 remote-S3 one-shot $1.90 inference
 on:
   push:
     branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
@@ -9,11 +9,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   guarded-inference:
-    # Only the explicit, unique launch marker may create a pod. The source
-    # approval/config independently enforce one allocation and total spending.
+    # Only an explicit unique launch marker may create one A40 pod. Original
+    # S3 archive remains in EU-CZ-1 and is accessed via HTTPS, not mounted.
     if: contains(github.event.head_commit.message, '[explicit-launch-approved-D-instrumented-once]')
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 205
     env:
       PYTHONPATH: scripts:src:.
       HEPHAESTUS_CONTRAST_AUTHORIZED: SINGLE_D_CONTRAST_PROBE
@@ -25,6 +25,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-SE-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,6 +50,7 @@ jobs:
       RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
       RUNPOD_DATACENTER_ID: EU-CZ-1
       RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      HEPHAESTUS_GPU_DATACENTER_ID: EU-SE-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
