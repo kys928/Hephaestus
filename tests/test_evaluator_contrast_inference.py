@@ -64,9 +64,9 @@ def test_single_paid_bootstrap_route_and_budget():
     assert body["containerDiskInGb"]==100
     assert "persist_bootstrap container_started" in body["dockerStartCmd"][2]
     assert "S3_BOOTSTRAP" in body["dockerStartCmd"][2] or "D_CONTRAST_S3_BOOTSTRAP" in body["dockerStartCmd"][2]
-    assert body["dataCenterIds"]==["EUR-IS-2"]
-    assert "networkVolumeId" not in body
-    assert "volumeMountPath" not in body
+    assert body["dataCenterIds"]==["EU-CZ-1"]
+    assert "networkVolumeId" in body
+    assert "volumeMountPath" in body
 
 def test_cost_guard():
     cfg=json.loads(launch.CONFIG.read_text())
