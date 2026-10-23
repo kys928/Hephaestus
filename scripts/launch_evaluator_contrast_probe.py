@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One user-approved, instrumented D inference. $1.90 max estimate, no retries."""
+"""One user-approved, instrumented D inference. $1.80 max estimate, no retries."""
 from __future__ import annotations
 import json,os,time,math
 from pathlib import Path
@@ -25,13 +25,13 @@ def authorize(cfg):
     if (a.get("status")!="authorized_once"
         or a.get("additional_allocations_authorized") is not True
         or a["approval_id"]!=cfg["approval_id"]
-        or a["max_total_estimated_gpu_usd"]!=1.90
-        or cfg["max_total_estimated_gpu_usd"]!=1.90
+        or a["max_total_estimated_gpu_usd"]!=1.80
+        or cfg["max_total_estimated_gpu_usd"]!=1.80
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
-        or cfg["max_hourly_usd"]>0.59
+        or cfg["max_hourly_usd"]>2.49
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
-        or cfg.get("required_gpu_datacenter")!="EU-SE-1"
+        or cfg.get("required_gpu_datacenter")!="EUR-IS-2"
         or cfg.get("storage_datacenter")!="EU-CZ-1"
         or cfg.get("attach_network_volume") is not False
         or cfg.get("s3_remote_volume_access") is not True
@@ -93,7 +93,7 @@ def guard(cfg,elapsed,price):
     if not isinstance(price,(int,float)) or not math.isfinite(price) or price<=0 or price>cfg["max_hourly_usd"]:
         raise ValueError("actual GPU rate unverified or too high")
     projected=price*(elapsed+cfg["teardown_reserve_seconds"])/3600
-    if projected>=cfg["max_total_estimated_gpu_usd"]:raise TimeoutError("approved $1.90 budget guard")
+    if projected>=cfg["max_total_estimated_gpu_usd"]:raise TimeoutError("approved $1.80 budget guard")
     return projected
 
 def execute(cfg,client,execution,sha,runid):
@@ -124,6 +124,8 @@ def execute(cfg,client,execution,sha,runid):
             if progress is not None and progress.get("stage")!="contrast_inference":
                 raise ValueError("unexpected progress stage")
             bootstrap_record=infra.maybe_json(client,f"{PREFIX}/{runid}/evaluation/bootstrap/progress.json")
+            if (not bootstrap_record and elapsed>=cfg["bootstrap_heartbeat_max_wait_seconds"]):
+                raise TimeoutError("no S3-visible container bootstrap in 10 minutes")
             if bootstrap_record and bootstrap_record.get("stage")=="bootstrap_failed":
                 raise RuntimeError("bootstrap failure, fail closed")
             terminal=infra.maybe_json(client,key)
