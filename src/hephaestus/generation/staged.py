@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from hephaestus.control.staged_state import (
+    WORKFLOW_RECORD_COLLECTION,
     StagedOperationRequest,
     StagedOperationResult,
     StagedOutputRecord,
@@ -15,6 +16,7 @@ from hephaestus.schemas.experiment_contract import (
     ExperimentProposal,
     TrainingRunHandle,
 )
+from hephaestus.storage.base import StateRepository
 
 from .models import GenerationResult
 from .service import EvaluationGenerationService
@@ -111,7 +113,51 @@ class StagedExperimentEvaluationAdapter:
     proposal: ExperimentProposal
     generation: StagedGenerationAdapter
     evaluator: ExperimentEvaluationService
+    record_repository: StateRepository | None = None
     comparison: ExperimentComparison | None = field(default=None, init=False)
+
+    def _completed_handle(
+        self, request: StagedOperationRequest, substep: str, expected_run_id: str
+    ) -> TrainingRunHandle | None:
+        previous = request.prior_outputs.get(f"evaluator.{substep}", {})
+        if previous.get("generation_complete") is not True:
+            return None
+        value = previous.get("training_run_handle")
+        if not isinstance(value, dict):
+            return None
+        try:
+            run = TrainingRunHandle.from_dict(value)
+        except (KeyError, TypeError, ValueError):
+            return None
+        if run.run_id != expected_run_id or run.status != "completed":
+            return None
+        if not run.checkpoint_refs or run.checkpoint_refs[-1] != previous.get("checkpoint_ref"):
+            return None
+        if (run.metadata.get("semantic_evaluation") is None or
+            run.metadata.get("generation_report") is None):
+            return None
+        return run
+
+    def _restore_comparison(self, request: StagedOperationRequest) -> ExperimentComparison | None:
+        prior = request.prior_outputs.get("evaluator.semantic_comparison", {})
+        identity = str(prior.get("comparison_id") or "").strip()
+        if not identity or self.record_repository is None:
+            return None
+        for row in reversed(self.record_repository.all(WORKFLOW_RECORD_COLLECTION)):
+            if (row.get("workflow_id") != request.workflow_id or
+                row.get("substep") != "semantic_comparison" or
+                row.get("kind") != "experiment_comparison"):
+                continue
+            payload = row.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("comparison_id") != identity:
+                continue
+            comparison = ExperimentComparison.from_dict(payload)
+            if comparison.experiment_id != self.proposal.experiment_id:
+                return None
+            return comparison
+        return None
 
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
         if request.substep == "checkpoint_resolution":
@@ -137,14 +183,22 @@ class StagedExperimentEvaluationAdapter:
                 metadata={"checkpoint_ref": checkpoint},
             )
         if request.substep == "semantic_comparison":
-            if self.generation.baseline_result is None or self.generation.candidate_result is None:
+            baseline = (
+                self.generation.baseline_result.run_handle
+                if self.generation.baseline_result is not None
+                else self._completed_handle(request, "baseline_generation", self.generation.baseline_run.run_id)
+            )
+            candidate = (
+                self.generation.candidate_result.run_handle
+                if self.generation.candidate_result is not None
+                else self._completed_handle(request, "candidate_generation", self.generation.candidate_run.run_id)
+            )
+            if baseline is None or candidate is None:
                 return StagedOperationResult(
                     status="blocked",
-                    blocking_issues=("generation_evidence_missing",),
+                    blocking_issues=("verified_generation_handle_missing",),
                     resumable=True,
                 )
-            baseline = self.generation.baseline_result.run_handle
-            candidate = self.generation.candidate_result.run_handle
             proposal = ExperimentProposal(**self.proposal.to_dict())
             proposal.baseline_ref = baseline.run_id
             self.comparison = self.evaluator.compare(proposal, [baseline, candidate])
@@ -172,9 +226,11 @@ class StagedExperimentEvaluationAdapter:
                 resumable=status != "completed",
             )
         if self.comparison is None:
+            self.comparison = self._restore_comparison(request)
+        if self.comparison is None:
             return StagedOperationResult(
                 status="blocked",
-                blocking_issues=("experiment_comparison_missing",),
+                blocking_issues=("verified_experiment_comparison_missing",),
                 resumable=True,
             )
         if request.substep == "deterministic_regression_evidence":
