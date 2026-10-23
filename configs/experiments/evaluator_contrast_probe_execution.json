@@ -12,7 +12,7 @@
   "shard_size": 8,
   "one_pod": true,
   "extra_runs": false,
-  "runpod_launch_enabled": true,
+  "runpod_launch_enabled": false,
   "required_gpu_stock_status": [
     "High",
     "Medium",
@@ -22,7 +22,7 @@
   "automated_retry_count_max": 1,
   "capacity_check_before_S3_claim": true,
   "low_stock_allocation_attempts_max": 1,
-  "prelaunch_status": "user_reauthorized_separate_pod_after_verified_A40_delete",
+  "prelaunch_status": "consumed_after_bootstrap_failed; no further paid allocations",
   "durable_timing_enabled": true,
   "durable_timing_schema": "D-contrast-stage-timing-v1",
   "resume_from_prior_run": false,
