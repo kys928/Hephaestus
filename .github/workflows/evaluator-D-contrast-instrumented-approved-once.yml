@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: hephaestus-D-Blackwell-workstation-fallback-once-20261023
+  group: hephaestus-D-shared-approval-BLACKWELL-EURIS2-20261023
   cancel-in-progress: false
 jobs:
   guarded-inference:
