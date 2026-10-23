@@ -1,0 +1,22 @@
+name: D historical one-use S3 claim read-only forensic check (NO GPU)
+on:
+  push:
+    branches: [repair/D-contrast-co-located-bootstrap-20261023]
+permissions: {contents: read}
+jobs:
+  read-once-claim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      PYTHONPATH: scripts:src:.
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io/
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'boto3>=1.35,<2'
+      - run: python scripts/inspect_D_once_claim_readonly.py
