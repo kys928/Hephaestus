@@ -1,11 +1,11 @@
 {
-  "approval_id": "heph-D-contrasts-instrumented-20261022-PROPOSED",
-  "status": "pending_explicit_user_launch_command",
-  "source": "Unapproved draft prepared 2026-10-22 after failed GPU run D-contrast-39299580607. Await separate explicit user authorization; prior single-use claim consumed.",
-  "scope": "Read-only D step-96 INFERENCE ONLY: 56 frozen unique prompts from 60 controlled contrast pairs, with durable load and generation timing. No training or model updates, no certification/promotion.",
+  "approval_id": "heph-D-contrasts-workstation-20261023-ONE-PAID-ATTEMPT",
+  "status": "authorized_once",
+  "source": "User explicitly authorized fresh results-first paid D inference on 2026-10-23: alternate available GPU meeting VRAM need, approximately $2 balance and spending up to available funds, without further launch approval.",
+  "scope": "Exactly one new immutable D step-96 inference-only pod for 56 frozen unique prompts / 60 paired counterfactual challenges, with durable stage timings, independently rescored on CPU; no training/retraining/certification/promotion or fallback allocation.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
-  "max_gpu_hourly_usd": 2.49,
-  "max_total_estimated_gpu_usd": 0.75,
+  "max_gpu_hourly_usd": 2.59,
+  "max_total_estimated_gpu_usd": 1.9,
   "max_pods": 1,
   "max_launch_attempts": 1,
   "previous_probe_approval_reused": false,
@@ -13,7 +13,7 @@
   "scientific_gates_unchanged": true,
   "model_retraining_authorized": false,
   "certification_authorized": false,
-  "additional_allocations_authorized": false,
+  "additional_allocations_authorized": true,
   "retry_requires_new_authorization": true,
   "prior_capacity_blocker": {
     "prior_gpu_run_id": "D-contrast-39299580607",
@@ -24,7 +24,7 @@
     "estimated_gpu_usd": 0.6501000355649249,
     "failure": "launcher_hard_wall_before_post_load_manifest"
   },
-  "capacity_condition": "Exact NVIDIA RTX PRO 6000 Blackwell Server Edition 1x Secure Cloud EU-CZ-1 <=$2.49/hour; quote valid, even if stock Low. Only one new pod if separately approved.",
-  "budget_increase_authorized": false,
-  "authorization_scope_note": "PROPOSED ONLY; no user launch command received for this subsequent paid GPU allocation. $0.75 is a retained planning ceiling, NOT an authorization. Must account for cold-cache stall."
+  "capacity_condition": "Exact NVIDIA RTX PRO 6000 Blackwell Workstation Edition Secure Cloud 1x in EU-CZ-1; stock High/Medium/Low, verified <=$2.59/hour; no unavailable or null stock; no fallback.",
+  "budget_increase_authorized": true,
+  "authorization_scope_note": "User estimates approximately $2 RunPod credit. Cap GPU spend estimate at $1.90 incl teardown reserve (cannot verify remaining account credit or storage charges). One pod creation attempt only and no automatic retry if pod-create attempted. Hardware-specific numeric outputs remain descriptive; scientific protocol fixed."
 }
