@@ -234,7 +234,7 @@ def test_approved_lineage_action_requires_durable_approval_reference(tmp_path: P
         )
 
 
-def test_semantic_judge_can_certify_only_after_explicit_review_and_three_runs() -> None:
+def test_semantic_judge_preserves_human_review_boundary_on_main() -> None:
     comparison = ExperimentComparison(
         comparison_id="comparison-reviewed",
         experiment_id="experiment-reviewed",
@@ -254,28 +254,16 @@ def test_semantic_judge_can_certify_only_after_explicit_review_and_three_runs() 
         recommendation="consider_candidate_after_human_review",
         confidence=0.75,
     )
-    pending = SemanticComparisonJudgeAdapter().decide(
+    decision = SemanticComparisonJudgeAdapter().decide(
         comparison,
         run_id="candidate-3",
         lineage_id="lineage",
         candidate_checkpoint_ref="checkpoint://candidate",
-        certification_requested=True,
     )
-    assert pending.next_action.value == "continue_from_checkpoint"
-
-    approved = SemanticComparisonJudgeAdapter().decide(
-        comparison,
-        run_id="candidate-3",
-        lineage_id="lineage",
-        candidate_checkpoint_ref="checkpoint://candidate",
-        human_review_approved=True,
-        human_review_approval_ref="approval://review",
-        independent_review_confidence=0.96,
-        certification_requested=True,
-    )
-    assert approved.next_action.value == "promote_checkpoint"
-    assert approved.confidence == pytest.approx(0.96)
-    assert "certification_state=certification_passed" in approved.reasons
+    # The main-branch Judge API does not accept fabricated human-review flags.
+    # A semantic recommendation requiring human review must not self-promote.
+    assert decision.next_action.value != "promote_checkpoint"
+    assert "human_review_pending=True" in decision.reasons
 
 
 @dataclass
