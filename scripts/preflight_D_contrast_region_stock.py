@@ -11,9 +11,9 @@ import os
 import sys
 import urllib.request
 
-GPU="NVIDIA RTX PRO 6000 Blackwell Server Edition"
+GPU="NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
 DATACENTER="EU-CZ-1"
-MAX_HOURLY_USD=2.49
+MAX_HOURLY_USD=2.59
 
 def inspect_response(payload):
     if not isinstance(payload,dict) or payload.get("errors"):
