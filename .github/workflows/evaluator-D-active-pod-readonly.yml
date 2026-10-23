@@ -1,0 +1,16 @@
+name: LIVE D A40 pod status via RunPod REST (READ ONLY)
+on:
+  push:
+    branches: [diagnostic/D-contrast-39974986184-live-readonly]
+permissions: {contents: read}
+jobs:
+  read-pod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/inspect_D_active_pod_readonly.py
