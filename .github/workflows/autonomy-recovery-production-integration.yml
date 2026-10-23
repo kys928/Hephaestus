@@ -1,0 +1,28 @@
+name: Autonomous recovery production integration (CPU only)
+on:
+  push:
+    branches: [feature/autonomous-evaluator-recovery-integration-20261024]
+  pull_request:
+    paths:
+      - 'src/hephaestus/production/**'
+      - 'src/hephaestus/providers/models/huggingface.py'
+      - 'tests/test_production_loop_v1.py'
+      - 'tests/test_production_staged_integration.py'
+      - '.github/workflows/autonomy-recovery-production-integration.yml'
+permissions:
+  contents: read
+jobs:
+  production-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies, never install GPU runtimes
+        run: python -m pip install -e '.[test]'
+      - name: Compile imported production modules
+        run: python -m compileall -q src/hephaestus/production src/hephaestus/providers/models/huggingface.py
+      - name: Test real composition, governance, staged interface and failure injection on CPU
+        run: pytest -q tests/test_production_loop_v1.py tests/test_staged_autonomous_orchestration.py tests/test_evaluation_generation_bridge.py tests/test_deterministic_role_boundary.py
