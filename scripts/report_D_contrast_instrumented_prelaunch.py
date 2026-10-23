@@ -30,7 +30,7 @@ def assemble():
         source_manifest["greedy_seed"]!=20261019):
         raise RuntimeError("unapproved launch or frozen scientific identity drift")
     if (execution["max_total_estimated_gpu_usd"]!=1.80 or
-        execution["max_hourly_usd"]!=2.49 or
+        execution["max_hourly_usd"]!=2.59 or
         execution["one_pod"] is not True or execution["extra_runs"] is not False or
         execution["runner_hard_wall_seconds"]>=execution["launcher_hard_wall_seconds"]):
         raise RuntimeError("bounded execution geometry drift")
@@ -99,7 +99,7 @@ def assemble():
             per_run_allocations_max=1,
             max_wall_seconds=execution["launcher_hard_wall_seconds"],
             gpu_spend_authorized_now=(0 if still_pending else 1),
-            note="New user-approved RTX PRO 6000 Blackwell Server Edition EUR-IS-2 one-pod $1.80 cap with <=$2.49/h rate, remote EU-CZ-1 S3 backend and 10m bootstrap limit; no guaranteed completion."
+            note="New user-approved RTX PRO 6000 Blackwell Server Edition EUR-IS-2 one-pod $1.80 cap with <=$2.59/h rate, remote EU-CZ-1 S3 backend and 10m bootstrap limit; no guaranteed completion."
         ),
         readiness_gates=dict(
             cpu_static_tests="pending workflow evidence",
