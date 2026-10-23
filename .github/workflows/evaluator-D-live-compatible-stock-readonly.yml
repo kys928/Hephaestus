@@ -1,0 +1,58 @@
+name: D live EU-CZ+fallback exact 1GPU quotes (NO GPU)
+on:
+  push:
+    branches: [diagnostic/D-live-EUCZ-compatible-20261023]
+permissions: {contents: read}
+jobs:
+  quote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Query exact live Secure Cloud 1GPU stock and price, no allocations
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request,math
+          H={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'User-Agent':'Mozilla/5.0 (compatible; Hephaestus-RunPod/1.0)','Accept':'application/json'}
+          def get(url):
+              with urllib.request.urlopen(urllib.request.Request(url,headers=H),timeout=25) as f:return json.load(f)
+          cat=get('https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD')
+          allowed=[]
+          for r in cat.get('gpus',[]):
+              vr=r.get('memory');price=(r.get('price') or {}).get('secure')
+              if type(vr) not in (int,float) or vr<22 or type(price) not in (int,float) or price>2.59 or price<=0:continue
+              for d in r.get('dataCenters',[]):
+                  if d.get('id')=='EU-CZ-1' or (d.get('id') in ('EU-RO-1','EU-SE-1','EUR-IS-2') and vr>=40):
+                      allowed.append((r['id'],d.get('id'),vr,price,d.get('availability')))
+          print('D_LIVE_COMPATIBLE_CATALOG '+json.dumps({'candidates':[{'gpu':x[0],'dc':x[1],'vram_gb':x[2],'secure_catalog_usd_hr':x[3],'catalog_availability':x[4]} for x in allowed]}),flush=True)
+          # Quote all EU-CZ 20+GB GPU types, including those absent from the REST availability array.
+          ids=[(r['id'],r.get('memory')) for r in cat.get('gpus',[]) if type(r.get('memory')) in (int,float) and r['memory']>=22 and type((r.get('price') or {}).get('secure')) in (int,float) and 0<(r.get('price') or {}).get('secure')<=2.59]
+          queries=[]
+          for g,vr in ids:
+              regions=['EU-CZ-1']
+              if g in ('NVIDIA RTX PRO 6000 Blackwell Server Edition','NVIDIA RTX PRO 6000 Blackwell Workstation Edition','NVIDIA A40','NVIDIA L40S'):
+                  regions += ['EU-RO-1','EU-SE-1']
+              for dc in regions:
+                  queries.append((g,dc,vr))
+          # Bound request size and tolerate distinct incomplete quotes.
+          fields=[]
+          for i,(gpu,dc,_) in enumerate(queries):
+              fields.append('q'+str(i)+':gpuTypes(input:{id:'+json.dumps(gpu)+'}){id lowestPrice(input:{gpuCount:1,secureCloud:true,dataCenterId:'+json.dumps(dc)+'}){stockStatus uninterruptablePrice availableGpuCounts}}')
+          request=urllib.request.Request('https://api.runpod.io/graphql',data=json.dumps({'query':'query {'+' '.join(fields)+'}'}).encode(),headers={**H,'Content-Type':'application/json'},method='POST')
+          with urllib.request.urlopen(request,timeout=35) as f: result=json.load(f)
+          if result.get('errors'):raise ValueError('quote GraphQL errors')
+          verified=[]
+          for i,(gpu,dc,vr) in enumerate(queries):
+              row=(result.get('data') or {}).get('q'+str(i))
+              if not isinstance(row,list) or len(row)!=1 or row[0].get('id')!=gpu:continue
+              quote=row[0].get('lowestPrice')
+              if not isinstance(quote,dict):continue
+              cost=quote.get('uninterruptablePrice');status=quote.get('stockStatus');counts=quote.get('availableGpuCounts')
+              if status not in ('Low','Medium','High') or type(cost) not in (int,float) or not math.isfinite(cost) or cost<=0 or cost>2.59:continue
+              if counts is not None and (not isinstance(counts,list) or 1 not in counts):continue
+              verified.append({'gpu':gpu,'dc':dc,'vram_gb':vr,'quoted_usd_hr':cost,'stock':status,'one_gpu':True})
+          verified.sort(key=lambda x:(0 if x['dc']=='EU-CZ-1' else 1, 0 if x['vram_gb']>=40 else 1,x['quoted_usd_hr']))
+          print('D_LIVE_COMPATIBLE_VERIFIED '+json.dumps({'offers':verified}),flush=True)
+          PY
