@@ -1,10 +1,10 @@
 {
-  "approval_id": "heph-D-contrasts-workstation-20261023-ONE-PAID-ATTEMPT",
+  "approval_id": "heph-D-contrasts-A40-EUSE1-20261023-ONE-PAID-ATTEMPT",
   "status": "authorized_once",
   "source": "User explicitly authorized fresh results-first paid D inference on 2026-10-23: alternate available GPU meeting VRAM need, approximately $2 balance and spending up to available funds, without further launch approval.",
   "scope": "Exactly one new immutable D step-96 inference-only pod for 56 frozen unique prompts / 60 paired counterfactual challenges, with durable stage timings, independently rescored on CPU; no training/retraining/certification/promotion or fallback allocation.",
   "source_D_step96_sha256": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
-  "max_gpu_hourly_usd": 2.59,
+  "max_gpu_hourly_usd": 0.59,
   "max_total_estimated_gpu_usd": 1.9,
   "max_pods": 1,
   "max_launch_attempts": 1,
@@ -24,7 +24,10 @@
     "estimated_gpu_usd": 0.6501000355649249,
     "failure": "launcher_hard_wall_before_post_load_manifest"
   },
-  "capacity_condition": "Exact NVIDIA RTX PRO 6000 Blackwell Workstation Edition Secure Cloud 1x in EU-CZ-1; stock High/Medium/Low, verified <=$2.59/hour; no unavailable or null stock; no fallback.",
+  "capacity_condition": "One NVIDIA A40 48GB BF16 Secure Cloud GPU in EU-SE-1 at <=$0.59/hour (High/Medium/Low); existing EU-CZ-1 network volume accessed over HTTPS S3 only, never cross-region mounted.",
   "budget_increase_authorized": true,
-  "authorization_scope_note": "User estimates approximately $2 RunPod credit. Cap GPU spend estimate at $1.90 incl teardown reserve (cannot verify remaining account credit or storage charges). One pod creation attempt only and no automatic retry if pod-create attempted. Hardware-specific numeric outputs remain descriptive; scientific protocol fixed."
+  "authorization_scope_note": "User authorized alternate GPU and up to approximately $2 available funds. One A40 EU-SE-1 GPU allocation attempt, $1.90 estimated total GPU ceiling with 120s teardown reserve; same immutable D step96 adapter/protocol and independent CPU scientific verification; no automatic pod retry.",
+  "gpu_datacenter": "EU-SE-1",
+  "storage_datacenter": "EU-CZ-1",
+  "hardware_change_from_prior": "96GB Blackwell Server Edition -> 48GB Ampere A40; deterministic BF16 outputs may differ across hardware. Report this limitation."
 }
