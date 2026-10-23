@@ -113,6 +113,19 @@ def guard(cfg,elapsed,price):
     if projected>=cfg["max_total_estimated_gpu_usd"]:raise TimeoutError("approved $1.80 budget guard")
     return projected
 
+def reserve_one_claim(client,bucket,key,claim):
+    """Refuse historical reuse even if storage ignores If-None-Match.
+
+    This is defense in depth, NOT sufficient for concurrent processes unless
+    GitHub workflow concurrency also serializes all approval variants.
+    """
+    if infra.maybe_json(client,key) is not None:
+        raise PermissionError("one-shot GPU claim already exists; no more pod allocations")
+    raw=json.dumps(claim,sort_keys=True).encode()
+    client.put_object(Bucket=bucket,Key=key,IfNoneMatch="*",Body=raw)
+    if infra.maybe_json(client,key)!=claim:
+        raise RuntimeError("one-use S3 claim readback mismatch; refuse allocation")
+
 def execute(cfg,client,execution,sha,runid):
     authorize(cfg)
     if not runid.startswith("D-contrast-") or len(sha)!=40 or any(k in runid for k in ("/","..")):
@@ -122,9 +135,11 @@ def execute(cfg,client,execution,sha,runid):
     # Validate the complete regional volume and GPU request BEFORE using up
     # the one-shot S3 claim. No extra pod can be created after this attempt.
     body=pod_request(cfg,sha,runid,real_env=True)
-    client.put_object(Bucket=infra.required("RUNPOD_NETWORK_VOLUME_ID"),
-        Key=f"{PREFIX}/approvals/{cfg['approval_id']}/once.json",IfNoneMatch="*",
-        Body=json.dumps(dict(sha=sha,runid=runid,protocol=PROTOCOL,gpu_type_id=cfg["gpu_type_id"]),sort_keys=True).encode())
+    reserve_one_claim(
+        client,infra.required("RUNPOD_NETWORK_VOLUME_ID"),
+        f"{PREFIX}/approvals/{cfg['approval_id']}/once.json",
+        dict(sha=sha,runid=runid,protocol=PROTOCOL,gpu_type_id=cfg["gpu_type_id"])
+    )
     podid=None;start=time.monotonic()
     record=dict(status="started",repo_sha=sha,run_id=runid,approval_id=cfg["approval_id"])
     try:
