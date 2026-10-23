@@ -28,10 +28,13 @@ def authorize(cfg):
         or a["max_total_estimated_gpu_usd"]!=1.90
         or cfg["max_total_estimated_gpu_usd"]!=1.90
         or cfg["max_hourly_usd"]!=a["max_gpu_hourly_usd"]
-        or cfg["max_hourly_usd"]>2.59
+        or cfg["max_hourly_usd"]>0.59
         or cfg["gpu_type_id"]!=regional.GPU
         or a["max_gpu_hourly_usd"]!=regional.MAX_HOURLY_USD
-        or cfg.get("required_datacenter")!="EU-CZ-1"
+        or cfg.get("required_gpu_datacenter")!="EU-SE-1"
+        or cfg.get("storage_datacenter")!="EU-CZ-1"
+        or cfg.get("attach_network_volume") is not False
+        or cfg.get("s3_remote_volume_access") is not True
         or a["approval_id"]=="heph-D-contrasts-20261019-capacity-retry-1"
         or a.get("max_pods")!=1 or a.get("max_launch_attempts")!=1
         or a["source_D_step96_sha256"]!=D_CHECKPOINT_SHA256
@@ -60,13 +63,22 @@ def pod_request(cfg,sha,runid,*,real_env):
     if (req.get("gpuCount")!=1 or req.get("cloudType")!="SECURE"
             or req.get("gpuTypeIds")!=["NVIDIA RTX PRO 6000 Blackwell Server Edition"]):
         raise ValueError("unexpected single-GPU bootstrap template")
-    # Keep the same node, cloud, attached volume and frozen input artifacts.
-    # Only the user-authorized model of GPU is changed; no fallback list.
+    # A network volume is bound to its original data center. The cheaper
+    # EU-SE-1 48GiB A40 runs WITHOUT a mounted volume. All frozen source
+    # artifacts and generated evidence use HTTPS S3 API to EU-CZ-1 instead.
     req["gpuTypeIds"]=[cfg["gpu_type_id"]]
-    if real_env and (req.get("dataCenterIds")!=[cfg["required_datacenter"]]
-                     or req.get("networkVolumeId")!=infra.required("RUNPOD_NETWORK_VOLUME_ID")):
-        raise ValueError("GPU volume or data-center drift")
+    if real_env and (req.get("dataCenterIds")!=[cfg["storage_datacenter"]]
+                     or req.get("networkVolumeId")!=infra.required("RUNPOD_NETWORK_VOLUME_ID")
+                     or infra.required("RUNPOD_DATACENTER_ID")!=cfg["storage_datacenter"]):
+        raise ValueError("unexpected base volume or S3 storage region")
+    req["dataCenterIds"]=[cfg["required_gpu_datacenter"]]
+    if cfg.get("attach_network_volume") is not False:
+        raise ValueError("cross-region volume mount is forbidden")
+    req.pop("networkVolumeId",None)
+    req.pop("volumeMountPath",None)
     env=req["env"]
+    env["HEPHAESTUS_GPU_DATACENTER_ID"]=cfg["required_gpu_datacenter"]
+    env["HEPHAESTUS_REMOTE_S3_MODE"]="1"
     for key in ("HEPHAESTUS_FACTOR_PROBE_AUTHORIZED","HEPHAESTUS_FACTOR_PROBE_RUN_ID",
                 "HEPHAESTUS_EVALUATOR_V2_AUTHORIZED"):
         env.pop(key,None)
@@ -149,9 +161,8 @@ if __name__=="__main__":
            max_usd=cfg["max_total_estimated_gpu_usd"],actual_allocation=False),sort_keys=True))
         raise SystemExit(0)
     authorize(cfg)
-    old=json.loads((ROOT/"configs/experiments/hephaestus_evaluator_semantic_repair_v2.json").read_text())
-    # Never preflight the old Server Edition while provisioning Workstation.
-    # Requery the exact 1x Secure Cloud GPU in EU-CZ-1 immediately before claim.
+    # Requery the exact A40 1x Secure Cloud GPU in EU-SE-1 immediately
+    # before the EU-CZ-1 S3 atomic claim and single provisioning request.
     quote=regional.inspect_response(regional.query())
     print("D_CONTRAST_PRICE_PREFLIGHT "+json.dumps(quote,sort_keys=True),flush=True)
     if (not quote["confident_capacity_signal"] or quote["gpu_type"]!=cfg["gpu_type_id"]
