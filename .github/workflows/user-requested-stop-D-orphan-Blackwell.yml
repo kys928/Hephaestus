@@ -1,0 +1,17 @@
+name: SAFETY terminate orphan D Blackwell pod (one ID)
+on:
+  push:
+    branches: [repair/D-contrast-co-located-bootstrap-20261023]
+permissions: {contents: read}
+jobs:
+  terminate-stalled-pod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Stop exact orphaned Blackwell pod and verify GET returns 404
+        run: python scripts/stop_D_orphan_Blackwell_once.py
