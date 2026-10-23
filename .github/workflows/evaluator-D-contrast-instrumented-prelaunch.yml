@@ -1,7 +1,7 @@
 name: D contrast instrumented CPU-only prelaunch (NO GPU)
 on:
   push:
-    branches: [experiment/D-contrast-instrumented-prelaunch-20261022]
+    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
 permissions:
   contents: read
 jobs:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Zero-GPU, zero-claim RunPod stock gate for one preauthorized D contrast retry.
+"""Zero-GPU, zero-claim RunPod stock gate for the separately authorized single D inference attempt.
 
 Only positive (High/Medium/Low) in-region Secure Cloud stock with a finite,
 within-cap price may try ONE pod; None/null, drift and unknown schema fail closed.
@@ -11,9 +11,9 @@ import os
 import sys
 import urllib.request
 
-GPU="NVIDIA RTX PRO 6000 Blackwell Server Edition"
-DATACENTER="EU-CZ-1"
-MAX_HOURLY_USD=2.49
+GPU="NVIDIA A40"
+DATACENTER="EU-SE-1"
+MAX_HOURLY_USD=0.59
 
 def inspect_response(payload):
     if not isinstance(payload,dict) or payload.get("errors"):
