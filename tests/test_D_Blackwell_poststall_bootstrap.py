@@ -14,12 +14,12 @@ def test_stage_bootstrap_persisted_without_launch():
     assert r["containerDiskInGb"]==100
     assert "networkVolumeId" in r
     shell=r["dockerStartCmd"][2]
-    assert "persist_bootstrap container_started" in shell
-    assert "persist_bootstrap runner_started" in shell
+    assert "write_bootstrap container_started" in shell
+    assert "write_bootstrap runner_started" in shell
     assert "HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY" in shell
     assert "RUNPOD_S3_ENDPOINT_URL" in shell
-    assert "D_CONTRAST_S3_BOOTSTRAP" in shell
-    assert 'Key=os.environ[\'HEPHAESTUS_BOOTSTRAP_PROGRESS_KEY\']' in shell
+    assert "persist_bootstrap" not in shell
+    assert "BOOTSTRAP_FILE" in shell
 
 def test_bad_shell_rejected_without_s3_or_pod_calls():
     for broken in ([],["bash","-c","echo hi"],["bash","-lc","echo hi"]):
@@ -31,11 +31,11 @@ def test_after_claim_cannot_reuse_pod_or_raise_budget(monkeypatch):
     assert cfg["max_total_estimated_gpu_usd"]==1.80
     assert cfg["max_hourly_usd"]==2.59
     assert cfg["bootstrap_heartbeat_max_wait_seconds"]==600
-    assert cfg["runpod_launch_enabled"] is True
+    assert cfg["runpod_launch_enabled"] is False
     assert cfg["allow_replay_after_create_attempt"] is False
     a=json.loads(launch.APPROVAL.read_text())
     assert a["approval_id"]==cfg["approval_id"]
     assert a["prior_A40_consumed_id"]!=a["approval_id"]
-    assert a["status"]=="authorized_once"
+    assert a["status"]=="pending_explicit_user_launch_command"
     assert a["max_pods"]==a["max_launch_attempts"]==1
     assert a["source_D_step96_sha256"]=="5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1"
