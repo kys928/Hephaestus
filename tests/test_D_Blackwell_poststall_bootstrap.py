@@ -8,11 +8,11 @@ def test_stage_bootstrap_persisted_without_launch():
     cfg=json.loads(launch.CONFIG.read_text())
     r=launch.pod_request(cfg,"f"*40,"D-contrast-dryrun",real_env=False)
     assert r["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
-    assert r["dataCenterIds"]==["EUR-IS-2"]
+    assert r["dataCenterIds"]==["EU-CZ-1"]
     assert r["cloudType"]=="SECURE"
     assert r["imageName"]=="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
     assert r["containerDiskInGb"]==100
-    assert "networkVolumeId" not in r
+    assert "networkVolumeId" in r
     shell=r["dockerStartCmd"][2]
     assert "persist_bootstrap container_started" in shell
     assert "persist_bootstrap runner_started" in shell
