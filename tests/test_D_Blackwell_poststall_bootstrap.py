@@ -39,3 +39,25 @@ def test_after_claim_cannot_reuse_pod_or_raise_budget(monkeypatch):
     assert a["status"]=="pending_explicit_user_launch_command"
     assert a["max_pods"]==a["max_launch_attempts"]==1
     assert a["source_D_step96_sha256"]=="5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1"
+
+
+def test_existing_claim_blocks_even_when_provider_ignores_if_none_match(monkeypatch):
+    writes=[]
+    class FakeS3:
+        def put_object(self,**kwargs):writes.append(kwargs)
+    monkeypatch.setattr(launch.infra,"maybe_json",lambda client,key:{"already_claimed":True})
+    with pytest.raises(PermissionError,match="already exists"):
+        launch.reserve_one_claim(FakeS3(),"volume","key",{"one":True})
+    assert writes==[]
+
+
+def test_claim_requires_verified_readback_before_create(monkeypatch):
+    writes=[]
+    class FakeS3:
+        def put_object(self,**kwargs):writes.append(kwargs)
+    data={"runid":"D-contrast-dryrun"}
+    observations=iter([None,{"other_run":"D-contrast-someone-else"}])
+    monkeypatch.setattr(launch.infra,"maybe_json",lambda client,key:next(observations))
+    with pytest.raises(RuntimeError,match="readback mismatch"):
+        launch.reserve_one_claim(FakeS3(),"volume","key",data)
+    assert len(writes)==1 and writes[0]["IfNoneMatch"]=="*"
