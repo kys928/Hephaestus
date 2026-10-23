@@ -26,8 +26,8 @@ jobs:
           request=x.pod_request(cfg,"f"*40,"D-contrast-offline-check",real_env=False)
           assert subprocess.run(["bash","-n"],input=request["dockerStartCmd"][2],text=True).returncode==0
           assert request["gpuTypeIds"]==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
-          assert request["dataCenterIds"]==["EUR-IS-2"]
-          assert "networkVolumeId" not in request
+          assert request["dataCenterIds"]==["EU-CZ-1"]
+          assert "networkVolumeId" in request
           print("D_BLACKWELL_OFFLINE_GATE "+json.dumps({"shell_valid":True,"dry_run_paid":False,"no_allocation":True,"budget_estimate_usd":cfg["max_total_estimated_gpu_usd"]}))
           PY
           python scripts/launch_evaluator_contrast_probe.py
