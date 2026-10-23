@@ -1,0 +1,46 @@
+name: Verify and delete obsolete exact Server pod e6p97v9ixa3nk5 (NO NEW GPU)
+on:
+  push:
+    branches: [experiment/D-contrast-WK-bootstrap-repair-20261023]
+permissions: {contents: read}
+jobs:
+  exact-pod-cleanup:
+    if: contains(github.event.head_commit.message, '[cleanup-exact-server-e6p97]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Delete exactly one orphan candidate from canceled run and verify absent
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,time,urllib.request,urllib.error,json
+          pod="e6p97v9ixa3nk5"
+          uri=f"https://rest.runpod.io/v1/pods/{pod}"
+          headers={"Authorization":"Bearer "+os.environ["RUNPOD_API_KEY"],"Accept":"application/json"}
+          def call(method):
+              request=urllib.request.Request(uri,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(request,timeout=20) as response:
+                      return response.status
+              except urllib.error.HTTPError as exc:
+                  if exc.code==404:return 404
+                  raise
+          before=call("GET")
+          print("D_CANCELLED_SERVER_CLEANUP before_status="+str(before),flush=True)
+          if before!=404:
+              if before!=200:raise RuntimeError("unexpected pod state; delete refused")
+              result=call("DELETE")
+              print("D_CANCELLED_SERVER_CLEANUP deletion_http="+str(result),flush=True)
+              if result not in (200,202,204,404):
+                  raise RuntimeError("delete not accepted")
+          for i in range(12):
+              last=call("GET")
+              if last==404:
+                  print("D_CANCELLED_SERVER_CLEANUP "+json.dumps({"pod_id":pod,"verified_absent":True,"check_attempt":i+1}),flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("orphan pod deletion NOT verified; DO NOT allocate replacement")
+          PY
