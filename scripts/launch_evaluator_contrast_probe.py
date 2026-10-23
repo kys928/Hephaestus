@@ -68,6 +68,14 @@ def pod_request(cfg,sha,runid,*,real_env):
     # EU-SE-1 48GiB A40 runs WITHOUT a mounted volume. All frozen source
     # artifacts and generated evidence use HTTPS S3 API to EU-CZ-1 instead.
     req["gpuTypeIds"]=[cfg["gpu_type_id"]]
+    # Prefer the RunPod-maintained Blackwell-compatible CUDA 12.8 image over
+    # the previously stalled generic CUDA13 runtime. This changes only
+    # container/bootstrap infrastructure, never checkpoint or evaluation.
+    if (cfg.get("image")!="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+            or cfg.get("container_disk_gb")!=100):
+        raise ValueError("unvalidated container image or ephemeral disk")
+    req["imageName"]=cfg["image"]
+    req["containerDiskInGb"]=cfg["container_disk_gb"]
     if real_env and (req.get("dataCenterIds")!=[cfg["storage_datacenter"]]
                      or req.get("networkVolumeId")!=infra.required("RUNPOD_NETWORK_VOLUME_ID")
                      or infra.required("RUNPOD_DATACENTER_ID")!=cfg["storage_datacenter"]):
