@@ -22,7 +22,7 @@ jobs:
           python -m py_compile scripts/evaluator_D_durable_timing.py scripts/evaluator_D_bootstrap_instrumentation.py scripts/interface_repair_v2_bootstrap.py scripts/run_interface_repair_v1.py scripts/run_evaluator_contrast_probe.py scripts/report_D_contrast_instrumented_prelaunch.py scripts/launch_evaluator_contrast_probe.py
       - name: Validate immutable science, no launch, budget, timing receipts
         run: |
-          pytest -q tests/test_D_contrast_durable_timing_prelaunch.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py tests/test_preflight_D_contrast_region_stock.py
+          pytest -q tests/test_D_Blackwell_poststall_bootstrap.py tests/test_D_contrast_durable_timing_prelaunch.py tests/test_evaluator_contrast_inference.py tests/test_evaluator_effect_polarity_contrasts.py tests/test_preflight_D_contrast_region_stock.py
       - name: Verify offline pod request without allocation
         run: python scripts/launch_evaluator_contrast_probe.py
       - name: Generate prelaunch scientific model and data report without GPU
