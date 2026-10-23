@@ -1,19 +1,19 @@
-name: D contrast future user-approved instrumented run (DISABLED until command)
+name: D approved Workstation one-shot $1.90 capped inference
 on:
   push:
-    branches: [experiment/D-contrast-instrumented-prelaunch-20261022]
+    branches: [experiment/D-contrast-flex-gpu-budget2-20261023]
 permissions:
   contents: read
 concurrency:
-  group: hephaestus-D-instrumented-proposed-one-shot-20261022
+  group: hephaestus-D-workstation-one-shot-20261023
   cancel-in-progress: false
 jobs:
   guarded-inference:
-    # Preparation commits cannot launch. Require an explicit future marker
-    # AND a separate new approval/config activation validated by launcher.
+    # Only the explicit, unique launch marker may create a pod. The source
+    # approval/config independently enforce one allocation and total spending.
     if: contains(github.event.head_commit.message, '[explicit-launch-approved-D-instrumented-once]')
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
     env:
       PYTHONPATH: scripts:src:.
       HEPHAESTUS_CONTRAST_AUTHORIZED: SINGLE_D_CONTRAST_PROBE
