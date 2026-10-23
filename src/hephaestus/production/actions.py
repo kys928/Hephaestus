@@ -111,7 +111,31 @@ class GovernedActionExecutor:
         previous = self.repository.get_latest(ACTION_EXECUTIONS, "execution_id", execution_id)
         if previous is not None and previous.get("status") == "applied":
             return dict(previous)
+        if previous is not None:
+            if previous.get("status") != "prepared":
+                raise RuntimeError("unknown action journal state; cannot safely replay")
+            before_state = previous.get("before")
+            after_state = previous.get("after")
+            if not isinstance(before_state, dict) or not isinstance(after_state, dict):
+                raise RuntimeError("malformed prepared action journal")
+            if current.to_dict() not in (before_state, after_state):
+                raise RuntimeError("lineage diverged since prepared action; refusing overwrite")
+            child = previous.get("child_after")
+            if child is not None:
+                if not isinstance(child, dict) or not str(child.get("lineage_id") or ""):
+                    raise RuntimeError("malformed prepared child lineage")
+                current_child = self.lineage_store.get_current(str(child["lineage_id"]))
+                if current_child is not None and current_child != child:
+                    raise RuntimeError("prepared child lineage conflicts with current state")
+                self.lineage_store.set_current(child)
+            # Rewriting an identical after-state heals the secondary legacy JSON
+            # mirror if a crash occurred between the two lineage-store writes.
+            self.lineage_store.set_current(after_state)
+            applied = {**previous, "status": "applied"}
+            self.repository.append(ACTION_EXECUTIONS, applied)
+            return applied
 
+        child_after: dict[str, object] | None = None
         now = datetime.now(timezone.utc).isoformat()
         current.latest_run_id = run_id
         current.last_requested_action = requested_action
@@ -147,7 +171,8 @@ class GovernedActionExecutor:
             if not origin:
                 raise ValueError("branch requires an origin checkpoint")
             child_id = child_lineage_id or f"{lineage_id}-branch-{hashlib.sha256((run_id + origin).encode()).hexdigest()[:8]}"
-            if self.lineage_store.get_current(child_id) is None:
+            existing_child = self.lineage_store.get_current(child_id)
+            if existing_child is None:
                 child = LineageState(
                     lineage_id=child_id,
                     parent_lineage_id=lineage_id,
@@ -165,8 +190,10 @@ class GovernedActionExecutor:
                     training_recipe_ref=current.training_recipe_ref,
                     eval_policy_ref=current.eval_policy_ref,
                 )
-                self.lineage_store.set_current(child.to_dict())
-                self.lineage_store.add_child(lineage_id, child_id)
+                child_after = child.to_dict()
+            elif existing_child.get("parent_lineage_id") != lineage_id:
+                raise RuntimeError("branch lineage identity conflict")
+            current.child_lineage_ids = list(dict.fromkeys([*current.child_lineage_ids, child_id]))
             current.metadata["latest_child_lineage_id"] = child_id
         elif canonical == "restart_lineage":
             current.status = "restarted"
@@ -197,7 +224,6 @@ class GovernedActionExecutor:
         else:
             raise NotImplementedError(f"registered action has no production executor: {canonical}")
 
-        self.lineage_store.set_current(current.to_dict())
         record = {
             "execution_id": execution_id,
             "status": "applied",
@@ -231,7 +257,14 @@ class GovernedActionExecutor:
             "applied_at": now,
             "before": before,
             "after": current.to_dict(),
+            "child_after": child_after,
         }
+        # Journal first, then cross-store mutation. On retry, a prepared record
+        # is reconciled against before/after identities, never blindly re-applied.
+        self.repository.append(ACTION_EXECUTIONS, {**record, "status": "prepared"})
+        if child_after is not None:
+            self.lineage_store.set_current(child_after)
+        self.lineage_store.set_current(current.to_dict())
         self.repository.append(ACTION_EXECUTIONS, record)
         return record
 
