@@ -150,6 +150,9 @@ class VerifiedRoleAdapters:
     @staticmethod
     def _cache_valid(spec: CertifiedRoleModel, adapter: Path, archive: Path, receipt: Path) -> bool:
         try:
+            if (adapter.is_symlink() or archive.is_symlink() or receipt.is_symlink()
+                    or adapter.parent.is_symlink()):
+                return False
             doc = json.loads(receipt.read_text(encoding="utf-8"))
             if (doc["role"] != spec.role or doc["model_id"] != spec.model_id
                 or doc["revision"] != spec.revision
@@ -161,7 +164,13 @@ class VerifiedRoleAdapters:
             files = doc["files"]
             if not isinstance(files, dict) or not files:
                 return False
-            return all(_sha_file(adapter / name) == sha for name, sha in files.items())
+            return all(
+                isinstance(name, str) and PurePosixPath(name).name == name
+                and not (adapter / name).is_symlink()
+                and (adapter / name).is_file()
+                and _sha_file(adapter / name) == sha
+                for name, sha in files.items()
+            )
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return False
 
@@ -178,14 +187,14 @@ class PinnedTransformersRoleGenerator:
 
     hf_cache_dir: Path
     device: str = "cuda:0"
-    _loaded_role: str | None = field(default=None, init=False)
+    _loaded_identity: tuple[str, str, str] | None = field(default=None, init=False)
     _model: Any = field(default=None, init=False, repr=False)
     _tokenizer: Any = field(default=None, init=False, repr=False)
 
     def close(self) -> None:
         self._model = None
         self._tokenizer = None
-        self._loaded_role = None
+        self._loaded_identity = None
         gc.collect()
         try:
             import torch
@@ -195,7 +204,8 @@ class PinnedTransformersRoleGenerator:
             pass
 
     def _load(self, spec: CertifiedRoleModel, profile: Mapping[str, object], adapter_path: Path) -> None:
-        if self._loaded_role == spec.role:
+        identity = (spec.role, spec.revision, spec.adapter.sha256)
+        if self._loaded_identity == identity:
             return
         self.close()
         try:
@@ -236,7 +246,7 @@ class PinnedTransformersRoleGenerator:
             model.eval()
             if not all(str(p.device).startswith("cuda") for p in model.parameters()):
                 raise RuntimeError("role model parameters are not fully resident on CUDA")
-            self._tokenizer, self._model, self._loaded_role = tokenizer, model, spec.role
+            self._tokenizer, self._model, self._loaded_identity = tokenizer, model, identity
         except Exception:
             self.close()
             raise
