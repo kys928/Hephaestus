@@ -324,6 +324,7 @@ class CertifiedRoleReasoner:
                 context: DeterministicRoleContext, seed: int = 271828,
                 max_new_tokens: int = 384) -> ModelRoleObservation:
         spec = self.stack.resolve(task.role)
+        self.contract.validate_model(spec)
         if not self.stack.production_certified or not self.stack.runtime_registry_ready:
             raise PermissionError("role model stack is not certified and admitted")
         if (context.run_id != task.run_id or context.lineage_id != task.lineage_id

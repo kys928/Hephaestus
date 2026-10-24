@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 import pytest
+from approval_fixtures import grant_for_lineage
 
 from hephaestus.control.staged_state import StagedAutonomousDependencies, StagedOperationRequest, StagedOperationResult
 from hephaestus.production.composition import ProductionCompositionRoot, ProductionCompositionSettings
@@ -187,6 +188,8 @@ def test_prepared_branch_reconciles_child_without_duplicate_parent_mutation(tmp_
         "checkpoint_ref": "checkpoint://parent",
         "approval_status": "approved", "approval_ref": "approval://branch",
     }
+    grant_for_lineage(root, "lineage-parent", "branch-test", "branch_new_experiment",
+                      "checkpoint://parent", "approval://branch")
     with pytest.raises(RuntimeError, match="injected crash"):
         executor.apply(**args)
     rows = runtime.state_repository.all(ACTION_EXECUTIONS)

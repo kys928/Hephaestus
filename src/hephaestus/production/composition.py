@@ -199,7 +199,8 @@ class ProductionCompositionRoot:
             state,
             maximum_attempts=settings.maximum_infrastructure_attempts,
         )
-        action_executor = GovernedActionExecutor(settings.state_root, state, approval_policy=approval_policy)
+        action_executor = GovernedActionExecutor(settings.state_root, state, approval_policy=approval_policy, artifact_store=artifacts)
+        action_executor.reconcile_prepared()
         loop_state = ProductionLoopStateStore(state)
 
         coordinator = ProductionAutonomyCoordinator(

@@ -14,6 +14,9 @@ from hephaestus.control.staged_state import (
 )
 from hephaestus.policy.action_registry import canonical_action_name, evaluate_action_boundary
 from hephaestus.policy.approval_policy import ApprovalPolicy
+from hephaestus.policy.action_authorization import ActionAuthorizer
+from hephaestus.state.single_writer import single_writer
+from hephaestus.storage.base import ArtifactStore
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.storage.base import StateRepository
@@ -39,7 +42,7 @@ class GovernedActionExecutor:
     """Apply finite Judge actions only after their own governance gate authorizes them.
 
     Promotion eligibility is deliberately *not* a generic lineage-action gate.
-    Only ``promote_checkpoint`` consumes ``promotion_allowed``. Rollback, branch,
+    Only ``promote_checkpoint`` requires independently recomputed certification. Rollback, branch,
     and restart are authorized independently by the central action registry and
     ApprovalPolicy, plus their own lineage preconditions. Legacy transition flags
     remain accepted for compatibility but have no authorization effect.
@@ -52,12 +55,46 @@ class GovernedActionExecutor:
     state_root: Path
     repository: StateRepository
     approval_policy: ApprovalPolicy | None = None
+    artifact_store: ArtifactStore | None = None
 
     @property
     def lineage_store(self) -> LineageStore:
         return LineageStore(self.state_root)
 
-    def apply(
+    def apply(self, **kwargs) -> dict[str, object]:
+        with single_writer(self.state_root):
+            self.reconcile_prepared()
+            return self._apply(**kwargs)
+
+    def reconcile_prepared(self) -> list[dict[str, object]]:
+        """Finish already-authorized intents before admitting another mutation."""
+        with single_writer(self.state_root):
+            latest = {str(r["execution_id"]): r for r in self.repository.all(ACTION_EXECUTIONS)}
+            return [self._reconcile(r) for r in latest.values() if r.get("status") == "prepared"]
+
+    def _reconcile(self, previous: dict) -> dict:
+        before, after = previous.get("before"), previous.get("after")
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            raise RuntimeError("malformed prepared action journal")
+        current = self.lineage_store.get_current(str(previous["lineage_id"]))
+        if current is None:
+            current = LineageState(lineage_id=str(previous["lineage_id"]), stage_name="smoke_test").to_dict()
+        if current not in (before, after):
+            raise RuntimeError("lineage diverged since prepared action; refusing overwrite")
+        child = previous.get("child_after")
+        if child is not None:
+            if not isinstance(child, dict) or not child.get("lineage_id"):
+                raise RuntimeError("malformed prepared child lineage")
+            existing = self.lineage_store.get_current(str(child["lineage_id"]))
+            if existing is not None and existing != child:
+                raise RuntimeError("prepared child lineage conflicts with current state")
+            self.lineage_store.set_current(child)
+        self.lineage_store.set_current(after)  # Also heals an interrupted legacy mirror write.
+        applied = {**previous, "status": "applied"}
+        self.repository.append(ACTION_EXECUTIONS, applied)
+        return applied
+
+    def _apply(
         self,
         *,
         lineage_id: str,
@@ -83,57 +120,44 @@ class GovernedActionExecutor:
             current = LineageState.from_dict(current_payload)
         before = current.to_dict()
 
-        boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
-        if not boundary["allowed"]:
-            raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
+        execution_id = _stable_id(lineage_id, run_id, canonical, checkpoint_ref, child_lineage_id)
+        previous = self.repository.get_latest(ACTION_EXECUTIONS, "execution_id", execution_id)
+        if previous is not None:
+            if previous.get("approval_ref") != approval_ref:
+                raise PermissionError("action retry changed authorization identity")
+            if previous.get("status") == "applied":
+                return dict(previous)
+            raise RuntimeError("unreconciled action journal state")
+        for row in self.repository.all(ACTION_EXECUTIONS):
+            if row.get("lineage_id") == lineage_id and row.get("run_id") == run_id:
+                raise PermissionError("a different action is already committed for this run")
+            if approval_ref and row.get("approval_ref") == approval_ref:
+                raise PermissionError("approval has already been consumed")
 
         policy = self.approval_policy or ApprovalPolicy()
         policy_decision = policy.decide(canonical, current.stage_name, current.trust_level)
-        operator_approved = approval_status in {"approved", "override_approved"}
-        policy_requires_approval = _approval_required_by_policy(policy_decision.outcome)
-        registry_requires_approval = bool(boundary.get("requires_approval", False))
-
-        if policy_decision.outcome == "override_not_allowed" and approval_status == "override_approved":
-            raise PermissionError(f"approval policy forbids override for {canonical}")
-        if policy_requires_approval and not operator_approved:
-            raise PermissionError(
-                f"approval policy did not authorize {canonical}: {policy_decision.reason}"
-            )
-        if (registry_requires_approval or policy_requires_approval) and not approval_ref:
-            raise PermissionError(f"approved action is missing durable approval reference: {canonical}")
-
-        # Promotion certification is a promotion-only boundary. It must never
-        # authorize rollback, branch, restart, or any other lineage mutation.
-        if canonical == "promote_checkpoint" and not promotion_allowed:
-            raise PermissionError("promotion gate did not authorize promote_checkpoint")
-
-        execution_id = _stable_id(lineage_id, run_id, canonical, checkpoint_ref, approval_ref)
-        previous = self.repository.get_latest(ACTION_EXECUTIONS, "execution_id", execution_id)
-        if previous is not None and previous.get("status") == "applied":
-            return dict(previous)
-        if previous is not None:
-            if previous.get("status") != "prepared":
-                raise RuntimeError("unknown action journal state; cannot safely replay")
-            before_state = previous.get("before")
-            after_state = previous.get("after")
-            if not isinstance(before_state, dict) or not isinstance(after_state, dict):
-                raise RuntimeError("malformed prepared action journal")
-            if current.to_dict() not in (before_state, after_state):
-                raise RuntimeError("lineage diverged since prepared action; refusing overwrite")
-            child = previous.get("child_after")
-            if child is not None:
-                if not isinstance(child, dict) or not str(child.get("lineage_id") or ""):
-                    raise RuntimeError("malformed prepared child lineage")
-                current_child = self.lineage_store.get_current(str(child["lineage_id"]))
-                if current_child is not None and current_child != child:
-                    raise RuntimeError("prepared child lineage conflicts with current state")
-                self.lineage_store.set_current(child)
-            # Rewriting an identical after-state heals the secondary legacy JSON
-            # mirror if a crash occurred between the two lineage-store writes.
-            self.lineage_store.set_current(after_state)
-            applied = {**previous, "status": "applied"}
-            self.repository.append(ACTION_EXECUTIONS, applied)
-            return applied
+        boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
+        protected = bool(boundary["requires_approval"]) or _approval_required_by_policy(policy_decision.outcome)
+        authorization: dict = {}
+        if protected:
+            if not approval_ref:
+                if approval_status in {"approved", "override_approved"}:
+                    raise PermissionError("approved action is missing durable approval reference")
+                raise PermissionError("action registry did not authorize action without approval")
+            authorization = ActionAuthorizer(self.state_root, policy, self.artifact_store).verify(
+                approval_ref=approval_ref, action=canonical, run_id=run_id, current=before,
+                checkpoint_ref=checkpoint_ref, child_lineage_id=child_lineage_id)
+            approval_status = str(authorization["approval_status"])
+        else:
+            approval_status = "not_required"
+        boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
+        if not boundary["allowed"]:
+            raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
+        if canonical == "promote_checkpoint":
+            # Authoritative immutable evaluation, never the caller's boolean.
+            certification_state = str(authorization["certification_state"])
+            confidence = float(authorization["confidence"])
+            promotion_allowed = True
 
         child_after: dict[str, object] | None = None
         now = datetime.now(timezone.utc).isoformat()
@@ -234,6 +258,7 @@ class GovernedActionExecutor:
             "checkpoint_ref": checkpoint_ref,
             "approval_status": approval_status,
             "approval_ref": approval_ref,
+            "authorization": authorization,
             "governance": {
                 "action_registry": boundary,
                 "approval_policy": {
