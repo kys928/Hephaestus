@@ -195,6 +195,10 @@ class EvaluatorRoleActivation:
             current = self._current()
             if current is None:
                 raise ValueError("no active Evaluator activation to roll back")
+            if current.get("status", "").startswith("rolled_back"):
+                if current.get("run_id") == run_id and current.get("approval_ref") == approval_ref:
+                    return current  # idempotent replay of the same authorized rollback
+                raise PermissionError("active Evaluator was already rolled back")
             self._authorize(
                 action="rollback_active_role", approval_ref=approval_ref,
                 run_id=run_id, lineage_id=lineage_id, checkpoint=None,
