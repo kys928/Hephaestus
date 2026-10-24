@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import random
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol, Sequence
@@ -159,12 +160,28 @@ class TransformersCausalLMGenerationBackend:
         tokenizer = AutoTokenizer.from_pretrained(
             str(tokenizer_ref), local_files_only=True, trust_remote_code=False
         )
+        peft_mode = str(loading_instructions.get("training_mode", "")).startswith("lora_")
+        base_source = str(loading_instructions.get("base_model_id", "")) if peft_mode else str(model_ref)
+        base_revision = str(loading_instructions.get("base_revision", ""))
+        if peft_mode:
+            from hephaestus.backends.hf_causal_lm import directory_content_identity
+            from hephaestus.training.peft_support import validate_adapter
+            validate_adapter(model_ref, model_id=base_source, revision=base_revision)
+            if Path(base_source).is_dir():
+                if directory_content_identity(base_source) != base_revision:
+                    raise GenerationBackendError("base_identity_mismatch", "PEFT base model bytes changed")
+            elif not re.fullmatch(r"[0-9a-fA-F]{40}", base_revision):
+                raise GenerationBackendError("base_revision_unpinned", "PEFT generation needs an exact base revision")
         model = AutoModelForCausalLM.from_pretrained(
-            str(model_ref),
+            base_source,
             local_files_only=True,
             trust_remote_code=False,
             torch_dtype=dtype_map[self.dtype],
+            **({"revision": base_revision} if peft_mode and not Path(base_source).is_dir() else {}),
         )
+        if peft_mode:
+            from peft import PeftModel
+            model = PeftModel.from_pretrained(model, str(model_ref), is_trainable=False)
         model.to(self.device)
         model.eval()
         if tokenizer.pad_token_id is None:

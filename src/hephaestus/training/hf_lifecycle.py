@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -28,6 +29,7 @@ from hephaestus.schemas.experiment_contract import (
     TrainingRunHandle,
 )
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
+from hephaestus.training.peft_support import validate_recipe
 
 _ACTIVE_STATUSES = {"preparing", "queued", "running", "interrupting", "resuming"}
 _TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -274,6 +276,19 @@ class TransformersTrainingLifecycleService:
                         issues=[_issue("run_not_found", "invalid_request", f"No run evidence for '{run_id}'.")],
                     )
                 if restored.status in _ACTIVE_STATUSES:
+                    result_ref = self.artifact_root / run_id / "runtime_result.json"
+                    if result_ref.is_file():
+                        result = json.loads(result_ref.read_text())
+                        if (result.get("run_id") == run_id and
+                                result.get("config_fingerprint") == restored.metadata.get("config_fingerprint") and
+                                result.get("status") in {"completed", "interrupted", "cancelled"}):
+                            job_ref = Path(str(restored.metadata["prepared_job_ref"]))
+                            job = json.loads(job_ref.read_text())
+                            recovered = _ManagedRun(restored, job_ref, compatibility=dict(job["compatibility"]))
+                            recovered.requested_action = "interrupt" if result["status"] == "interrupted" else (
+                                "cancel" if result["status"] == "cancelled" else None)
+                            self._finalize(recovered)
+                            return recovered.handle
                     pid = restored.metadata.get("pid")
                     if isinstance(pid, int) and self._pid_alive(pid):
                         restored.metadata["process_observation"] = "pid_alive_unattached"
@@ -705,10 +720,19 @@ class TransformersTrainingLifecycleService:
                 _issue("cpu_mixed_precision_unsupported", "unsupported_capability", "CPU requires float32.")
             )
         mode = compatibility["training_mode"]
-        if mode != "full_finetune":
+        if mode not in {"full_finetune", "lora_finetune", "lora_continuation"}:
             issues.append(
-                _issue("unsupported_training_mode", "unsupported_capability", "Only full_finetune is supported.")
+                _issue("unsupported_training_mode", "unsupported_capability", "Unsupported full/LoRA training mode.")
             )
+        peft_config = None
+        if mode in {"lora_finetune", "lora_continuation"}:
+            if importlib.util.find_spec("peft") is None:
+                issues.append(_issue("peft_unavailable", "unsupported_capability", "Install the peft-training extra."))
+            try:
+                peft_config = validate_recipe(dict(constraints.get("peft_config", {})),
+                    model_id=compatibility["model_id"], revision=compatibility["model_revision"], mode=mode).to_dict()
+            except (ValueError, TypeError, OSError, KeyError) as exc:
+                issues.append(_issue("invalid_peft_recipe", "incompatible_candidate", str(exc)))
         optimizer = compatibility["optimizer"].lower()
         scheduler = compatibility["scheduler"].lower()
         if optimizer != "adamw":
@@ -755,6 +779,7 @@ class TransformersTrainingLifecycleService:
             "dtype": dtype,
             "device": device,
             "training_mode": mode,
+            "peft_config": peft_config,
             "dataset_identity": compatibility["processed_dataset_hash"],
             "dataset_summary": data_summary,
             "optimizer": optimizer,
@@ -1003,7 +1028,9 @@ class TransformersTrainingLifecycleService:
             status = "interrupted"
         elif managed.requested_action == "cancel" and worker_status == "cancelled":
             status = "cancelled"
-        elif returncode == 0 and worker_status == "completed":
+        elif worker_status == "completed" and (returncode == 0 or (
+                managed.process is None and result.get("run_id") == managed.handle.run_id and
+                result.get("config_fingerprint") == managed.handle.metadata.get("config_fingerprint"))):
             status = "completed"
         else:
             status = "failed"
@@ -1048,6 +1075,7 @@ class TransformersTrainingLifecycleService:
                 if not valid or record.get("checkpoint_manifest_hash") != observed_hash:
                     raise ValueError(observed_hash)
                 managed.handle.checkpoint_refs = [str(checkpoint_ref)]
+                managed.handle.metadata["generation_handoff_ref"] = str(checkpoint_ref / "loading_instructions.json")
                 token_ref = root / "resume_token.json"
                 managed.handle.resume_token_ref = str(token_ref) if token_ref.is_file() else None
             except (OSError, json.JSONDecodeError, ValueError) as exc:
