@@ -17,6 +17,8 @@ from hephaestus.schemas.discovery_contract import (
     ModelSelectionDecision,
 )
 from hephaestus.schemas.experiment_contract import ExperimentProposal, InterventionProposal
+from hephaestus.schemas.model_proposal import ModelInterventionSelection
+import math
 
 
 class ExperimentPlanningError(ValueError):
@@ -212,6 +214,43 @@ class ClosedLoopExperimentPlanner:
             output.append(candidate.proposal)
         return output
 
+    def admit_model_selection(self, diagnosis: DiagnosisReport, selection: ModelInterventionSelection,
+                              verified_refs: set[str]) -> InterventionProposal:
+        """Select an existing policy-admissible controlled intervention, never execute it."""
+        if (not selection.evidence_refs or not set(selection.evidence_refs) <= verified_refs or
+                not selection.inference_receipt_ref.startswith("sha256:") or
+                not math.isfinite(selection.confidence) or not 0 <= selection.confidence <= 1):
+            raise ExperimentPlanningError("model_proposal_evidence_or_confidence_invalid")
+        allowed = diagnosis.metadata.get("allowed_intervention_kinds")
+        if allowed is not None and selection.intervention_kind not in allowed:
+            raise ExperimentPlanningError("model_intervention_outside_campaign_scope")
+        if selection.intervention_kind not in {"collect_more_evidence", "repair_evaluation", "stop", "rollback"}:
+            budget = diagnosis.metadata.get("budget", {})
+            if not any(type(budget.get(k)) in (int, float) and math.isfinite(budget[k]) and budget[k] > 0
+                       for k in ("max_compute_hours", "max_cost_usd", "max_training_steps")):
+                raise ExperimentPlanningError("model_intervention_has_no_bounded_training_budget")
+        candidates = list(self.propose_interventions(diagnosis))
+        if selection.intervention_kind == "stop":
+            hypothesis = self._ordered_hypotheses(diagnosis)[0] if diagnosis.hypotheses else DiagnosticHypothesis(
+                "model-stop", "inconclusive", "No admitted next experiment.", confidence=diagnosis.confidence)
+            candidate = self._candidate(diagnosis, hypothesis, "stop", self._relevant_memories(diagnosis))
+            if candidate.assessment.accepted:
+                candidates.append(candidate.proposal)
+        matching = [c for c in candidates if c.intervention_kind == selection.intervention_kind
+                    and c.primary_variable == selection.primary_variable]
+        if not matching:
+            raise ExperimentPlanningError("model_intervention_not_scientifically_admissible")
+        chosen = matching[0]
+        failures = self.policy.validate_intervention(chosen)
+        if failures:
+            raise ExperimentPlanningError(";".join(failures))
+        chosen.metadata.update(model_originated=True, model_selection=selection.to_dict(),
+            model_inference_receipt_ref=selection.inference_receipt_ref,
+            model_evidence_refs=list(selection.evidence_refs), deterministic_rank=chosen.metadata.get("rank"))
+        # Model confidence is an interpretation, not replacement measurement evidence.
+        chosen.confidence = min(chosen.confidence, selection.confidence)
+        return chosen
+
     def create_discovery_requests(
         self,
         diagnosis: DiagnosisReport,
@@ -271,6 +310,7 @@ class ClosedLoopExperimentPlanner:
         intervention: InterventionProposal,
         dataset_selection: DatasetSelectionDecision | None,
         model_selection: ModelSelectionDecision | None,
+        *, allow_unresolved_discovery: bool = False,
     ) -> ExperimentProposal:
         validation = self.policy.validate_intervention(intervention)
         if validation:
@@ -306,7 +346,16 @@ class ClosedLoopExperimentPlanner:
             )
         )
         approvals.update(str(item) for item in intervention.metadata.get("required_approvals", []))
-        if intervention.intervention_kind == "replace_or_mix_dataset":
+        unresolved = []
+        if intervention.intervention_kind == "replace_or_mix_dataset" and dataset_selection is None:
+            if not allow_unresolved_discovery:
+                raise ExperimentPlanningError("selected_dataset_decision_required")
+            unresolved.append("dataset_selection")
+        if intervention.intervention_kind == "change_model" and model_selection is None:
+            if not allow_unresolved_discovery:
+                raise ExperimentPlanningError("selected_model_decision_required")
+            unresolved.append("model_selection")
+        if intervention.intervention_kind == "replace_or_mix_dataset" and dataset_selection is not None:
             if dataset_selection is None or dataset_selection.status != "selected":
                 raise ExperimentPlanningError("selected_dataset_decision_required")
             if not dataset_selection.selected_candidate_ids:
@@ -323,7 +372,7 @@ class ClosedLoopExperimentPlanner:
         elif dataset_selection is not None:
             raise ExperimentPlanningError("dataset_selection_not_required_for_intervention")
 
-        if intervention.intervention_kind == "change_model":
+        if intervention.intervention_kind == "change_model" and model_selection is not None:
             if model_selection is None or model_selection.status != "selected":
                 raise ExperimentPlanningError("selected_model_decision_required")
             if not model_selection.selected_candidate_id:
@@ -395,12 +444,17 @@ class ClosedLoopExperimentPlanner:
             status="pending",
             metadata={
                 "hypothesis": intervention.hypothesis,
+                "intervention_kind": intervention.intervention_kind,
                 "baseline_justification": baseline_justification,
                 "alternatives_rejected": dict(intervention.alternatives_rejected),
                 "planner_rank": intervention.metadata.get("rank"),
                 "planner_score": intervention.metadata.get("ranking_score"),
                 "planner_does_not_execute": True,
+                "model_originated": intervention.metadata.get("model_originated", False),
+                "model_inference_receipt_ref": intervention.metadata.get("model_inference_receipt_ref"),
+                "model_evidence_refs": intervention.metadata.get("model_evidence_refs", []),
                 "approval_state": "required" if approvals else "not_required",
+                "unresolved_discovery": unresolved,
             },
         )
 
@@ -420,6 +474,9 @@ class ClosedLoopExperimentPlanner:
         )
         matching_dead_ends = [
             memory for memory in memories if self._memory_matches(memory, kind, primary, hypothesis)
+            and ("controlled_variables" not in memory.get("metadata", {}) or
+                 (memory["metadata"]["controlled_variables"] == controlled and
+                  memory["metadata"].get("baseline_ref") == diagnosis.metadata.get("baseline_ref")))
             and str(memory.get("memory_type")) == "known_dead_end"
         ]
         prior_attempts = sum(
@@ -564,7 +621,7 @@ class ClosedLoopExperimentPlanner:
                 return "training_duration"
             return "learning_rate"
         if kind == "resume_training":
-            return "checkpoint_resume_point"
+            return "training_duration"
         if kind == "change_model":
             return "model_candidate"
         if kind in {"rollback", "branch", "restart"}:

@@ -10,6 +10,7 @@ from hephaestus.control.deterministic_role_boundary import (
 from hephaestus.control.staged_state import StagedOperationRequest, WORKFLOW_RECORD_COLLECTION
 from hephaestus.llm.role_contract import RoleTask, RoleEvidence
 from hephaestus.schemas.scientific_evidence import ScientificEvidenceBinding
+from hephaestus.schemas.diagnosis_contract import DiagnosisReport
 from hephaestus.state.evidence_store import ScientificEvidenceStore
 from hephaestus.storage.verified import canonical_bytes
 
@@ -54,6 +55,20 @@ class ArtifactModelEvidenceBinder:
         for binding in rows:
             key = hashlib.sha256(canonical_bytes([target_run, binding.artifact_ref])).hexdigest()[:24]
             self.store.register(replace(binding, binding_id=f"binding-{key}", target_run_id=target_run))
+
+    def diagnosis_for(self, request: StagedOperationRequest) -> DiagnosisReport:
+        bindings = [*self.store.for_run(request.run_id, request.lineage_id),
+                    *self._workflow_sources(request.run_id, request.lineage_id)]
+        for binding in reversed(bindings):
+            if binding.kind != "diagnosis_report":
+                continue
+            source = self.store.resolve(binding)
+            report = DiagnosisReport.from_dict(source["payload"])
+            if (report.run_id != request.run_id or report.lineage_id != request.lineage_id or
+                    report.stage_name != request.stage_name):
+                raise ValueError("model Planner diagnosis identity mismatch")
+            return report
+        raise ValueError("model Planner requires a verified production diagnosis report")
 
     def bind(self, *, role: str, request: StagedOperationRequest):
         bindings = [*self.store.for_run(request.run_id, request.lineage_id),

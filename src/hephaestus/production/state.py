@@ -10,7 +10,8 @@ from typing import Any
 
 from hephaestus.recovery.models import RecoveryAttempt
 from hephaestus.recovery.store import RecoveryAttemptConflict, RecoveryAttemptStore
-from hephaestus.storage.base import StateRepository
+from hephaestus.storage.base import StateRepository, ArtifactStore
+from hephaestus.storage.verified import canonical_bytes
 
 RECOVERY_ATTEMPTS = "production_recovery_attempts"
 LOOP_STATES = "production_loop_states"
@@ -22,12 +23,14 @@ INTEGRATION_RECORDS = "production_integration_records"
 @dataclass(slots=True)
 class RepositoryIntegrationRecordSink:
     repository: StateRepository
+    artifact_store: ArtifactStore | None = None
 
     def append(self, kind: str, payload: dict[str, object]) -> None:
-        self.repository.append(
-            INTEGRATION_RECORDS,
-            {"kind": str(kind), "payload": dict(payload)},
-        )
+        row = {"kind": str(kind), "payload": dict(payload)}
+        if self.artifact_store is not None:
+            artifact = self.artifact_store.put_bytes(canonical_bytes(row), media_type="application/json")
+            row["artifact_ref"] = artifact.artifact_ref
+        self.repository.append(INTEGRATION_RECORDS, row)
 
 
 @dataclass(slots=True)

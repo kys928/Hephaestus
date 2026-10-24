@@ -23,6 +23,8 @@ from hephaestus.data.preprocessing import AutonomousDataPreprocessor, DataProces
 from hephaestus.data.registry import DatasetProviderRegistry
 from hephaestus.data.remote_acquisition import RemoteDatasetAcquisitionService
 from hephaestus.diagnosis.service import EvidenceBasedDiagnosisService
+from hephaestus.diagnosis.evidence import StateEvidenceAdapter, BoundScientificEvidenceAdapter
+from hephaestus.state.experiment_memory import ExperimentMemoryQuery
 from hephaestus.evaluation.experiment_service import ExperimentEvaluationService
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.planning.service import ClosedLoopExperimentPlanner
@@ -102,6 +104,13 @@ class ProductionRuntime:
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
 
+    def with_role_models(self, services, reasoner):
+        from .model_roles import with_model_backed_roles
+        if reasoner.artifact_store is not self.artifact_store:
+            raise ValueError("role receipts and scientific sources must share the production artifact store")
+        return with_model_backed_roles(services, reasoner, self.model_evidence,
+                                       enabled=True, planner=self.planner)
+
     def service_inventory(self) -> dict[str, str]:
         return {
             "state_repository": type(self.state_repository).__name__,
@@ -141,7 +150,7 @@ class ProductionCompositionRoot:
         state = SQLiteStateRepository(settings.resolved_database_path())
         artifacts = FileSystemArtifactStore(settings.artifact_root)
         secrets = EnvironmentSecretsProvider()
-        record_sink = RepositoryIntegrationRecordSink(state)
+        record_sink = RepositoryIntegrationRecordSink(state, artifacts)
 
         execution_backend = (
             resolve_backend(settings.execution_backend_name, config_dir=settings.config_dir)
@@ -152,8 +161,10 @@ class ProductionCompositionRoot:
         runtime_monitor = RuntimeMonitorRole(execution_backend, runtime_policy)
         approval_policy = ApprovalPolicy(config_dir=settings.config_dir)
 
-        diagnosis = IntegratedDiagnosisService(EvidenceBasedDiagnosisService())
-        planner = ClosedLoopExperimentPlanner()
+        scientific_evidence = ScientificEvidenceStore(state, artifacts)
+        diagnosis = IntegratedDiagnosisService(EvidenceBasedDiagnosisService(evidence_adapters=(
+            StateEvidenceAdapter(settings.state_root), BoundScientificEvidenceAdapter(scientific_evidence))))
+        planner = ClosedLoopExperimentPlanner(memory_query=ExperimentMemoryQuery(settings.state_root, state, artifacts))
 
         hf_dataset = HuggingFaceDatasetProvider(enable_network=settings.enable_dataset_network)
         registry = DatasetProviderRegistry(
@@ -241,7 +252,7 @@ class ProductionCompositionRoot:
             judge=judge,
             recovery=recovery,
             infrastructure_recovery=infra_recovery,
-            model_evidence=ArtifactModelEvidenceBinder(ScientificEvidenceStore(state, artifacts), settings.config_dir),
+            model_evidence=ArtifactModelEvidenceBinder(scientific_evidence, settings.config_dir),
             action_executor=action_executor,
             loop_state=loop_state,
             coordinator=coordinator,

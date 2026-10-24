@@ -7,6 +7,8 @@ have run in CI.
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,14 @@ from hephaestus.control.staged_state import StagedAutonomousDependencies, WORKFL
 from hephaestus.llm.role_contract import RoleTask, RoleEvidence, RoleMasteryContract
 from hephaestus.llm.certified_runtime import CertifiedRoleReasoner, VerifiedRoleAdapters
 from hephaestus.production.model_roles import with_model_backed_roles
+from hephaestus.production.evidence import ArtifactModelEvidenceBinder
+from hephaestus.state.evidence_store import ScientificEvidenceStore
+from hephaestus.schemas.scientific_evidence import ScientificEvidenceBinding
+from hephaestus.schemas.diagnosis_contract import DiagnosticHypothesis
+from hephaestus.planning.service import ClosedLoopExperimentPlanner
+from hephaestus.storage.verified import canonical_bytes
+from hephaestus.control.staged_state import StagedOutputRecord
+from test_closed_loop_planner import _diagnosis
 from hephaestus.storage.filesystem import JsonLineStateRepository
 
 from test_certified_role_inference import _archive, _roles, FakeS3
@@ -70,30 +80,50 @@ class ModelProposals:
         v = profile["vocabulary"]
         action = ("request_recheck" if spec.role == "controller" else
                   self.judge_action if spec.role == "judge" else v["action"][0])
+        decision = v["decision"][0]
+        primary = v["primary_variable"][0]
+        if spec.role == "diagnosis":
+            decision, action, primary = "evaluation_integrity", "repair_evaluation", "evaluation_protocol"
+        refs = re.findall(r"^- (sha256:[0-9a-f]{64}):", prompt, re.M)
         return RoleGeneration(json.dumps({
-            "decision": v["decision"][0],
+            "decision": decision,
             "action": action,
-            "primary_variable": v["primary_variable"][0],
+            "primary_variable": primary,
             "confidence": 0.7,
-            "evidence_refs": ["verified://run-evidence"],
+            "evidence_refs": refs[:1],
             "uncertainties": [],
             "rationale": "The validated evidence supports this review only.",
         }), metadata={"test_double":True})
 
 
 def _run(tmp_path, model):
-    router = FakeOperationRouter(action="continue_lineage_best")
+    repository = JsonLineStateRepository(tmp_path / "state")
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    initial = artifacts.put_bytes(canonical_bytes({"run_id":"role-model-1", "lineage_id":"model-lineage",
+        "stage_name":"smoke_test", "kind":"eval_report", "payload":{"status":"failed", "eval_integrity_verified":True}}))
+    evidence_store = ScientificEvidenceStore(repository, artifacts)
+    evidence_store.register(ScientificEvidenceBinding("initial", "role-model-1", "role-model-1", "model-lineage",
+        "smoke_test", "eval_report", initial.artifact_ref))
+
+    class ScientificRouter(FakeOperationRouter):
+        def execute(self, request):
+            result = super().execute(request)
+            if request.substep == "evidence_based_diagnosis":
+                report = _diagnosis(hypotheses=[DiagnosticHypothesis("hyp-eval", "evaluation_integrity",
+                    "Inspect the completed frozen comparison.", supporting_evidence_refs=[initial.artifact_ref],
+                    recommended_intervention_kinds=["collect_more_evidence", "repair_evaluation"], confidence=.8)])
+                report.run_id, report.lineage_id, report.stage_name = request.run_id, request.lineage_id, request.stage_name
+                return replace(result, records=(StagedOutputRecord("diagnosis_report", report.to_dict()),))
+            return result
+    router = ScientificRouter(action="continue_lineage_best")
     blob = _archive()
     s3 = FakeS3(blob)
-    reasoner = CertifiedRoleReasoner(
-        _roles(blob),
+    reasoner = CertifiedRoleReasoner(_roles(blob),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
-        VerifiedRoleAdapters(s3, "read-only-source", tmp_path / "cache"),
-        model, FileSystemArtifactStore(tmp_path / "receipts"),
-    )
-    services = with_model_backed_roles(_services(router), reasoner, BoundForRun(), enabled=True)
-    repository = JsonLineStateRepository(tmp_path / "state")
-    deps = StagedAutonomousDependencies(services=services, state_repository=repository)
+        VerifiedRoleAdapters(s3, "read-only-source", tmp_path / "cache"), model, artifacts)
+    services = with_model_backed_roles(_services(router), reasoner, ArtifactModelEvidenceBinder(evidence_store),
+                                      enabled=True, planner=ClosedLoopExperimentPlanner())
+    deps = StagedAutonomousDependencies(services=services, state_repository=repository, artifact_store=artifacts)
     orchestrator = build_orchestrator(
         state_root=tmp_path / "legacy-unused", run_id="role-model-1",
         lineage_id="model-lineage", stage_name="smoke_test",
@@ -110,11 +140,14 @@ def test_real_staged_orchestrator_invokes_all_five_explicit_model_roles(tmp_path
     rows = [r for r in repo.all(WORKFLOW_RECORD_COLLECTION) if r.get("kind") == "model_role_proposal"]
     assert len(rows) == 5
     assert {r["payload"]["role"] for r in rows} == set(model.calls)
-    assert all(r["payload"]["advisory_only"] is True for r in rows)
+    assert {r["payload"]["role"] for r in rows if r["payload"]["advisory_only"] is False} == {"planner", "diagnosis"}
+    proposals = [r["payload"] for r in repo.all(WORKFLOW_RECORD_COLLECTION) if r["kind"] == "experiment_proposal"]
+    assert proposals[0]["metadata"]["model_originated"] is True
+    assert proposals[0]["primary_variable"] == "diagnostic_measurement"
 
 
 def test_model_judge_disagreement_blocks_before_staged_action(tmp_path):
-    state, repo, model, s3 = _run(tmp_path, ModelProposals(judge_action="reject_checkpoint"))
+    state, repo, model, s3 = _run(tmp_path, ModelProposals(judge_action="rerun_same_config"))
     assert state.status == "blocked"
     assert "model_judge_disagreed_with_governed_verdict" in state.blocking_issues
     assert not any(

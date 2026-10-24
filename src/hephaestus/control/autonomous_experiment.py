@@ -332,6 +332,11 @@ class GuardedTrainingLifecycleService:
     delegate: TrainingLifecycleService
 
     def launch(self, proposal: ExperimentProposal) -> TrainingRunHandle:
+        if proposal.metadata.get("unresolved_discovery"):
+            return TrainingRunHandle(proposal.run_id, proposal.experiment_id, "not_launched", "failed",
+                issues=[ContractIssue("experiment_discovery_unresolved", "missing_evidence",
+                    "Finalize the experiment with validated discovery selections before training.", blocking=True)],
+                metadata={"launch_attempted":False})
         return self.delegate.launch(proposal)
 
     def status(self, run_id: str) -> TrainingRunHandle:
