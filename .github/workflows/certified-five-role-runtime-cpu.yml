@@ -7,6 +7,8 @@ on:
       - 'src/hephaestus/llm/**'
       - 'configs/models/hephaestus_role_mastery_runtime_v1.json'
       - 'tests/test_certified_role_inference.py'
+      - 'tests/test_model_backed_staged_roles.py'
+      - 'src/hephaestus/production/model_roles.py'
       - 'pyproject.toml'
 permissions: {contents: read}
 jobs:
@@ -23,6 +25,6 @@ jobs:
       - name: Compile runtime and validate five-role response/S3 integrity
         run: |
           python -m compileall -q src/hephaestus/llm
-          pytest -q tests/test_certified_role_inference.py tests/test_certified_role_stack.py tests/test_deterministic_role_boundary.py
+          pytest -q tests/test_certified_role_inference.py tests/test_model_backed_staged_roles.py tests/test_certified_role_stack.py tests/test_deterministic_role_boundary.py
       - name: Run complete regression suite without GPU dependencies or cloud credentials
         run: pytest -q tests/
