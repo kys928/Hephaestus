@@ -18,6 +18,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Protocol
+import platform
+from importlib.metadata import version, PackageNotFoundError
+from hephaestus.storage.base import ArtifactStore
+from hephaestus.storage.verified import canonical_bytes
+from .inference_receipts import RoleGeneration
 
 from hephaestus.control.deterministic_role_boundary import (
     DeterministicRoleContext, DeterministicRoleGate, EvidenceRegistry,
@@ -178,7 +183,7 @@ class VerifiedRoleAdapters:
 class RoleGenerator(Protocol):
     def generate(self, *, spec: CertifiedRoleModel, profile: Mapping[str, object],
                  adapter_path: Path, prompt: str, max_new_tokens: int,
-                 seed: int) -> str: ...
+                 seed: int) -> RoleGeneration: ...
 
 
 @dataclass(slots=True)
@@ -252,7 +257,7 @@ class PinnedTransformersRoleGenerator:
             raise
 
     def generate(self, *, spec: CertifiedRoleModel, profile: Mapping[str, object],
-                 adapter_path: Path, prompt: str, max_new_tokens: int, seed: int) -> str:
+                 adapter_path: Path, prompt: str, max_new_tokens: int, seed: int) -> RoleGeneration:
         if not (16 <= max_new_tokens <= 1024):
             raise ValueError("max_new_tokens outside bounded role contract")
         self._load(spec, profile, adapter_path)
@@ -285,17 +290,43 @@ class PinnedTransformersRoleGenerator:
                 return time.monotonic() >= deadline
 
         decoding = dict(profile["decoding"])
+        pad_id = getattr(self._tokenizer, "pad_token_id", None)
+        if pad_id is None:
+            pad_id = getattr(self._tokenizer, "eos_token_id", None)
+        started = time.monotonic()
         with torch.inference_mode():
             sequence = self._model.generate(
                 **encoded, **decoding, max_new_tokens=max_new_tokens,
                 stopping_criteria=StoppingCriteriaList([Deadline()]),
-                pad_token_id=getattr(self._tokenizer, "pad_token_id", None)
-                    or getattr(self._tokenizer, "eos_token_id", None),
+                pad_token_id=pad_id,
             )[0]
         if time.monotonic() >= deadline:
             raise TimeoutError("role inference exhausted 90-second hard generation window")
         continuation = sequence[prompt_len:]
-        return self._tokenizer.decode(continuation, skip_special_tokens=True).strip()
+        packages = {}
+        for package in ("torch", "transformers", "peft", "tokenizers", "huggingface-hub", "mistral-common"):
+            try:
+                packages[package] = version(package)
+            except PackageNotFoundError:
+                packages[package] = None
+        generated_ids = continuation.tolist()
+        eos = getattr(self._model.generation_config, "eos_token_id", None)
+        eos_ids = eos if isinstance(eos, list) else [eos]
+        finish = ("eos" if generated_ids and generated_ids[-1] in eos_ids else
+                  "length" if len(generated_ids) >= max_new_tokens else "completed")
+        return RoleGeneration(
+            self._tokenizer.decode(continuation, skip_special_tokens=True), finish,
+            {"rendered_prompt": self._tokenizer.decode(ids[0].tolist(), skip_special_tokens=False),
+             "input_token_ids":ids[0].tolist(), "generated_token_ids":generated_ids,
+             "tokenizer_id":spec.model_id, "tokenizer_revision":spec.revision,
+             "decoding":{**decoding, "max_new_tokens":max_new_tokens, "pad_token_id":pad_id, "eos_token_id":eos},
+             "seed":seed, "elapsed_seconds":time.monotonic()-started,
+             "python":platform.python_version(), "packages":packages,
+             "cuda_version":torch.version.cuda, "cudnn_version":torch.backends.cudnn.version(),
+             "gpu_name":torch.cuda.get_device_name(0), "device":self.device,
+             "compute_capability":list(torch.cuda.get_device_capability(0)),
+             "peak_allocated_bytes":torch.cuda.max_memory_allocated(0),
+             "deterministic_algorithms":torch.are_deterministic_algorithms_enabled()})
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,6 +339,7 @@ class ModelRoleObservation:
     prompt_sha256: str
     output_sha256: str
     action_gate: DeterministicRoleGate | None
+    inference_receipt_ref: str
     advisory_only: bool = True
 
 
@@ -319,6 +351,7 @@ class CertifiedRoleReasoner:
     contract: RoleMasteryContract
     adapters: VerifiedRoleAdapters
     generator: RoleGenerator
+    artifact_store: ArtifactStore
 
     def propose(self, task: RoleTask, registry: EvidenceRegistry, *,
                 context: DeterministicRoleContext, seed: int = 271828,
@@ -336,12 +369,36 @@ class CertifiedRoleReasoner:
             raise ValueError("role evidence is not independently verified")
         prompt = self.contract.prompt(task)
         adapter = self.adapters.materialize(spec)
-        raw = self.generator.generate(
+        generated = self.generator.generate(
             spec=spec, profile=self.contract.profile(task.role),
             adapter_path=adapter, prompt=prompt,
             max_new_tokens=max_new_tokens, seed=seed,
         )
-        answer = self.contract.parse(task.role, raw, set(refs))
+        if not isinstance(generated, RoleGeneration):
+            raise TypeError("role generator must return text with execution provenance")
+        raw = generated.text
+        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+        output_hash = hashlib.sha256(raw.encode()).hexdigest()
+        receipt = {
+            "schema":"role-inference.v1", "role":task.role, "run_id":task.run_id,
+            "lineage_id":task.lineage_id, "stage_name":task.stage_name,
+            "prompt":prompt, "raw_output":raw, "prompt_sha256":prompt_hash, "output_sha256":output_hash,
+            "model_id":spec.model_id, "base_revision":spec.revision,
+            "adapter_sha256":spec.adapter.sha256, "adapter_source":spec.adapter.s3_key,
+            "tokenizer_id":spec.model_id, "tokenizer_revision":spec.revision,
+            "profile":self.contract.profile(task.role), "max_new_tokens":max_new_tokens,
+            "seed":seed, "finish_reason":generated.finish_reason,
+            "execution":dict(generated.metadata), "generator":type(self.generator).__name__,
+            "python":platform.python_version(), "evidence_refs":refs,
+        }
+        try:
+            answer = self.contract.parse(task.role, raw, set(refs))
+        except ValueError as exc:
+            receipt.update(status="rejected", error=str(exc))
+            self.artifact_store.put_bytes(canonical_bytes(receipt), media_type="application/json")
+            raise
+        receipt.update(status="accepted", answer=answer.to_dict())
+        artifact = self.artifact_store.put_bytes(canonical_bytes(receipt), media_type="application/json")
         # Only Controller and Judge propose finite executable transitions.
         # Diagnosis, Planner, and Evaluator outputs remain advisory, even if
         # their training vocabulary uses names resembling governed actions.
@@ -354,7 +411,7 @@ class CertifiedRoleReasoner:
         return ModelRoleObservation(
             role=task.role, answer=answer, model_id=spec.model_id,
             revision=spec.revision, adapter_sha256=spec.adapter.sha256,
-            prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
-            output_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+            prompt_sha256=prompt_hash, output_sha256=output_hash,
+            inference_receipt_ref=artifact.artifact_ref,
             action_gate=gate,
         )

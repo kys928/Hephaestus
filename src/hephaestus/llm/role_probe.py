@@ -29,6 +29,8 @@ from .certified_runtime import (
     CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
 )
 from .role_contract import RoleEvidence, RoleMasteryContract, RoleTask
+from hephaestus.production.evidence import evidence_excerpt
+from hephaestus.storage.filesystem import FileSystemArtifactStore
 
 
 DEFAULT_REGISTRY = Path("configs/models/hephaestus_role_model_stack_v1.json")
@@ -56,17 +58,21 @@ def checked_cases(case_file: Path):
     for item in raws:
         if not isinstance(item, dict):
             raise ValueError("evidence entry must be an object")
-        ref, source, expected, fact = (
+        ref, source, expected = (
             str(item.get("ref") or ""), str(item.get("source_file") or ""),
-            str(item.get("sha256") or ""), str(item.get("fact") or ""),
+            str(item.get("sha256") or ""),
         )
-        if not ref or not source or not fact or ref in records:
+        if not ref or not source or ref in records:
             raise ValueError("evidence has missing or duplicate fields")
         content = Path(source).read_bytes()
         observed = hashlib.sha256(content).hexdigest()
         if len(expected) != 64 or observed != expected:
             raise ValueError(f"local source evidence SHA-256 mismatch: {ref}")
-        task_evidence.append(RoleEvidence(ref, fact))
+        source_doc = json.loads(content)
+        if not isinstance(source_doc, dict):
+            raise ValueError("probe scientific evidence must be a JSON object")
+        # Human/model-authored fact strings are not substituted for source bytes.
+        task_evidence.append(RoleEvidence(ref, evidence_excerpt(source_doc)))
         records[ref] = EvidenceRecord(
             ref=ref, kind="verified_local_source",
             run_id=run_id, lineage_id=lineage_id,
@@ -101,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         adapters=VerifiedRoleAdapters(
             client=s3, bucket=args.s3_bucket, cache_root=args.adapter_cache),
         generator=generator,
+        artifact_store=FileSystemArtifactStore(args.adapter_cache / "inference-receipts"),
     )
     try:
         for role in REQUIRED_ROLES:

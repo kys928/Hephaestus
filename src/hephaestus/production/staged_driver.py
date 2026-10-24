@@ -101,6 +101,10 @@ class StagedProductionCycleDriver:
         ):
             raise ValueError("staged action executor would duplicate the production loop action")
         deps.services.action_executor = StagedActionIntentService()
+        if deps.artifact_store is None:
+            deps.artifact_store = runtime.artifact_store
+        if state.latest_run_id and state.latest_run_id != run_id:
+            runtime.model_evidence.carry_forward(state.latest_run_id, run_id, state.lineage_id)
 
         workflow = build_staged_autonomous_orchestrator(
             workflow_id=f"workflow-{run_id}",

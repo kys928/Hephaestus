@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 import pytest
+from hephaestus.llm.inference_receipts import RoleGeneration
+from hephaestus.storage.filesystem import FileSystemArtifactStore
 
 from hephaestus.control.deterministic_role_boundary import (
     DeterministicRoleContext, EvidenceRecord, EvidenceRegistry,
@@ -64,11 +66,11 @@ class ModelProposals:
         assert profile["rule"] in prompt
         self.calls.append(spec.role)
         if spec.role == self.corrupt_role:
-            return "the model answered without a JSON decision"
+            return RoleGeneration("the model answered without a JSON decision", metadata={"test_double":True})
         v = profile["vocabulary"]
         action = ("request_recheck" if spec.role == "controller" else
                   self.judge_action if spec.role == "judge" else v["action"][0])
-        return json.dumps({
+        return RoleGeneration(json.dumps({
             "decision": v["decision"][0],
             "action": action,
             "primary_variable": v["primary_variable"][0],
@@ -76,7 +78,7 @@ class ModelProposals:
             "evidence_refs": ["verified://run-evidence"],
             "uncertainties": [],
             "rationale": "The validated evidence supports this review only.",
-        })
+        }), metadata={"test_double":True})
 
 
 def _run(tmp_path, model):
@@ -87,7 +89,7 @@ def _run(tmp_path, model):
         _roles(blob),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
         VerifiedRoleAdapters(s3, "read-only-source", tmp_path / "cache"),
-        model,
+        model, FileSystemArtifactStore(tmp_path / "receipts"),
     )
     services = with_model_backed_roles(_services(router), reasoner, BoundForRun(), enabled=True)
     repository = JsonLineStateRepository(tmp_path / "state")
@@ -138,6 +140,7 @@ def test_explicit_enable_required(tmp_path):
         _roles(blob),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
         VerifiedRoleAdapters(FakeS3(blob), "volume", tmp_path), ModelProposals(),
+        FileSystemArtifactStore(tmp_path / "receipts"),
     )
     with pytest.raises(PermissionError, match="explicit"):
         with_model_backed_roles(_services(router), reasoner, BoundForRun())

@@ -13,6 +13,8 @@ from hephaestus.evaluation.pack_loader import load_eval_pack
 from hephaestus.schemas.contract_common import ContractIssue
 from hephaestus.schemas.experiment_contract import TrainingRunHandle
 from hephaestus.storage.base import ArtifactStore
+from hephaestus.storage.filesystem import FileSystemArtifactStore
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
 from .backends import GenerationBackend, GenerationBackendError, load_generation_instructions
 from .models import (
@@ -93,6 +95,76 @@ class EvaluationGenerationService:
     pack_name: str = "semantic_behavior_v1"
     config_dir: Path = Path("configs")
     artifact_store: ArtifactStore | None = None
+
+    @property
+    def evidence_store(self) -> ArtifactStore:
+        return self.artifact_store or FileSystemArtifactStore(self.artifact_root / "immutable-evidence")
+
+    def _source_bytes(self, ref: str) -> bytes:
+        if ref.startswith("sha256:"):
+            with self.evidence_store.open(ref) as stream:
+                raw = stream.read(16 * 1024 * 1024 + 1)
+            if "sha256:" + hashlib.sha256(raw).hexdigest() != ref:
+                raise ValueError("generation source hash mismatch")
+            return raw
+        path = Path(ref).resolve()
+        if self.artifact_root.resolve() not in path.parents:
+            raise ValueError("generation evidence path escapes configured root")
+        return path.read_bytes()
+
+    def verify_completed_handle(self, run: TrainingRunHandle, expected: TrainingRunHandle) -> TrainingRunHandle:
+        """Restore only complete, authentic frozen task/seed outputs; no inference."""
+        receipt_ref = str(run.metadata.get("generation_report", {}).get("receipt_ref") or "")
+        receipt = read_verified_json(self.evidence_store, receipt_ref)
+        report = receipt["report"]
+        plan = self.plan()
+        if (run.run_id != expected.run_id or run.experiment_id != expected.experiment_id or
+                run.status != "completed" or run.checkpoint_refs != expected.checkpoint_refs or
+                report["run_id"] != expected.run_id or not expected.checkpoint_refs or
+                report["checkpoint_ref"] != expected.checkpoint_refs[-1] or
+                report["completed"] is not True or report["completion_status"] != "completed"):
+            raise ValueError("completed generation run/checkpoint identity mismatch")
+        for key in ("eval_pack_id", "eval_pack_version", "content_hash", "decoding_config",
+                    "generation_settings_id", "seed_identity"):
+            if report[key] != getattr(plan, key):
+                raise ValueError("completed generation frozen protocol mismatch")
+        if run.metadata.get("semantic_evaluation") != receipt["semantic_evaluation"]:
+            raise ValueError("persisted semantic metadata differs from verified source")
+        if hashlib.sha256(self._source_bytes(report["report_ref"])).hexdigest() != receipt["report_source_sha256"]:
+            raise ValueError("generation report source bytes changed")
+        handoff = str(report["metadata"].get("generation_handoff_ref") or "")
+        if not handoff or _file_hash(Path(handoff)) != receipt["handoff_sha256"]:
+            raise ValueError("generation checkpoint loading contract changed")
+        tasks = {(task.task_id, task.seed):task for task in plan.tasks}
+        samples = report["samples"]
+        receipts = receipt["sample_receipts"]
+        if len(samples) != len(tasks) or len(receipts) != len(tasks):
+            raise ValueError("completed generation sample count mismatch")
+        seen = set()
+        for sample, source in zip(samples, receipts, strict=True):
+            identity = (sample["task_id"], sample["seed"])
+            if identity not in tasks or identity in seen:
+                raise ValueError("completed generation has missing/duplicate task seeds")
+            seen.add(identity)
+            task = tasks[identity]
+            actual = read_verified_json(self.evidence_store, source["artifact_ref"])
+            raw = self._source_bytes(source["source_ref"])
+            if hashlib.sha256(raw).hexdigest() != source["source_sha256"]:
+                raise ValueError("generation sample source bytes changed")
+            # The stored source includes top-level generation_settings_id; the
+            # report sample stores it in metadata. Evidence-ref rewiring is IO.
+            expected_sample = {k:v for k,v in sample.items() if k != "evidence_ref"}
+            actual_sample = {k:v for k,v in actual.items()
+                             if k not in {"evidence_ref", "generation_settings_id"}}
+            if expected_sample != actual_sample:
+                raise ValueError("generation sample differs from report")
+            if (sample["sample_id"] != self._sample_identity(expected.run_id, report["checkpoint_ref"], plan, task) or
+                    sample["run_id"] != expected.run_id or sample["task_kind"] != task.task_kind or
+                    sample["prompt_hash"] != "sha256:"+hashlib.sha256(task.prompt.encode()).hexdigest() or
+                    sample["output_hash"] != "sha256:"+hashlib.sha256(sample["output"].encode()).hexdigest() or
+                    actual["generation_settings_id"] != plan.generation_settings_id):
+                raise ValueError("generation sample task/output provenance mismatch")
+        return run
 
     def plan(self) -> GenerationPlan:
         pack = load_eval_pack(self.pack_name, config_dir=self.config_dir)
@@ -318,11 +390,25 @@ class EvaluationGenerationService:
                 report.evidence_refs = sorted({*report.evidence_refs, artifact.artifact_ref})
                 _atomic_json(report_path, report.to_dict())
 
+        sample_receipts = []
+        for sample in report.samples:
+            raw = self._source_bytes(sample.evidence_ref)
+            stored = self.evidence_store.put_bytes(raw, media_type="application/json")
+            sample_receipts.append({"source_ref":sample.evidence_ref,
+                "source_sha256":hashlib.sha256(raw).hexdigest(), "artifact_ref":stored.artifact_ref})
+        receipt = {"schema":"generation-receipt.v1", "report":report.to_dict(),
+            "semantic_evaluation":report.semantic_evaluation_metadata(),
+            "sample_receipts":sample_receipts,
+            "report_source_sha256":hashlib.sha256(self._source_bytes(str(report.report_ref))).hexdigest(),
+            "handoff_sha256":_file_hash(Path(handoff_ref))}
+        evidence_receipt = self.evidence_store.put_bytes(canonical_bytes(receipt), media_type="application/json")
+
         updated = TrainingRunHandle.from_dict(run.to_dict())
         updated.metadata = dict(updated.metadata)
         updated.metadata["semantic_evaluation"] = report.semantic_evaluation_metadata()
         updated.metadata["generation_report"] = {
             "report_id": report.report_id,
+            "receipt_ref": evidence_receipt.artifact_ref,
             "report_ref": report.report_ref,
             "completion_status": report.completion_status,
             "generation_settings_id": report.generation_settings_id,

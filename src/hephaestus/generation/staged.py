@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
 from hephaestus.control.staged_state import (
     WORKFLOW_RECORD_COLLECTION,
@@ -136,27 +137,45 @@ class StagedExperimentEvaluationAdapter:
         if (run.metadata.get("semantic_evaluation") is None or
             run.metadata.get("generation_report") is None):
             return None
-        return run
+        expected = (self.generation.baseline_run if expected_run_id == self.generation.baseline_run.run_id
+                    else self.generation.candidate_run)
+        try:
+            return self.generation.service.verify_completed_handle(run, expected)
+        except (ValueError, KeyError, TypeError, OSError):
+            return None
 
     def _restore_comparison(self, request: StagedOperationRequest) -> ExperimentComparison | None:
         prior = request.prior_outputs.get("evaluator.semantic_comparison", {})
         identity = str(prior.get("comparison_id") or "").strip()
         if not identity or self.record_repository is None:
             return None
-        for row in reversed(self.record_repository.all(WORKFLOW_RECORD_COLLECTION)):
-            if (row.get("workflow_id") != request.workflow_id or
-                row.get("substep") != "semantic_comparison" or
-                row.get("kind") != "experiment_comparison"):
-                continue
-            payload = row.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            if payload.get("comparison_id") != identity:
-                continue
-            comparison = ExperimentComparison.from_dict(payload)
-            if comparison.experiment_id != self.proposal.experiment_id:
+        try:
+            receipt = read_verified_json(self.generation.service.evidence_store,
+                                        str(prior.get("comparison_receipt_ref") or ""))
+            comparison = ExperimentComparison.from_dict(receipt["comparison"])
+            if comparison.comparison_id != identity or comparison.experiment_id != self.proposal.experiment_id:
                 return None
-            return comparison
+            baseline = self._completed_handle(request, "baseline_generation", self.generation.baseline_run.run_id)
+            candidate = self._completed_handle(request, "candidate_generation", self.generation.candidate_run.run_id)
+            if baseline is None or candidate is None:
+                return None
+            proposal = ExperimentProposal(**self.proposal.to_dict())
+            proposal.baseline_ref = baseline.run_id
+            if receipt["proposal"] != proposal.to_dict():
+                return None
+            expected_refs = [r.metadata["generation_report"]["receipt_ref"] for r in (baseline, candidate)]
+            if receipt["generation_receipts"] != expected_refs:
+                return None
+            # Recompute scoring, never generation, from the verified frozen samples.
+            if self.evaluator.compare(proposal, [baseline, candidate]).to_dict() != comparison.to_dict():
+                return None
+            for row in reversed(self.record_repository.all(WORKFLOW_RECORD_COLLECTION)):
+                if (row.get("workflow_id") == request.workflow_id and
+                        row.get("substep") == "semantic_comparison" and row.get("kind") == "experiment_comparison" and
+                        isinstance(row.get("payload"), dict) and row["payload"].get("comparison_id") == identity):
+                    return comparison if row["payload"] == comparison.to_dict() else None
+        except (ValueError, KeyError, TypeError, OSError):
+            return None
         return None
 
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
@@ -199,9 +218,19 @@ class StagedExperimentEvaluationAdapter:
                     blocking_issues=("verified_generation_handle_missing",),
                     resumable=True,
                 )
+            try:
+                self.generation.service.verify_completed_handle(baseline, self.generation.baseline_run)
+                self.generation.service.verify_completed_handle(candidate, self.generation.candidate_run)
+            except (ValueError, KeyError, TypeError, OSError):
+                return StagedOperationResult(status="blocked", blocking_issues=("generation_artifact_verification_failed",), resumable=False)
             proposal = ExperimentProposal(**self.proposal.to_dict())
             proposal.baseline_ref = baseline.run_id
             self.comparison = self.evaluator.compare(proposal, [baseline, candidate])
+            receipt = self.generation.service.evidence_store.put_bytes(canonical_bytes({
+                "schema":"comparison-receipt.v1", "comparison":self.comparison.to_dict(),
+                "proposal":proposal.to_dict(),
+                "generation_receipts":[r.metadata["generation_report"]["receipt_ref"] for r in (baseline, candidate)]
+            }), media_type="application/json")
             status = (
                 "blocked"
                 if self.comparison.primary_outcome == "invalid_comparison"
@@ -219,6 +248,7 @@ class StagedExperimentEvaluationAdapter:
                 ),
                 metadata={
                     "comparison_id": self.comparison.comparison_id,
+                    "comparison_receipt_ref": receipt.artifact_ref,
                     "primary_outcome": self.comparison.primary_outcome,
                     "recommendation": self.comparison.recommendation,
                     "eval_pack_id": self.comparison.metadata.get("eval_pack_id"),

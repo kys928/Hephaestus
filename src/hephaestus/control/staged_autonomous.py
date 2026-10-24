@@ -761,6 +761,7 @@ class GovernedStagedOrchestrator:
             "workflow_id": self.workflow_id,
             "run_id": self.run_id,
             "lineage_id": self.lineage_id,
+            "stage_name": self.stage_name,
             "phase": phase.value,
             "substep": substep,
             "operation_id": operation_id,
@@ -768,6 +769,10 @@ class GovernedStagedOrchestrator:
             "kind": kind,
             "payload": payload,
         }
+        if self.dependencies.artifact_store is not None:
+            from hephaestus.storage.verified import canonical_bytes
+            artifact = self.dependencies.artifact_store.put_bytes(canonical_bytes(wrapped), media_type="application/json")
+            wrapped["artifact_ref"] = artifact.artifact_ref
         self.dependencies.state_repository.append(WORKFLOW_RECORD_COLLECTION, wrapped)
         if self.dependencies.record_sink is not None:
             self.dependencies.record_sink.append(kind, payload)
