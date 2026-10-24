@@ -15,6 +15,8 @@ import shutil
 import tarfile
 import tempfile
 import time
+import re
+from uuid import uuid4
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Protocol
@@ -22,6 +24,7 @@ import platform
 from importlib.metadata import version, PackageNotFoundError
 from hephaestus.storage.base import ArtifactStore
 from hephaestus.storage.verified import canonical_bytes
+from hephaestus.state.single_writer import single_writer
 from .inference_receipts import RoleGeneration
 
 from hephaestus.control.deterministic_role_boundary import (
@@ -47,6 +50,19 @@ def _sha_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_adapter_base(spec: CertifiedRoleModel, config: Mapping[str, object]) -> None:
+    if config.get("peft_type") != "LORA":
+        raise ValueError("unexpected PEFT adapter type")
+    base = str(config.get("base_model_name_or_path") or "").replace("\\", "/").rstrip("/")
+    parts = PurePosixPath(base).parts
+    slug = "models--" + spec.model_id.replace("/", "--")
+    snapshot = len(parts) >= 3 and parts[-3:] == (slug, "snapshots", spec.revision)
+    if base != spec.model_id and not snapshot:
+        raise ValueError("adapter base-model identity does not match certified registry")
+    if config.get("revision") not in {None, "", spec.revision}:
+        raise ValueError("adapter base revision does not match certified registry")
+
+
 class S3GetObject(Protocol):
     def get_object(self, *, Bucket: str, Key: str) -> Mapping[str, Any]: ...
 
@@ -62,12 +78,24 @@ class VerifiedRoleAdapters:
     def materialize(self, spec: CertifiedRoleModel) -> Path:
         if not self.bucket.strip():
             raise ValueError("S3 volume bucket is missing")
-        target = self.cache_root / spec.role / spec.adapter.sha256
-        adapter = target / "adapter"
-        archive = target / "selected-adapter.tar.gz"
-        receipt = target / "receipt.json"
-        if self._cache_valid(spec, adapter, archive, receipt):
-            return adapter
+        if spec.role not in {"controller", "diagnosis", "planner", "evaluator", "judge"} or not re.fullmatch(r"[0-9a-f]{64}", spec.adapter.sha256):
+            raise ValueError("invalid certified adapter cache identity")
+        root = self.cache_root / spec.role / spec.adapter.sha256
+        with single_writer(root, "materialize", blocking=True):
+            pointer = root / "current.json"
+            try:
+                generation = json.loads(pointer.read_text())["generation"]
+                if not re.fullmatch(r"[0-9a-f]{32}", generation):
+                    raise ValueError("invalid adapter cache generation")
+                target = root / "generations" / generation
+                if self._cache_valid(spec, target / "adapter", target / "selected-adapter.tar.gz", target / "receipt.json"):
+                    return target / "adapter"
+            except (OSError, ValueError, KeyError, TypeError):
+                pass  # A new immutable generation repairs the cache; old paths stay in place.
+            return self._materialize_generation(spec, root, pointer)
+
+    def _materialize_generation(self, spec: CertifiedRoleModel, root: Path, pointer: Path) -> Path:
+        target = root / "generations" / uuid4().hex
         self.cache_root.mkdir(parents=True, exist_ok=True)
         work = Path(tempfile.mkdtemp(prefix=f".{spec.role}-", dir=self.cache_root))
         try:
@@ -136,10 +164,9 @@ class VerifiedRoleAdapters:
             if not {"adapter_config.json", "adapter_model.safetensors"}.issubset(checksums):
                 raise ValueError("PEFT adapter configuration or safetensors weights missing")
             adapter_cfg = json.loads((extracted / "adapter_config.json").read_text())
-            if not isinstance(adapter_cfg, dict) or adapter_cfg.get("peft_type") != "LORA":
-                raise ValueError("unexpected PEFT adapter type")
-            if target.exists():
-                shutil.rmtree(target)
+            if not isinstance(adapter_cfg, dict):
+                raise ValueError("unexpected PEFT adapter configuration")
+            validate_adapter_base(spec, adapter_cfg)
             target.parent.mkdir(parents=True, exist_ok=True)
             (work / "receipt.json").write_text(json.dumps({
                 "role": spec.role, "model_id": spec.model_id, "revision": spec.revision,
@@ -147,6 +174,17 @@ class VerifiedRoleAdapters:
                 "archive_bytes": spec.adapter.bytes, "files": checksums,
             }, sort_keys=True), encoding="utf-8")
             os.replace(work, target)
+            # Atomic publication changes only a small pointer. No reader's
+            # immutable adapter path is deleted, renamed or overwritten.
+            with tempfile.NamedTemporaryFile(dir=root, mode="wb", delete=False) as handle:
+                temporary = Path(handle.name)
+                handle.write(canonical_bytes({"generation":target.name}))
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.replace(temporary, pointer)
+            finally:
+                temporary.unlink(missing_ok=True)
             return target / "adapter"
         finally:
             if work.exists():
@@ -167,8 +205,38 @@ class VerifiedRoleAdapters:
                 or _sha_file(archive) != spec.adapter.sha256):
                 return False
             files = doc["files"]
-            if not isinstance(files, dict) or not files:
+            if not isinstance(files, dict) or not {"adapter_config.json", "adapter_model.safetensors"} <= set(files):
                 return False
+            # A mutable receipt cannot vouch for its own checksums. Recover the
+            # expected file hashes from the independently pinned archive bytes.
+            authoritative = {}
+            with tarfile.open(archive, "r:gz") as bundle:
+                members = bundle.getmembers()
+                if len(members) > MAX_ARCHIVE_MEMBERS:
+                    return False
+                total = 0
+                for member in members:
+                    path = PurePosixPath(member.name)
+                    if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] != "adapter":
+                        return False
+                    if member.isdir():
+                        continue
+                    if not member.isfile() or len(path.parts) != 2 or path.name in authoritative:
+                        return False
+                    total += member.size
+                    if total > MAX_EXPANDED_ADAPTER_BYTES:
+                        return False
+                    stream = bundle.extractfile(member)
+                    if stream is None:
+                        return False
+                    digest = hashlib.sha256()
+                    with stream:
+                        for chunk in iter(lambda:stream.read(1024*1024), b""):
+                            digest.update(chunk)
+                    authoritative[path.name] = digest.hexdigest()
+            if files != authoritative or {p.name for p in adapter.iterdir()} != set(files):
+                return False
+            validate_adapter_base(spec, json.loads((adapter / "adapter_config.json").read_text()))
             return all(
                 isinstance(name, str) and PurePosixPath(name).name == name
                 and not (adapter / name).is_symlink()
@@ -176,7 +244,7 @@ class VerifiedRoleAdapters:
                 and _sha_file(adapter / name) == sha
                 for name, sha in files.items()
             )
-        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        except (OSError, ValueError, KeyError, TypeError, tarfile.TarError):
             return False
 
 
@@ -192,7 +260,7 @@ class PinnedTransformersRoleGenerator:
 
     hf_cache_dir: Path
     device: str = "cuda:0"
-    _loaded_identity: tuple[str, str, str] | None = field(default=None, init=False)
+    _loaded_identity: tuple[str, str, str, str, str] | None = field(default=None, init=False)
     _model: Any = field(default=None, init=False, repr=False)
     _tokenizer: Any = field(default=None, init=False, repr=False)
 
@@ -209,7 +277,7 @@ class PinnedTransformersRoleGenerator:
             pass
 
     def _load(self, spec: CertifiedRoleModel, profile: Mapping[str, object], adapter_path: Path) -> None:
-        identity = (spec.role, spec.revision, spec.adapter.sha256)
+        identity = (spec.role, spec.model_id, spec.revision, spec.adapter.sha256, str(adapter_path.resolve()))
         if self._loaded_identity == identity:
             return
         self.close()
@@ -294,6 +362,7 @@ class PinnedTransformersRoleGenerator:
         if pad_id is None:
             pad_id = getattr(self._tokenizer, "eos_token_id", None)
         started = time.monotonic()
+        torch.cuda.reset_peak_memory_stats(0)
         with torch.inference_mode():
             sequence = self._model.generate(
                 **encoded, **decoding, max_new_tokens=max_new_tokens,

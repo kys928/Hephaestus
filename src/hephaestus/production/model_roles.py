@@ -31,6 +31,8 @@ class ModelEvidenceBinder(Protocol):
 
     def diagnosis_for(self, request: StagedOperationRequest) -> DiagnosisReport: ...
 
+    def verify_refs(self, request: StagedOperationRequest, refs: list[str]) -> set[str]: ...
+
 
 @dataclass(slots=True)
 class ModelBackedStage:
@@ -49,14 +51,13 @@ class ModelBackedStage:
                 receipt["lineage_id"] != request.lineage_id or receipt["answer"] != doc["selection"]["model_decision"]):
             raise ValueError("selected intervention model receipt identity mismatch")
         selection = ModelInterventionSelection.from_dict(doc["selection"])
-        # Recheck original source bytes, including sources omitted from the next
-        # bounded model context. They retain their source-run provenance.
-        for ref in selection.evidence_refs:
-            source = read_verified_json(self.reasoner.artifact_store, ref)
-            if source["lineage_id"] != request.lineage_id:
-                raise ValueError("selected intervention scientific source lineage mismatch")
+        answer = self.reasoner.contract.parse("planner", receipt["raw_output"], set(receipt["evidence_refs"]))
+        expected = planner_selection(answer, selection.inference_receipt_ref)
+        if expected.to_dict() != selection.to_dict():
+            raise ValueError("selected intervention does not derive from the raw model decision")
+        verified_refs = self.evidence.verify_refs(request, selection.evidence_refs)
         diagnosis = self.evidence.diagnosis_for(request)
-        chosen = self.planner.admit_model_selection(diagnosis, selection, set(selection.evidence_refs))
+        chosen = self.planner.admit_model_selection(diagnosis, selection, verified_refs)
         if chosen.to_dict() != doc["intervention"]:
             raise ValueError("selected intervention changed since deterministic admission")
         return diagnosis, chosen

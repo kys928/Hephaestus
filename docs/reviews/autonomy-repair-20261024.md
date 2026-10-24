@@ -124,3 +124,96 @@ until actual validated selections are supplied to the existing planner/coordinat
 finalization interface. A forged `approved` status cannot launch an unresolved
 design through the guarded training service. This repair does not establish a
 live, fully composed autonomous training campaign or real model reasoning quality.
+
+## External allocation, adapter publication and final boundary review
+
+- P0-04 **confirmed and reproduced**: provider acceptance followed by process
+  death left no persisted external ID. The existing RunPod adapter now writes a
+  durable intent first, attaches stable operation/request markers, discovers and
+  validates existing resources after uncertainty, and refuses another POST.
+  Missing/duplicate/mismatched resources receive bounded reconciliation, then
+  require operator review. Neither a timeout nor an empty listing proves that
+  allocation failed. Intent records contain hashes/identities, never API keys or
+  environment values. Provider receipt write failures follow the same path.
+- Hard-stop testing found an **additional actual defect**: a persisted `running`
+  workflow could inherit `resumable=false` from the previous completed step and
+  remain permanently stuck. In-flight steps are now restartable. Provider
+  uncertainty has an explicit interrupted/resumable control result, with the
+  same stable staged operation identity; exhaustion blocks further progress.
+- P1-09 **confirmed**: adapter replacement could delete a directory during model
+  loading. Materialization now has a process-safe lock, immutable generation
+  paths and atomic pointer publication. Previously returned paths are retained,
+  including corrupt generations. No background garbage collection may remove
+  them while loaders run. Checksums in a mutable cache receipt are independently
+  checked against the SHA-pinned archive; editing weights AND the receipt fails.
+- P1-12 **remaining compatibility repair implemented**: PEFT configuration must
+  match the certified base model and revision. Both repository identifiers and
+  original HF snapshot paths are supported, including legitimate null revision
+  fields when the pinned snapshot/archive establishes identity. Substitution or
+  wrong revisions block before inference. All five synthetic CPU archives now
+  declare their actual role-specific base identities.
+- Final review strengthened P0-02: approval decisions pin the exact reviewed
+  request digest. Promotion rehashes the existing finalized checkpoint manifest,
+  reads the active stage and independently frozen eval pack, rechecks scorecard
+  identities/metrics/thresholds, recomputes deterministic gates and applies frozen
+  repeatability/certification requirements. Caller flags cannot override them.
+  Prepared but unapplied actions recheck authorization on restart; already-applied
+  transitions only finish journal/mirror reconciliation.
+- Final review strengthened P0-01/P0-03: using a selected plan re-derives its domain
+  choice from the preserved raw model output and rechecks cited source bindings.
+  Evidence supersession is durable; a newly bound replacement is available for
+  future context while the retired source cannot authorize the old plan.
+
+Final local validation: **563 passed, 6 skipped**, plus `git diff --check`, Python
+compilation and the independent frozen-source contract verifier. Cross-process
+cache tests publish one complete generation with one download. A real staged
+orchestrator is reconstructed after simulated remote acceptance and sends only
+one provider POST. These are real control/persistence/artifact implementations
+against deterministic provider/model doubles, not live GPU or scientific trials.
+
+## Per-finding adjudication and proof
+
+All twelve findings were independently checked against source and callers. The
+original frozen role rules were correct; the defect was missing integrity guards,
+not an observed preexisting change to their wording.
+
+| Finding | Verdict / root cause | Repair and principal proof | Remaining validation boundary |
+| --- | --- | --- | --- |
+| P0-01 Planner advisory only | Confirmed; model output did not enter selection | Existing Planner admits translated proposals; `test_changing_model_selection_changes_the_downstream_experiment` | Actual-weight reasoning and full campaign composition |
+| P0-02 Caller authorization claims | Confirmed; raw strings/boolean granted transitions | Authoritative scoped/digest-bound grants and recomputed gates; `test_fabricated_approval_reference_cannot_authorize_branch`, adverse certification tests | Operator store/access controls remain trusted deployment authority |
+| P0-03 No production binder | Confirmed; tested binder was synthetic | Actual source-byte binding and lifecycle; `test_production_binder_derives_context_from_verified_source_and_retains_run_provenance`, supersession tests | Live S3 campaign ingestion not exercised |
+| P0-04 Duplicate remote allocation | Confirmed; post-acceptance/pre-receipt window | Durable intent and reconciliation; `test_staged_controller_recovers_acceptance_window_with_same_operation_identity` | Live provider behavior and durable mounted state deployment |
+| P0-05 Metadata-only restoration | Confirmed; sample/report bytes not re-read | Immutable generation/comparison receipts and rescoring; `test_restored_generation_requires_authentic_complete_artifact_bytes` | Real generated scientific corpus not certified |
+| P1-06 Inference after side effects | Confirmed for proposal stages | Proposal/admission precede execution; `test_invalid_controller_model_cannot_execute_its_delegate` | Observation delegates must keep their non-mutation contract |
+| P1-07 Vocabulary mismatch | Confirmed; noop missing; continuation variable differed | Explicit non-execution/translation; `test_controller_noop_is_a_valid_non_executable_outcome`, complete Planner vocabulary test | No model vocabulary or action registry expansion |
+| P1-08 Missing scientific dependencies | Confirmed; empty adapters/query | Actual durable composition; resumed experiment-memory and bound-diagnosis tests | Old unsealed rows cannot become scientific failure proof |
+| P1-09 Cache race | Confirmed under concurrent materializers | Immutable publication/locking; `test_concurrent_processes_publish_one_complete_adapter_generation` and interrupted extraction | Old generations require controlled offline cleanup |
+| P1-10 Missing inference replay | Confirmed; hashes lacked preserved inputs/outputs | Immutable typed receipts; `test_role_inference_receipt_replays_exact_prompt_raw_output_and_decision` | Actual GPU environment/decoding compatibility remains unmeasured |
+| P1-11 Incomplete writer recovery | Confirmed; separate stores and no ownership fence | Kernel-owned single writer, startup reconciliation, expiry recheck; cross-process and crash tests | No multi-host transactional claim |
+| P1-12 Unpinned contract/base compatibility | Confirmed guard gap; baseline text matched training | Canonical pin, independent frozen-source verifier, adapter/base/revision tests | HF base-weight byte authenticity and actual PEFT loading remain unproven |
+
+## Reviewable changes and deployment blockers
+
+The repair series is stacked on the existing draft #82/#81, without merging either:
+#83 governance, #84 evidence, #85 model selection/memory, then the external
+execution/cache/final-verification repair. Every stage has CPU regression evidence.
+No production registry flags, credentials, frozen packs or configuration policies
+were changed. Positive promotion tests use explicitly synthetic checkpoint bytes
+and an isolated temporary approved profile; they never modify repository policy.
+
+The stricter boundary intentionally refuses production certification through an
+unhashed legacy eval pack. A real campaign needs an explicitly approved, correctly
+hashed certification profile and genuinely unseen holdouts. That approval is not
+manufactured by this repair.
+
+Additional verified deployment issue: the existing provider contract/configuration
+uses REST v1. RunPod's [official overview](https://docs.runpod.io/api-reference/overview)
+announces its retirement on **15 November 2026**. The allocation repair preserves
+that existing API contract; a separately reviewed v2 migration is required before
+production deployment. Reconciliation fields were checked against RunPod's
+[official list-Pods contract](https://docs.runpod.io/api-reference/pods/GET/pods).
+
+Outstanding system milestones remain real five-model GPU inference validation,
+governed PEFT continuation, complete durable campaign composition, independent
+scientific certification, transactional role activation/rollback and an actual
+self-repair demonstration. Nothing in this series proves those milestones.

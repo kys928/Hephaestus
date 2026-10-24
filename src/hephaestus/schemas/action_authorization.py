@@ -15,3 +15,4 @@ class ActionAuthorizationScope(JsonSchema):
     child_lineage_id: str | None = None
     eval_report_ref: str | None = None
     data_manifest_ref: str | None = None
+    checkpoint_manifest_hash: str | None = None

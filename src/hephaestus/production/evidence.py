@@ -32,6 +32,7 @@ class ArtifactModelEvidenceBinder:
     maximum_context_chars: int = 10_000
 
     def _workflow_sources(self, run_id: str, lineage_id: str):
+        superseded = self.store.superseded_refs(run_id, lineage_id)
         for row in self.store.repository.all(WORKFLOW_RECORD_COLLECTION):
             if row.get("run_id") != run_id or row.get("lineage_id") != lineage_id:
                 continue
@@ -40,6 +41,8 @@ class ArtifactModelEvidenceBinder:
             ref = str(row.get("artifact_ref") or "")
             if not ref:
                 raise ValueError("workflow source lacks immutable evidence receipt")
+            if ref in superseded:
+                continue
             binding = ScientificEvidenceBinding(str(row["record_id"]), run_id, run_id,
                 lineage_id, str(row["stage_name"]), str(row["kind"]), ref)
             source = self.store.resolve(binding)
@@ -55,6 +58,24 @@ class ArtifactModelEvidenceBinder:
         for binding in rows:
             key = hashlib.sha256(canonical_bytes([target_run, binding.artifact_ref])).hexdigest()[:24]
             self.store.register(replace(binding, binding_id=f"binding-{key}", target_run_id=target_run))
+
+    def verify_refs(self, request: StagedOperationRequest, refs: list[str]) -> set[str]:
+        bindings = [*self.store.for_run(request.run_id, request.lineage_id),
+                    *self._workflow_sources(request.run_id, request.lineage_id)]
+        requested = set(refs)
+        if requested.intersection(self.store.superseded_refs(request.run_id, request.lineage_id)):
+            raise ValueError("scientific source was superseded after model proposal admission")
+        resolved = set()
+        for binding in bindings:
+            if binding.artifact_ref not in requested:
+                continue
+            self.store.resolve(binding)
+            if binding.stage_name != request.stage_name:
+                raise ValueError("scientific source stage changed since proposal admission")
+            resolved.add(binding.artifact_ref)
+        if requested != resolved:
+            raise ValueError("scientific source is no longer bound to this campaign run")
+        return resolved
 
     def diagnosis_for(self, request: StagedOperationRequest) -> DiagnosisReport:
         bindings = [*self.store.for_run(request.run_id, request.lineage_id),

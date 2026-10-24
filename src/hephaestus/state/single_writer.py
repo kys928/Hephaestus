@@ -19,7 +19,7 @@ class WriterBusyError(RuntimeError):
 
 
 @contextmanager
-def single_writer(root: Path, name: str = "lineage"):
+def single_writer(root: Path, name: str = "lineage", *, blocking: bool = False):
     import fcntl  # Fail closed on platforms without process-safe flock.
 
     root = root.resolve()
@@ -27,7 +27,7 @@ def single_writer(root: Path, name: str = "lineage"):
     path = str(root / f".{name}-writer.lock")
     with _guard:
         lock = _locks.setdefault(path, threading.RLock())
-    if not lock.acquire(blocking=False):
+    if not lock.acquire(blocking=blocking):
         raise WriterBusyError("state directory already has an active writer")
     held = getattr(_held, "locks", {})
     _held.locks = held
@@ -37,7 +37,7 @@ def single_writer(root: Path, name: str = "lineage"):
             return
         with open(path, "a+b") as stream:
             try:
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
             except BlockingIOError as exc:
                 raise WriterBusyError("state directory already has an active writer") from exc
             token = uuid4().hex

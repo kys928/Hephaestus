@@ -17,7 +17,12 @@ from hephaestus.providers.models.role_stack import REQUIRED_ROLES
 
 
 # Base identities independently recovered from the frozen training config.
-BASE_IDENTITIES = {'controller': ('Qwen/Qwen3-4B-Instruct-2507', 'cdbee75f17c01a7cc42f958dc650907174af0554'), 'diagnosis': ('mistralai/Ministral-3-3B-Reasoning-2512', '4a36357c811bf511a7b625d132e12f22408aac91'), 'planner': ('mistralai/Ministral-3-8B-Reasoning-2512', '81eaece1948f3875421d9a45bc55487d10e2d894'), 'evaluator': ('ibm-granite/granite-3.3-8b-instruct', '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b'), 'judge': ('microsoft/Phi-4-mini-instruct', 'cfbefacb99257ffa30c83adab238a50856ac3083')}
+BASE_IDENTITIES = {'controller': ('Qwen/Qwen3-4B-Instruct-2507', 'cdbee75f17c01a7cc42f958dc650907174af0554'),
+ 'diagnosis': ('mistralai/Ministral-3-3B-Reasoning-2512',
+               '4a36357c811bf511a7b625d132e12f22408aac91'),
+ 'planner': ('mistralai/Ministral-3-8B-Reasoning-2512', '81eaece1948f3875421d9a45bc55487d10e2d894'),
+ 'evaluator': ('ibm-granite/granite-3.3-8b-instruct', '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b'),
+ 'judge': ('microsoft/Phi-4-mini-instruct', 'cfbefacb99257ffa30c83adab238a50856ac3083')}
 
 
 KEYS = ("decision", "action", "primary_variable", "confidence",

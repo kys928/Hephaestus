@@ -116,7 +116,7 @@ def _run(tmp_path, model):
                 return replace(result, records=(StagedOutputRecord("diagnosis_report", report.to_dict()),))
             return result
     router = ScientificRouter(action="continue_lineage_best")
-    blob = _archive()
+    blob = {role:_archive(role=role) for role in ("controller", "diagnosis", "planner", "evaluator", "judge")}
     s3 = FakeS3(blob)
     reasoner = CertifiedRoleReasoner(_roles(blob),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),

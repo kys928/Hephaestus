@@ -81,6 +81,21 @@ class GovernedActionExecutor:
             current = LineageState(lineage_id=str(previous["lineage_id"]), stage_name="smoke_test").to_dict()
         if current not in (before, after):
             raise RuntimeError("lineage diverged since prepared action; refusing overwrite")
+        if current == before:
+            action = str(previous["effective_action"])
+            policy = self.approval_policy or ApprovalPolicy()
+            boundary = evaluate_action_boundary(action)
+            outcome = policy.decide(action, str(before["stage_name"]), str(before["trust_level"]))
+            if boundary["requires_approval"] or _approval_required_by_policy(outcome.outcome):
+                # Prepared is not permission to mutate later after revocation,
+                # expiry, policy drift or checkpoint corruption. Already-applied
+                # after-states only need journal/mirror completion.
+                scope = previous.get("authorization", {}).get("scope", {})
+                ActionAuthorizer(self.state_root, policy, self.artifact_store).verify(
+                    approval_ref=str(previous.get("approval_ref") or ""), action=action,
+                    run_id=str(previous["run_id"]), current=before,
+                    checkpoint_ref=previous.get("checkpoint_ref"),
+                    child_lineage_id=scope.get("child_lineage_id"))
         child = previous.get("child_after")
         if child is not None:
             if not isinstance(child, dict) or not child.get("lineage_id"):
