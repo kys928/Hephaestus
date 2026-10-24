@@ -196,3 +196,44 @@ def test_rollback_requires_separate_authority_and_restores_frozen_role(tmp_path)
     again = manager.rollback(lineage_id="L", run_id="rollback-run",
                              approval_ref="rollback-grant", simulated=True)
     assert again == event
+
+
+def test_rolled_back_activation_cannot_be_replayed_as_current(tmp_path):
+    manager, checkpoint = _setup(tmp_path)
+    probe = SyntheticProbe()
+    first = manager.activate(lineage_id="L", run_id="activation-run",
+        checkpoint_ref=checkpoint, approval_ref="activation-grant",
+        generator=probe, simulated=True)
+    grant_for_lineage(tmp_path, "L", "rollback-run",
+        "rollback_active_role", None, "rollback-grant")
+    manager.rollback(lineage_id="L", run_id="rollback-run",
+        approval_ref="rollback-grant", simulated=True)
+    with pytest.raises(PermissionError, match="superseded or rolled back"):
+        manager.activate(lineage_id="L", run_id="activation-run",
+            checkpoint_ref=checkpoint, approval_ref="activation-grant",
+            generator=probe, simulated=True)
+    _, path = manager.resolve()
+    assert path is None
+    assert len(probe.calls) == 1
+
+
+def test_reactivation_after_rollback_can_rollback_again_to_frozen_original(tmp_path):
+    manager, checkpoint = _setup(tmp_path)
+    manager.activate(lineage_id="L", run_id="activation-run",
+        checkpoint_ref=checkpoint, approval_ref="activation-grant",
+        generator=SyntheticProbe(), simulated=True)
+    grant_for_lineage(tmp_path, "L", "rollback-run",
+        "rollback_active_role", None, "rollback-grant")
+    manager.rollback(lineage_id="L", run_id="rollback-run",
+        approval_ref="rollback-grant", simulated=True)
+    grant_for_lineage(tmp_path, "L", "activation-run-2",
+        "activate_role_adapter", checkpoint, "activation-grant-2")
+    manager.activate(lineage_id="L", run_id="activation-run-2",
+        checkpoint_ref=checkpoint, approval_ref="activation-grant-2",
+        generator=SyntheticProbe(), simulated=True)
+    grant_for_lineage(tmp_path, "L", "rollback-run-2",
+        "rollback_active_role", None, "rollback-grant-2")
+    manager.rollback(lineage_id="L", run_id="rollback-run-2",
+        approval_ref="rollback-grant-2", simulated=True)
+    _, path = manager.resolve()
+    assert path is None
