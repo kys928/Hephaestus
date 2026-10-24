@@ -104,10 +104,11 @@ class RoleMasteryContract:
             raise ValueError("evidence identifiers must be nonempty and unique")
         if any(not x.fact or len(x.fact) > 3000 for x in task.evidence):
             raise ValueError("evidence facts must be nonempty and bounded")
-        # Encode facts as JSON strings so untrusted newline content cannot
-        # escape its evidence bullet into a spoofed control instruction.
-        evidence = "\n".join(f"- {e.ref}: {json.dumps(e.fact, ensure_ascii=False)}"
-                             for e in task.evidence)
+        # Preserve the original training bullet format, without allowing
+        # untrusted newlines to spoof another evidence item or control section.
+        evidence = "\\n".join(
+            f"- {e.ref}: {' '.join(e.fact.splitlines())}" for e in task.evidence
+        )
         v = cfg["vocabulary"]
         return (
             f"You are the Hephaestus {task.role.upper()} specialist.\n\n"
