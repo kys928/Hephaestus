@@ -21,3 +21,19 @@ jobs:
       - run: python -m pip install -e '.[test]'
       - run: python scripts/verify_frozen_role_contract.py
       - run: python -m pytest -q
+  real-cpu-peft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      HF_HUB_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+      - run: python -m pip install -e '.[test,peft-training]'
+      - name: Actual local tiny-model CPU optimization, resume and generation
+        run: python -m pytest tests/test_peft_training_lifecycle.py -q -m real_cpu
