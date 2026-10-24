@@ -45,7 +45,7 @@ def _checkpoint(tmp_path, model_id, revision):
     }))
     (adapter / "adapter_model.safetensors").write_bytes(b"synthetic-untrained-weights")
     paths = {
-        p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        p.relative_to(folder).as_posix(): "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
         for p in adapter.rglob("*") if p.is_file()
     }
     digest = "sha256:" + hashlib.sha256(json.dumps(
