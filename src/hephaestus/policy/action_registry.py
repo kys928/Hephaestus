@@ -71,6 +71,8 @@ _ACTION_DESCRIPTIONS = {
     "modify_data_policy": "Update data policy reference/policy.",
     "modify_eval_policy": "Update evaluation policy reference/policy.",
     "promote_checkpoint": "Promote candidate checkpoint into lineage truth.",
+    "activate_role_adapter": "Switch active Evaluator adapter after separate high-risk authorization and successful role health check.",
+    "rollback_active_role": "Restore the previous active Evaluator adapter under separate high-risk authorization.",
     "mark_lineage_stable": "Mark lineage as stable in persistent state.",
     "mark_lineage_poisoned": "Mark lineage as poisoned/unsafe.",
     "quarantine_lineage": "Quarantine lineage from further autonomous operations.",
@@ -125,6 +127,8 @@ APPROVAL_REQUIRED_ACTIONS = [
 
 HIGH_RISK_APPROVAL_REQUIRED_ACTIONS = [
     "promote_checkpoint",
+    "activate_role_adapter",
+    "rollback_active_role",
     "mark_lineage_stable",
     "mark_lineage_poisoned",
     "quarantine_lineage",
