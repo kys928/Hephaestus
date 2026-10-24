@@ -237,3 +237,19 @@ def test_reactivation_after_rollback_can_rollback_again_to_frozen_original(tmp_p
         approval_ref="rollback-grant-2", simulated=True)
     _, path = manager.resolve()
     assert path is None
+
+
+def test_active_role_resolution_does_not_rehash_optimizer_training_state(tmp_path, monkeypatch):
+    manager, checkpoint = _setup(tmp_path)
+    manager.activate(lineage_id="L", run_id="activation-run",
+        checkpoint_ref=checkpoint, approval_ref="activation-grant",
+        generator=SyntheticProbe(), simulated=True)
+
+    import hephaestus.providers.models.active_evaluator as activation_module
+    def expensive_full_checkpoint_validation_is_forbidden(_):
+        raise AssertionError("per-inference runtime must not rehash full optimizer state")
+    monkeypatch.setattr(activation_module, "validate_checkpoint_manifest",
+                        expensive_full_checkpoint_validation_is_forbidden)
+    spec, path = manager.resolve()
+    assert path == Path(checkpoint) / "model"
+    assert spec.adapter.bytes > 0
