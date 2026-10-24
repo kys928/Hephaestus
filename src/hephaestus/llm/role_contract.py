@@ -106,7 +106,7 @@ class RoleMasteryContract:
             raise ValueError("evidence facts must be nonempty and bounded")
         # Preserve the original training bullet format, without allowing
         # untrusted newlines to spoof another evidence item or control section.
-        evidence = "\\n".join(
+        evidence = "\n".join(
             f"- {e.ref}: {' '.join(e.fact.splitlines())}" for e in task.evidence
         )
         v = cfg["vocabulary"]
