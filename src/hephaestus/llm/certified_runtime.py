@@ -421,11 +421,18 @@ class CertifiedRoleReasoner:
     adapters: VerifiedRoleAdapters
     generator: RoleGenerator
     artifact_store: ArtifactStore
+    active_evaluator: object | None = None  # Opt-in governed evaluator routing; frozen default unchanged.
 
     def propose(self, task: RoleTask, registry: EvidenceRegistry, *,
                 context: DeterministicRoleContext, seed: int = 271828,
                 max_new_tokens: int = 384) -> ModelRoleObservation:
         spec = self.stack.resolve(task.role)
+        active_adapter_path = None
+        if task.role == "evaluator" and self.active_evaluator is not None:
+            # Resolve the selected finalized adapter and recheck every manifest
+            # component on each new request. Simulated activations cannot enter
+            # normal production routing.
+            spec, active_adapter_path = self.active_evaluator.resolve()
         self.contract.validate_model(spec)
         if not self.stack.production_certified or not self.stack.runtime_registry_ready:
             raise PermissionError("role model stack is not certified and admitted")
@@ -437,7 +444,7 @@ class CertifiedRoleReasoner:
         if not validated.passed or set(refs) != set(validated.valid_refs):
             raise ValueError("role evidence is not independently verified")
         prompt = self.contract.prompt(task)
-        adapter = self.adapters.materialize(spec)
+        adapter = active_adapter_path if active_adapter_path is not None else self.adapters.materialize(spec)
         generated = self.generator.generate(
             spec=spec, profile=self.contract.profile(task.role),
             adapter_path=adapter, prompt=prompt,
