@@ -39,6 +39,8 @@ from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
 
 from .actions import GovernedActionExecutor
+from .evidence import ArtifactModelEvidenceBinder
+from hephaestus.state.evidence_store import ScientificEvidenceStore
 from .recovery import InfrastructureRecoveryController
 from .state import (
     DurableRecoveryAttemptStore,
@@ -95,6 +97,7 @@ class ProductionRuntime:
     judge: SemanticComparisonJudgeAdapter
     recovery: BoundedRecoveryService
     infrastructure_recovery: InfrastructureRecoveryController
+    model_evidence: ArtifactModelEvidenceBinder
     action_executor: GovernedActionExecutor
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
@@ -238,6 +241,7 @@ class ProductionCompositionRoot:
             judge=judge,
             recovery=recovery,
             infrastructure_recovery=infra_recovery,
+            model_evidence=ArtifactModelEvidenceBinder(ScientificEvidenceStore(state, artifacts), settings.config_dir),
             action_executor=action_executor,
             loop_state=loop_state,
             coordinator=coordinator,

@@ -199,6 +199,11 @@ class FakeApprovalService:
 @dataclass
 class FakeArtifactStore:
     verified: bool
+    root: Path
+
+    def put_bytes(self, data, **kwargs):
+        from hephaestus.storage.filesystem import FileSystemArtifactStore
+        return FileSystemArtifactStore(self.root).put_bytes(data, **kwargs)
 
     def verify(self, artifact_ref: str) -> bool:
         return self.verified
@@ -415,7 +420,7 @@ def test_retryable_failure_keeps_stable_operation_identity(tmp_path: Path) -> No
 def test_corrupted_checkpoint_blocks_evaluation_before_generation(tmp_path: Path) -> None:
     router = FakeOperationRouter(checkpoint_ref=f"sha256:{'a' * 64}")
     orchestrator, _ = _orchestrator(
-        tmp_path, router, artifact_store=FakeArtifactStore(verified=False)
+        tmp_path, router, artifact_store=FakeArtifactStore(verified=False, root=tmp_path / "artifacts")
     )
 
     state = orchestrator.run()

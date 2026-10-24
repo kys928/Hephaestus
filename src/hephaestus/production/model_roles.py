@@ -84,13 +84,16 @@ class ModelBackedStage:
                 "adapter_sha256": observation.adapter_sha256,
                 "prompt_sha256": observation.prompt_sha256,
                 "output_sha256": observation.output_sha256,
+                "inference_receipt_ref": observation.inference_receipt_ref,
                 "advisory_only": True,
             }
         )
         return replace(base, records=(*base.records, record),
+                       output_refs=(*base.output_refs, observation.inference_receipt_ref),
                        metadata={**base.metadata,
                                  "model_role": observation.role,
                                  "model_role_output_sha256": observation.output_sha256,
+                                 "inference_receipt_ref": observation.inference_receipt_ref,
                                  "model_role_proposal_advisory_only": True})
 
 

@@ -45,3 +45,41 @@ plane; access to append decisions must be restricted by deployment. No adversary
 with arbitrary filesystem/source write access is modeled as an untrusted caller.
 Real inference, PEFT continuation and independent scientific certification remain
 unverified. The remaining findings are tracked in subsequent repair commits.
+
+## Evidence repair
+
+- P0-03 **confirmed**: only a protocol and synthetic test binder existed. A real
+  `ArtifactModelEvidenceBinder` now resolves hash-addressed source envelopes,
+  checks source run/lineage/stage/kind, derives bounded context from actual JSON
+  bytes and retains source identities across cycles. It never promotes model
+  prose or JSON claims into verified approval/checkpoint facts. Missing,
+  corrupted, superseded and identity-mismatched sources fail closed.
+- Workflow records can be sealed into immutable artifacts by the staged
+  orchestrator. The production driver supplies its real artifact store, and the
+  composition root supplies the binder/evidence store. Cross-cycle bindings are
+  explicit; full provenance stays durable while model context is bounded.
+- P0-05 **confirmed**: restored metadata previously admitted edited samples.
+  Generation now emits immutable report/sample receipts. Restoration verifies
+  source bytes, frozen pack/settings/seed identity, checkpoint/loading handoff,
+  exact task/seed coverage and output/prompt hashes. Comparison restoration
+  re-reads an immutable receipt and recomputes deterministic scoring from those
+  verified samples, without repeated generation. Legacy metadata without receipts
+  fails closed; it is not silently re-certified.
+- P1-10 **confirmed**: role inference now requires an artifact store and typed
+  generation result. Receipts preserve the exact prompt/raw output, parsed answer,
+  model/adapter/tokenizer identities, profile, seed, finish reason and execution
+  provenance. The actual GPU generator also records rendered input tokens/text,
+  output token IDs, effective decoding, package/CUDA/device metadata and timing.
+  CPU test-double receipts explicitly identify themselves. Invalid raw outputs
+  are preserved as rejected receipts. No actual GPU validation is claimed.
+- Additional confirmed defect: the operator GPU probe verified file hashes but
+  substituted a separate caller-written fact string. Context now comes directly
+  from the verified source JSON; misleading prose is ignored.
+
+Validation: **519 passed, 6 skipped** locally. Dedicated evidence tests exercise
+actual immutable filesystem bytes, source tampering (including recomputed local
+output hashes), missing samples, forged persisted metadata, changed checkpoints
+and seeds, comparison edits, immutable-store and local-path restoration, source
+supersession, cross-cycle provenance and raw-output/decision replay. Existing
+service doubles were updated to implement the artifact/result interfaces; no
+production fallback or scientific assertion was weakened.

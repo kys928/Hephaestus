@@ -14,6 +14,8 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from hephaestus.llm.inference_receipts import RoleGeneration
+from hephaestus.storage.filesystem import FileSystemArtifactStore
 
 from hephaestus.control.deterministic_role_boundary import (
     DeterministicRoleContext, EvidenceRecord, EvidenceRegistry,
@@ -95,7 +97,7 @@ class ControlledModelOutput:
         action = ("continue_lineage_best" if spec.role == "judge" else
                   "request_recheck" if spec.role == "controller" else
                   vocab["action"][0])
-        return json.dumps({
+        return RoleGeneration(json.dumps({
             "decision": vocab["decision"][0],
             "action": action,
             "primary_variable": vocab["primary_variable"][0],
@@ -103,7 +105,7 @@ class ControlledModelOutput:
             "evidence_refs": ["verified://datum"],
             "uncertainties": [],
             "rationale": "The verified artifact supports a bounded assessment.",
-        })
+        }), metadata={"test_double":True})
 
 
 def _inputs(role):
@@ -148,7 +150,7 @@ def test_five_real_role_paths_validate_pinned_model_proposals_on_cpu(tmp_path, r
     model = ControlledModelOutput(contract, task)
     s3 = FakeS3(blob)
     reasoner = CertifiedRoleReasoner(
-        _roles(blob), contract, VerifiedRoleAdapters(s3, "volume-1", tmp_path), model,
+        _roles(blob), contract, VerifiedRoleAdapters(s3, "volume-1", tmp_path), model, FileSystemArtifactStore(tmp_path / "receipts"),
     )
     output = reasoner.propose(task, registry, context=context)
     assert output.role == role
@@ -210,7 +212,7 @@ def test_unverified_evidence_stops_before_adapter_download_or_generation(tmp_pat
     model = ControlledModelOutput(RoleMasteryContract.load(CONTRACT), task)
     reasoner = CertifiedRoleReasoner(
         _roles(blob), RoleMasteryContract.load(CONTRACT),
-        VerifiedRoleAdapters(fake, "volume-1", tmp_path), model,
+        VerifiedRoleAdapters(fake, "volume-1", tmp_path), model, FileSystemArtifactStore(tmp_path / "receipts"),
     )
     with pytest.raises(ValueError, match="independently verified"):
         reasoner.propose(
@@ -251,13 +253,13 @@ def test_judge_gate_blocks_unapproved_promotion_even_when_model_proposes_it(tmp_
     class UnsafeProposal(ControlledModelOutput):
         def generate(self, **kwargs):
             json_text = super().generate(**kwargs)
-            row = json.loads(json_text)
+            row = json.loads(json_text.text)
             row["action"] = "promote_checkpoint"
-            return json.dumps(row)
+            return replace(json_text, text=json.dumps(row))
     m = UnsafeProposal(RoleMasteryContract.load(CONTRACT), task)
     obs = CertifiedRoleReasoner(
         _roles(blob), RoleMasteryContract.load(CONTRACT),
-        VerifiedRoleAdapters(FakeS3(blob), "volume-1", tmp_path), m,
+        VerifiedRoleAdapters(FakeS3(blob), "volume-1", tmp_path), m, FileSystemArtifactStore(tmp_path / "receipts"),
     ).propose(task, registry, context=ctx)
     assert obs.action_gate is not None
     assert not obs.action_gate.allowed

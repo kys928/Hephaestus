@@ -62,16 +62,14 @@ def _timestamp(value: str) -> datetime:
 
 
 def _artifact(store: ArtifactStore | None, ref: str | None) -> dict:
-    if store is None or not ref or not ref.startswith("sha256:"):
+    if store is None or not ref:
         raise PermissionError("immutable scientific evidence is required")
-    with store.open(ref) as stream:
-        raw = stream.read(16 * 1024 * 1024 + 1)
-    if len(raw) > 16 * 1024 * 1024 or "sha256:" + hashlib.sha256(raw).hexdigest() != ref:
-        raise PermissionError("scientific evidence hash mismatch")
-    value = json.loads(raw)
-    if not isinstance(value, dict):
-        raise PermissionError("scientific evidence must be an object")
-    return value
+    from hephaestus.storage.verified import read_verified_json
+    try:
+        return read_verified_json(store, ref)
+    except (ValueError, OSError) as exc:
+        raise PermissionError("scientific evidence hash/identity mismatch") from exc
+
 
 
 @dataclass(slots=True)
