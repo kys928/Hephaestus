@@ -24,7 +24,9 @@ turn on production automatic role dispatch.
   Retrying an applied event is idempotent while a rolled-back event cannot be
   replayed to re-activate it.
 - `CertifiedRoleReasoner` optionally resolves the active local Evaluator
-  adapter at inference time, rechecks finalized checkpoint bytes, and loads it
+  adapter at inference time, verifies the content-addressed checkpoint manifest
+  plus the exact executable adapter files (without rehashing multi-GB optimizer
+  state per request), and loads it
   through the existing Transformers/PEFT runtime. Other roles keep the frozen
   registry. With no activation manager provided, old behavior is unchanged.
 - A separately authorized rollback restores the previous active Evaluator
@@ -63,3 +65,8 @@ approval, retry idempotency, and repeated activation/rollback behavior.
 The full CPU suite runs unchanged in the dedicated workflow.
 
 No GPU or cloud resources were created and no production model was activated.
+
+- The existing frozen registry certification metrics remain metadata about the
+  original certified role adapter. They must not be interpreted as measured
+  quality metrics for a newly activated Evaluator. Scientific promotion evidence
+  is recorded separately in the governed action journal.
