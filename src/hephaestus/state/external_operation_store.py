@@ -15,7 +15,7 @@ class ExternalOperationStore:
         return ExternalOperation.from_dict(row) if row is not None else None
 
     def record(self, operation: ExternalOperation) -> None:
-        if operation.status not in {"submitting", "uncertain", "accepted", "blocked"}:
+        if operation.status not in {"submitting", "uncertain", "accepted", "blocked", "terminating", "terminated"}:
             raise ValueError("invalid external operation state")
         prior = self.get(operation.operation_id)
         if prior is not None:
@@ -25,3 +25,7 @@ class ExternalOperationStore:
             if prior.external_id and prior.external_id != operation.external_id:
                 raise ValueError("external operation cannot change its allocated resource")
         self.repository.append(EXTERNAL_OPERATIONS, operation.to_dict())
+
+    def for_resource(self, external_id: str) -> ExternalOperation | None:
+        row = self.repository.get_latest(EXTERNAL_OPERATIONS, "external_id", external_id)
+        return ExternalOperation.from_dict(row) if row is not None else None

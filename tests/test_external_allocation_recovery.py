@@ -28,9 +28,7 @@ class AcceptingProvider:
     def request(self, method, url, *, headers, json_body=None):
         if method == "POST":
             self.posts += 1
-            pod = {**deepcopy(json_body), "id":f"pod-{self.posts}", "desiredStatus":"RUNNING",
-                "networkVolume":{"id":json_body["networkVolumeId"], "dataCenterId":"EU-CZ-1"},
-                "image":json_body["imageName"], "gpu":{"count":1}}
+            pod = {**deepcopy(json_body), "id":f"pod-{self.posts}", "status":"PROVISIONING", "dataCenterId":"EU-CZ-1"}
             self.pods.append(pod)
             if self.crash_after_accept:
                 self.crash_after_accept = False
@@ -42,8 +40,8 @@ class AcceptingProvider:
         if method == "GET":
             self.gets += 1
             if urlsplit(url).path.endswith("/pods"):
-                if self.hide_resources: return 200, []
-                return 200, deepcopy(self.pods + (self.pods if self.duplicate_match else []))
+                return 200, {"pods": [] if self.hide_resources else deepcopy(self.pods + (self.pods if self.duplicate_match else [])),
+                    "pagination": {"nextCursor": None, "hasNextPage": False}}
             pod_id = urlsplit(url).path.rsplit("/",1)[-1]
             return 200, deepcopy(next(p for p in self.pods if p["id"] == pod_id))
         raise AssertionError(method)
@@ -85,8 +83,8 @@ def test_ambiguous_or_mismatched_remote_resources_never_trigger_reallocation(tmp
     if fault == "not_found": provider.hide_resources = True
     elif fault == "duplicate": provider.duplicate_match = True
     elif fault == "markers": provider.pods[0]["env"]["HEPHAESTUS_REQUEST_SHA256"] = "wrong"
-    elif fault == "volume": provider.pods[0]["networkVolume"]["id"] = "unrelated-volume"
-    else: provider.pods[0]["image"] = provider.pods[0]["imageName"] = "unrelated-image"
+    elif fault == "volume": provider.pods[0]["mounts"]["network"][0]["volumeId"] = "unrelated-volume"
+    else: provider.pods[0]["image"] = "unrelated-image"
     for _ in range(5):
         with pytest.raises(AmbiguousRunPodOperation): _create(_adapter(tmp_path, provider))
     assert provider.posts == 1
