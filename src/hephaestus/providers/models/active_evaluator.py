@@ -80,13 +80,46 @@ class EvaluatorRoleActivation:
             return original, None
         if current.get("status", "").endswith("_simulated") and not self.allow_simulated_for_tests:
             raise PermissionError("simulated role activation cannot route production inference")
-        spec, directory, manifest_hash, adapter_hash = self._valid_checkpoint(str(current["checkpoint_ref"]))
-        if (current.get("checkpoint_manifest_hash") != manifest_hash
-                or current.get("adapter_tree_hash") != adapter_hash
+        # Inference must not rehash the entire training checkpoint (which
+        # includes potentially multi-GB optimizer state) on every request.
+        # Activation already verified every component. Here reverify only
+        # the exact adapter bytes the model will execute and the original
+        # finalized manifest's identity.
+        folder = Path(str(current["checkpoint_ref"]))
+        adapter = folder / "model"
+        manifest_path = folder / "checkpoint_manifest.json"
+        if (manifest_path.is_symlink() or adapter.is_symlink() or
+                not manifest_path.is_file() or not adapter.is_dir()):
+            raise ValueError("active Evaluator adapter/manifest path is unsafe")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        components = manifest.get("components")
+        if not isinstance(components, dict) or manifest.get("partial_write") is not False:
+            raise ValueError("active Evaluator checkpoint manifest is invalid")
+        manifest_hash = "sha256:" + hashlib.sha256(canonical_bytes(components)).hexdigest()
+        if (manifest.get("manifest_hash") != manifest_hash
+                or current.get("checkpoint_manifest_hash") != manifest_hash):
+            raise ValueError("active Evaluator manifest identity changed")
+        for name in ("adapter_config.json", "adapter_provenance.json", "adapter_model.safetensors"):
+            path = adapter / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("active adapter component is missing or unsafe")
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for piece in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(piece)
+            if components.get("model/" + name) != "sha256:" + digest.hexdigest():
+                raise ValueError("active adapter component differs from finalized manifest")
+        validate_adapter(adapter, model_id=original.model_id, revision=original.revision)
+        adapter_hash = directory_content_identity(adapter)
+        if (current.get("adapter_tree_hash") != adapter_hash
                 or current.get("model_id") != original.model_id
                 or current.get("revision") != original.revision):
-            raise ValueError("active Evaluator identity or checkpoint bytes changed")
-        return spec, directory
+            raise ValueError("active Evaluator identity or adapter bytes changed")
+        size = sum(p.stat().st_size for p in adapter.rglob("*") if p.is_file())
+        spec = replace(original, adapter=AdapterArtifact(
+            s3_key="local-finalized:" + str(folder),
+            sha256=adapter_hash.removeprefix("sha256:"), bytes=size))
+        return spec, adapter
 
     def _authorize(self, *, action: str, approval_ref: str, run_id: str,
                    lineage_id: str, checkpoint: str | None) -> dict:
