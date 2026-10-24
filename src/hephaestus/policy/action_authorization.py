@@ -52,10 +52,10 @@ def build_action_approval_request(*, request_id: str, current: dict, run_id: str
     if _timestamp(expires_at) <= datetime.now(timezone.utc):
         raise ValueError("approval request must expire in the future")
     checkpoint_hash = None
-    if action == "promote_checkpoint":
+    if action in {"promote_checkpoint", "activate_role_adapter"}:
         valid, checkpoint_hash = validate_checkpoint_manifest(str(checkpoint_ref or ""))
         if not valid:
-            raise ValueError("promotion approval requires verified materialized checkpoint bytes")
+            raise ValueError("checkpoint action requires verified materialized checkpoint bytes")
     scope = ActionAuthorizationScope(action, str(current["lineage_id"]), run_id,
         str(current["stage_name"]), checkpoint_ref, lineage_digest(current), expires_at,
         child_lineage_id, eval_report_ref, data_manifest_ref, checkpoint_hash)
@@ -161,6 +161,10 @@ class ActionAuthorizer:
                          if r.get("lineage_id") == current["lineage_id"])
             if not checkpoint_ref or checkpoint_ref not in known:
                 raise PermissionError("checkpoint does not belong to the authorized lineage")
+        if action == "activate_role_adapter":
+            valid, checkpoint_hash = validate_checkpoint_manifest(str(checkpoint_ref or ""))
+            if not valid or checkpoint_hash != scope.checkpoint_manifest_hash:
+                raise PermissionError("activation checkpoint manifest differs from operator-reviewed bytes")
         if action == "promote_checkpoint":
             stage = load_named_config(self.policy.config_dir, "stage_profiles", str(current["stage_name"]))
             if action not in stage.get("allowed_next_actions", []):
