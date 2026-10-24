@@ -105,10 +105,10 @@ class FakeTransport:
         raise AssertionError(f"unexpected method: {method}")
 
 
-def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it() -> None:
+def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it(tmp_path) -> None:
     transport = FakeTransport()
     execution = RunPodExecutionAdapter(
-        config=_config(), secrets=_secrets(), transport=transport
+        config=_config(), secrets=_secrets(), transport=transport, state_root=tmp_path
     )
     pod = execution.create_disposable_cpu_pod(name="smoke")
     assert pod["id"] == "pod-test"

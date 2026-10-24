@@ -127,7 +127,7 @@ def test_comparison_restore_recomputes_verified_sample_scoring_and_rejects_recor
 
 
 def test_role_inference_receipt_replays_exact_prompt_raw_output_and_decision(tmp_path):
-    blob = _archive()
+    blob = _archive(role="planner")
     task, registry, context = _inputs("planner")
     artifacts = FileSystemArtifactStore(tmp_path / "receipts")
     contract = RoleMasteryContract.load(CONTRACT)

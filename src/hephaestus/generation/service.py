@@ -104,18 +104,22 @@ class EvaluationGenerationService:
         if ref.startswith("sha256:"):
             with self.evidence_store.open(ref) as stream:
                 raw = stream.read(16 * 1024 * 1024 + 1)
-            if "sha256:" + hashlib.sha256(raw).hexdigest() != ref:
+            if len(raw) > 16 * 1024 * 1024 or "sha256:" + hashlib.sha256(raw).hexdigest() != ref:
                 raise ValueError("generation source hash mismatch")
             return raw
         path = Path(ref).resolve()
         if self.artifact_root.resolve() not in path.parents:
             raise ValueError("generation evidence path escapes configured root")
+        if path.stat().st_size > 16 * 1024 * 1024:
+            raise ValueError("generation evidence exceeds verification size limit")
         return path.read_bytes()
 
     def verify_completed_handle(self, run: TrainingRunHandle, expected: TrainingRunHandle) -> TrainingRunHandle:
         """Restore only complete, authentic frozen task/seed outputs; no inference."""
         receipt_ref = str(run.metadata.get("generation_report", {}).get("receipt_ref") or "")
         receipt = read_verified_json(self.evidence_store, receipt_ref)
+        if receipt.get("schema") != "generation-receipt.v1":
+            raise ValueError("unsupported generation receipt schema")
         report = receipt["report"]
         plan = self.plan()
         if (run.run_id != expected.run_id or run.experiment_id != expected.experiment_id or
@@ -133,6 +137,9 @@ class EvaluationGenerationService:
         if hashlib.sha256(self._source_bytes(report["report_ref"])).hexdigest() != receipt["report_source_sha256"]:
             raise ValueError("generation report source bytes changed")
         handoff = str(report["metadata"].get("generation_handoff_ref") or "")
+        expected_handoff = expected.metadata.get("generation_handoff_ref") or expected.metadata.get("loading_instructions_ref")
+        if expected_handoff and Path(str(expected_handoff)).resolve() != Path(handoff).resolve():
+            raise ValueError("generation checkpoint handoff identity differs from expected run")
         if not handoff or _file_hash(Path(handoff)) != receipt["handoff_sha256"]:
             raise ValueError("generation checkpoint loading contract changed")
         tasks = {(task.task_id, task.seed):task for task in plan.tasks}

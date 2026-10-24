@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from approval_fixtures import grant_action
+from approval_fixtures import grant_action, synthetic_checkpoint
 from hephaestus.storage.filesystem import FileSystemArtifactStore
+from hephaestus.policy.approval_policy import ApprovalPolicy
 
 from hephaestus.control.semantic_judge import SemanticComparisonJudgeAdapter
 from hephaestus.control.spine import SPINE_ORDER
@@ -109,7 +110,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
         ).to_dict()
     )
     artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
-    executor = GovernedActionExecutor(tmp_path, repository, artifact_store=artifacts)
+    executor = GovernedActionExecutor(tmp_path, repository, approval_policy=ApprovalPolicy(), artifact_store=artifacts)
 
     reject = executor.apply(
         lineage_id="lineage-main",
@@ -161,27 +162,28 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert restart["after"]["status"] == "restarted"
     assert restart["governance"]["promotion_gate_applied"] is False
 
-    grant_action(tmp_path, "good-run", "promote_checkpoint", "checkpoint://good", "approval://promotion", artifacts=artifacts)
+    good_checkpoint = synthetic_checkpoint(tmp_path, "good")
+    grant_action(tmp_path, "good-run", "promote_checkpoint", good_checkpoint, "approval://promotion", artifacts=artifacts, policy=executor.approval_policy)
     promoted = executor.apply(
         lineage_id="lineage-main",
         run_id="good-run",
         requested_action="promote_checkpoint",
-        checkpoint_ref="checkpoint://good",
+        checkpoint_ref=good_checkpoint,
         approval_status="approved",
         approval_ref="approval://promotion",
         promotion_allowed=True,
         certification_state="certification_passed",
         confidence=0.95,
     )
-    assert promoted["after"]["best_checkpoint_ref"] == "checkpoint://good"
-    assert promoted["after"]["certified_stable_checkpoint_ref"] == "checkpoint://good"
+    assert promoted["after"]["best_checkpoint_ref"] == good_checkpoint
+    assert promoted["after"]["certified_stable_checkpoint_ref"] == good_checkpoint
     assert promoted["after"]["status"] == "stable"
     assert promoted["governance"]["promotion_gate_applied"] is True
     assert executor.apply(
         lineage_id="lineage-main",
         run_id="good-run",
         requested_action="promote_checkpoint",
-        checkpoint_ref="checkpoint://good",
+        checkpoint_ref=good_checkpoint,
         approval_status="approved",
         approval_ref="approval://promotion",
         promotion_allowed=True,
@@ -295,16 +297,17 @@ class _TwoCycleDriver:
                 evidence={"semantic_outcome": "regressed", "diagnosis_input": "comparison://1"},
                 next_cycle={"intervention": "change_model", "reason": "prior candidate rejected"},
             )
+        candidate_checkpoint = synthetic_checkpoint(runtime.settings.state_root, "candidate-2")
         grant_action(runtime.settings.state_root, "candidate-2", "promote_checkpoint",
-                     "checkpoint://candidate-2", "approval://human-review-and-promotion",
-                     artifacts=runtime.artifact_store)
+                     candidate_checkpoint, "approval://human-review-and-promotion",
+                     artifacts=runtime.artifact_store, policy=runtime.approval_policy)
         return ProductionCycleResult(
             cycle_id="cycle-2",
             run_id="candidate-2",
             experiment_id="experiment-2",
             status="completed",
             judge_action="promote_checkpoint",
-            checkpoint_ref="checkpoint://candidate-2",
+            checkpoint_ref=candidate_checkpoint,
             confidence=0.95,
             promotion_allowed=True,
             certification_state="certification_passed",
@@ -339,7 +342,7 @@ def test_loop_automatically_recovers_continues_and_applies_final_promotion(tmp_p
     assert stored is not None and stored.status == "completed"
     lineage = LineageStore(tmp_path / "state").get_current("lineage-main")
     assert lineage is not None
-    assert lineage["certified_stable_checkpoint_ref"] == "checkpoint://candidate-2"
+    assert lineage["certified_stable_checkpoint_ref"] == str(runtime.settings.state_root / "test-checkpoints/candidate-2")
     assert runtime.state_repository.all("production_infrastructure_recovery")
 
 

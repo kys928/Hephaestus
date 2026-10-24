@@ -3,14 +3,22 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from hephaestus.schemas.action_authorization import ActionAuthorizationScope
 from hephaestus.schemas.approval_request import ApprovalRequest
+from hephaestus.schemas.approval_decision import ApprovalDecision
 from hephaestus.schemas.eval_report import EvalReport
+from hephaestus.schemas.scorecard import Scorecard
+from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
+from hephaestus.config_loader import load_named_config
+from hephaestus.evaluation.pack_loader import load_eval_pack
+from hephaestus.evaluation.regression_checks import build_regression_summary
 from hephaestus.state.decision_store import DecisionStore
 from hephaestus.state.run_store import RunStore
 from hephaestus.storage.base import ArtifactStore
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
 from .action_registry import canonical_action_name, evaluate_action_boundary
 from .approval_policy import ApprovalPolicy
 from .promotion_gates import evaluate_promotion_gates
@@ -43,15 +51,36 @@ def build_action_approval_request(*, request_id: str, current: dict, run_id: str
         raise ValueError("cannot request an unknown or forbidden action")
     if _timestamp(expires_at) <= datetime.now(timezone.utc):
         raise ValueError("approval request must expire in the future")
+    checkpoint_hash = None
+    if action == "promote_checkpoint":
+        valid, checkpoint_hash = validate_checkpoint_manifest(str(checkpoint_ref or ""))
+        if not valid:
+            raise ValueError("promotion approval requires verified materialized checkpoint bytes")
     scope = ActionAuthorizationScope(action, str(current["lineage_id"]), run_id,
         str(current["stage_name"]), checkpoint_ref, lineage_digest(current), expires_at,
-        child_lineage_id, eval_report_ref, data_manifest_ref)
+        child_lineage_id, eval_report_ref, data_manifest_ref, checkpoint_hash)
     return ApprovalRequest(request_id, f"decision-{run_id}", str(current["lineage_id"]),
         run_id, action, "Review exact action, target and immutable evidence",
         "high" if boundary["high_risk"] else "moderate",
         required_approval_type(policy, action, current),
         created_at=datetime.now(timezone.utc).isoformat(),
         metadata={"action_scope": scope.to_dict(), "checkpoint_ref": checkpoint_ref})
+
+
+def build_scoped_approval_decision(request: ApprovalRequest, *, decision_event_id: str,
+                                   operator_id: str, outcome: str, note: str,
+                                   policy: ApprovalPolicy) -> ApprovalDecision:
+    """Record an explicit operator response to exactly the reviewed request bytes."""
+    if not operator_id.strip() or operator_id == "operator.unknown":
+        raise ValueError("an identified operator is required")
+    resolution = policy.resolve_operator_outcome(outcome,
+        override_allowed=request.required_approval_type != "operator_approval_no_override")
+    digest = hashlib.sha256(canonical_bytes(request.to_dict())).hexdigest()
+    return ApprovalDecision(decision_event_id, request.request_id, request.lineage_id,
+        request.run_id, operator_id, resolution.outcome, resolution.status, note,
+        resolution.effect_on_action, datetime.now(timezone.utc).isoformat(),
+        {"approval_request_sha256":digest, "proposed_action":request.proposed_action,
+         "checkpoint_ref":request.metadata.get("checkpoint_ref")})
 
 
 def _timestamp(value: str) -> datetime:
@@ -64,7 +93,6 @@ def _timestamp(value: str) -> datetime:
 def _artifact(store: ArtifactStore | None, ref: str | None) -> dict:
     if store is None or not ref:
         raise PermissionError("immutable scientific evidence is required")
-    from hephaestus.storage.verified import read_verified_json
     try:
         return read_verified_json(store, ref)
     except (ValueError, OSError) as exc:
@@ -92,6 +120,8 @@ class ActionAuthorizer:
         latest = store.get_latest_approval_decision(str(decision.get("request_id", "")))
         if request is None or latest != decision:
             raise PermissionError("approval was superseded or its request is missing")
+        if decision.get("metadata", {}).get("approval_request_sha256") != hashlib.sha256(canonical_bytes(request)).hexdigest():
+            raise PermissionError("approval request bytes changed after the operator decision")
         if (decision.get("status") != "approved" or decision.get("outcome") not in
                 {"approved", "override_approved"} or not decision.get("operator_id")
                 or decision.get("operator_id") == "operator.unknown"
@@ -132,6 +162,15 @@ class ActionAuthorizer:
             if not checkpoint_ref or checkpoint_ref not in known:
                 raise PermissionError("checkpoint does not belong to the authorized lineage")
         if action == "promote_checkpoint":
+            stage = load_named_config(self.policy.config_dir, "stage_profiles", str(current["stage_name"]))
+            if action not in stage.get("allowed_next_actions", []):
+                raise PermissionError("active stage does not permit promotion")
+            pack = load_eval_pack(str(stage["eval_pack"]), config_dir=self.policy.config_dir)
+            if pack.get("content_hash_verified") is not True:
+                raise PermissionError("active certification pack has no independently verified frozen content hash")
+            valid, checkpoint_hash = validate_checkpoint_manifest(str(checkpoint_ref or ""))
+            if not valid or checkpoint_hash != scope.checkpoint_manifest_hash:
+                raise PermissionError("candidate checkpoint bytes differ from the operator-reviewed manifest")
             report = EvalReport.from_dict(_artifact(self.artifacts, scope.eval_report_ref))
             manifest = _artifact(self.artifacts, scope.data_manifest_ref)
             run = RunStore(self.root).get(run_id)
@@ -145,6 +184,37 @@ class ActionAuthorizer:
                     report.deterministic_passed is not True or report.failed_gates or
                     report.promotion_bundle_passed is not True or report.evidence_completeness != 1.0):
                 raise PermissionError("scientific certification identity or hard gates failed")
+            if (report.pack_name != stage["eval_pack"] or report.eval_pack_id != pack["eval_pack_id"] or
+                    report.eval_pack_version != pack["eval_pack_version"]):
+                raise PermissionError("scientific report does not match the active frozen certification pack")
+            for value in (report.confidence, report.evidence_completeness, report.stability_confidence, report.consistency_score):
+                if type(value) not in (float, int) or not math.isfinite(value) or not 0 <= value <= 1:
+                    raise PermissionError("invalid scientific confidence or completeness value")
+            scorecard = Scorecard.from_dict(report.deterministic_scorecard)
+            if (scorecard.run_id != run_id or scorecard.checkpoint_ref != checkpoint_ref or
+                    scorecard.eval_pack_id != report.eval_pack_id or scorecard.eval_pack_version != report.eval_pack_version or
+                    scorecard.thresholds != stage["deterministic_gates"] or
+                    scorecard.deterministic_passed is not True or scorecard.failed_gates or
+                    not set(pack["required_metrics"]) <= set(scorecard.metrics) or
+                    any(type(x) not in (int, float) or not math.isfinite(x) for x in scorecard.metrics.values())):
+                raise PermissionError("scorecard identity, metrics or policy thresholds failed verification")
+            regression = build_regression_summary(run_id, scorecard.metrics,
+                stage["deterministic_gates"], pack["regression_bundles"])
+            if (not regression.deterministic_passed or
+                    not all(bundle["passed"] for bundle in regression.bundle_results.values()) or
+                    not scorecard.gate_results or
+                    any(gate.get("passed") is not True for gate in scorecard.gate_results.values())):
+                raise PermissionError("recomputed deterministic scientific gates failed")
+            stage_cert = stage.get("certification_profile", {})
+            required = pack["minimum_evidence"]
+            required_rechecks = max(int(stage_cert.get("required_rechecks", 0)),
+                                   int(pack["repeatability_requirements"].get("required_rechecks", 0)))
+            if (report.repeated_eval_count < required_rechecks or
+                    report.observed_consistent_runs < max(int(stage_cert.get("min_consistent_runs", 1)),
+                        int(pack["recheck_requirements"]["min_consistent_runs"])) or
+                    report.consistency_score < max(float(stage_cert.get("min_repeat_consistency", 0)),
+                        float(pack["repeatability_requirements"].get("min_repeat_consistency", 0)))):
+                raise PermissionError("frozen repeatability requirements are not satisfied")
             gate = evaluate_promotion_gates(run_id, str(current["lineage_id"]), action,
                                             report, current, manifest,
                                             {"approval_status": result["approval_status"]})
@@ -154,7 +224,15 @@ class ActionAuthorizer:
                 evidence_completeness=report.evidence_completeness,
                 certification_readiness=report.certification_readiness,
                 recheck_recommended=report.recheck_recommended or report.recheck_needed,
-                observed_evidence_runs=report.repeated_eval_count,
+                observed_evidence_runs=1+report.repeated_eval_count,
+                min_promotion_evidence=int(required["promotion_runs"]),
+                min_stable_evidence=int(required["stable_runs"]),
+                min_certification_evidence=int(required["certification_runs"]),
+                stage_certification_eligibility=str(stage_cert.get("eligibility", "standard")),
+                stage_require_recheck=bool(stage_cert.get("require_recheck", False)),
+                stage_min_consistent_runs=int(stage_cert.get("min_consistent_runs", 1)),
+                min_stability_confidence=float(pack["certification_bundle"]["min_stability_confidence"]),
+                stage_thresholds=stage.get("stage_thresholds") or pack["stage_tolerances"].get(str(stage["strictness"]), {}),
                 observed_consistent_runs=report.observed_consistent_runs,
                 stability_confidence=report.stability_confidence,
                 repeatability_sufficient=report.repeatability_sufficient,

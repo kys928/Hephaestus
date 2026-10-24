@@ -152,6 +152,8 @@ class StagedExperimentEvaluationAdapter:
         try:
             receipt = read_verified_json(self.generation.service.evidence_store,
                                         str(prior.get("comparison_receipt_ref") or ""))
+            if receipt.get("schema") != "comparison-receipt.v1":
+                return None
             comparison = ExperimentComparison.from_dict(receipt["comparison"])
             if comparison.comparison_id != identity or comparison.experiment_id != self.proposal.experiment_id:
                 return None

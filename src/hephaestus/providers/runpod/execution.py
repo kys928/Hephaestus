@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from pathlib import Path
+from urllib.parse import urlencode
+from dataclasses import replace
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -11,10 +15,22 @@ from typing import Any, Protocol
 from hephaestus.infrastructure.secrets import SecretsProvider
 
 from .config import RunPodConfig
+from hephaestus.schemas.external_operation import ExternalOperation, ExternalOperationPending
+from hephaestus.state.external_operation_store import ExternalOperationStore
+from hephaestus.state.single_writer import single_writer
+from hephaestus.storage.sqlite import SQLiteStateRepository
+from hephaestus.storage.verified import canonical_bytes
 
 
 class RunPodApiError(RuntimeError):
     pass
+
+
+class AmbiguousRunPodOperation(RunPodApiError, ExternalOperationPending):
+    """Allocation outcome is unknown. A retry must reconcile, never POST again."""
+
+    def __init__(self, message: str, *, resumable: bool = True):
+        ExternalOperationPending.__init__(self, message, resumable=resumable)
 
 
 class RunPodHttpTransport(Protocol):
@@ -25,7 +41,7 @@ class RunPodHttpTransport(Protocol):
         *,
         headers: dict[str, str],
         json_body: dict[str, object] | None = None,
-    ) -> tuple[int, dict[str, Any] | None]: ...
+    ) -> tuple[int, dict[str, Any] | list[dict[str, Any]] | None]: ...
 
 
 @dataclass(slots=True)
@@ -39,7 +55,7 @@ class UrllibRunPodTransport:
         *,
         headers: dict[str, str],
         json_body: dict[str, object] | None = None,
-    ) -> tuple[int, dict[str, Any] | None]:
+    ) -> tuple[int, dict[str, Any] | list[dict[str, Any]] | None]:
         data = None if json_body is None else json.dumps(json_body).encode("utf-8")
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
@@ -48,9 +64,8 @@ class UrllibRunPodTransport:
                 payload = json.loads(raw) if raw else None
                 return int(response.status), payload
         except urllib.error.HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")[:1000]
             raise RunPodApiError(
-                f"RunPod API request failed with HTTP {exc.code}: {raw}"
+                f"RunPod API request failed with HTTP {exc.code}"
             ) from exc
         except urllib.error.URLError as exc:
             raise RunPodApiError("RunPod API request failed at the transport layer") from exc
@@ -61,13 +76,16 @@ class RunPodExecutionAdapter:
     config: RunPodConfig
     secrets: SecretsProvider = field(repr=False)
     transport: RunPodHttpTransport = field(default_factory=UrllibRunPodTransport, repr=False)
+    # This must be mounted durable storage for controller restart recovery.
+    state_root: Path = Path("state")
+    maximum_reconciliation_attempts: int = 3
 
     def _request(
         self,
         method: str,
         path: str,
         body: dict[str, object] | None = None,
-    ) -> tuple[int, dict[str, Any] | None]:
+    ) -> tuple[int, dict[str, Any] | list[dict[str, Any]] | None]:
         api_key = self.secrets.resolve(self.config.api_key_ref)
         headers = {"Authorization": f"Bearer {api_key}"}
         if body is not None:
@@ -84,6 +102,7 @@ class RunPodExecutionAdapter:
         *,
         name: str = "hephaestus-runpod-smoke",
         image_name: str = "ubuntu:22.04",
+        operation_id: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, object] = {
             "name": name,
@@ -101,7 +120,7 @@ class RunPodExecutionAdapter:
             "dockerStartCmd": ["bash", "-lc", "sleep 300"],
             "interruptible": False,
         }
-        return self._create_pod(body)
+        return self._create_pod(body, operation_id=operation_id)
 
     def create_bounded_gpu_pod(
         self,
@@ -113,6 +132,7 @@ class RunPodExecutionAdapter:
         env: dict[str, str] | None = None,
         container_disk_in_gb: int = 20,
         interruptible: bool = False,
+        operation_id: str | None = None,
     ) -> dict[str, Any]:
         """Create one GPU Pod pinned to this config's datacenter and Network Volume.
 
@@ -147,16 +167,82 @@ class RunPodExecutionAdapter:
         }
         if env:
             body["env"] = {str(key): str(value) for key, value in env.items()}
-        return self._create_pod(body)
+        return self._create_pod(body, operation_id=operation_id)
 
-    def _create_pod(self, body: dict[str, object]) -> dict[str, Any]:
-        status, payload = self._request("POST", "pods", body)
-        if status != 201 or not isinstance(payload, dict):
-            raise RunPodApiError(f"unexpected create-Pod response status: {status}")
-        pod_id = payload.get("id")
-        if not isinstance(pod_id, str) or not pod_id:
-            raise RunPodApiError("create-Pod response did not contain a Pod id")
-        return payload
+    def _create_pod(self, body: dict[str, object], *, operation_id: str | None = None) -> dict[str, Any]:
+        if not body.get("name") or self.maximum_reconciliation_attempts < 1:
+            raise ValueError("a stable resource name and positive reconciliation limit are required")
+        key = hashlib.sha256(canonical_bytes([self.config.api_base_url,
+            self.config.network_volume_id, operation_id or body["name"]])).hexdigest()
+        request_hash = hashlib.sha256(canonical_bytes(body)).hexdigest()
+        resource_name = str(body["name"])[:140] + "-" + key[:32]
+        intent = ExternalOperation("runpod-"+key, "runpod", request_hash, resource_name, "submitting")
+        markers = {"HEPHAESTUS_OPERATION_ID":key, "HEPHAESTUS_REQUEST_SHA256":request_hash}
+        environment = dict(body.get("env") or {})
+        if set(environment).intersection(markers):
+            raise ValueError("caller cannot override provider-operation identity markers")
+        submitted = {**body, "name":resource_name, "env":{**environment, **markers}}
+        with single_writer(self.state_root, "runpod"):
+            store = ExternalOperationStore(SQLiteStateRepository(self.state_root / "runpod-operations.sqlite3"))
+            existing = store.get(intent.operation_id)
+            if existing is not None:
+                if existing.request_sha256 != request_hash:
+                    raise ValueError("RunPod operation retry changed its request")
+                if existing.status == "blocked":
+                    raise AmbiguousRunPodOperation("RunPod operation needs explicit reconciliation review", resumable=False)
+                if existing.external_id:
+                    pod = self.get_pod(existing.external_id)
+                    self._validate_reconciled_pod(pod, submitted)
+                    return pod
+                if existing.reconciliation_attempts >= self.maximum_reconciliation_attempts:
+                    store.record(replace(existing, status="blocked"))
+                    raise AmbiguousRunPodOperation("RunPod operation exhausted its reconciliation budget", resumable=False)
+                attempts = existing.reconciliation_attempts + 1
+                pending = replace(existing, status="uncertain", reconciliation_attempts=attempts)
+                store.record(pending)  # Bound reconciliation attempts, including interrupted GETs.
+                query = urlencode({"name":resource_name, "includeNetworkVolume":"true", "includeMachine":"true"})
+                status, response = self._request("GET", "pods?"+query)
+                if status != 200 or not isinstance(response, list) or not all(isinstance(x, dict) for x in response):
+                    raise AmbiguousRunPodOperation("provider resource discovery is unavailable or ambiguous")
+                matches = [pod for pod in response if pod.get("name") == resource_name]
+                if len(matches) != 1:
+                    store.record(replace(pending, status="blocked" if attempts >= self.maximum_reconciliation_attempts else "uncertain"))
+                    raise AmbiguousRunPodOperation("provider acceptance is unresolved; duplicate allocation refused")
+                pod = matches[0]
+                self._validate_reconciled_pod(pod, submitted)
+                try:
+                    store.record(replace(pending, status="accepted", external_id=str(pod["id"])))
+                except Exception as exc:
+                    raise AmbiguousRunPodOperation("provider resource was found but its receipt could not be persisted") from exc
+                return pod
+            # A crash after this durable intent can only enter reconciliation.
+            store.record(intent)
+            try:
+                status, payload = self._request("POST", "pods", submitted)
+                if status != 201 or not isinstance(payload, dict) or not isinstance(payload.get("id"), str) or not payload["id"]:
+                    raise RunPodApiError("create-Pod response did not confirm an allocation identity")
+            except Exception as exc:
+                store.record(replace(intent, status="uncertain"))
+                raise AmbiguousRunPodOperation("provider acceptance is unknown; reconcile this operation before retrying") from exc
+            try:
+                store.record(replace(intent, status="accepted", external_id=payload["id"]))
+            except Exception as exc:
+                raise AmbiguousRunPodOperation("provider resource was accepted but its receipt could not be persisted") from exc
+            return payload
+
+    def _validate_reconciled_pod(self, pod: dict, request: dict) -> None:
+        volume = pod.get("networkVolume") or {}
+        env = pod.get("env") or {}
+        gpu = pod.get("gpu") or {}
+        image = pod.get("imageName") or pod.get("image")
+        if (not isinstance(volume, dict) or not isinstance(gpu, dict) or not pod.get("id") or pod.get("name") != request["name"] or
+                not isinstance(env, dict) or any(env.get(k) != v for k,v in request["env"].items()) or
+                volume.get("id", pod.get("networkVolumeId")) != self.config.network_volume_id or
+                volume.get("dataCenterId", self.config.datacenter_id) != self.config.datacenter_id or
+                image != request["imageName"] or pod.get("dockerStartCmd") != request["dockerStartCmd"] or
+                pod.get("volumeMountPath") != request["volumeMountPath"] or
+                (request["computeType"] == "GPU" and gpu.get("count", pod.get("gpuCount")) != 1)):
+            raise AmbiguousRunPodOperation("discovered provider resource does not match durable operation intent")
 
     def get_pod(self, pod_id: str) -> dict[str, Any]:
         status, payload = self._request("GET", f"pods/{pod_id}")

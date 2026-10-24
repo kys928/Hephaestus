@@ -33,6 +33,7 @@ from hephaestus.control.staged_state import (
     StagedWorkflowState,
 )
 from hephaestus.policy.action_registry import evaluate_action_boundary
+from hephaestus.schemas.external_operation import ExternalOperationPending
 
 
 def _canonical_json(payload: object) -> str:
@@ -77,7 +78,7 @@ class GovernedStagedOrchestrator:
         if run_id is not None and run_id != self.run_id:
             raise ValueError("staged orchestrator run_id does not match its configured workflow")
         state = self._load_or_create()
-        if state.completion_marker or (not state.resumable and state.status != "pending"):
+        if state.completion_marker or (not state.resumable and state.status not in {"pending", "running"}):
             return state
 
         for phase in SPINE_ORDER:
@@ -89,6 +90,7 @@ class GovernedStagedOrchestrator:
                 state.current_phase = phase.value
                 state.current_substep = substep
                 state.status = "running"
+                state.resumable = True  # A hard controller stop leaves an in-flight, reconcilable step.
                 state.blocking_issues = []
                 self._persist_state(state)
 
@@ -263,6 +265,15 @@ class GovernedStagedOrchestrator:
         )
         try:
             return service.execute(request)
+        except ExternalOperationPending as exc:
+            return StagedOperationResult(
+                status="interrupted" if exc.resumable else "blocked",
+                resumable=exc.resumable,
+                blocking_issues=("external_operation_outcome_requires_reconciliation",),
+                records=(StagedOutputRecord("external_operation_pending", {
+                    "operation_id":operation_id, "phase":phase.value, "substep":substep,
+                    "error_type":type(exc).__name__, "resumable":exc.resumable}),),
+            )
         except Exception as exc:  # subsystem exceptions are evidence, never success
             return StagedOperationResult(
                 status="terminal_failure",

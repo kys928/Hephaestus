@@ -153,3 +153,40 @@ def test_composition_diagnosis_resolves_bound_previous_run_evidence(tmp_path):
         evidence_refs=[artifact.artifact_ref]))
     assert artifact.artifact_ref in [o.source_ref for o in report.observations]
     assert len(restarted.diagnosis_service.delegate.evidence_adapters) == 2
+
+
+@pytest.mark.parametrize("fault", ["superseded", "rebound_model_decision"])
+def test_selected_plan_revalidates_source_freshness_and_raw_decision_before_use(tmp_path, fault):
+    from hephaestus.production.model_roles import ModelBackedStage
+    from hephaestus.production.evidence import ArtifactModelEvidenceBinder
+    from hephaestus.state.evidence_store import ScientificEvidenceStore, EVIDENCE_BINDINGS
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.storage.verified import canonical_bytes, read_verified_json
+    from hephaestus.control.staged_state import StagedOperationRequest
+    state, repo, model, s3 = _run(tmp_path, ModelProposals())
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    binder = ArtifactModelEvidenceBinder(ScientificEvidenceStore(repo, artifacts))
+    prior = dict(state.steps["planner.intervention_ranking"].output)
+    request = StagedOperationRequest(state.workflow_id, state.run_id, state.lineage_id, state.stage_name,
+                                    "planner", "experiment_proposal", "op-replay", 2, (), {"planner.intervention_ranking":prior})
+    document = read_verified_json(artifacts, prior["selected_intervention_ref"])
+    if fault == "superseded":
+        ref = document["selection"]["evidence_refs"][0]
+        source = read_verified_json(artifacts, ref)
+        replacement = artifacts.put_bytes(canonical_bytes({**source, "payload":{**source["payload"], "new_observation":True}}))
+        binder.store.supersede(ref, replacement.artifact_ref, run_id=state.run_id, lineage_id=state.lineage_id)
+    else:
+        from hephaestus.schemas.model_proposal import ModelInterventionSelection
+        changed = {**document["selection"], "intervention_kind":"repair_evaluation", "primary_variable":"evaluation_protocol"}
+        selected = ClosedLoopExperimentPlanner().admit_model_selection(binder.diagnosis_for(request),
+            ModelInterventionSelection.from_dict(changed), set(changed["evidence_refs"]))
+        forged = artifacts.put_bytes(canonical_bytes({"selection":changed,"intervention":selected.to_dict()}))
+        prior["selected_intervention_ref"] = forged.artifact_ref
+    class ReceiptReader:
+        artifact_store = artifacts
+        contract = RoleMasteryContract.load(CONTRACT)
+    class NoDelegate:
+        def execute(self, request): pytest.fail("invalid selected plan reached delegate")
+    stage = ModelBackedStage("planner", NoDelegate(), ReceiptReader(), binder, ClosedLoopExperimentPlanner())
+    with pytest.raises(ValueError):
+        stage.execute(request)

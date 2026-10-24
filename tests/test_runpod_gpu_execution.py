@@ -24,7 +24,7 @@ class _Transport:
         return 201, {"id": "pod-test", "desiredStatus": "RUNNING"}
 
 
-def test_bounded_gpu_pod_is_pinned_to_configured_volume_and_datacenter() -> None:
+def test_bounded_gpu_pod_is_pinned_to_configured_volume_and_datacenter(tmp_path) -> None:
     config = RunPodConfig.from_env({
         "RUNPOD_DATACENTER_ID": "EU-CZ-1",
         "RUNPOD_NETWORK_VOLUME_ID": "cviwpryzao",
@@ -32,7 +32,7 @@ def test_bounded_gpu_pod_is_pinned_to_configured_volume_and_datacenter() -> None
         "RUNPOD_API_BASE_URL": "https://rest.runpod.io/v1",
     })
     transport = _Transport()
-    execution = RunPodExecutionAdapter(config=config, secrets=_Secrets(), transport=transport)
+    execution = RunPodExecutionAdapter(config=config, secrets=_Secrets(), transport=transport, state_root=tmp_path)
     pod = execution.create_bounded_gpu_pod(
         name="scientific-run",
         image_name="pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
@@ -51,5 +51,7 @@ def test_bounded_gpu_pod_is_pinned_to_configured_volume_and_datacenter() -> None
     assert body["networkVolumeId"] == "cviwpryzao"
     assert body["volumeMountPath"] == "/workspace"
     assert body["dockerStartCmd"] == ["bash", "-lc", "python run.py"]
-    assert body["env"] == {"HEPHAESTUS_RUN_ID": "run-1"}
+    assert body["env"]["HEPHAESTUS_RUN_ID"] == "run-1"
+    assert len(body["env"]["HEPHAESTUS_OPERATION_ID"]) == 64
+    assert len(body["env"]["HEPHAESTUS_REQUEST_SHA256"]) == 64
     assert body["interruptible"] is False

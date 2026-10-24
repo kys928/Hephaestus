@@ -43,13 +43,15 @@ class FakeS3:
 
     def get_object(self, *, Bucket: str, Key: str):
         self.gets.append((Bucket, Key))
-        return {"Body": io.BytesIO(self.blob)}
+        return {"Body": io.BytesIO(self.blob[Key.split("/roles/")[1].split("/")[0]] if isinstance(self.blob, dict) else self.blob)}
 
 
-def _archive(names=None, *, link=False) -> bytes:
+def _archive(names=None, *, link=False, role="judge", base_name=None, revision=None) -> bytes:
+    spec = load_certified_role_model_stack(STACK).resolve(role)
     entries = names or {
         "adapter/adapter_config.json": json.dumps({
-            "peft_type": "LORA", "base_model_name_or_path": "pinned-model",
+            "peft_type": "LORA", "base_model_name_or_path": base_name or spec.model_id,
+            "revision": revision or spec.revision,
         }).encode(),
         "adapter/adapter_model.safetensors": b"safetensors-placeholder-bytes",
     }
@@ -74,7 +76,8 @@ def _roles(blob: bytes):
             spec,
             adapter=AdapterArtifact(
                 s3_key=spec.adapter.s3_key,
-                sha256=sha256(blob).hexdigest(), bytes=len(blob),
+                sha256=sha256(blob[role] if isinstance(blob, dict) else blob).hexdigest(),
+                bytes=len(blob[role] if isinstance(blob, dict) else blob),
             ),
         )
     return replace(stack, roles=roles)
@@ -144,7 +147,7 @@ def test_frozen_role_contract_loads_exact_five_trained_roles():
 
 @pytest.mark.parametrize("role", REQUIRED_ROLES)
 def test_five_real_role_paths_validate_pinned_model_proposals_on_cpu(tmp_path, role):
-    blob = _archive()
+    blob = _archive(role=role)
     task, registry, context = _inputs(role)
     contract = RoleMasteryContract.load(CONTRACT)
     model = ControlledModelOutput(contract, task)
@@ -179,7 +182,8 @@ def test_adapter_cache_reuses_verified_archive_without_new_s3_get(tmp_path):
     # a real re-download, never continuing with modified adapter weights.
     (first / "adapter_model.safetensors").write_bytes(b"tampered")
     third = store.materialize(spec)
-    assert third == first
+    assert third != first
+    assert first.exists()  # Already-returned paths are never deleted/replaced.
     assert (third / "adapter_model.safetensors").read_bytes() == b"safetensors-placeholder-bytes"
     assert len(s3.gets) == 2
 
