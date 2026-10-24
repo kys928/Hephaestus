@@ -101,7 +101,7 @@ class RoleMasteryContract:
         if not task.evidence or len(task.evidence) > 100:
             raise ValueError("role task requires bounded evidence")
         refs = [e.ref for e in task.evidence]
-        if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:/._#?=&%+\\-]{0,255}", x)
+        if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:/._#?=&%+-]{0,255}", x)
                for x in refs) or len(set(refs)) != len(refs):
             raise ValueError("evidence identifiers must be safe, nonempty and unique")
         if any(not x.fact or len(x.fact) > 3000 for x in task.evidence):
