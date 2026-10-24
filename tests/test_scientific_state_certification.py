@@ -1,7 +1,4 @@
 """Scientific-state assessment exercises real content-addressed artifacts, no ML doubles."""
-import json
-from pathlib import Path
-
 import pytest
 
 from hephaestus.evaluation.scientific_state_certification import assess_scientific_states
@@ -128,7 +125,7 @@ def test_immutable_prediction_modification_fails_before_scoring(tmp_path):
     prediction_ref = arguments["candidate_refs"][0]
     path = store._path_for_digest(prediction_ref.split(":")[1])
     path.write_bytes(b'{"schema":"scientific-state-predictions.v1","fake":true}')
-    with pytest.raises((ValueError, Exception), match="hash|integrity|mismatch"):
+    with pytest.raises(ValueError, match="hash|integrity|mismatch"):
         assess_scientific_states(store, **arguments)
 
 
