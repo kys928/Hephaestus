@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from hephaestus.schemas.diagnosis_contract import DiagnosisRequest
+from hephaestus.state.evidence_store import ScientificEvidenceStore
 
 EvidenceRecord = Mapping[str, object]
 
@@ -19,6 +20,23 @@ class EvidenceAdapter(Protocol):
     """Resolve evidence without changing source state."""
 
     def load(self, request: DiagnosisRequest) -> Sequence[EvidenceRecord]: ...
+
+
+@dataclass(slots=True)
+class BoundScientificEvidenceAdapter:
+    """Resolve explicitly bound previous/current-run scientific evidence."""
+
+    store: ScientificEvidenceStore
+
+    def load(self, request: DiagnosisRequest) -> list[EvidenceRecord]:
+        records = []
+        for binding in self.store.for_run(request.run_id, request.lineage_id):
+            source = self.store.resolve(binding)
+            record = deepcopy(source["payload"])
+            record["source_ref"] = binding.artifact_ref
+            record["evidence_kind"] = binding.kind
+            records.append(record)
+        return records
 
 
 @dataclass(slots=True)

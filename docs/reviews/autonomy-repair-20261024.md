@@ -83,3 +83,44 @@ and seeds, comparison edits, immutable-store and local-path restoration, source
 supersession, cross-cycle provenance and raw-output/decision replay. Existing
 service doubles were updated to implement the artifact/result interfaces; no
 production fallback or scientific assertion was weakened.
+
+## Scientific selection and experiment memory
+
+- P0-01 **confirmed**: Planner inference was advisory and ran after delegation.
+  Model decisions now pass an explicit frozen-vocabulary translation and the
+  existing `ClosedLoopExperimentPlanner` admission/ranking policy. Admitted
+  selections change the real experiment proposal and discovery requests. Sources,
+  model receipt, controls, budget and required approvals remain attached.
+  Unsupported, out-of-scope, ungrounded or budgetless training proposals block.
+- P1-06 **confirmed, role-specific fix**: Controller/Planner inference and
+  admission happen before delegated execution. An invalid Controller output
+  produces zero delegate calls. Diagnosis/Evaluator/Judge interpret deterministic
+  observations; action mutation remains separate and approval-gated. Diagnosis
+  may select a supported hypothesis or declare inconclusive; it cannot change
+  observations, erase missing evidence or invent a verified cause.
+- P1-07 **additional confirmed mismatch**: domain `resume_training` incorrectly
+  named checkpoint position as the primary changed variable. Continuation now
+  changes training duration, matching the frozen role contract while preserving
+  baseline/checkpoint controls. Every frozen Planner decision has a deliberate
+  action/variable translation; evaluator recommendations remain non-executable.
+- P1-08 **confirmed**: production now injects state and verified bound-evidence
+  diagnosis adapters plus a durable experiment-memory query. The query combines
+  existing legacy memory with verified experiment/comparison records; it does
+  not create another memory database. A resumed runtime recalls an observed
+  failed controlled intervention and refuses repetition unless new evidence or
+  changed controls justify it. Failure records do not assert causality.
+- Integration records now receive immutable source receipts so experiment memory
+  can check actual content; unsealed historical rows are not failure proof.
+
+Validation: **531 passed, 6 skipped** locally. Tests execute the real staged model
+composition, production binder, admission and proposal code with explicit CPU
+model/service doubles. Changing only the model choice changes the experiment ID
+and primary variable. Other tests cover invalid action pairs, all frozen Planner
+translations, bounded continuation, missing budget, campaign scope, persistent
+failed-history retrieval and new-evidence retries.
+
+Boundary: designs requiring new model/dataset discovery are explicitly pending
+until actual validated selections are supplied to the existing planner/coordinator
+finalization interface. A forged `approved` status cannot launch an unresolved
+design through the guarded training service. This repair does not establish a
+live, fully composed autonomous training campaign or real model reasoning quality.
