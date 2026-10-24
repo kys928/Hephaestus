@@ -1,0 +1,30 @@
+name: Governed Evaluator activation and routing safety (CPU)
+on:
+  push:
+    branches: [feature/governed-evaluator-role-activation-20261024]
+  pull_request:
+    paths:
+      - 'src/hephaestus/providers/models/active_evaluator.py'
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'src/hephaestus/policy/action_registry.py'
+      - 'src/hephaestus/policy/action_authorization.py'
+      - 'tests/test_governed_evaluator_activation.py'
+      - '.github/workflows/governed-evaluator-activation-cpu.yml'
+permissions: {contents: read}
+jobs:
+  isolated-activation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Compile modified activation and runtime
+        run: python -m compileall -q src/hephaestus/providers/models/active_evaluator.py src/hephaestus/llm/certified_runtime.py
+      - name: Exercise operator grants, rollback, adapter integrity and route changes
+        run: pytest -q tests/test_governed_evaluator_activation.py tests/test_scientific_state_certification.py
+      - name: Run complete CPU regression suite
+        run: pytest -q tests/
