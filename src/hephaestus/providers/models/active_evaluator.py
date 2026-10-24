@@ -133,6 +133,9 @@ class EvaluatorRoleActivation:
             for row in self._events():
                 if row.get("operation_id") == operation_id and row.get("status") in (
                         "active_verified", "active_simulated"):
+                    current = self._current()
+                    if current is None or current.get("operation_id") != operation_id:
+                        raise PermissionError("a historical activation was superseded or rolled back")
                     self.resolve()
                     return row
             self.contract.validate_model(spec)
@@ -208,10 +211,11 @@ class EvaluatorRoleActivation:
             previous_id = current.get("previous_operation_id")
             prior = next((r for r in reversed(self._events())
                           if r.get("operation_id") == previous_id and
-                          r.get("status") in ("active_verified", "active_simulated")), None)
+                          r.get("status") in ("active_verified", "active_simulated",
+                                               "rolled_back_verified", "rolled_back_simulated")), None)
             if previous_id and prior is None:
                 raise RuntimeError("original active routing target is unavailable")
-            if prior:
+            if prior and prior.get("checkpoint_ref"):
                 self._valid_checkpoint(str(prior["checkpoint_ref"]))
             operation_id = "evaluator-rollback-" + hashlib.sha256(canonical_bytes(
                 [lineage_id, run_id, approval_ref, current["operation_id"]]
