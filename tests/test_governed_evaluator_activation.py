@@ -162,7 +162,7 @@ def test_tampered_adapter_after_activation_fails_closed(tmp_path):
     manager.activate(lineage_id="L", run_id="activation-run", checkpoint_ref=checkpoint,
         approval_ref="activation-grant", generator=SyntheticProbe(), simulated=True)
     (Path(checkpoint) / "model" / "adapter_model.safetensors").write_bytes(b"corrupted")
-    with pytest.raises(ValueError, match="integrity"):
+    with pytest.raises(ValueError, match="integrity|differs from finalized manifest"):
         manager.resolve()
 
 
