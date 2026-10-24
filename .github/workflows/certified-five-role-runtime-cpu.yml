@@ -1,0 +1,28 @@
+name: Verified five-role runtime (CPU security and contract tests)
+on:
+  push:
+    branches: [feature/certified-five-role-runtime-20261024]
+  pull_request:
+    paths:
+      - 'src/hephaestus/llm/**'
+      - 'configs/models/hephaestus_role_mastery_runtime_v1.json'
+      - 'tests/test_certified_role_inference.py'
+      - 'pyproject.toml'
+permissions: {contents: read}
+jobs:
+  contract-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only tests
+        run: python -m pip install -e '.[test]'
+      - name: Compile runtime and validate five-role response/S3 integrity
+        run: |
+          python -m compileall -q src/hephaestus/llm
+          pytest -q tests/test_certified_role_inference.py tests/test_certified_role_stack.py tests/test_deterministic_role_boundary.py
+      - name: Run complete regression suite without GPU dependencies or cloud credentials
+        run: pytest -q tests/
