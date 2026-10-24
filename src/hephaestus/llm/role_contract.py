@@ -6,6 +6,7 @@ vocabularies. Responses are *proposals*, never permissions or machine facts.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 from dataclasses import dataclass
@@ -13,6 +14,10 @@ from pathlib import Path
 from typing import Mapping
 
 from hephaestus.providers.models.role_stack import REQUIRED_ROLES
+
+
+# Base identities independently recovered from the frozen training config.
+BASE_IDENTITIES = {'controller': ('Qwen/Qwen3-4B-Instruct-2507', 'cdbee75f17c01a7cc42f958dc650907174af0554'), 'diagnosis': ('mistralai/Ministral-3-3B-Reasoning-2512', '4a36357c811bf511a7b625d132e12f22408aac91'), 'planner': ('mistralai/Ministral-3-8B-Reasoning-2512', '81eaece1948f3875421d9a45bc55487d10e2d894'), 'evaluator': ('ibm-granite/granite-3.3-8b-instruct', '51dd4bc2ade4059a6bd87649d68aa11e4fb2529b'), 'judge': ('microsoft/Phi-4-mini-instruct', 'cfbefacb99257ffa30c83adab238a50856ac3083')}
 
 
 KEYS = ("decision", "action", "primary_variable", "confidence",
@@ -54,7 +59,14 @@ class RoleAnswer:
 
 class RoleMasteryContract:
     def __init__(self, payload: Mapping[str, object]) -> None:
-        self.payload = dict(payload)
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        # Independently compared with VOCAB/ROLE_RULES and candidate profiles at
+        # frozen training commit c831bbfc0e2054d54fccd1ef374fd84722612c79.
+        if hashlib.sha256(encoded.encode()).hexdigest() != (
+            "29bdc8a987403fd2871b4d4b389ed788edb278d833c93df13581a247736ba163"
+        ):
+            raise ValueError("role runtime contract integrity digest drift")
+        self._encoded = encoded
         if self.payload.get("contract_id") != "hephaestus-role-mastery-runtime.v1":
             raise ValueError("unsupported role mastery contract")
         if self.payload.get("original_training_pack_sha256") != (
@@ -83,6 +95,10 @@ class RoleMasteryContract:
             if not isinstance(config.get("decoding"), dict):
                 raise ValueError(f"missing frozen decoding: {role}")
 
+    @property
+    def payload(self) -> dict[str, object]:
+        return json.loads(self._encoded)
+
     @classmethod
     def load(cls, path: str | Path) -> "RoleMasteryContract":
         return cls(json.loads(Path(path).read_text(encoding="utf-8")))
@@ -91,6 +107,10 @@ class RoleMasteryContract:
         if role not in REQUIRED_ROLES:
             raise ValueError(f"unknown Hephaestus role: {role}")
         return dict(self.payload["roles"][role])
+
+    def validate_model(self, spec) -> None:
+        if BASE_IDENTITIES.get(spec.role) != (spec.model_id, spec.revision):
+            raise ValueError("certified base model identity/revision drift from frozen contract")
 
     def prompt(self, task: RoleTask) -> str:
         cfg = self.profile(task.role)

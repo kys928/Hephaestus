@@ -6,6 +6,7 @@ from typing import Any
 
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state._json_store import JsonSingleDocument
+from hephaestus.state.single_writer import single_writer
 
 
 @dataclass(slots=True)
@@ -33,12 +34,13 @@ class LineageStore:
         self._all_doc().write(ordered)
 
     def set_current(self, record: dict[str, Any]) -> None:
-        state = LineageState.from_dict(dict(record))
-        lineage_id = str(state.lineage_id)
-        states = self._read_all()
-        states[lineage_id] = state.to_dict()
-        self._write_all(states)
-        self._legacy_doc().write(state.to_dict())
+        with single_writer(self.root):
+            state = LineageState.from_dict(dict(record))
+            lineage_id = str(state.lineage_id)
+            states = self._read_all()
+            states[lineage_id] = state.to_dict()
+            self._write_all(states)
+            self._legacy_doc().write(state.to_dict())
 
     def get_current(self, lineage_id: str | None = None) -> dict[str, Any] | None:
         if lineage_id is None:
@@ -56,19 +58,20 @@ class LineageStore:
         return self.list_lineages()
 
     def add_child(self, parent_lineage_id: str, child_lineage_id: str) -> None:
-        states = self._read_all()
-        parent = states.get(parent_lineage_id)
-        if parent is None:
-            return
-        children = [str(item) for item in parent.get("child_lineage_ids", [])]
-        if child_lineage_id not in children:
-            children.append(child_lineage_id)
-            parent["child_lineage_ids"] = children
-            states[parent_lineage_id] = parent
-            self._write_all(states)
-            legacy = self._legacy_doc().read()
-            if legacy and legacy.get("lineage_id") == parent_lineage_id:
-                self._legacy_doc().write(parent)
+        with single_writer(self.root):
+            states = self._read_all()
+            parent = states.get(parent_lineage_id)
+            if parent is None:
+                return
+            children = [str(item) for item in parent.get("child_lineage_ids", [])]
+            if child_lineage_id not in children:
+                children.append(child_lineage_id)
+                parent["child_lineage_ids"] = children
+                states[parent_lineage_id] = parent
+                self._write_all(states)
+                legacy = self._legacy_doc().read()
+                if legacy and legacy.get("lineage_id") == parent_lineage_id:
+                    self._legacy_doc().write(parent)
 
     def get_children(self, lineage_id: str) -> list[str]:
         state = self.get_current(lineage_id)

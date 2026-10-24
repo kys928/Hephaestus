@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from approval_fixtures import grant_action
+from hephaestus.storage.filesystem import FileSystemArtifactStore
 
 from hephaestus.control.semantic_judge import SemanticComparisonJudgeAdapter
 from hephaestus.control.spine import SPINE_ORDER
@@ -106,7 +108,8 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
             last_stable_checkpoint_ref="checkpoint://stable",
         ).to_dict()
     )
-    executor = GovernedActionExecutor(tmp_path, repository)
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    executor = GovernedActionExecutor(tmp_path, repository, artifact_store=artifacts)
 
     reject = executor.apply(
         lineage_id="lineage-main",
@@ -118,6 +121,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
 
     # These actions are authorized by their own action/approval boundary. The
     # old promotion-gate lineage flags are intentionally false and ignored.
+    grant_action(tmp_path, "branch-run", "branch_new_experiment", "checkpoint://old", "approval://branch", artifacts=artifacts)
     branch = executor.apply(
         lineage_id="lineage-main",
         run_id="branch-run",
@@ -131,6 +135,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert LineageStore(tmp_path).get_parent(child) == "lineage-main"
     assert branch["governance"]["promotion_gate_applied"] is False
 
+    grant_action(tmp_path, "rollback-run", "rollback_to_checkpoint", "checkpoint://stable", "approval://rollback", artifacts=artifacts)
     rollback = executor.apply(
         lineage_id="lineage-main",
         run_id="rollback-run",
@@ -143,6 +148,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert rollback["after"]["best_checkpoint_ref"] == "checkpoint://stable"
     assert rollback["governance"]["promotion_gate_applied"] is False
 
+    grant_action(tmp_path, "restart-run", "restart_lineage", "checkpoint://stable", "approval://restart", artifacts=artifacts)
     restart = executor.apply(
         lineage_id="lineage-main",
         run_id="restart-run",
@@ -155,6 +161,7 @@ def test_governed_action_executor_applies_reject_branch_rollback_restart_and_pro
     assert restart["after"]["status"] == "restarted"
     assert restart["governance"]["promotion_gate_applied"] is False
 
+    grant_action(tmp_path, "good-run", "promote_checkpoint", "checkpoint://good", "approval://promotion", artifacts=artifacts)
     promoted = executor.apply(
         lineage_id="lineage-main",
         run_id="good-run",
@@ -288,6 +295,9 @@ class _TwoCycleDriver:
                 evidence={"semantic_outcome": "regressed", "diagnosis_input": "comparison://1"},
                 next_cycle={"intervention": "change_model", "reason": "prior candidate rejected"},
             )
+        grant_action(runtime.settings.state_root, "candidate-2", "promote_checkpoint",
+                     "checkpoint://candidate-2", "approval://human-review-and-promotion",
+                     artifacts=runtime.artifact_store)
         return ProductionCycleResult(
             cycle_id="cycle-2",
             run_id="candidate-2",
