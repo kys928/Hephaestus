@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
-"""Provide a schema-verified RunPod GPU allowlist for availability-priority Pod scheduling.
+"""Compatibility launcher for ordered GPU preferences.
 
-The GraphQL catalog endpoint is blocked from GitHub-hosted runners by RunPod's
-edge policy (HTTP 403 / error 1010). The REST v1 Pod schema itself returned the
-accepted GPU enum during validation. We therefore use only IDs explicitly
-observed in that current schema and let the Pod scheduler determine live
-capacity inside the fixed EU-CZ-1 Secure Cloud datacenter. This changes
-execution routing only, never scientific inputs.
+REST v2 takes one GPU ID. RunPodExecutionAdapter resolves these preferences
+through the pinned datacenter catalog before recording an allocation intent.
+An unresolved allocation always escapes this helper without another attempt.
 """
 from __future__ import annotations
 
 import time
+from hephaestus.providers.runpod.execution import RunPodApiError, AmbiguousRunPodOperation
 from datetime import datetime, timezone
 
 DATACENTER = "EU-CZ-1"
 
-# Every ID below was explicitly present in the current RunPod REST /pods schema
-# validation response. Blackwell consumer GPUs are deliberately omitted because
+# Historical preferences only; every request is checked against the v2 catalog. Blackwell consumer GPUs are deliberately omitted because
 # the experiment image is pinned to CUDA 12.6. RTX 4090 remains first because it
 # is the hardware used by the first controlled training run.
 VERIFIED_GPU_IDS = (
@@ -41,12 +38,11 @@ def scheduler_evidence(attempt: int) -> dict[str, object]:
     return {
         "attempt": attempt,
         "queried_at": datetime.now(timezone.utc).isoformat(),
-        "selection_source": "runpod_rest_v1_schema_verified_gpu_enum_with_scheduler_availability",
-        "catalog_graphql_from_github_runner": "blocked_http_403_error_1010",
+        "selection_source": "runpod_rest_v2_datacenter_catalog_selection",
         "datacenter_id": DATACENTER,
         "cloud_type": "SECURE",
         "gpu_count": 1,
-        "gpu_type_priority": "availability",
+        "gpu_type_priority": "ordered_catalog_availability",
         "ordered_gpu_type_ids": list(VERIFIED_GPU_IDS),
     }
 
@@ -75,7 +71,9 @@ def create_with_capacity_retries(
                         "count": gpu.get("count"),
                     }
             return pod, observations
-        except BaseException as exc:
+        except AmbiguousRunPodOperation:
+            raise
+        except RunPodApiError as exc:
             last_error = exc
             observation["create_status"] = "failed"
             observation["create_error"] = f"{type(exc).__name__}: {exc}"

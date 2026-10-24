@@ -54,7 +54,7 @@ jobs:
               'RUNPOD_DATACENTER_ID': 'EU-CZ-1',
               'RUNPOD_NETWORK_VOLUME_ID': 'cviwpryzao',
               'RUNPOD_S3_ENDPOINT_URL': 'https://s3api-eu-cz-1.runpod.io/',
-              'RUNPOD_API_BASE_URL': 'https://rest.runpod.io/v1',
+              'RUNPOD_API_BASE_URL': 'https://api.runpod.io/v2',
           }
           mismatched = [name for name, value in expected.items() if os.environ[name] != value]
           if mismatched:
