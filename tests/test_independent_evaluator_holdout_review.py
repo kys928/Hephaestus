@@ -91,6 +91,10 @@ def _scene(tmp_path, *, regress=False, overlap=None, wins=10, audit_issue=None):
         semantic_audit["holdout_cases_checked"] = 23
     elif audit_issue == "outdated":
         semantic_audit["scan_completed_at"] = "2026-08-12T13:00:00+00:00"
+    elif audit_issue == "malformed_methods":
+        semantic_audit["methods"] = [["not-a-method"]]
+    elif audit_issue == "boolean_coverage":
+        semantic_audit["training_cases_checked"] = True
     semantic_audit_ref = _put(store, semantic_audit)
     settings = _put(store, {"decoding": "greedy", "max_new_tokens": 128,
                             "sampling_seeded": True})
@@ -303,7 +307,7 @@ def test_certificate_verification_refuses_untrusted_authority_or_scope(tmp_path,
 
 @pytest.mark.parametrize("issue", [
     "missing_audit", "wrong_scope", "semantic_overlap", "missing_method",
-    "incomplete_inventory", "outdated",
+    "incomplete_inventory", "outdated", "malformed_methods", "boolean_coverage",
 ])
 def test_semantic_leakage_audit_is_mandatory_and_scoped_to_external_exposures(tmp_path, issue):
     store, args, _, _ = _scene(tmp_path, audit_issue=issue)
