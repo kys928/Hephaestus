@@ -119,10 +119,19 @@ def compose_verified_staged_dependencies(
             runtime, diagnosis_request_ref=diagnosis_request_ref)
     for name in _REQUIRED_CORE:
         _reject_test_worker(getattr(core_services, name))
-    if type(reasoner).__name__.lower().startswith(("fake", "mock", "stub")):
-        raise ValueError("role inference test double is not a production reasoner")
-    if type(generation_backend).__name__.lower().startswith(("fake", "mock", "stub")):
-        raise ValueError("generation test double is not a production backend")
+    # Reject legitimate-looking wrappers around fixture generators. The
+    # frozen five-role mastery contract is CUDA-only and must never silently
+    # switch to a CPU stand-in. CPU tiny-model proof has a separate scope.
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator,
+    )
+    from hephaestus.generation.backends import TransformersCausalLMGenerationBackend
+    if (type(reasoner) is not CertifiedRoleReasoner
+            or type(reasoner.generator) is not PinnedTransformersRoleGenerator
+            or reasoner.generator.device != "cuda:0"):
+        raise PermissionError("production five-role inference requires frozen CUDA model generator")
+    if type(generation_backend) is not TransformersCausalLMGenerationBackend:
+        raise PermissionError("production generation requires real Transformers inference backend")
 
     services = runtime.with_discovery_services(core_services)
     services = runtime.with_local_data_factory(
