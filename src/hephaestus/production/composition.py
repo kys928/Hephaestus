@@ -104,6 +104,37 @@ class ProductionRuntime:
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
 
+    def with_evaluation_services(self, services, *,
+                                 baseline_run_artifact_ref: str,
+                                 generation_backend,
+                                 inference_enabled: bool = False,
+                                 eval_pack_name: str = "semantic_behavior_v1"):
+        """Bind an independently pinned baseline and actual evaluation backend.
+
+        Call after with_training_services to preserve the verified checkpoint
+        resolution owner. No generation is allowed unless explicitly enabled.
+        """
+        from dataclasses import replace
+        from hephaestus.generation.service import EvaluationGenerationService
+        from .staged_evaluation import StagedVerifiedEvaluation
+        if services.evaluator is None:
+            raise ValueError("staged generation requires real evaluator/checkpoint services")
+        service = StagedVerifiedEvaluation(
+            repository=self.state_repository, artifacts=self.artifact_store,
+            lifecycle=self.training_lifecycle,
+            generation_service=EvaluationGenerationService(
+                artifact_root=self.settings.artifact_root / "generation",
+                backend=generation_backend, pack_name=eval_pack_name,
+                config_dir=self.settings.config_dir,
+                artifact_store=self.artifact_store,
+            ),
+            evaluation_service=self.evaluator,
+            checkpoint_service=services.evaluator,
+            baseline_run_artifact_ref=baseline_run_artifact_ref,
+            inference_enabled=inference_enabled,
+        )
+        return replace(services, generation=service, evaluator=service)
+
     def with_discovery_services(self, services):
         """Bind real allowlisted dataset/model discovery and selection."""
         from dataclasses import replace
