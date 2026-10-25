@@ -303,6 +303,10 @@ def verify_external_evaluator_certificate(
     if envelope.get("schema") != "independent-evaluator-certificate-signature.v1":
         raise PermissionError("independent certificate signature missing")
     statement_ref = envelope.get("statement_ref")
+    if (not isinstance(statement_ref, str) or
+            not statement_ref.startswith("sha256:") or
+            not artifacts.verify(statement_ref)):
+        raise PermissionError("independent certificate statement is missing or corrupted")
     statement = read_verified_json(artifacts, statement_ref)
     if (statement.get("schema") != "independent-evaluator-certificate.v1"
             or statement.get("certifier_id") != trusted_certifier_id
