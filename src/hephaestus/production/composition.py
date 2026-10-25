@@ -104,6 +104,21 @@ class ProductionRuntime:
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
 
+    def with_discovery_services(self, services):
+        """Bind real allowlisted dataset/model discovery and selection."""
+        from dataclasses import replace
+        from .staged_discovery import StagedDiscoveryAdapter
+        service = StagedDiscoveryAdapter(
+            repository=self.state_repository, artifacts=self.artifact_store,
+            dataset_registry=self.dataset_registry,
+            dataset_selector=self.dataset_selector,
+            model_coordinator=self.coordinator,
+            model_selector=self.model_selector,
+        )
+        return replace(services, dataset_discovery=service,
+                       dataset_selection=service, model_discovery=service,
+                       model_selection=service)
+
     def with_training_services(self, services, *, execute_enabled: bool = False):
         """Inject the actual guarded PEFT lifecycle into staged operations.
 
