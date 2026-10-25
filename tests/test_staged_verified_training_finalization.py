@@ -355,6 +355,8 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     assert verdict.run_id == proposal.run_id
     assert verdict.lineage_id == proposal.lineage_id
     assert any("certification_state=" in reason for reason in verdict.reasons)
+    assert not any("certification_state=certification_passed" in reason for reason in verdict.reasons)
+    assert verdict.next_action.value != "promote_checkpoint"
     # The tiny training pack is deliberately not a sealed scientific holdout:
     # generation+Judge execution is not a scientifically certified improvement.
 
