@@ -28,6 +28,29 @@ class StagedDiscoveryAdapter:
     dataset_selector: object
     model_coordinator: object
     model_selector: object
+    require_planner_approval_receipt: bool = False
+
+    def _planner_dataset_approvals(self, request: StagedOperationRequest, search: DatasetSearchRequest) -> list[str]:
+        """Reopen the original Planner approval record before selecting data.
+
+        Merely selecting a candidate must never discard the intervention's
+        existing approval requirements. The native staged approval gate later
+        checks the entire union against an independent approval provider.
+        """
+        receipt = verified_workflow_payload(
+            self.repository, self.artifacts, request,
+            substep="approval_requirement_discovery", kind="approval_requirements")
+        intervention = search.metadata.get("intervention_id")
+        if not isinstance(intervention, str) or not intervention:
+            raise ValueError("discovery request has no Planner intervention identity")
+        if receipt.get("intervention_id") != intervention:
+            raise ValueError("Planner approval record belongs to a different intervention")
+        required = receipt.get("required_approvals")
+        if (not isinstance(required, list) or
+                any(not isinstance(item, str) or not item.strip() for item in required) or
+                len(required) != len(set(required))):
+            raise ValueError("Planner approval requirements are not a validated list")
+        return sorted(required)
 
     def _search(self, request: StagedOperationRequest, kind: str):
         bundle = verified_workflow_payload(
@@ -149,6 +172,8 @@ class StagedDiscoveryAdapter:
             # The existing staged acquisition approval gate must independently
             # authorize that separate action even for a known-license source.
             if kind == "dataset":
+                if self.require_planner_approval_receipt:
+                    approvals.extend(self._planner_dataset_approvals(request, search))
                 approvals = sorted(set([*approvals, "dataset_acquisition"]))
             metadata = {
                 "required_approvals": approvals,
