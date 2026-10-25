@@ -114,7 +114,7 @@ class StagedExperimentFinalizer:
             raise ValueError("data preprocessing/contract evidence missing")
         processed = Path(str(factory.get("processed_dataset_ref") or ""))
         processing = Path(str(factory.get("processing_evidence_ref") or ""))
-        contract_path = processed.parent / "trainable_data_contract.json"
+        contract_path = processing.parent / "trainable_data_contract.json"
         _verified_file(processed, str(factory["processed_content_hash"]))
         if (contract.get("processed_dataset_ref") != str(processed) or
                 evidence.get("processed_dataset_ref") != str(processed) or
@@ -122,7 +122,8 @@ class StagedExperimentFinalizer:
                 evidence.get("approval_refs") != [approval] or
                 contract.get("run_id") != request.run_id):
             raise ValueError("trainable contract does not match approved source")
-        if (processing != Path(str(evidence.get("processing_evidence_ref") or "")) or
+        if (processing.is_symlink() or contract_path.is_symlink() or
+                processing != Path(str(evidence.get("processing_evidence_ref") or "")) or
                 json.loads(processing.read_text(encoding="utf-8")) != evidence or
                 json.loads(contract_path.read_text(encoding="utf-8")) != contract):
             raise ValueError("local processed evidence or contract changed")
