@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from hephaestus.backends.hf_causal_lm import directory_content_identity
@@ -20,6 +20,7 @@ from hephaestus.schemas.discovery_contract import (
 )
 from hephaestus.schemas.experiment_contract import ExperimentProposal
 from hephaestus.storage.base import ArtifactStore, StateRepository
+from hephaestus.storage.verified import read_verified_json
 from hephaestus.training.peft_support import validate_recipe
 
 from .staged_records import verified_workflow_payload
@@ -46,6 +47,7 @@ class StagedExperimentFinalizer:
     # V1 intentionally only admits locally pinned model/tokenizer bytes. Remote
     # HF downloads require the dedicated operator-approved acquisition flow.
     local_models_only: bool = True
+    approved_recipe_refs: frozenset[str] = field(default_factory=frozenset)
 
     def _load(self, request: StagedOperationRequest, substep: str, kind: str):
         return verified_workflow_payload(
@@ -163,6 +165,17 @@ class StagedExperimentFinalizer:
             raise ValueError("Planner training recipe is incomplete")
         if constraints["training_mode"] not in {"lora_finetune", "lora_continuation"}:
             raise ValueError("this finalizer requires a PEFT intervention")
+        recipe_ref = constraints["training_recipe_ref"]
+        if (not isinstance(recipe_ref, str) or recipe_ref not in self.approved_recipe_refs
+                or not recipe_ref.startswith("sha256:")):
+            raise PermissionError("PEFT recipe must be independently pinned by operator policy")
+        approved_recipe = read_verified_json(self.artifacts, recipe_ref)
+        if (approved_recipe.get("schema") != "approved-peft-recipe.v1"
+                or approved_recipe.get("training_mode") != constraints["training_mode"]
+                or approved_recipe.get("peft_config") != constraints["peft_config"]
+                or approved_recipe.get("max_steps") != constraints["max_steps"]
+                or approved_recipe.get("model_selection_id") != msel.decision_id):
+            raise ValueError("training recipe differs from approved immutable policy")
         if type(constraints["seed"]) is not int or constraints["seed"] < 0:
             raise ValueError("training seed must be explicitly pinned")
         if type(constraints["max_steps"]) is not int or constraints["max_steps"] <= 0:
