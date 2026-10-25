@@ -23,7 +23,7 @@ from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.llm.cpu_causal_research import CpuCausalProposalScorer, SCOPE
 from hephaestus.production.cpu_causal_planner import CpuResearchCausalPlanner
 from hephaestus.production.staged_core import make_staged_core_services
-from hephaestus.storage.verified import read_verified_json
+from hephaestus.storage.verified import read_verified_json, canonical_bytes
 
 from test_staged_real_core_science import _runtime, _source
 
@@ -32,6 +32,10 @@ from test_staged_real_core_science import _runtime, _source
 def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_path):
     rt = _runtime(tmp_path)
     source_ref = _source(rt)
+    source = read_verified_json(rt.artifact_store, source_ref)
+    source["bounded_research_limits"] = {"max_training_steps": 2}
+    source_ref = rt.artifact_store.put_bytes(
+        canonical_bytes(source), media_type="application/json").artifact_ref
     scorer = CpuCausalProposalScorer.load(
         rt.artifact_store, cache_dir=tmp_path / "hf-cache")
     core = make_staged_core_services(rt, diagnosis_request_ref=source_ref)
