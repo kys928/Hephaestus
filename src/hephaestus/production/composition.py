@@ -172,7 +172,7 @@ class ProductionRuntime:
         configure unrelated stage services or silently launch a workload.
         """
         from dataclasses import replace
-        from .staged_training import StagedTrainingLifecycleAdapter, StagedCheckpointAndEvaluation
+        from .staged_training import StagedTrainingLifecycleAdapter, StagedCheckpointAndEvaluation, StagedTrainingStatusMonitor
         from .staged_finalization import StagedExperimentFinalizer
         if services.evaluator is None:
             raise ValueError("real staged checkpoint binding requires an evaluator service")
@@ -186,6 +186,7 @@ class ProductionRuntime:
                     if finalize_verified_selections else service)
         return replace(
             services, training_lifecycle=admitted,
+            runtime_monitor=StagedTrainingStatusMonitor(service, services.runtime_monitor),
             evaluator=StagedCheckpointAndEvaluation(service, services.evaluator),
         )
 
