@@ -1,0 +1,35 @@
+name: Read-only diagnosis of terminated CUDA role Pod
+on:
+  push:
+    branches: [feature/cuda-five-role-preflight-20261025]
+    paths:
+      - .github/workflows/cuda-role-pod-diagnostics.yml
+      - scripts/inspect_first_cuda_bootstrap_log.py
+permissions: {contents: read}
+jobs:
+  inspect-first-attempt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only volume interface
+        run: python -m pip install 'boto3>=1.35,<2'
+      - name: Read terminated CUDA Pod bootstrap log (never creates Pod)
+        run: python scripts/inspect_first_cuda_bootstrap_log.py
+      - name: Publish redacted diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminated-cuda-pod-diagnostic
+          path: evidence/first_cuda_bootstrap_diagnostic.json
+          retention-days: 7
+          if-no-files-found: warn
