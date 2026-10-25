@@ -28,7 +28,7 @@ def _fp(word: str) -> str:
     return "sha256:" + hashlib.sha256(word.encode()).hexdigest()
 
 
-def _scene(tmp_path, *, regress=False, overlap=None, wins=10):
+def _scene(tmp_path, *, regress=False, overlap=None, wins=10, audit_issue=None):
     crypto = pytest.importorskip("cryptography")
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -59,6 +59,39 @@ def _scene(tmp_path, *, regress=False, overlap=None, wins=10):
         "case_ids": ["development-only"],
         "example_fingerprints": [_fp("development-only")],
     })
+    semantic_audit = {
+        "schema": "independent-semantic-leakage-audit.v1",
+        "holdout_ref": pack,
+        "training_exposure_ref": exposure_train,
+        "development_exposure_ref": exposure_dev,
+        "diagnostic_manifest_ref": diagnostics,
+        "case_ids_sha256": "sha256:" + hashlib.sha256(canonical_bytes(
+            sorted(case["case_id"] for case in cases))).hexdigest(),
+        "holdout_cases_checked": len(cases),
+        "training_cases_checked": 1,
+        "development_cases_checked": 1,
+        "diagnostic_cases_checked": 1,
+        "methods": ["lexical_near_duplicate", "semantic_similarity", "human_review"],
+        "auditor_id": "external-private-text-auditor",
+        "method_version": "synthetic-test-audit-v1",
+        "original_text_examined": True,
+        "candidate_scores_blinded": True,
+        "scan_completed_at": "2026-09-12T13:00:00+00:00",
+        "disposition": "no_detected_leakage",
+        "suspected_near_duplicates": 0,
+        "unresolved_semantic_matches": 0,
+    }
+    if audit_issue == "wrong_scope":
+        semantic_audit["training_exposure_ref"] = "sha256:" + "0" * 64
+    elif audit_issue == "semantic_overlap":
+        semantic_audit["unresolved_semantic_matches"] = 1
+    elif audit_issue == "missing_method":
+        semantic_audit["methods"] = ["lexical_near_duplicate", "human_review"]
+    elif audit_issue == "incomplete_inventory":
+        semantic_audit["holdout_cases_checked"] = 23
+    elif audit_issue == "outdated":
+        semantic_audit["scan_completed_at"] = "2026-08-12T13:00:00+00:00"
+    semantic_audit_ref = _put(store, semantic_audit)
     settings = _put(store, {"decoding": "greedy", "max_new_tokens": 128,
                             "sampling_seeded": True})
     baseline_refs = []
@@ -90,6 +123,7 @@ def _scene(tmp_path, *, regress=False, overlap=None, wins=10):
         "schema": "independent-holdout-witness.v1",
         "custodian_id": "separate-custodian-service",
         "holdout_ref": pack, "diagnostic_manifest_ref": diagnostics,
+        "semantic_audit_ref": semantic_audit_ref if audit_issue != "missing_audit" else "",
         "training_exposure_ref": exposure_train,
         "development_exposure_ref": exposure_dev,
         "baseline_prediction_refs": baseline_refs,
@@ -142,6 +176,7 @@ def test_independent_signature_and_paired_effect_allow_review_but_never_certify(
     assert receipt["certification_state"] == "not_certified"
     assert receipt["live_activation_authorized"] is False
     assert receipt["assessment_ref"] == result.assessment.artifact_ref
+    assert receipt["semantic_audit_ref"] == witness["semantic_audit_ref"]
     assessment = read_verified_json(store, result.assessment.artifact_ref)
     assert assessment["certification_state"] == "not_certified"
 
@@ -264,3 +299,13 @@ def test_certificate_verification_refuses_untrusted_authority_or_scope(tmp_path,
         })
     with pytest.raises((ValueError, PermissionError)):
         verify_external_evaluator_certificate(store, **certificate)
+
+
+@pytest.mark.parametrize("issue", [
+    "missing_audit", "wrong_scope", "semantic_overlap", "missing_method",
+    "incomplete_inventory", "outdated",
+])
+def test_semantic_leakage_audit_is_mandatory_and_scoped_to_external_exposures(tmp_path, issue):
+    store, args, _, _ = _scene(tmp_path, audit_issue=issue)
+    with pytest.raises((PermissionError, ValueError)):
+        review_independent_evaluator_holdout(store, **args)
