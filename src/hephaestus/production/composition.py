@@ -163,7 +163,7 @@ class ProductionRuntime:
                        dataset_selection=service, model_discovery=service,
                        model_selection=service)
 
-    def with_training_services(self, services, *, execute_enabled: bool = False):
+    def with_training_services(self, services, *, execute_enabled: bool = False,\n                               finalize_verified_selections: bool = False):
         """Inject the actual guarded PEFT lifecycle into staged operations.
 
         Disabled until the caller explicitly enables execution. This does not
@@ -171,14 +171,17 @@ class ProductionRuntime:
         """
         from dataclasses import replace
         from .staged_training import StagedTrainingLifecycleAdapter, StagedCheckpointAndEvaluation
+        from .staged_finalization import StagedExperimentFinalizer
         if services.evaluator is None:
             raise ValueError("real staged checkpoint binding requires an evaluator service")
         service = StagedTrainingLifecycleAdapter(
             repository=self.state_repository, artifacts=self.artifact_store,
             lifecycle=self.training_lifecycle, execute_enabled=execute_enabled,
         )
+        admitted = (StagedExperimentFinalizer(self.state_repository, self.artifact_store, service)
+                    if finalize_verified_selections else service)
         return replace(
-            services, training_lifecycle=service,
+            services, training_lifecycle=admitted,
             evaluator=StagedCheckpointAndEvaluation(service, services.evaluator),
         )
 
