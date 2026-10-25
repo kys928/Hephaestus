@@ -7,9 +7,11 @@ from pathlib import Path
 import boto3
 from botocore.config import Config
 
-RUN_ID = "hephaestus-five-role-cuda-40189242460"
+RUN_ID = os.environ.get("HEPHAESTUS_DIAGNOSTIC_RUN_ID", "hephaestus-five-role-cuda-40189242460")
+if not re.fullmatch(r"hephaestus-five-role-cuda-[0-9]{8,20}", RUN_ID):
+    raise ValueError("read-only diagnostic run identity invalid")
 KEY = f"hephaestus/research/cuda-roles-20261025/{RUN_ID}/pod_runtime.log"
-DEST = Path("evidence/first_cuda_bootstrap_diagnostic.json")
+DEST = Path("evidence/cuda_bootstrap_diagnostic.json")
 
 
 def redact(value: str) -> str:
