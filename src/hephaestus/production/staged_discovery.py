@@ -144,8 +144,14 @@ class StagedDiscoveryAdapter:
                     blocking_issues=("selection_not_approved_by_policy",),
                 )
             selected = [c for c in candidates if c.candidate_id in selected_ids]
+            approvals = list(decision.required_approvals)
+            # Selecting a dataset NEVER grants permission to read/prepare it.
+            # The existing staged acquisition approval gate must independently
+            # authorize that separate action even for a known-license source.
+            if kind == "dataset":
+                approvals = sorted(set([*approvals, "dataset_acquisition"]))
             metadata = {
-                "required_approvals": list(decision.required_approvals),
+                "required_approvals": approvals,
                 "subject_ref": decision.decision_id,
                 kind + "_selection_required": True,
                 kind + "_selection_id": decision.decision_id,
