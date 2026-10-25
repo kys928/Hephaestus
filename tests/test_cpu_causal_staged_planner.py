@@ -185,7 +185,16 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         assert workflow.steps[key].completion_marker, (
             key + ": " + str(workflow.steps[key].blocking_issues))
     discovery = workflow.steps["planner.discovery_request_preparation"]
-    assert discovery.output["discovery_required"] is True
+    assert discovery.output["dataset_request_id"]
+    search_rows = [
+        row for row in rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+        if row.get("kind") == "search_request"
+        and row.get("operation_id") == discovery.operation_id
+    ]
+    assert len(search_rows) == 1
+    search = read_verified_json(rt.artifact_store, search_rows[0]["artifact_ref"])
+    assert search["payload"]["discovery_required"] is True
+    assert search["payload"]["dataset_request"] is not None
     assert workflow.steps["planner.approval_requirement_discovery"].output[
         "required_approvals"] == ["dataset_selection_approval"]
     next_stage = workflow.steps.get("data_acquisition_audit.dataset_discovery")
