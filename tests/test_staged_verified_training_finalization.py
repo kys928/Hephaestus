@@ -209,3 +209,47 @@ def test_cannot_consider_untrusted_writable_recipe_to_be_policy_approved(tmp_pat
     result = finalizer.execute(request)
     assert result.status == "blocked"
     assert "scientific_training_finalization_failed:PermissionError" in result.blocking_issues
+
+
+@pytest.mark.real_cpu
+def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp_path):
+    """Actual optimizer/PEFT/model weights, NOT a simulated scientific success."""
+    import importlib.util
+    if any(importlib.util.find_spec(name) is None
+           for name in ("torch", "transformers", "tokenizers", "peft")):
+        pytest.skip("requires opt-in real CPU PEFT dependencies")
+    from hephaestus.training.hf_lifecycle import (
+        TransformersTrainingLifecycleService, validate_checkpoint_manifest,
+    )
+    from hephaestus.generation.backends import TransformersCausalLMGenerationBackend
+    from hephaestus.generation.models import GenerationTask
+    from test_real_hf_training import _wait
+
+    runtime, finalizer, request, _ = _setup_finalized(tmp_path, real_model=True)
+    proposal = finalizer.finalize(request)
+    assert proposal.training_constraints["training_mode"] == "lora_finetune"
+    worker = TransformersTrainingLifecycleService(tmp_path / "real-cpu-lora-runs")
+    started = worker.launch(proposal)
+    assert started.status == "running", started.to_dict()
+    result = _wait(worker, proposal.run_id, {"completed", "failed"}, timeout=100)
+    assert result.status == "completed", result.to_dict()
+    assert result.checkpoint_refs
+    checkpoint = Path(result.checkpoint_refs[-1])
+    assert validate_checkpoint_manifest(checkpoint)[0]
+    assert (checkpoint / "model" / "adapter_model.safetensors").is_file()
+    assert not (checkpoint / "model" / "model.safetensors").exists()
+
+    instructions = json.loads((checkpoint / "loading_instructions.json").read_text())
+    generated = TransformersCausalLMGenerationBackend().generate_batch(
+        [GenerationTask("probe", "generation_probes", "hello world", 17)],
+        run_id="post-lora-generation",
+        loading_instructions=instructions,
+        decoding_config={"max_new_tokens": 8, "temperature": 1.0},
+    )
+    assert len(generated) == 1 and generated[0].output
+    # An independent new service must resolve existing completed work and
+    # must not change trainable data nor launch another optimization.
+    restored = TransformersTrainingLifecycleService(
+        tmp_path / "real-cpu-lora-runs").status(proposal.run_id)
+    assert restored.status == "completed"
+    assert restored.checkpoint_refs == result.checkpoint_refs
