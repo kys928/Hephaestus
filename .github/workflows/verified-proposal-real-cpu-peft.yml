@@ -1,0 +1,25 @@
+name: Verified proposal -> actual tiny LoRA weights (CPU)
+on:
+  push:
+    branches: [feature/verified-training-proposal-finalization-20261025]
+  pull_request:
+    paths:
+      - 'src/hephaestus/production/staged_finalization.py'
+      - 'tests/test_staged_verified_training_finalization.py'
+      - '.github/workflows/verified-proposal-real-cpu-peft.yml'
+permissions: {contents: read}
+jobs:
+  tiny-actual-lora:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual PEFT/Transformers test dependencies
+        run: python -m pip install -e '.[peft-training,test]'
+      - name: Prove actual optimizer update and generation from finalized proposal
+        run: |
+          pytest -q -m real_cpu tests/test_staged_verified_training_finalization.py -rs
+          pytest -q tests/test_staged_verified_training_finalization.py -rs
