@@ -14,11 +14,11 @@ import hashlib
 
 from hephaestus.control.staged_state import (
     StagedOperationRequest, StagedOperationResult, StagedOutputRecord,
-    WORKFLOW_RECORD_COLLECTION,
 )
 from hephaestus.schemas.experiment_contract import ExperimentProposal, TrainingRunHandle
 from hephaestus.storage.base import ArtifactStore, StateRepository
-from hephaestus.storage.verified import canonical_bytes, read_verified_json
+from hephaestus.storage.verified import canonical_bytes
+from .staged_records import verified_workflow_payload
 from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
 
 
@@ -47,28 +47,8 @@ class StagedTrainingLifecycleAdapter:
 
     def _record(self, request: StagedOperationRequest, *, step: str,
                 kind: str) -> dict[str, object]:
-        rows = self.repository.all(WORKFLOW_RECORD_COLLECTION)
-        matches = [r for r in rows if (
-            r.get("workflow_id") == request.workflow_id
-            and r.get("run_id") == request.run_id
-            and r.get("lineage_id") == request.lineage_id
-            and r.get("stage_name") == request.stage_name
-            and r.get("substep") == step
-            and r.get("kind") == kind
-        )]
-        if len(matches) != 1:
-            raise ValueError(f"expected exactly one verified {step}/{kind} record")
-        row = matches[0]
-        reference = row.get("artifact_ref")
-        if not isinstance(reference, str):
-            raise ValueError("staged scientific record lacks immutable artifact")
-        saved = read_verified_json(self.artifacts, reference)
-        if saved != {key: value for key, value in row.items() if key != "artifact_ref"}:
-            raise ValueError("scientific stage record changed after publication")
-        payload = saved.get("payload")
-        if not isinstance(payload, dict):
-            raise ValueError("scientific stage record payload malformed")
-        return payload
+        return verified_workflow_payload(self.repository, self.artifacts, request,
+                                         substep=step, kind=kind)
 
     def _proposal(self, request: StagedOperationRequest, *,
                   finalized: bool = False) -> ExperimentProposal:
