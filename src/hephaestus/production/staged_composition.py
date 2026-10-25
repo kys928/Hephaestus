@@ -64,8 +64,9 @@ def staged_binding_inventory(dependencies: StagedAutonomousDependencies) -> dict
     """
     if dependencies.artifact_store is None:
         raise ValueError("content-addressed artifact custody is required")
-    if dependencies.approval_service is None:
-        raise ValueError("independent scoped approval provider is required")
+    if (dependencies.approval_service is None or
+            not callable(getattr(dependencies.approval_service, "decision_for", None))):
+        raise ValueError("independent scoped approval provider with decision_for is required")
     orchestrator = build_staged_autonomous_orchestrator(
         workflow_id="coverage-only-not-executed", run_id="coverage-only",
         lineage_id="coverage-only", stage_name="smoke_test",
