@@ -34,8 +34,21 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     source_ref = _source(rt)
     source = read_verified_json(rt.artifact_store, source_ref)
     source["bounded_research_limits"] = {"max_training_steps": 2}
+    source["baseline_justification"] = (
+        "This integration-only synthetic diagnostic has no measured baseline "
+        "model. Any proposal remains pending actual independently verified "
+        "baseline or baseline-absence scientific review before real training."
+    )
     source_ref = rt.artifact_store.put_bytes(
         canonical_bytes(source), media_type="application/json").artifact_ref
+    try:
+        import torch
+        import transformers
+        import huggingface_hub
+    except ImportError:
+        if os.environ.get("HEPHAESTUS_REQUIRE_REAL_CPU_LM") == "1":
+            raise
+        pytest.skip("Real pretrained LM integration is mandatory only in dedicated PyTorch CPU job")
     scorer = CpuCausalProposalScorer.load(
         rt.artifact_store, cache_dir=tmp_path / "hf-cache")
     core = make_staged_core_services(rt, diagnosis_request_ref=source_ref)
@@ -90,6 +103,24 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         assert sixth.status in {"blocked", "terminal_failure"}
         assert sixth.blocking_issues
     failure_detail = None
+    if (workflow.steps.get("planner.experiment_proposal") is not None
+            and workflow.steps["planner.experiment_proposal"].status == "terminal_failure"):
+        from hephaestus.control.staged_state import StagedOperationRequest
+        seven = workflow.steps["planner.experiment_proposal"]
+        request = StagedOperationRequest(
+            workflow_id=workflow.workflow_id, run_id=workflow.run_id,
+            lineage_id=workflow.lineage_id, stage_name=workflow.stage_name,
+            phase="planner", substep="experiment_proposal",
+            operation_id=seven.operation_id, attempt=1,
+            input_refs=tuple(seven.input_refs),
+            prior_outputs={key: value.output for key, value in workflow.steps.items()},
+        )
+        try:
+            core.planner.execute(request)
+            failure_detail = "stage7_replay_unexpectedly_succeeded"
+        except Exception as exc:
+            failure_detail = type(exc).__name__ + ":" + str(exc)[:650]
+        print("STAGE7_REPLAY_EXACT_EXCEPTION", failure_detail)
     if sixth.status == "terminal_failure":
         from hephaestus.control.staged_state import StagedOperationRequest
         audit_request = StagedOperationRequest(
@@ -128,6 +159,24 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         },
     }
     assert len(report["operation_statuses"]) == 45
+    # This regression must fail if the real domain contract cannot produce
+    # an experiment proposal from the original verified source and selection.
+    stage7 = workflow.steps.get("planner.experiment_proposal")
+    assert stage7 is not None and stage7.completion_marker, (
+        "Stage 7 scientific proposal did not complete: " +
+        (failure_detail or str(stage7.blocking_issues if stage7 else "not_executed"))
+    )
+    proposal_rows = [
+        row for row in rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+        if row.get("kind") == "experiment_proposal"
+        and row.get("operation_id") == stage7.operation_id
+    ]
+    assert len(proposal_rows) == 1
+    proposal_doc = read_verified_json(rt.artifact_store, proposal_rows[0]["artifact_ref"])
+    assert proposal_doc["payload"]["baseline_ref"] is None
+    assert proposal_doc["payload"]["metadata"]["baseline_justification"] == source["baseline_justification"]
+    assert proposal_doc["payload"]["required_approvals"]
+    assert proposal_doc["payload"]["metadata"]["approval_state"] == "required"
     if os.environ.get("HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"):
         p=Path(os.environ["HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"])
         p.parent.mkdir(parents=True,exist_ok=True)
