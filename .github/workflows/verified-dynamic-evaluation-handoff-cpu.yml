@@ -1,0 +1,28 @@
+name: Verified candidate generation and comparison (CPU)
+on:
+  push:
+    branches: [feature/verified-dynamic-evaluation-handoff-20261025]
+  pull_request:
+    paths:
+      - 'src/hephaestus/production/staged_evaluation.py'
+      - 'src/hephaestus/production/composition.py'
+      - 'tests/test_staged_dynamic_generation_evaluation.py'
+      - '.github/workflows/verified-dynamic-evaluation-handoff-cpu.yml'
+permissions: {contents: read}
+jobs:
+  verified-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU dependencies only
+        run: python -m pip install -e '.[test]'
+      - name: Test genuine frozen generation/comparison and cross-process restoration
+        run: |
+          python -m compileall -q src/hephaestus/production/staged_evaluation.py
+          pytest -q tests/test_staged_dynamic_generation_evaluation.py
+      - name: Full CPU regressions
+        run: pytest -q tests/
