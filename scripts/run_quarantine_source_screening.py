@@ -103,6 +103,8 @@ def main():
     # Do not read any unknown/private text in the search for a custodian.
     custody = {"schema": "custodial-reference-provisioning-request.v1",
         "scope_ref": scope_ref, "status": "external_custodian_required",
+        "scope_ref_is_source_measurement_only_not_protected_audit_permission": True,
+        "separately_accepted_protected_audit_scope_ref": None,
         "reference_manifest_refs": {}, "trusted_custodian_id": None,
         "trusted_custodian_public_key": None,
         "required_roles": ["training", "development", "diagnostic", "holdout"],

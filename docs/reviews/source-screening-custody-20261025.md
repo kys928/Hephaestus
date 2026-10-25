@@ -73,7 +73,7 @@ this implementer cannot supply independent custody or historical secrecy.
 The new `CustodialReferenceManifest` and signature verifier require externally
 pinned, distinct training/development/diagnostic/holdout manifests and an
 operator-provisioned Ed25519 public key. A signed statement binds all four refs,
-the exact screening scope, validity interval, no training, and execution inside
+the exact separately accepted `custodial-contamination-audit-scope.v1`, validity interval, no training, and execution inside
 the custodian environment. Manifests declare original-text availability and
 complete exposure inventory, not just case hashes. The verifier checks issuer
 identity and byte scope; it cannot prove a custodian's assertions true.
@@ -84,6 +84,14 @@ aggregate receipts. This signature verifier is an additive admission tool; it
 does not change existing clearance or certification acceptance paths. Production
 audit execution still requires those original texts, accepted methods and an
 external auditor's judgment.
+
+The new protected-audit scope must explicitly permit protected-reference reads
+inside the custodian environment, bind the four exact manifests and named source
+file hashes, and authorize lexical/semantic/frozen-evaluation comparisons. The
+existing source-only scope forbids such access and is rejected by the verifier;
+a signature cannot upgrade it. The provisioning request's original `scope_ref`
+identifies source measurements only; the new protected-audit digest is missing
+until independently authorized. No protected access is inferred from this request.
 
 The runtime emits a concrete provisioning request with `status` set to
 `external_custodian_required`, empty reference refs and no invented public key.
@@ -184,3 +192,7 @@ full PII clearance, exact/near-duplicate comparisons across those complete
 references, dataset acquisition approval and the 45-stage campaign. This work
 establishes source-only measurements and a custody-admission mechanism, not
 those external facts. PR #108 remains draft and unmerged.
+
+The final source-only/protected-scope substitution guard adds an adversarial
+case; the dedicated local selection is now **70 passed**. Source-only access
+cannot be promoted into protected-reference access by a signed statement.

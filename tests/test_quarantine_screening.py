@@ -56,7 +56,11 @@ def _scene(tmp_path, change=None):
         if change == "incomplete_inventory" and role == "training":
             manifest["exposure_inventory_complete"] = False
         refs[role] = put(manifest)
-    scope = "sha256:" + "a" * 64
+    scope = put({"schema": "custodial-contamination-audit-scope.v1", "training_allowed": False,
+        "protected_reference_access_allowed": change != "source_only_scope",
+        "execution_boundary": "custodian_environment", "reference_manifest_refs": refs,
+        "source_file_hashes": {"synthetic/train.jsonl": "sha256:" + "a" * 64},
+        "purposes": ["exact_near_duplicate", "semantic_contamination", "frozen_evaluation_leakage"]})
     statement = {"schema": "custodial-reference-access.v1", "custodian_id": "synthetic-test-custodian",
         "reference_manifest_refs": refs, "scope_ref": scope, "training_allowed": False,
         "execution_boundary": "custodian_environment", "original_text_audits_authorized": True,
@@ -82,7 +86,7 @@ def test_exact_external_custody_bundle_verifies_synthetic_signature(tmp_path):
     assert len(verify_custodial_reference_bundle(store, **args)) == 4
 
 
-@pytest.mark.parametrize("change", ["training", "expired", "signature", "incomplete_inventory"])
+@pytest.mark.parametrize("change", ["training", "expired", "signature", "incomplete_inventory", "source_only_scope"])
 def test_invalid_custody_never_admitted(tmp_path, change):
     store, args = _scene(tmp_path, change)
     with pytest.raises(PermissionError):

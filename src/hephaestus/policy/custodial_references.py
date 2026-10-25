@@ -30,6 +30,22 @@ def verify_custodial_reference_bundle(artifacts, *, signature_ref, trusted_state
             or any(not _digest(r) for r in expected_reference_refs.values())
             or len(set(expected_reference_refs.values())) != 4):
         raise PermissionError("independently pinned custody roots and four distinct references required")
+    try:
+        scope = read_verified_json(artifacts, expected_scope_ref)
+    except (ValueError, FileNotFoundError) as exc:
+        raise PermissionError("independently accepted protected-audit scope is unavailable or corrupted") from exc
+    hashes = scope.get("source_file_hashes")
+    purposes = scope.get("purposes")
+    if (scope.get("schema") != "custodial-contamination-audit-scope.v1"
+            or scope.get("training_allowed") is not False
+            or scope.get("protected_reference_access_allowed") is not True
+            or scope.get("execution_boundary") != "custodian_environment"
+            or scope.get("reference_manifest_refs") != expected_reference_refs
+            or not isinstance(hashes, dict) or not hashes
+            or any(not isinstance(k, str) or not k or not _digest(v) for k, v in hashes.items())
+            or not isinstance(purposes, list) or any(not isinstance(p, str) for p in purposes)
+            or not {"exact_near_duplicate", "semantic_contamination", "frozen_evaluation_leakage"}.issubset(purposes)):
+        raise PermissionError("independently authorized protected-audit scope required; source-only permission is insufficient")
     envelope = read_verified_json(artifacts, signature_ref)
     if (envelope.get("schema") != "custodial-reference-signature.v1"
             or envelope.get("statement_ref") != trusted_statement_ref):
