@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -102,8 +103,8 @@ def main() -> int:
         # Never use a pre-existing Pod belonging to a different project.
         existing_ids = {item["id"] for item in execution.list_pods()}
         allowed = [
-            "NVIDIA RTX PRO 6000 WK",
-            "NVIDIA RTX PRO 6000",
+            "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+            "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
         ]
         selected = execution.select_gpu(allowed)
         result["gpu_id"] = selected
@@ -118,12 +119,13 @@ def main() -> int:
             raise PermissionError("exact Git repository SHA is mandatory")
         pod = execution.create_bounded_gpu_pod(
             name=run_id,
-            image_name="pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime",
+            image_name="pytorch/pytorch:2.14.1-cuda13.2-cudnn9-runtime",
             gpu_type_ids=[selected],
             docker_start_cmd=["bash", "-lc", _shell()],
             env={
                 "HEPHAESTUS_ROLE_RUN_ID": run_id,
                 "HEPHAESTUS_REPO_SHA": sha,
+                "HEPHAESTUS_HF_CACHE_DIR": "/tmp/hephaestus-hf-cache",
                 "HEPHAESTUS_ROLE_RUN_ROOT":
                     "/workspace/hephaestus/research/cuda-roles-20261025/" + run_id,
             },
@@ -152,7 +154,9 @@ def main() -> int:
                     result["evidence"] = {
                         "volume_key": target, "stage_status": doc.get("status"),
                         "role_result_count": len(doc.get("role_results", [])),
+                        "raw_receipt_sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
                     }
+                    Path("evidence/cuda_role_output.json").write_bytes(data)
                     result["status"] = (
                         "model_execution_completed" if
                         doc.get("status") == "five_frozen_role_inferences_completed"
@@ -172,6 +176,20 @@ def main() -> int:
         else:
             result["status"] = "launcher_error"
     finally:
+        if pod_id is None and result.get("status") == "launcher_error":
+            # Recover a Pod created during an ambiguous API reply only by its
+            # exact new run name; leave every unrelated pre-existing Pod alone.
+            try:
+                expected = "hephaestus-five-role-cuda-" + os.environ["GITHUB_RUN_ID"]
+                found = [
+                    item for item in execution.list_pods()
+                    if item.get("name") == expected and item.get("id") not in existing_ids
+                ]
+                if len(found) == 1:
+                    pod_id = found[0]["id"]
+                    result["reconciled_pod_id"] = pod_id
+            except Exception as exc:
+                result["reconciliation_error"] = type(exc).__name__
         if pod_id is not None:
             # Refuse to leak a paid Pod on expected paths.
             try:
