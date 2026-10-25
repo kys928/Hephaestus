@@ -25,7 +25,7 @@ _NATIVE_GATES = frozenset({
 # baseline; require the caller to supply genuine, audited implementations.
 _REQUIRED_CORE = (
     "judge_entry", "evidence_collector", "diagnosis", "plan_readiness",
-    "planner", "runtime_monitor", "recovery", "judge_exit", "evaluator",
+    "planner", "runtime_monitor", "recovery", "judge_exit",
 )
 
 
@@ -88,7 +88,7 @@ def staged_binding_inventory(dependencies: StagedAutonomousDependencies) -> dict
 
 
 def compose_verified_staged_dependencies(
-    runtime, *, core_services: StagedAutonomousServices,
+    runtime, *, core_services: StagedAutonomousServices | None = None,
     approval_service, reasoner, generation_backend,
     baseline_run_artifact_ref: str,
     approved_recipe_refs: tuple[str, ...],
@@ -97,6 +97,7 @@ def compose_verified_staged_dependencies(
     enable_training_execution: bool = False,
     enable_generation_inference: bool = False,
     eval_pack_name: str = "semantic_behavior_v1",
+    diagnosis_request_ref: str | None = None,
 ) -> StagedAutonomousDependencies:
     """Bind all implemented adapters to one governed, restartable spine.
 
@@ -110,6 +111,12 @@ def compose_verified_staged_dependencies(
         raise PermissionError("actual immutable baseline handle reference is required")
     if approval_service is None or generation_backend is None or reasoner is None:
         raise ValueError("approval, generation and five-role inference implementations are required")
+    if core_services is None:
+        if not diagnosis_request_ref:
+            raise PermissionError("one immutable diagnosis input must be pinned to compose core services")
+        from .staged_core import make_staged_core_services
+        core_services = make_staged_core_services(
+            runtime, diagnosis_request_ref=diagnosis_request_ref)
     for name in _REQUIRED_CORE:
         _reject_test_worker(getattr(core_services, name))
     if type(reasoner).__name__.lower().startswith(("fake", "mock", "stub")):
