@@ -258,6 +258,83 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     assert restored.status == "completed"
     assert restored.checkpoint_refs == result.checkpoint_refs
 
+    # Use an entirely local *test-only*, SHA-verified frozen evaluation pack:
+    # tiny positional embeddings cannot safely generate 96 tokens from the
+    # protected production semantic pack. Do not modify that frozen pack.
+    from hephaestus.generation.service import EvaluationGenerationService
+    from hephaestus.evaluation.experiment_service import ExperimentEvaluationService
+    from hephaestus.control.semantic_judge import SemanticComparisonJudgeAdapter
+    from hephaestus.schemas.experiment_contract import TrainingRunHandle
+    import hashlib
+    config_dir = tmp_path / "cpu-eval-configs"
+    pack_dir = config_dir / "eval_packs"
+    pack_dir.mkdir(parents=True)
+    original_pack = json.loads(
+        (Path("configs") / "eval_packs" / "semantic_behavior_v1.yaml").read_text())
+    pack = dict(original_pack)
+    pack["pack_name"] = "tiny_cpu_repair_v1"
+    pack["eval_pack_id"] = "tiny_cpu_repair"
+    pack["source_ref"] = "configs/eval_packs/tiny_cpu_repair_v1.yaml"
+    pack["decoding_config"] = {
+        "temperature": 0.0, "top_p": 1.0, "max_new_tokens": 8, "seeds": [11, 29],
+    }
+    for bundle in ("generation_probes", "continuation_prompts", "ranking_sets",
+                   "regression_prompts", "structure_tests", "repetition_checks",
+                   "length_termination_checks"):
+        pack[bundle] = []
+    pack["generation_probes"] = [{
+        "task_id": "tiny_short_probe", "prompt": "hello world",
+        "checks": [{"name": "nonempty_bounded_answer", "type": "max_words",
+                    "value": 12, "dimension": "excessive_length", "hard": False}],
+    }]
+    pack["required_evidence"] = {"comparison_runs": 2, "seeds_per_task": 2}
+    pack.pop("content_hash")
+    pack["content_hash"] = hashlib.sha256(
+        json.dumps(pack, sort_keys=True, separators=(",", ":"),
+                   ensure_ascii=False).encode()).hexdigest()
+    (pack_dir / "tiny_cpu_repair_v1.yaml").write_text(
+        json.dumps(pack, sort_keys=True), encoding="utf-8")
+
+    model_dir = Path(proposal.training_constraints["model_id"])
+    baseline_instructions = tmp_path / "frozen-parent-loading.json"
+    baseline_instructions.write_text(json.dumps({
+        "backend": "transformers_causal_lm",
+        "model_artifact_ref": str(model_dir),
+        "tokenizer_artifact_ref": str(model_dir),
+        "trust_remote_code": False,
+    }), encoding="utf-8")
+    baseline = TrainingRunHandle(
+        run_id=proposal.baseline_ref, experiment_id=proposal.experiment_id,
+        backend_id="transformers_causal_lm", status="completed",
+        checkpoint_refs=[str(model_dir)],
+        metadata={"generation_handoff_ref": str(baseline_instructions)},
+    )
+    generation = EvaluationGenerationService(
+        tmp_path / "actual-generated-evidence",
+        TransformersCausalLMGenerationBackend(),
+        pack_name="tiny_cpu_repair_v1", config_dir=config_dir,
+        artifact_store=runtime.artifact_store,
+    )
+    before = generation.generate(baseline)
+    after = generation.generate(restored)
+    assert before.report.completed and after.report.completed
+    assert len(before.report.samples) == len(after.report.samples) == 2
+    compared = ExperimentEvaluationService(
+        pack_name="tiny_cpu_repair_v1", config_dir=config_dir,
+    ).compare(proposal, [before.run_handle, after.run_handle])
+    assert compared.primary_outcome != "invalid_comparison", compared.to_dict()
+    assert compared.evaluation_report_refs or compared.evidence_refs
+    verdict = SemanticComparisonJudgeAdapter().decide(
+        compared, run_id=proposal.run_id, lineage_id=proposal.lineage_id,
+        candidate_checkpoint_ref=str(checkpoint), monitor_outcome="healthy",
+        recent_failure_count=0, has_stable_checkpoint=True,
+    )
+    assert verdict.run_id == proposal.run_id
+    assert verdict.lineage_id == proposal.lineage_id
+    assert any("certification_state=" in reason for reason in verdict.reasons)
+    # The tiny training pack is deliberately not a sealed scientific holdout:
+    # generation+Judge execution is not a scientifically certified improvement.
+
 
 def test_wrong_frozen_parent_ref_stops_training_before_validation(tmp_path):
     runtime, finalizer, request, _ = _setup_finalized(tmp_path)
