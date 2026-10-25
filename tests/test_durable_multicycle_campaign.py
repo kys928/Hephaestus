@@ -148,6 +148,27 @@ def test_three_complete_spine_cycles_with_failure_memory_and_restart(tmp_path):
         stored = read_verified_json(restarted.artifact_store, row["artifact_ref"])
         assert stored == {k: v for k, v in row.items() if k != "artifact_ref"}
 
+    # All three completed cycles must now support independent replay of
+    # all 45 hash-backed operation results. This is a CONTROL-PLANE trace,
+    # not evidence that the deterministic fixture workers were real models.
+    from hephaestus.control.staged_state import (
+        StagedWorkflowState, WORKFLOW_STATE_COLLECTION,
+    )
+    from hephaestus.production.staged_trace import verify_completed_staged_trace
+    for i in (1, 2, 3):
+        workflow_id = f"workflow-recovery-campaign-cycle-{i}"
+        row = restarted.state_repository.get_latest(
+            WORKFLOW_STATE_COLLECTION, "workflow_id", workflow_id)
+        assert row is not None
+        workflow = StagedWorkflowState.from_dict(row)
+        proof = verify_completed_staged_trace(
+            workflow, restarted.state_repository, restarted.artifact_store)
+        attested = read_verified_json(restarted.artifact_store, proof)
+        assert attested["verified_operation_count"] == 45
+        assert len({op["operation_id"] for op in attested["operations"]}) == 45
+        assert attested["scientific_certification"] == "not_certified"
+        assert attested["scope"] == "control_record_integrity_only_not_real_model_proof"
+
     reloaded = _runtime(tmp_path)
     same = ProductionLoopRunner(
         reloaded, StagedProductionCycleDriver(_factory(ScientificSimulationWorker())),
