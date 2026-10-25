@@ -115,6 +115,36 @@ def test_real_diagnosis_and_planner_handoff_execute_from_sha_bound_sources(tmp_p
             if value.completion_marker
         ]
         assert len(completed) == 5
+        from hephaestus.control.spine import SPINE_ORDER
+        from hephaestus.control.staged_state import PHASE_SUBSTEPS
+        operation_matrix = []
+        for phase in SPINE_ORDER:
+            for substep in PHASE_SUBSTEPS[phase]:
+                key = phase.value + "." + substep
+                stage = workflow.steps.get(key)
+                rows = [] if stage is None else [
+                    row for row in rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+                    if (row.get("workflow_id") == workflow.workflow_id
+                        and row.get("operation_id") == stage.operation_id)
+                ]
+                for row in rows:
+                    receipt = read_verified_json(
+                        rt.artifact_store, row["artifact_ref"])
+                    assert receipt == {
+                        k: v for k, v in row.items() if k != "artifact_ref"
+                    }, key
+                operation_matrix.append({
+                    "phase_substep": key,
+                    "status": stage.status if stage is not None else "not_executed",
+                    "completion_marker": bool(stage and stage.completion_marker),
+                    "operation_id": stage.operation_id if stage is not None else None,
+                    "content_verified_record_refs": [
+                        row["artifact_ref"] for row in rows],
+                })
+        assert len(operation_matrix) == 45
+        assert sum(x["completion_marker"] for x in operation_matrix) == 5
+        assert operation_matrix[5]["phase_substep"] == "planner.intervention_ranking"
+        assert not operation_matrix[5]["completion_marker"]
         scientific = {
             "schema": "hephaestus-real-cpu-staged-prefix.v1",
             "run_id": workflow.run_id,
@@ -127,6 +157,9 @@ def test_real_diagnosis_and_planner_handoff_execute_from_sha_bound_sources(tmp_p
             "actual_cpu_train_and_inference_evidence_in_separate_files": True,
             "scientific_certification": "not_certified",
             "operations": completed,
+            "all_45_operation_coverage_matrix": operation_matrix,
+            "receipt_integrity_verified": True,
+            "incomplete_operation_count": 40,
         }
         path.write_text(json.dumps(scientific, sort_keys=True, indent=2) + "\n")
 
