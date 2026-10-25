@@ -333,6 +333,16 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
         pack_name="tiny_cpu_repair_v1", config_dir=config_dir,
         artifact_store=runtime.artifact_store,
     )
+    from hephaestus.generation.backends import load_generation_instructions
+    # Isolate the actual Transformers backend failure before the generation
+    # service normalizes unexpected exceptions into structured missing evidence.
+    probe = generation.backend.generate_batch(
+        list(generation.plan().tasks),
+        run_id="debug-frozen-baseline",
+        loading_instructions=load_generation_instructions(str(baseline_instructions)),
+        decoding_config=generation.plan().decoding_config,
+    )
+    assert len(probe) == 2
     before = generation.generate(baseline)
     after = generation.generate(restored)
     assert before.report.completed and after.report.completed, (
