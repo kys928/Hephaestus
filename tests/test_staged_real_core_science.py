@@ -102,6 +102,35 @@ def test_real_diagnosis_and_planner_handoff_execute_from_sha_bound_sources(tmp_p
     assert report["run_id"] == "real-early-1"
     assert report["metadata"]["deterministic_layer_authoritative"]
 
+    import os, json
+    outcome = os.environ.get("HEPHAESTUS_CPU_STAGED_ENTRY_REPORT")
+    if outcome:
+        from pathlib import Path
+        path = Path(outcome)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        completed = [
+            {"phase_substep": key, "operation_id": value.operation_id,
+             "status": value.status, "output_refs": value.output_refs}
+            for key, value in workflow.steps.items()
+            if value.completion_marker
+        ]
+        assert len(completed) == 5
+        scientific = {
+            "schema": "hephaestus-real-cpu-staged-prefix.v1",
+            "run_id": workflow.run_id,
+            "completed_real_service_operations": len(completed),
+            "full_spine_operations": 45,
+            "complete_full_spine": False,
+            "blocked_next": workflow.current_substep,
+            "stage_services": "actual immutable-evidence diagnosis and planner handoff",
+            "experimental_sources": "synthetic_fixture_data_not_external_custody",
+            "actual_cpu_train_and_inference_evidence_in_separate_files": True,
+            "scientific_certification": "not_certified",
+            "operations": completed,
+        }
+        path.write_text(json.dumps(scientific, sort_keys=True, indent=2) + "\n")
+
+
 
 @pytest.mark.parametrize("variant", ["wrong_run", "incomplete"])
 def test_bad_evidence_never_generates_an_approved_plan(tmp_path, variant):
