@@ -64,7 +64,7 @@ def test_explicit_response_structure_not_prompt_json_is_counted():
 
 def test_policy_gate_cannot_promote_zero_target_or_missing_provenance():
     audit = strict_preview_metrics(
-        [{"instruction": "Say hello", "response": "Hello."}] * 10, _tokenizer())
+        [{"instruction": "Say hello", "response": "Hello."}] * 100, _tokenizer())
     assert rank_status(
         "structured_json", audit, declared_en=True, known_license=True,
         immutably_pinned=True, tokenizer_ok=True,
@@ -80,4 +80,17 @@ def test_policy_gate_cannot_promote_zero_target_or_missing_provenance():
     assert rank_status(
         "termination", audit, declared_en=True, known_license=True,
         immutably_pinned=True, tokenizer_ok=True,
-    ) == "provisional_target_review_only_not_approved"
+    ) == "terminal_punctuation_proxy_not_verified_eos_eot"
+    sparse = strict_preview_metrics(
+        [{"instruction": "Return JSON", "response": '{"value": 1}'}]
+        + [{"instruction": "Describe the topic", "response": "Some prose."}] * 99,
+        _tokenizer(),
+    )
+    assert rank_status(
+        "structured_json", sparse, declared_en=True, known_license=True,
+        immutably_pinned=True, tokenizer_ok=True,
+    ) == "target_coverage_too_sparse_in_preview"
+    assert rank_status(
+        "structured_json", sparse, declared_en=True, known_license=False,
+        immutably_pinned=True, tokenizer_ok=True,
+    ) == "metadata_provenance_review_required"
