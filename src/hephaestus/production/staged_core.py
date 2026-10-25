@@ -121,6 +121,17 @@ class StagedScientificEntry:
                         "max_training_steps": cap["max_training_steps"]}
                     result.metadata["budget_source_ref"] = self.diagnosis_request_ref
                     result.metadata["budget_is_approval"] = False
+                # A *declared* absence of a baseline is not a fabricated
+                # baseline measurement. Preserve its original operator-pinned
+                # source, and let the scientific Planner decide admissibility.
+                justification = source.get("baseline_justification")
+                if justification is not None:
+                    if (not isinstance(justification, str) or
+                            not 20 <= len(justification.strip()) <= 1200):
+                        raise ValueError("invalid source-pinned baseline absence justification")
+                    result.metadata["baseline_justification"] = justification.strip()
+                    result.metadata["baseline_justification_source_ref"] = self.diagnosis_request_ref
+                    result.metadata["baseline_justification_is_a_baseline"] = False
                 if (result.run_id != req.run_id or result.lineage_id != req.lineage_id
                         or not result.report_id):
                     raise ValueError("diagnosis returned unrelated scientific source")
