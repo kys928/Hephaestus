@@ -1,0 +1,79 @@
+name: Freeze verified runtime milestone — immutable release evidence
+on:
+  push:
+    branches: [milestone/role-runtime-verified-v1-20261025]
+    paths:
+      - milestones/role-runtime-verified-v1/manifest.json
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: role-runtime-verified-v1-one-time-archive
+  cancel-in-progress: false
+jobs:
+  verify-and-freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only archival SDK
+        run: python -m pip install 'boto3>=1.35,<2'
+      - name: Restore actual CPU evidence JSON from completed GitHub run
+        uses: actions/download-artifact@v4
+        with:
+          name: cpu-real-roles-and-peft-separated-evidence
+          run-id: 40190607106
+          github-token: ${{ github.token }}
+          path: downloaded/cpu
+      - name: Restore actual CUDA evidence JSON from completed GitHub run
+        uses: actions/download-artifact@v4
+        with:
+          name: hephaestus-frozen-five-role-cuda-attempt
+          run-id: 40190358524
+          github-token: ${{ github.token }}
+          path: downloaded/gpu
+      - name: Independently hash original JSON bytes and all RunPod inference receipts
+        run: python scripts/archive_role_runtime_verified_v1.py
+      - name: Check permanent tag does not already exist
+        shell: bash
+        run: |
+          if gh api repos/"$GITHUB_REPOSITORY"/git/ref/tags/role-runtime-verified-v1 --silent >/dev/null 2>&1; then
+            echo "::error::Frozen milestone tag already exists. Refusing to move or overwrite it."
+            exit 1
+          fi
+      - name: Create permanently retained GitHub Release with original evidence
+        run: |
+          gh release create role-runtime-verified-v1 \
+            --target "$GITHUB_SHA" \
+            --title "Hephaestus role-runtime-verified-v1 (research only)" \
+            --notes-file milestones/role-runtime-verified-v1/FREEZE_NOTES.md \
+            --latest=false \
+            release-evidence/cpu-verified-json-evidence.zip \
+            release-evidence/gpu-verified-json-evidence.zip \
+            release-evidence/original-cuda-five-role-inference-receipts.zip \
+            release-evidence/evidence-index.json
+      - name: Confirm release at the exact frozen commit
+        run: |
+          gh release view role-runtime-verified-v1 --json tagName,assets,targetCommitish \
+            > release-evidence/published-release.json
+          python - <<'PY'
+          import json,os
+          x=json.load(open("release-evidence/published-release.json"))
+          assert x["tagName"]=="role-runtime-verified-v1"
+          assert x["targetCommitish"]==os.environ["GITHUB_SHA"]
+          assert len(x["assets"])==4
+          print("RELEASE_PUBLISHED_WITH_VERIFIED_SOURCE_BYTES", x["tagName"], len(x["assets"]))
+          PY

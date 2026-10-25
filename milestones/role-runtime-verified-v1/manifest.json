@@ -1,0 +1,190 @@
+{
+  "schema": "role-runtime-research-freeze.v1",
+  "milestone": "role-runtime-verified-v1",
+  "created_date_utc": "2026-10-25",
+  "intent": "freeze original verified inference and small scientific-component evidence, NOT autonomous scientific certification",
+  "repository": "kys928/Hephaestus",
+  "source_code": {
+    "baseline_main_sha": "304875f0c7d65650553aafcce608b5d345d93d9d",
+    "scientific_core_pr97_sha": "09269b237a29f4e64648f6e691efcc7792717dc4",
+    "cpu_research_pr98_sha": "bc62873a0ee0b38c32a65d62375fd081b53287cb",
+    "cuda_successful_pod_checkout_sha": "bb6873b7a683546ef87da461b0a0c899de16aef5",
+    "cuda_research_pr99_head_sha": "b4a7df83f44ccddda2c3256607f48386c0b72281",
+    "original_role_training_frozen_sha": "c831bbfc0e2054d54fccd1ef374fd84722612c79",
+    "stack_file": "configs/models/hephaestus_role_model_stack_v1.json",
+    "role_contract_file": "configs/models/hephaestus_role_mastery_runtime_v1.json",
+    "draft_changes_are_not_merged": true
+  },
+  "frozen_role_registry": {
+    "stack_id": "hephaestus-role-model-stack-v1",
+    "source_experiment_id": "role-mastery-v1-35596791201",
+    "roles": {
+      "controller": {
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+        "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+        "adapter": {
+          "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/controller/selected-adapter.tar.gz",
+          "sha256": "sha256:62ae757aad46191486c09acf87e164972434b19834f4401f9dd7f3e8bb65972e",
+          "bytes": 43618367
+        },
+        "certified_stack_source_only": true
+      },
+      "diagnosis": {
+        "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+        "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+        "adapter": {
+          "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/diagnosis/selected-adapter.tar.gz",
+          "sha256": "sha256:534d1929d76fc64d07d8d36e85115d5660c113e63b022206bd500d288bdff32c",
+          "bytes": 34645558
+        },
+        "certified_stack_source_only": true
+      },
+      "planner": {
+        "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+        "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+        "adapter": {
+          "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/planner/selected-adapter.tar.gz",
+          "sha256": "sha256:1d4315b588c31262435cef1ad7df5c63edecd948b7992eca6e972a63bc18df85",
+          "bytes": 53593098
+        },
+        "certified_stack_source_only": true
+      },
+      "evaluator": {
+        "model_id": "ibm-granite/granite-3.3-8b-instruct",
+        "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+        "adapter": {
+          "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/evaluator/selected-adapter.tar.gz",
+          "sha256": "sha256:e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325",
+          "bytes": 61503144
+        },
+        "certified_stack_source_only": true
+      },
+      "judge": {
+        "model_id": "microsoft/Phi-4-mini-instruct",
+        "revision": "cfbefacb99257ffa30c83adab238a50856ac3083",
+        "adapter": {
+          "s3_key": "hephaestus/scientific/v1/role_mastery/role-mastery-v1-35596791201/roles/judge/selected-adapter.tar.gz",
+          "sha256": "sha256:086d6b779fc27bd70f9e5a3c4cbfc056490a203da192d719bf23d65ff5660abd",
+          "bytes": 27139725
+        },
+        "certified_stack_source_only": true
+      }
+    }
+  },
+  "environment": {
+    "cpu": {
+      "runner": "GitHub Actions ubuntu-latest",
+      "python": "3.12",
+      "pytorch": "installed by .[peft-training,test], actual pip version not recorded in JSON evidence",
+      "hardware": "GitHub hosted CPU; processor SKU not captured in evidence",
+      "optimizer": "AdamW on synthetic role features; 22 steps",
+      "weights_retained": false,
+      "transformers_peft_versions": "not captured in frozen test receipt"
+    },
+    "gpu": {
+      "datacenter": "EU-CZ-1",
+      "accelerator": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "cuda": "13.2",
+      "torch": "2.14.1+cu132",
+      "python": "3.12",
+      "base_model_snapshots": "exact Hugging Face revision SHA via pinned snapshot_download",
+      "adapter_provenance": "SHA verified original read-only RunPod network volume",
+      "runtime_seconds": 93.54,
+      "model_library_versions": "exact installed Transformers/PEFT versions not recorded in terminal JSON",
+      "pod_deleted": true
+    }
+  },
+  "execution": {
+    "cpu": {
+      "workflow_run_id": 40190607106,
+      "all_45_slots_in_status_matrix": true,
+      "completed_staged_operations": 5,
+      "blocked_operation": "planner.intervention_ranking",
+      "uncompleted_staged_operations": 40,
+      "roles_genuine_torch_weights": true,
+      "roles_are_causal_language_models": false,
+      "role_optimizer_steps": 22,
+      "training_examples": 80,
+      "training_accuracy_on_synthetic_training_set": 1,
+      "other_real_peft_test": {
+        "optimizer_steps": 2,
+        "training_loss_last": 2.1011500358581543,
+        "semantic_delta": 0,
+        "model": "small test-only GPT2 initialized from synthetic configuration",
+        "granite_effect_measured": false
+      },
+      "uninterrupted_45_campaign": false
+    },
+    "gpu": {
+      "workflow_run_id": 40190358524,
+      "run_id": "hephaestus-five-role-cuda-40190358524",
+      "accepted_frozen_role_inferences": 5,
+      "all_role_inference_receipts_content_addressed": true,
+      "uninterrupted_45_campaign": false,
+      "run_status": "five_frozen_role_inferences_completed",
+      "pod_created": true,
+      "pod_deleted": true,
+      "model_promotion": false,
+      "scientific_improvement_certified": false
+    }
+  },
+  "sources": {
+    "cpu": {
+      "artifact_id": 12598350386,
+      "run_id": 40190607106,
+      "zip_sha256": "sha256:514663c507a02b2343b277b2a946902998aa95b6a2e43f993626ff781c07f5ec",
+      "members": {
+        "cpu-research-roles.json": "sha256:28f4705e360f053975b4cd4dcb4bc2770611fb4d49a6c25c3f0f806ca8cefa9e",
+        "cpu-staged-prefix.json": "sha256:70fef41864827b8fb35ee17bcec517596ef9d5897daec9aa14ccdb47bf8a97eb",
+        "cpu-real-peft-and-judge.json": "sha256:4692e0c2881968cb9c52eaa5bd2063b2bf550934100ff516719c97fe8ecfc46a"
+      }
+    },
+    "gpu": {
+      "artifact_id": 12596544865,
+      "run_id": 40190358524,
+      "zip_sha256": "sha256:bcbf1e840df8d0dc1f52b2dff58c656c98dda0eaac8929b2e02e404d22a9af79",
+      "terminal_sha256": "sha256:53be28ea447aca9c170e0448fc0cb35234fd3687e0038c25fa6546187478ac60",
+      "runpod_key_prefix": "hephaestus/research/cuda-roles-20261025/hephaestus-five-role-cuda-40190358524",
+      "members": {
+        "cuda_preflight.json": "sha256:04c2381e5ce9ea8eee54a6266a2edf0e665fc6d6a9e4418228b16f907b6225cb",
+        "cuda_five_role_launcher_result.json": "sha256:e503c06c90e10b779aa46c3f5de105437e6982a0dfb4b36eb1d7799ae4562924",
+        "cuda_role_assets.json": "sha256:447014d2959c63d6641941e50563ef28749c530b6adb4c9da57fa07eea560856",
+        "cuda_role_output.json": "sha256:53be28ea447aca9c170e0448fc0cb35234fd3687e0038c25fa6546187478ac60"
+      },
+      "inference_receipts": {
+        "controller": "sha256:5bbfe3835f01b443eab02c1b74781491a89dc4dd5fd4c5c4b660dde09dc903ec",
+        "diagnosis": "sha256:a2e56c9307b039273c4e88533b9aead522fad8c988ea8c7c0e001f5744463814",
+        "planner": "sha256:3c5def9fa18fbe7b7e7a61ad1c93df29976c1d5970650e3cf3a4aab433f1a95d",
+        "evaluator": "sha256:aaabb9279e8810767b0e51cea3278e1e8b41713edca0e4fa296492357964f6fc",
+        "judge": "sha256:515fe9e42712abb260c186e2ab1faeec77ad41ebe4a2afaa84a61faabfba2000"
+      }
+    }
+  },
+  "certification": {
+    "autonomous_production": false,
+    "scientific_improvement": false,
+    "independent_holdout_audit": false,
+    "independent_semantic_duplicate_review": false,
+    "authorized_model_promotion": false,
+    "scope": "verified research runtime only",
+    "frozen_45_stage_scientific_certification": false
+  },
+  "limitations": [
+    "CPU role test trains a synthetic feature classifier, not an actual language-model research agent",
+    "CPU actual PEFT and Judge test is a separate slice rather than one 45-operation campaign",
+    "only five actual staged operations completed; the sixth blocked and 39 not executed",
+    "original temporary CPU model/LoRA checkpoints and individual staged state blobs not retained",
+    "no complete GPU 45-stage scientific worker campaign; only five role inference probes",
+    "no independent private text semantic contamination audit or original sealed holdout custody",
+    "no genuine Granite improvement established or scientifically certified",
+    "production model dispatch and promotion remain disabled",
+    "exact CPU library versions and GPU Transformers/PEFT versions not recorded in terminal JSON"
+  ],
+  "archival_transport": {
+    "method": "actions/download-artifact@v4 then verify original JSON member SHA-256 and repackage in new GitHub Release ZIP",
+    "retained_source_zip_hashes_are_for_upstream_originals": true,
+    "release_zip_container_bytes_differ_from_upstream_originals": true,
+    "runpod_raw_inference_receipts_original_bytes_archived": true,
+    "forbid_mutation_or_certification": true
+  }
+}
