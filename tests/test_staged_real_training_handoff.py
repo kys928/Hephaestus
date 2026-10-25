@@ -107,6 +107,7 @@ class PlannedWorker(FakeOperationRouter):
                     "data_contract_ref": "" if self.invalid_data else "sha256:" + "b" * 64,
                     "training_recipe_ref": "recipe://controlled-test",
                     "max_steps": 3,
+                    "seed": 17,
                 },
                 required_approvals=["operator_approval"] if self.approvals else [],
                 status="ready", metadata={"unresolved_discovery": (
@@ -116,6 +117,13 @@ class PlannedWorker(FakeOperationRouter):
             return replace(result, records=(
                 StagedOutputRecord("experiment_proposal", proposal.to_dict()),
             ), metadata={"experiment_id": proposal.experiment_id})
+        if request.substep == "generation_prompt_materialization":
+            # This is an explicit synthetic *evaluation* worker. Its pack
+            # identity is visible to the actual orchestrator replay gate.
+            return replace(result, metadata={**result.metadata,
+                "eval_pack_id": "generic_lm",
+                "generation_settings_id": "decode-v1",
+                "seed_identity": "generation-seeds:11-29-47"})
         if request.substep == "semantic_comparison":
             return replace(result, metadata={**result.metadata,
                 "comparison_id": "comparison-" + request.run_id})
