@@ -24,6 +24,10 @@ from hephaestus.llm.cpu_causal_research import CpuCausalProposalScorer, SCOPE
 from hephaestus.production.cpu_causal_planner import CpuResearchCausalPlanner
 from hephaestus.production.staged_core import make_staged_core_services
 from hephaestus.storage.verified import read_verified_json, canonical_bytes
+from hephaestus.providers.datasets.local_fixture import (
+    LocalFixtureDatasetProvider, LocalFixtureDescriptor,
+)
+from hephaestus.utils.hashing import hash_file
 
 from test_staged_real_core_science import _runtime, _source
 
@@ -54,6 +58,27 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     core = make_staged_core_services(rt, diagnosis_request_ref=source_ref)
     core = replace(core, planner=CpuResearchCausalPlanner(
         core.planner, scorer, rt.model_evidence, rt.planner))
+    # An actual file is read, counted and SHA-hashed by the existing
+    # allowlisted local provider. It is freshly authored *synthetic test
+    # material*, not an independently sourced training corpus.
+    local = tmp_path / "operator-authored-research-only.jsonl"
+    local.write_text(
+        '{"text":"Synthetic example to test a real local dataset discovery record."}\\n'
+        '{"text":"Synthetic second example with a distinct text record."}\\n',
+        encoding="utf-8",
+    )
+    rt.dataset_registry.register(LocalFixtureDatasetProvider(fixtures=(
+        LocalFixtureDescriptor(
+            path=local, dataset_id="research-only-authored-test-dataset",
+            revision="sha256:" + hash_file(local),
+            task_types=("data quality", "language modeling"),
+            languages=("en",), domains=("synthetic data quality evaluation",),
+            license="CC0-1.0", synthetic=True,
+            metadata={"description": "original synthetic research-only data quality smoke test"},
+        ),
+    )))
+    rt.dataset_registry.provider_allowlist = {"local_fixture"}
+    core = rt.with_discovery_services(core, require_planner_approval_receipt=True)
     dependencies = StagedAutonomousDependencies(
         services=core, state_repository=rt.state_repository,
         artifact_store=rt.artifact_store,
@@ -197,11 +222,44 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     assert search["payload"]["dataset_request"] is not None
     assert workflow.steps["planner.approval_requirement_discovery"].output[
         "required_approvals"] == ["dataset_selection_approval"]
-    next_stage = workflow.steps.get("data_acquisition_audit.dataset_discovery")
-    assert next_stage is not None and next_stage.status == "blocked"
-    assert any("service_not_configured" in issue for issue in next_stage.blocking_issues)
-    assert sum(value == "completed" for value in report["operation_statuses"].values()) == 9
-    assert report["operation_statuses"]["data_acquisition_audit.dataset_discovery"] == "blocked"
+    dataset_discovery = workflow.steps["data_acquisition_audit.dataset_discovery"]
+    dataset_selection = workflow.steps["data_acquisition_audit.dataset_selection"]
+    assert dataset_discovery.completion_marker and dataset_selection.completion_marker
+    discovered_rows = [
+        row for row in rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+        if row.get("kind") == "dataset_discovery_result"
+        and row.get("operation_id") == dataset_discovery.operation_id
+    ]
+    assert len(discovered_rows) == 1
+    original = read_verified_json(rt.artifact_store, discovered_rows[0]["artifact_ref"])
+    assert original["payload"]["status"] == "discovered"
+    assert len(original["payload"]["candidates"]) == 1
+    candidate = original["payload"]["candidates"][0]
+    assert candidate["provider_id"] == "local_fixture"
+    assert candidate["provenance"]["content_hash"] == "sha256:" + hash_file(local)
+    assert candidate["metadata"]["synthetic"] is True
+    selected_rows = [
+        row for row in rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+        if row.get("kind") == "dataset_selection_decision"
+        and row.get("operation_id") == dataset_selection.operation_id
+    ]
+    assert len(selected_rows) == 1
+    selection = read_verified_json(rt.artifact_store, selected_rows[0]["artifact_ref"])
+    assert selection["payload"]["status"] == "selected"
+    assert selection["payload"]["selected_candidate_ids"] == [candidate["candidate_id"]]
+    assert dataset_selection.output["subject_ref"] == selection["payload"]["decision_id"]
+    assert dataset_selection.output["required_approvals"] == [
+        "dataset_acquisition", "dataset_selection_approval"]
+    gate = workflow.steps["data_acquisition_audit.acquisition_approval_gate"]
+    assert gate.status == "approval_pending"
+    assert not gate.completion_marker
+    assert gate.approval_request and gate.approval_request["status"] == "pending"
+    assert gate.approval_request["subject_ref"] == selection["payload"]["decision_id"]
+    assert gate.approval_request["requirements"] == [
+        "dataset_acquisition", "dataset_selection_approval"]
+    assert workflow.steps.get("data_acquisition_audit.dataset_acquisition") is None
+    assert sum(value == "completed" for value in report["operation_statuses"].values()) == 11
+    assert report["operation_statuses"]["data_acquisition_audit.acquisition_approval_gate"] == "approval_pending"
     if os.environ.get("HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"):
         p=Path(os.environ["HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"])
         p.parent.mkdir(parents=True,exist_ok=True)
