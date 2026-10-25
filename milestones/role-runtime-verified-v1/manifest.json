@@ -179,5 +179,12 @@
     "no genuine Granite improvement established or scientifically certified",
     "production model dispatch and promotion remain disabled",
     "exact CPU library versions and GPU Transformers/PEFT versions not recorded in terminal JSON"
-  ]
+  ],
+  "archival_transport": {
+    "method": "actions/download-artifact@v4 then verify original JSON member SHA-256 and repackage in new GitHub Release ZIP",
+    "retained_source_zip_hashes_are_for_upstream_originals": true,
+    "release_zip_container_bytes_differ_from_upstream_originals": true,
+    "runpod_raw_inference_receipts_original_bytes_archived": true,
+    "forbid_mutation_or_certification": true
+  }
 }
