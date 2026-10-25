@@ -125,9 +125,14 @@ class CpuCausalProposalScorer:
                                       lineage_id=task.lineage_id)
         if not validated.passed or set(validated.valid_refs) != set(refs):
             raise PermissionError("CPU research model lacks verified source evidence")
+        # The original source set has already been fully verified. This
+        # small CPU model receives the two most recent bounded excerpts only.
+        # Never imply that the LM read the other verified source bodies.
+        presented = task.evidence[-2:]
         source_text = "\n".join(
-            "SOURCE " + row.ref + " [FACT EXCERPT; ORIGINAL HASH VERIFIED]: " + " ".join(row.fact.split())[:80]
-            for row in task.evidence
+            "SOURCE " + row.ref + " [FACT EXCERPT; ORIGINAL HASH VERIFIED]: " +
+            " ".join(row.fact.split())[:80]
+            for row in presented
         )
         prefix = (
             "Hephaestus scientific research assistant. This CPU model may only "
@@ -167,6 +172,8 @@ class CpuCausalProposalScorer:
             "lineage_id":task.lineage_id, "stage_name":task.stage_name,
             "prompt_sha256":"sha256:"+sha256(prefix.encode()).hexdigest(),
             "input_source_refs":refs,
+            "context_evidence_refs":[item.ref for item in presented],
+            "verified_sources_not_seen_by_model":[item.ref for item in task.evidence[:-2]],
             "candidates":scored, "selected_candidate":selected,
             "identity":identity,
             "advisory_only":True, "approval_granted":False,
