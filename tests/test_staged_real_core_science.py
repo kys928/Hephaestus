@@ -67,6 +67,14 @@ def test_real_diagnosis_and_planner_handoff_execute_from_sha_bound_sources(tmp_p
     rt = _runtime(tmp_path)
     source_ref = _source(rt)
     svc = make_staged_core_services(rt, diagnosis_request_ref=source_ref)
+    # The Controller is the FIRST operation. Its model binder must see an
+    # immutable verified source before any staged records exist.
+    task, registry, context = rt.model_evidence.bind(
+        role="controller", request=_request("judge_entry_decision"))
+    assert task.evidence and registry.validate(
+        [item.ref for item in task.evidence], run_id=task.run_id,
+        lineage_id=task.lineage_id).passed
+    assert any("staged_diagnosis_source_manifest" in item.fact for item in task.evidence)
     deps = StagedAutonomousDependencies(
         services=svc, state_repository=rt.state_repository,
         artifact_store=rt.artifact_store,
