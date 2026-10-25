@@ -126,14 +126,14 @@ class CpuCausalProposalScorer:
         if not validated.passed or set(validated.valid_refs) != set(refs):
             raise PermissionError("CPU research model lacks verified source evidence")
         source_text = "\n".join(
-            "SOURCE " + row.ref + ": " + " ".join(row.fact.split())[:600]
+            "SOURCE " + row.ref + " [FACT EXCERPT; ORIGINAL HASH VERIFIED]: " + " ".join(row.fact.split())[:80]
             for row in task.evidence
         )
         prefix = (
             "Hephaestus scientific research assistant. This CPU model may only "
             "recommend a review; never claim a certificate or approval.\n"
             "Role: " + task.role + "\n"
-            "Scientific problem: " + task.situation[:1200] + "\n"
+            "Scientific problem (bounded excerpt): " + task.situation[:220] + "\n"
             "Verified source statements:\n" + source_text + "\n"
             "Choose the best next review proposal. Possible proposal:\n"
         )
