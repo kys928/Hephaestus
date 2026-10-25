@@ -337,7 +337,7 @@ def make_staged_core_services(runtime, *, diagnosis_request_ref: str) -> StagedA
     refs = source.get("evidence_refs")
     if (not isinstance(refs, list) or not refs
             or not all(isinstance(ref, str) for ref in refs)
-            or len(set(refs)) != len(refs):
+            or len(set(refs)) != len(refs)):
         raise ValueError("entry scientific source references missing or repeated")
     for ref in refs:
         if not isinstance(ref, str) or not ref.startswith("sha256:"):
