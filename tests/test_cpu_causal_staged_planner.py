@@ -63,8 +63,8 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     # material*, not an independently sourced training corpus.
     local = tmp_path / "operator-authored-research-only.jsonl"
     local.write_text(
-        '{"text":"Synthetic example to test a real local dataset discovery record."}\\n'
-        '{"text":"Synthetic second example with a distinct text record."}\\n',
+        '{"text":"Synthetic example to test a real local dataset discovery record."}\n'
+        '{"text":"Synthetic second example with a distinct text record."}\n',
         encoding="utf-8",
     )
     rt.dataset_registry.register(LocalFixtureDatasetProvider(fixtures=(
