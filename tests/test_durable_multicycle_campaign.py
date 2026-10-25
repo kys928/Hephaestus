@@ -178,6 +178,10 @@ def test_campaign_identity_is_immutable_and_cannot_reset_existing_state(tmp_path
         ProductionLoopRunner(runtime, StagedProductionCycleDriver(_factory(first)),
                              maximum_cycles=0).run(program_id="identity-campaign",
                              lineage_id="original", stage_name="smoke_test")
+    with pytest.raises(ValueError, match="cycle budget changed"):
+        ProductionLoopRunner(runtime, StagedProductionCycleDriver(_factory(first)),
+                             maximum_cycles=2).run(program_id="identity-campaign",
+                             lineage_id="original", stage_name="smoke_test")
 
 
 def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
