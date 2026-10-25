@@ -47,8 +47,13 @@ def verify_semantic_leakage_audit(
     }
     if any(audit.get(key) != value for key, value in expected.items()):
         raise PermissionError("semantic leakage audit does not cover exact sealed data and exposures")
+    for field in ("holdout_cases_checked", "training_cases_checked",
+                  "development_cases_checked", "diagnostic_cases_checked"):
+        if type(audit.get(field)) is not int:
+            raise PermissionError("semantic leakage audit has non-integer coverage")
     methods = audit.get("methods")
-    if (not isinstance(methods, list) or len(methods) != len(set(methods))
+    if (not isinstance(methods, list) or not all(isinstance(v, str) for v in methods)
+            or len(methods) != len(set(methods))
             or not {"lexical_near_duplicate", "semantic_similarity", "human_review"}.issubset(set(methods))):
         raise PermissionError("semantic leakage audit lacks lexical, semantic, or human review")
     if (not isinstance(audit.get("auditor_id"), str) or not audit["auditor_id"].strip()
