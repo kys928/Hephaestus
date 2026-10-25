@@ -7,7 +7,9 @@ from dataclasses import replace
 
 import pytest
 
-from hephaestus.evaluation.independent_holdout_review import review_independent_evaluator_holdout
+from hephaestus.evaluation.independent_holdout_review import (
+    review_independent_evaluator_holdout, verify_external_evaluator_certificate,
+)
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
@@ -194,3 +196,71 @@ def test_non_significant_contrast_effect_is_not_confused_with_improvement(tmp_pa
     assert not result.eligible_for_external_certification_review
     assert ("insufficient_independent_decisive_contrast_pairs" in result.blocking_issues
             or "paired_sign_test_not_significant" in result.blocking_issues)
+
+
+def _externally_signed_certificate(store, args, custodian_private):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    result = review_independent_evaluator_holdout(store, **args)
+    independent = Ed25519PrivateKey.generate()
+    key = independent.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    statement = {
+        "schema": "independent-evaluator-certificate.v1",
+        "role": "evaluator", "verdict": "certified",
+        "certifier_id": "independent-scientific-committee",
+        "holdout_ref": args["approved_pack_ref"],
+        "candidate_checkpoint_ref": args["expected_candidate_checkpoint_ref"],
+        "review_receipt_ref": result.review_receipt_ref,
+        "assessment_ref": result.assessment.artifact_ref,
+        "issued_at": "2026-10-25T08:00:00+00:00",
+        "expires_at": "2027-10-25T08:00:00+00:00",
+    }
+    signed = _put(store, statement)
+    certificate = _put(store, {
+        "schema": "independent-evaluator-certificate-signature.v1",
+        "statement_ref": signed,
+        "ed25519_signature_base64": base64.b64encode(
+            independent.sign(canonical_bytes(statement))).decode("ascii"),
+    })
+    authorized = {
+        "certificate_ref": certificate,
+        "expected_checkpoint_ref": args["expected_candidate_checkpoint_ref"],
+        "pre_registered_pack_ref": args["pre_registered_pack_ref"],
+        "trusted_certifier_id": statement["certifier_id"],
+        "trusted_certifier_public_key": key,
+        "trusted_custodian_id": args["trusted_custodian_id"],
+        "trusted_custodian_public_key": args["trusted_custodian_public_key"],
+    }
+    return authorized
+
+
+def test_distinct_external_certifier_signature_must_match_recomputed_evidence(tmp_path):
+    store, args, witness, private = _scene(tmp_path)
+    certificate = _externally_signed_certificate(store, args, private)
+    result = verify_external_evaluator_certificate(store, **certificate)
+    assert result["status"] == "external_certificate_signature_verified"
+    assert result["candidate_checkpoint_ref"] == args["expected_candidate_checkpoint_ref"]
+    assert result["certificate_ref"] == certificate["certificate_ref"]
+
+
+@pytest.mark.parametrize("variant", ["wrong_certificate_key", "wrong_checkpoint",
+                                     "wrong_pack", "same_review_authority", "fake_certificate"])
+def test_certificate_verification_refuses_untrusted_authority_or_scope(tmp_path, variant):
+    store, args, witness, private = _scene(tmp_path)
+    certificate = _externally_signed_certificate(store, args, private)
+    if variant == "wrong_certificate_key":
+        certificate["trusted_certifier_public_key"] = args["trusted_custodian_public_key"]
+    elif variant == "wrong_checkpoint":
+        certificate["expected_checkpoint_ref"] = "checkpoint://unrelated"
+    elif variant == "wrong_pack":
+        certificate["pre_registered_pack_ref"] = "sha256:" + "0" * 64
+    elif variant == "same_review_authority":
+        certificate["trusted_certifier_id"] = args["trusted_custodian_id"]
+    elif variant == "fake_certificate":
+        certificate["certificate_ref"] = _put(store, {
+            "schema": "independent-evaluator-certificate-signature.v1",
+            "statement_ref": "sha256:" + "0" * 64,
+            "ed25519_signature_base64": base64.b64encode(b"0" * 64).decode(),
+        })
+    with pytest.raises((ValueError, PermissionError)):
+        verify_external_evaluator_certificate(store, **certificate)
