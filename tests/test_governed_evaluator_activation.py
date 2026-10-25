@@ -253,3 +253,28 @@ def test_active_role_resolution_does_not_rehash_optimizer_training_state(tmp_pat
     spec, path = manager.resolve()
     assert path == Path(checkpoint) / "model"
     assert spec.adapter.bytes > 0
+
+
+def test_production_activation_requires_separately_trusted_holdout_certificate(tmp_path):
+    # Even an already synthetic-'certified' promoted checkpoint and an
+    # authentic operator activation approval must NOT suffice for live routing.
+    manager, checkpoint = _setup(tmp_path)
+    with pytest.raises(PermissionError, match="independently signed"):
+        manager.activate(
+            lineage_id="L", run_id="activation-run", checkpoint_ref=checkpoint,
+            approval_ref="activation-grant", generator=SyntheticProbe(),
+            simulated=False)
+    assert manager._current() is None
+    assert not any(event.get("status") == "active_verified"
+                   for event in manager.repository.all(ACTIVE_ROLE_EVENTS))
+
+
+def test_active_verified_route_without_signed_receipt_fails_closed(tmp_path):
+    manager, checkpoint = _setup(tmp_path)
+    # Injected invalid state, not a successful production activation.
+    manager.repository.append(ACTIVE_ROLE_EVENTS, {
+        "status": "active_verified", "role": "evaluator",
+        "checkpoint_ref": checkpoint,
+    })
+    with pytest.raises(PermissionError, match="certificate"):
+        manager.resolve()
