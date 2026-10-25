@@ -151,6 +151,7 @@ def _setup_finalized(tmp_path, *, checked_tokenizer=True,
         StagedTrainingLifecycleAdapter(runtime.state_repository, runtime.artifact_store,
                                        runtime.training_lifecycle, execute_enabled=False),
         approved_recipe_refs=frozenset((recipe.artifact_ref,)),
+        approved_baseline_refs=frozenset(("frozen-parent",)),
     )
     return runtime, service, _req(), source
 
@@ -256,3 +257,11 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
         tmp_path / "real-cpu-lora-runs").status(proposal.run_id)
     assert restored.status == "completed"
     assert restored.checkpoint_refs == result.checkpoint_refs
+
+
+def test_wrong_frozen_parent_ref_stops_training_before_validation(tmp_path):
+    runtime, finalizer, request, _ = _setup_finalized(tmp_path)
+    finalizer.approved_baseline_refs = frozenset(("another-parent",))
+    outcome = finalizer.execute(request)
+    assert outcome.status == "blocked"
+    assert "scientific_training_finalization_failed:PermissionError" in outcome.blocking_issues
