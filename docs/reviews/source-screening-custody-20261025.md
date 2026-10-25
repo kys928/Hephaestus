@@ -137,3 +137,50 @@ training bytes digest `sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32
 the repository diagnostic probe's exact digest and the public behavior pack's
 file digest. These are incomplete exposure records, not four completed
 custodial manifests. No original training or private holdout bytes were read.
+
+## Verified corrected run
+
+[Run 40228254201](https://github.com/kys928/Hephaestus/actions/runs/40228254201)
+passed **69 focused tests**, then repeated both complete source-file scans.
+[The v2 research freeze](https://github.com/kys928/Hephaestus/releases/tag/source-screening-triage-v2)
+pins `fbd4b0619eac7bdba18108863be480b62cea494b`. Its evidence ZIP SHA-256 is
+`3cc57c6d66de2506313d6ab9485d7752036744683b4e744d60e54566d564bc0e`;
+all nine content files verified against the archived index after download.
+
+| Source | Rows scanned | Unique normalized mapped rows | English-heuristic rows | Original-profile unknowns / tokens | Public prompt hits |
+| --- | ---: | ---: | ---: | --- | ---: |
+| SAF train | 1,700 | 26 | 1,700 | 5,746 / 398,030 (1.4436%, fails 1%) | 0 / six public prompts |
+| WikiText-2 raw train | 36,718 | 21,707 nonempty | 16,503 | 0 / 2,586,397 (0%, passes source-profile check) | 0 / six public prompts |
+
+The first 100 SAF rows reproduce the frozen preview **exactly**: 265 unknowns
+out of 23,193 tokens. WikiText's first 100 likewise reproduce 0 / 6,902. These
+rechecks explain the result without assuming changed source or tokenizer bytes.
+The original tokenizer encodes a newline as one unknown token; the control
+`one\ntwo` contains one unknown, while `one two` contains none. The separate
+flattened-whitespace study measures SAF 0 / 391,907. This strongly implicates
+line-boundary handling in the prior incompatibility finding; it does not clear
+the complete staged wrapper/chunking profile or authorize changing it. The
+tokenizer is not modified. Dataset-scoring policy remains unchanged.
+
+WikiText produced **13,420** contiguous 128-prefix / 32-target candidate windows
+over 7,252 long-enough accepted rows, stride 64, with no row concatenation or
+invented EOS. No windows were materialized for training. This is not a
+termination-supervision proof or a replacement for full leakage screening.
+
+Recorded runtime: Python 3.12.15, tokenizers 0.23.3, PyArrow 23.0.1,
+cryptography 50.0.2, CPU runner. No GPU was allocated. Source files were deleted
+from the temporary quarantine before evidence upload.
+
+The broad dependency-minimal regression run exposed missing `cryptography` in
+the new custody test fixtures. Those fixtures now follow the existing optional
+dependency skip convention; dedicated screening CI explicitly installs it and
+must execute the signature tests. Production verification still refuses missing
+cryptography. Local full regression before the normalization follow-up was
+716 passed / 12 skipped; final focused checks are reported separately.
+
+**Still incomplete:** independent custody of all four original-text manifests,
+protected-reference read authorization, semantic/original-text human review,
+full PII clearance, exact/near-duplicate comparisons across those complete
+references, dataset acquisition approval and the 45-stage campaign. This work
+establishes source-only measurements and a custody-admission mechanism, not
+those external facts. PR #108 remains draft and unmerged.

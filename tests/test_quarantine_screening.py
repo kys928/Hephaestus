@@ -39,6 +39,7 @@ def test_public_overlap_is_partial_even_if_no_hits():
 
 
 def _scene(tmp_path, change=None):
+    pytest.importorskip("cryptography")  # mandatory installation in dedicated custody workflow
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
     store = FileSystemArtifactStore(tmp_path)
