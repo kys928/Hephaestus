@@ -23,6 +23,10 @@ jobs:
         env:
           HEPHAESTUS_CPU_ROLE_SMOKE_REPORT: evidence/cpu-research-roles.json
         run: pytest -q -m real_cpu tests/test_cpu_real_role_weights.py -rs
+      - name: Verify first five genuine content-addressed staged operations
+        env:
+          HEPHAESTUS_CPU_STAGED_ENTRY_REPORT: evidence/cpu-staged-prefix.json
+        run: pytest -q tests/test_staged_real_core_science.py -rs
       - name: Execute real training, checkpoint, generation, comparison and Judge
         env:
           HEPHAESTUS_CPU_CAMPAIGN_REPORT: evidence/cpu-real-peft-and-judge.json
