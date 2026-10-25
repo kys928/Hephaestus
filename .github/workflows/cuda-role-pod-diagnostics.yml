@@ -16,6 +16,7 @@ jobs:
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HEPHAESTUS_DIAGNOSTIC_RUN_ID: hephaestus-five-role-cuda-40189727864
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,6 +31,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terminated-cuda-pod-diagnostic
-          path: evidence/first_cuda_bootstrap_diagnostic.json
+          path: evidence/cuda_bootstrap_diagnostic.json
           retention-days: 7
           if-no-files-found: warn
