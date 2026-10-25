@@ -1,4 +1,5 @@
 name: Frozen five-role CUDA smoke — bounded paid RunPod test
+# Second bounded execution: actual Judge must cite the one immutable verified source.
 on:
   push:
     branches: [feature/cuda-five-role-preflight-20261025]
