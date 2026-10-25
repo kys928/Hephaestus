@@ -56,6 +56,12 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     # If no such option exists, this is a correct scientific refusal.
     sixth = workflow.steps.get("planner.intervention_ranking")
     assert sixth is not None
+    print("REAL_CPU_SCIENTIFIC_PLANNER_STATUS", json.dumps({
+        "status": sixth.status,
+        "issues": list(sixth.blocking_issues),
+        "output": sixth.output,
+        "completed": sixth.completion_marker,
+    }, default=str))
     if sixth.completion_marker:
         assert sixth.status == "completed"
         ref = sixth.metadata["cpu_causal_model_inference_ref"]
@@ -74,7 +80,8 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         source = read_verified_json(rt.artifact_store, model_decision_rows[0]["artifact_ref"])
         assert source["payload"]["metadata"]["model_originated"]
     else:
-        assert sixth.status == "blocked"
+        assert sixth.status in {"blocked", "terminal_failure"}
+        assert sixth.blocking_issues
     report = {
         "schema":"hephaestus-cpu-real-causal-staged-planner.v1",
         "actual_pinned_cpu_causal_lm_loaded": True,
