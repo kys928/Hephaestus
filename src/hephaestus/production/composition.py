@@ -163,7 +163,9 @@ class ProductionRuntime:
                        dataset_selection=service, model_discovery=service,
                        model_selection=service)
 
-    def with_training_services(self, services, *, execute_enabled: bool = False,\n                               finalize_verified_selections: bool = False,\n                               approved_recipe_refs: tuple[str, ...] = ()):
+    def with_training_services(self, services, *, execute_enabled: bool = False,
+                               finalize_verified_selections: bool = False,
+                               approved_recipe_refs: tuple[str, ...] = ()):
         """Inject the actual guarded PEFT lifecycle into staged operations.
 
         Disabled until the caller explicitly enables execution. This does not
@@ -178,7 +180,9 @@ class ProductionRuntime:
             repository=self.state_repository, artifacts=self.artifact_store,
             lifecycle=self.training_lifecycle, execute_enabled=execute_enabled,
         )
-        admitted = (StagedExperimentFinalizer(\n            self.state_repository, self.artifact_store, service,\n            approved_recipe_refs=frozenset(approved_recipe_refs))
+        admitted = (StagedExperimentFinalizer(
+            self.state_repository, self.artifact_store, service,
+            approved_recipe_refs=frozenset(approved_recipe_refs))
                     if finalize_verified_selections else service)
         return replace(
             services, training_lifecycle=admitted,
