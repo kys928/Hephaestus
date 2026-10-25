@@ -97,8 +97,9 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
             and row.get("operation_id") == sixth.operation_id
         ]
         assert len(model_decision_rows) == 1
-        source = read_verified_json(rt.artifact_store, model_decision_rows[0]["artifact_ref"])
-        assert source["payload"]["metadata"]["model_originated"]
+        intervention_record = read_verified_json(
+            rt.artifact_store, model_decision_rows[0]["artifact_ref"])
+        assert intervention_record["payload"]["metadata"]["model_originated"]
     else:
         assert sixth.status in {"blocked", "terminal_failure"}
         assert sixth.blocking_issues
