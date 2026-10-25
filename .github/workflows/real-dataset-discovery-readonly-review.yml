@@ -1,0 +1,56 @@
+name: Independent real-dataset discovery and review (read-only)
+on:
+  push:
+    branches:
+      - experiment/read-only-real-dataset-review-20261025
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-real-dataset-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 42
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real metadata and frozen-tokenizer audit dependencies
+        run: python -m pip install --disable-pip-version-check -e . 'boto3>=1.35,<2' 'tokenizers>=0.20,<1' 'pytest>=8,<9'
+      - name: Check provider and scientific Planner contracts
+        run: pytest -q tests/test_autonomous_data_discovery.py tests/test_huggingface_dataset_acquisition.py tests/test_closed_loop_planner.py tests/test_resolved_evidence_planner.py
+      - name: Verify frozen driver compiles
+        run: python -m py_compile scripts/run_first_autonomous_dataset_discovery.py
+      - name: Real live Hugging Face provider discovery, immutable metadata, bounded previews, real frozen-tokenizer audit, and policy selection
+        run: python scripts/run_first_autonomous_dataset_discovery.py
+      - name: Write explicit read-only custody limits
+        if: always()
+        run: |
+          python - <<'PY'
+          import json,hashlib,pathlib,os
+          paths=[pathlib.Path(x) for x in ("first_autonomous_dataset_discovery.json","first_autonomous_dataset_candidates.json","first_autonomous_dataset_selection.json","first_autonomous_dataset_experiment.json")]
+          out={"schema":"hephaestus-independent-real-dataset-review-custody.v1","research_only":True,"dataset_downloaded":False,"training_launched":False,"operator_approval_inferred":False,"gpu_allocated":False,"frozen_source":"docs/evidence/first-targeted-post-failure-diagnostics-001-33874832481/planner.json","run_commit":os.getenv("GITHUB_SHA"),"artifact_file_sha256":{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()}}
+          pathlib.Path("real_dataset_review_custody.json").write_text(json.dumps(out,sort_keys=True,indent=2)+"\n")
+          print(json.dumps(out,sort_keys=True))
+          PY
+      - name: Keep real scientific evidence for independent review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-dataset-metadata-preview-and-tokenizer-review
+          path: |
+            first_autonomous_dataset_discovery.json
+            first_autonomous_dataset_candidates.json
+            first_autonomous_dataset_selection.json
+            first_autonomous_dataset_experiment.json
+            real_dataset_review_custody.json
+          if-no-files-found: warn
+          retention-days: 30
