@@ -14,7 +14,7 @@ from hephaestus.control.staged_state import StagedAutonomousDependencies, Staged
 from hephaestus.production.composition import ProductionCompositionRoot, ProductionCompositionSettings
 from hephaestus.production.loop import ProductionLoopRunner
 from hephaestus.production.staged_driver import StagedProductionCycleDriver
-from hephaestus.production.state import ACTION_EXECUTIONS, WORKFLOW_RECORD_COLLECTION
+from hephaestus.production.state import ACTION_EXECUTIONS
 from hephaestus.state.experiment_memory import ExperimentMemoryQuery
 from hephaestus.storage.verified import read_verified_json
 from test_staged_autonomous_orchestration import FakeOperationRouter, _services
