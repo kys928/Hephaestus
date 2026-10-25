@@ -178,6 +178,21 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     assert proposal_doc["payload"]["metadata"]["baseline_justification"] == source["baseline_justification"]
     assert proposal_doc["payload"]["required_approvals"]
     assert proposal_doc["payload"]["metadata"]["approval_state"] == "required"
+    # The rest of the genuine Planner handoff remains evidence-backed and
+    # carries required approvals without granting or faking them.
+    for key in ("planner.discovery_request_preparation",
+                "planner.approval_requirement_discovery"):
+        assert workflow.steps[key].completion_marker, (
+            key + ": " + str(workflow.steps[key].blocking_issues))
+    discovery = workflow.steps["planner.discovery_request_preparation"]
+    assert discovery.output["discovery_required"] is True
+    assert workflow.steps["planner.approval_requirement_discovery"].output[
+        "required_approvals"] == ["dataset_selection_approval"]
+    next_stage = workflow.steps.get("data_acquisition_audit.dataset_discovery")
+    assert next_stage is not None and next_stage.status == "blocked"
+    assert any("service_not_configured" in issue for issue in next_stage.blocking_issues)
+    assert sum(value == "completed" for value in report["operation_statuses"].values()) == 9
+    assert report["operation_statuses"]["data_acquisition_audit.dataset_discovery"] == "blocked"
     if os.environ.get("HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"):
         p=Path(os.environ["HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT"])
         p.parent.mkdir(parents=True,exist_ok=True)
