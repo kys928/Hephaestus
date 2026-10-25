@@ -1,0 +1,62 @@
+name: Capability-targeted real HF dataset discovery (read-only)
+on:
+  push:
+    branches: [experiment/capability-targeted-dataset-discovery-20261025]
+  workflow_dispatch:
+
+permissions: {contents: read}
+jobs:
+  four-track-live-scientific-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: \${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: \${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: \${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: \${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: \${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only Hugging Face metadata and frozen-tokenizer dependencies
+        run: python -m pip install --disable-pip-version-check -e . 'boto3>=1.35,<2' 'tokenizers>=0.20,<1' 'pytest>=8,<9'
+      - name: Prove strict preview metrics and frozen discovery guard contracts
+        run: |
+          python -m py_compile scripts/run_capability_targeted_dataset_discovery.py
+          pytest -q tests/test_capability_targeted_dataset_discovery.py tests/test_huggingface_dataset_acquisition.py tests/test_autonomous_data_discovery.py
+      - name: Run independently budgeted English JSON, short answers, termination and continuation searches
+        run: python scripts/run_capability_targeted_dataset_discovery.py
+      - name: Persist read-only scientific evidence custody hashes
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,os
+          targets=[pathlib.Path('capability_targeted_discovery_20261025.json')]
+          out={
+            'schema':'hephaestus-targeted-discovery-custody.v1',
+            'run_commit':os.environ.get('GITHUB_SHA'),
+            'read_only':True,
+            'original_frozen_sources_unchanged':True,
+            'actual_corpus_acquired':False,
+            'training_executed':False,
+            'gpu_launched':False,
+            'approval_issued':False,
+            'source_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in targets if p.is_file()},
+          }
+          pathlib.Path('capability_targeted_discovery_custody.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(out,sort_keys=True))
+          PY
+      - name: Upload original four-track results (no raw dataset rows)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: four-track-targeted-real-hf-review
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            capability_targeted_discovery_20261025.json
+            capability_targeted_discovery_custody.json
