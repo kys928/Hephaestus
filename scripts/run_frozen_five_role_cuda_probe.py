@@ -155,13 +155,22 @@ def main() -> int:
                     raise TimeoutError("bounded five-role scientific smoke budget exhausted")
                 result["hf_pinned_snapshot"] = str(_prefetch_one(
                     spec.model_id, spec.revision, hf_cache))
+                situation = (
+                    "Read-only CUDA runtime smoke on the frozen role registry. "
+                    "Do not assert a scientific improvement, certification, or "
+                    "permission to act. Return a bounded, evidence-based proposal."
+                )
+                if role == "judge":
+                    situation += (
+                        " The only available, SHA-verified evidence reference is "
+                        + task_ref + ". Cite this reference exactly once in "
+                        + "the evidence_refs JSON array. Do not invent other sources. "
+                        + "No independent scientific review or authorization has been "
+                        + "provided; prefer a permitted nonpromotion disposition."
+                    )
                 task = RoleTask(
                     role=role,
-                    situation=(
-                        "Read-only CUDA runtime smoke on the frozen role registry. "
-                        "Do not assert a scientific improvement, certification, or "
-                        "permission to act. Return a bounded, evidence-based proposal."
-                    ),
+                    situation=situation,
                     evidence=(RoleEvidence(
                         task_ref,
                         "SHA-verified frozen five-role registry. "
