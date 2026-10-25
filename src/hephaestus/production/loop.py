@@ -104,6 +104,7 @@ class ProductionLoopRunner:
                 lineage_id=lineage_id,
                 stage_name=stage_name,
                 status="running",
+                metadata={"cycle_limit": self.maximum_cycles},
             )
             store.save(state)
         else:
@@ -115,6 +116,14 @@ class ProductionLoopRunner:
                 raise ValueError("durable campaign cycle history is inconsistent")
             if state.cycle_index > self.maximum_cycles:
                 raise ValueError("requested cycle ceiling is below persisted progress")
+            frozen_limit = state.metadata.get("cycle_limit")
+            if frozen_limit is not None and frozen_limit != self.maximum_cycles:
+                raise ValueError("campaign cycle budget changed after creation")
+            if frozen_limit is None:
+                # Legacy campaigns were created without an explicit limit.
+                # They can be resumed once with the existing requested cap;
+                # subsequent restarts cannot silently change that ceiling.
+                state.metadata["cycle_limit"] = self.maximum_cycles
             if state.status in {"completed", "stopped", "blocked"}:
                 return state
             state.status = "running"
