@@ -31,12 +31,14 @@ jobs:
         run: python -m py_compile scripts/run_first_autonomous_dataset_discovery.py
       - name: Real live Hugging Face provider discovery, immutable metadata, bounded previews, real frozen-tokenizer audit, and policy selection
         run: python scripts/run_first_autonomous_dataset_discovery.py
+      - name: Independently cross-examine human and synthetic alternative datasets against the same frozen tokenizer
+        run: python scripts/independent_real_dataset_contrast_review.py
       - name: Write explicit read-only custody limits
         if: always()
         run: |
           python - <<'PY'
           import json,hashlib,pathlib,os
-          paths=[pathlib.Path(x) for x in ("first_autonomous_dataset_discovery.json","first_autonomous_dataset_candidates.json","first_autonomous_dataset_selection.json","first_autonomous_dataset_experiment.json")]
+          paths=[pathlib.Path(x) for x in ("first_autonomous_dataset_discovery.json","first_autonomous_dataset_candidates.json","first_autonomous_dataset_selection.json","first_autonomous_dataset_experiment.json","independent_dataset_contrast_review.json")]
           out={"schema":"hephaestus-independent-real-dataset-review-custody.v1","research_only":True,"dataset_downloaded":False,"training_launched":False,"operator_approval_inferred":False,"gpu_allocated":False,"frozen_source":"docs/evidence/first-targeted-post-failure-diagnostics-001-33874832481/planner.json","run_commit":os.getenv("GITHUB_SHA"),"artifact_file_sha256":{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths if p.is_file()}}
           pathlib.Path("real_dataset_review_custody.json").write_text(json.dumps(out,sort_keys=True,indent=2)+"\n")
           print(json.dumps(out,sort_keys=True))
@@ -52,5 +54,6 @@ jobs:
             first_autonomous_dataset_selection.json
             first_autonomous_dataset_experiment.json
             real_dataset_review_custody.json
+            independent_dataset_contrast_review.json
           if-no-files-found: warn
           retention-days: 30
