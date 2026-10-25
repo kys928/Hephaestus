@@ -45,6 +45,7 @@ class StagedScientificEntry:
     artifacts: object
     diagnosis_service: object
     diagnosis_request_ref: str
+    repository: object
 
     def _source(self, req: StagedOperationRequest):
         payload = read_verified_json(self.artifacts, self.diagnosis_request_ref)
@@ -113,7 +114,7 @@ class StagedScientificEntry:
                               "missing_evidence": list(result.missing_evidence),
                               "blocking_diagnosis": any(i.blocking for i in result.issues)})
             report = DiagnosisReport.from_dict(verified_workflow_payload(
-                self.diagnosis_service_repository(req), self.artifacts, req,
+                self.repository, self.artifacts, req,
                 substep="evidence_based_diagnosis", kind="diagnosis_report"))
             if report.missing_evidence or any(i.blocking for i in report.issues):
                 return _bad("diagnosis_not_ready_for_planning", resumable=True)
@@ -124,15 +125,6 @@ class StagedScientificEntry:
                 }),), metadata={"ready_to_plan": True})
         except (ValueError, TypeError, PermissionError, KeyError, OSError) as exc:
             return _bad(f"scientific_entry_invalid:{type(exc).__name__}")
-
-    # Repository assigned explicitly so the service cannot trust caller metadata.
-    repository: object = None
-
-    def diagnosis_service_repository(self, req):
-        if self.repository is None:
-            raise ValueError("scientific entry requires production state repository")
-        return self.repository
-
 
 @dataclass(slots=True)
 class StagedPlannerHandoff:
@@ -210,6 +202,7 @@ class StagedRuntimeObservation:
                         "event_stream_ref": handle.event_stream_ref,
                         "metrics_ref": handle.metrics_ref,
                         "observed_status": handle.status,
+                        "incidents": [issue.to_dict() for issue in handle.issues],
                     }),), metadata={"runtime_evidence_complete": True,
                                   "monitor_outcome": "healthy"})
             if not req.prior_outputs.get(
@@ -296,7 +289,7 @@ class StagedSemanticJudge:
                 # Even a promising tiny-model effect cannot become an implicit
                 # certificate or promotion: conservative model of this gate.
                 if action == "promote_checkpoint":
-                    action = "request_recheck"
+                    return _bad("independent_certificate_required_before_promotion")
                 return StagedOperationResult(
                     records=(StagedOutputRecord("judge_exit", outcome.to_dict()),),
                     metadata={"proposed_action": action, "subject_ref": checkpoint,
