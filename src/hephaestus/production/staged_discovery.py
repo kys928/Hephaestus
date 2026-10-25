@@ -7,7 +7,7 @@ acquisition, preprocessing and training remain separate governed operations.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from hephaestus.control.staged_state import (
     StagedOperationRequest, StagedOperationResult, StagedOutputRecord,
@@ -29,6 +29,7 @@ class StagedDiscoveryAdapter:
     model_coordinator: object
     model_selector: object
     require_planner_approval_receipt: bool = False
+    candidate_review_refs: dict[str, str] = field(default_factory=dict)
 
     def _planner_dataset_approvals(self, request: StagedOperationRequest, search: DatasetSearchRequest) -> list[str]:
         """Reopen the original Planner approval record before selecting data.
@@ -126,10 +127,23 @@ class StagedDiscoveryAdapter:
                     "candidates": [c.to_dict() for c in candidates],
                     "issues": [item.to_dict() for item in issues],
                 }
+                records = [StagedOutputRecord(record_kind, payload)]
+                if kind == "dataset" and self.candidate_review_refs:
+                    from hephaestus.storage.verified import read_verified_json
+                    # Review evidence is part of this persisted operation, not
+                    # an unrelated report or an approval in candidate metadata.
+                    records.append(StagedOutputRecord("dataset_candidate_reviews", {
+                        "request_id": search.request_id,
+                        "reviews": [{"candidate_id": c.candidate_id,
+                            "review_ref": self.candidate_review_refs[c.candidate_id],
+                            "review": read_verified_json(self.artifacts,
+                                self.candidate_review_refs[c.candidate_id])}
+                            for c in candidates if c.candidate_id in self.candidate_review_refs],
+                    }))
                 return StagedOperationResult(
                     status="completed" if payload["status"] == "discovered" else "blocked",
                     resumable=False,
-                    records=(StagedOutputRecord(record_kind, payload),),
+                    records=tuple(records),
                     blocking_issues=tuple(blocking or (
                         () if candidates else ("discovery_returned_no_candidates",)
                     )),
@@ -143,6 +157,16 @@ class StagedDiscoveryAdapter:
                                   "reason": "planner_requested_no_" + kind + "_change"},
                 ),), metadata={"required_approvals": [],
                                kind + "_selection_required": False})
+            if kind == "dataset" and self.candidate_review_refs:
+                reviews = verified_workflow_payload(self.repository, self.artifacts, request,
+                    substep="dataset_discovery", kind="dataset_candidate_reviews")
+                from hephaestus.storage.verified import read_verified_json
+                expected = [{"candidate_id": c.candidate_id,
+                    "review_ref": self.candidate_review_refs[c.candidate_id],
+                    "review": read_verified_json(self.artifacts, self.candidate_review_refs[c.candidate_id])}
+                    for c in candidates if c.candidate_id in self.candidate_review_refs]
+                if reviews != {"request_id": search.request_id, "reviews": expected}:
+                    raise ValueError("discovery review evidence differs from selection scope")
             decision = (
                 self.dataset_selector.select(search, candidates)
                 if kind == "dataset" else self.model_selector.select(search, candidates)
@@ -185,6 +209,8 @@ class StagedDiscoveryAdapter:
                 revision = selected[0].revision
                 if revision:
                     metadata[kind + "_revision"] = revision
+                if kind == "dataset" and selected[0].provider_id == "huggingface":
+                    metadata["remote_dataset_review_required"] = True
             return StagedOperationResult(
                 records=(StagedOutputRecord(record_kind, decision.to_dict()),),
                 metadata=metadata,

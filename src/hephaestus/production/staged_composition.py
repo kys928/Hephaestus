@@ -94,6 +94,9 @@ def compose_verified_staged_dependencies(
     approved_recipe_refs: tuple[str, ...],
     approved_baseline_refs: tuple[str, ...],
     enable_local_acquisition: bool = False,
+    enable_huggingface_acquisition: bool = False,
+    dataset_review_policy=None,
+    candidate_review_refs=None,
     enable_training_execution: bool = False,
     enable_generation_inference: bool = False,
     eval_pack_name: str = "semantic_behavior_v1",
@@ -133,10 +136,19 @@ def compose_verified_staged_dependencies(
     if type(generation_backend) is not TransformersCausalLMGenerationBackend:
         raise PermissionError("production generation requires real Transformers inference backend")
 
+    if enable_local_acquisition and enable_huggingface_acquisition:
+        raise ValueError("choose one explicitly governed dataset acquisition route")
+    if enable_huggingface_acquisition and dataset_review_policy is None:
+        raise PermissionError("remote execution requires independent dataset review policy")
     services = runtime.with_discovery_services(
-        core_services, require_planner_approval_receipt=True)
-    services = runtime.with_local_data_factory(
-        services, acquisition_enabled=enable_local_acquisition)
+        core_services, require_planner_approval_receipt=True,
+        dataset_review_policy=dataset_review_policy, candidate_review_refs=candidate_review_refs)
+    if dataset_review_policy is not None:
+        services = runtime.with_huggingface_data_factory(services,
+            review_policy=dataset_review_policy, acquisition_enabled=enable_huggingface_acquisition)
+    else:
+        services = runtime.with_local_data_factory(
+            services, acquisition_enabled=enable_local_acquisition)
     services = runtime.with_training_services(
         services, execute_enabled=enable_training_execution,
         finalize_verified_selections=True,

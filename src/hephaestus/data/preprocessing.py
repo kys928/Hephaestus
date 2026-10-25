@@ -158,7 +158,7 @@ def _load_parquet_records(path: Path, max_rows: int) -> tuple[list[object], bool
     return raw_records, total_rows > len(raw_records)
 
 
-def _load_records(path: Path, record_format: str, max_rows: int) -> _LoadResult:
+def _load_records(path: Path, record_format: str, max_rows: int, record_mapper=None) -> _LoadResult:
     raw_records: list[object]
     malformed = 0
     truncated = False
@@ -203,7 +203,8 @@ def _load_records(path: Path, record_format: str, max_rows: int) -> _LoadResult:
         if not isinstance(raw, dict):
             malformed += 1
             continue
-        record = normalize_record(raw)
+        mapped = record_mapper.map(raw) if record_mapper is not None else raw
+        record = normalize_record(mapped) if mapped is not None else None
         if record is None:
             malformed += 1
             continue
@@ -227,6 +228,7 @@ class AutonomousDataPreprocessor:
     record_filter: RecordFilter | None = None
     contamination_checker: ContaminationChecker | None = None
     tokenizer_checker: TokenizerCompatibilityChecker | None = None
+    record_mapper: object | None = None
 
     def process(
         self,
@@ -323,6 +325,7 @@ class AutonomousDataPreprocessor:
             acquisition.source_path,
             acquisition.record_format,
             self.config.max_rows,
+            self.record_mapper,
         )
         audit_scope = "sampled_audit" if loaded.truncated else "full_scan"
 

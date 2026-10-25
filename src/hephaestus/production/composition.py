@@ -117,6 +117,19 @@ class ProductionRuntime:
         return replace(services, dataset_acquisition=service,
                        data_preprocessor=service)
 
+    def with_huggingface_data_factory(self, services, *, review_policy,
+                                     acquisition_enabled: bool = False):
+        """Opt-in remote acquisition after independent full-corpus clearance."""
+        from dataclasses import replace
+        from .staged_remote_data import StagedApprovedHuggingFaceDataFactory
+        service = StagedApprovedHuggingFaceDataFactory(
+            repository=self.state_repository, artifacts=self.artifact_store,
+            preprocessor=self.data_preprocessor,
+            maximum_source_bytes=self.settings.maximum_dataset_bytes,
+            acquisition_enabled=acquisition_enabled,
+            remote_acquisition=self.dataset_acquisition, review_policy=review_policy)
+        return replace(services, dataset_acquisition=service, data_preprocessor=service)
+
     def with_evaluation_services(self, services, *,
                                  baseline_run_artifact_ref: str,
                                  generation_backend,
@@ -149,17 +162,26 @@ class ProductionRuntime:
         return replace(services, generation=service, evaluator=service)
 
     def with_discovery_services(self, services, *,
-                                require_planner_approval_receipt: bool = False):
+                                require_planner_approval_receipt: bool = False,
+                                dataset_review_policy=None, candidate_review_refs=None):
         """Bind real allowlisted discovery; optionally require verified Planner approval custody."""
         from dataclasses import replace
         from .staged_discovery import StagedDiscoveryAdapter
+        selector = self.dataset_selector
+        refs = dict(candidate_review_refs or {})
+        if dataset_review_policy is not None:
+            from hephaestus.data.reviewed_selection import ReviewBoundDatasetSelector
+            selector = ReviewBoundDatasetSelector(selector, dataset_review_policy, refs)
+        elif refs:
+            raise ValueError("candidate review references require an explicit review policy")
         service = StagedDiscoveryAdapter(
             repository=self.state_repository, artifacts=self.artifact_store,
             dataset_registry=self.dataset_registry,
-            dataset_selector=self.dataset_selector,
+            dataset_selector=selector,
             model_coordinator=self.coordinator,
             model_selector=self.model_selector,
             require_planner_approval_receipt=require_planner_approval_receipt,
+            candidate_review_refs=refs,
         )
         return replace(services, dataset_discovery=service,
                        dataset_selection=service, model_discovery=service,

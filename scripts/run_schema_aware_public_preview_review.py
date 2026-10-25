@@ -34,8 +34,8 @@ REVIEW = {
         "caveat": "Chinese-language classroom instructions; English filter cannot be assumed to preserve source coverage",
     },
     "vara201/ecommerce-orders-structured-output": {
-        "task": "structured_json", "prompt": ("instruction", "prompt", "input"),
-        "target": ("output", "response", "completion"), "preferred_config": None,
+        "task": "structured_json", "prompt": ("instruction", "data", "schema"),
+        "target": ("output",), "preferred_config": None, "require_all_prompt_fields": True,
         "caveat": "Exact schema and origin must be checked; card license does not settle underlying generated-content rights",
     },
     "nvidia/Nemotron-RL-instruction_following-structured_outputs": {
@@ -90,6 +90,9 @@ def text_pair(row: dict, spec: dict) -> tuple[str, str, str]:
     if spec["task"] == "raw_continuation":
         text = row.get("text")
         return "", text if isinstance(text, str) else "", "single_text_train_row"
+    if spec.get("require_all_prompt_fields") and any(
+            not isinstance(row.get(k), str) or not row[k].strip() for k in spec["prompt"]):
+        return "", "", "missing_required_source_or_schema"
     prompt = " ".join(str(row[k]).strip() for k in spec["prompt"]
                       if isinstance(row.get(k), str) and row[k].strip())
     target = next((row[k] for k in spec["target"]

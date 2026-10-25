@@ -61,11 +61,14 @@ class StagedApprovedLocalDataFactory:
         if len(matches) != 1:
             raise ValueError("selected dataset has no unique discovered source")
         candidate = matches[0]
+        self._validate_candidate(candidate)
+        return decision, candidate
+
+    def _validate_candidate(self, candidate):
         if candidate.provider_id != "local_fixture":
             raise ValueError("remote datasets require a separate governed acquisition adapter")
         if not candidate.license or not candidate.provenance.get("content_hash"):
             raise ValueError("source license and pinned content hash are mandatory")
-        return decision, candidate
 
     def _approval(self, req, decision, candidate):
         gate = req.prior_outputs.get("data_acquisition_audit.acquisition_approval_gate", {})
@@ -78,7 +81,8 @@ class StagedApprovedLocalDataFactory:
         if (record.get("status") != "approved"
                 or record.get("approval_ref") != gate["approval_ref"]
                 or record.get("subject_ref") != decision.decision_id
-                or "dataset_acquisition" not in record.get("requirements", [])):
+                or not set(["dataset_acquisition", *decision.required_approvals]).issubset(
+                    record.get("requirements", []))):
             raise PermissionError("operator approval is stale, unscoped or mismatched")
         return DatasetAcquisitionApproval(
             selection_decision_id=decision.decision_id,
@@ -124,6 +128,29 @@ class StagedApprovedLocalDataFactory:
         self._source(req)
         return result
 
+    def _acquisition_result(self, req, decision, candidate, approval):
+        source = acquire_approved_local_candidate(
+            candidate, decision, approval, max_bytes=self.maximum_source_bytes)
+        return StagedOperationResult(
+            records=(StagedOutputRecord("acquisition_receipt", {
+                "schema": "approved-local-acquisition.v1",
+                "selection_decision_id": decision.decision_id,
+                "candidate_id": candidate.candidate_id,
+                "source_ref": str(source.source_path),
+                "source_content_hash": source.source_content_hash,
+                "source_bytes": source.source_bytes,
+                "record_format": source.record_format,
+                "revision": source.revision,
+                "approval_refs": list(source.approval_refs),
+            }),), metadata={"dataset_revision": source.revision,
+                            "approved_source_sha256": source.source_content_hash})
+
+    def _process_candidate(self, req, decision, candidate, approval):
+        return self.preprocessor.process(
+            run_id=req.run_id, lineage_id=req.lineage_id,
+            stage_name=req.stage_name, candidate=candidate,
+            selection=decision, approval=approval, tokenizer_ref=None)
+
     def execute(self, req: StagedOperationRequest) -> StagedOperationResult:
         if req.substep not in _SOURCE_STEPS | _PROCESS_STEPS:
             return StagedOperationResult(status="blocked", resumable=False,
@@ -135,23 +162,7 @@ class StagedApprovedLocalDataFactory:
             if req.substep == "dataset_acquisition":
                 decision, candidate = self._selection(req)
                 approval = self._approval(req, decision, candidate)
-                source = acquire_approved_local_candidate(
-                    candidate, decision, approval, max_bytes=self.maximum_source_bytes)
-                return StagedOperationResult(
-                    records=(StagedOutputRecord("acquisition_receipt", {
-                        "schema": "approved-local-acquisition.v1",
-                        "selection_decision_id": decision.decision_id,
-                        "candidate_id": candidate.candidate_id,
-                        "source_ref": str(source.source_path),
-                        "source_content_hash": source.source_content_hash,
-                        "source_bytes": source.source_bytes,
-                        "record_format": source.record_format,
-                        "revision": source.revision,
-                        "approval_refs": list(source.approval_refs),
-                    }),),
-                    metadata={"dataset_revision": source.revision,
-                              "approved_source_sha256": source.source_content_hash},
-                )
+                return self._acquisition_result(req, decision, candidate, approval)
             if req.substep in {"license_provenance_evidence", "dataset_audit"}:
                 decision, candidate, approval, source = self._source(req)
                 kind = ("license_provenance_evidence" if
@@ -170,12 +181,7 @@ class StagedApprovedLocalDataFactory:
                 )
             if req.substep == "manifest_production":
                 decision, candidate, approval, source = self._source(req)
-                result = self.preprocessor.process(
-                    run_id=req.run_id, lineage_id=req.lineage_id,
-                    stage_name=req.stage_name, candidate=candidate,
-                    selection=decision, approval=approval,
-                    tokenizer_ref=None,
-                )
+                result = self._process_candidate(req, decision, candidate, approval)
                 processing = dict(result.processing_evidence)
                 return StagedOperationResult(
                     records=(

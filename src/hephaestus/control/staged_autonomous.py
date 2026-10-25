@@ -391,6 +391,26 @@ class GovernedStagedOrchestrator:
             requirements=requirements,
         )
         request_record = StagedOutputRecord("approval_request", request.to_dict())
+        # Scientific eligibility is owned by the data service and cannot be
+        # overridden by a permissive operator approval provider. No network IO
+        # is permitted in this readiness check.
+        if substep == "acquisition_approval_gate" and source and source.output.get("remote_dataset_review_required"):
+            service = self.dependencies.services.dataset_acquisition
+            readiness = getattr(service, "approval_readiness", None)
+            issues = ("remote_dataset_review_service_missing",)
+            if callable(readiness):
+                issues = readiness(StagedOperationRequest(
+                    workflow_id=self.workflow_id, run_id=self.run_id,
+                    lineage_id=self.lineage_id, stage_name=self.stage_name,
+                    phase=phase.value, substep=substep, operation_id=operation_id,
+                    attempt=1, input_refs=tuple(self._input_refs(state)),
+                    prior_outputs={k: v.output for k, v in state.steps.items()}))
+            if issues:
+                return StagedOperationResult(status="approval_pending", records=(request_record,),
+                    blocking_issues=tuple(issues), resumable=True,
+                    metadata={"approval_status": "pending",
+                        "approval_request": request.to_dict(),
+                        "required_approvals": list(requirements)})
         decision = (
             self.dependencies.approval_service.decision_for(request)
             if self.dependencies.approval_service is not None
