@@ -16,6 +16,7 @@ jobs:
       HF_HUB_DISABLE_TELEMETRY: '1'
       TOKENIZERS_PARALLELISM: 'false'
       HEPHAESTUS_REAL_CPU_LM_REPORT: evidence/cpu-real-pretrained-causal-role-output.json
+      HEPHAESTUS_REQUIRE_REAL_CPU_LM: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
