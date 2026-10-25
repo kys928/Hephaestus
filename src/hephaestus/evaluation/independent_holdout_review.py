@@ -265,6 +265,8 @@ def review_independent_evaluator_holdout(
         "baseline_checkpoint_ref": expected_baseline_checkpoint_ref,
         "candidate_checkpoint_ref": expected_candidate_checkpoint_ref,
         "minimum_practical_gain": minimum_practical_gain,
+        "minimum_decisive_contrast_pairs": minimum_decisive_contrast_pairs,
+        "maximum_pair_p_value": maximum_pair_p_value,
         "observed_accuracy_gain": assessment.candidate_accuracy - assessment.baseline_accuracy,
         "winning_contrast_pairs": wins,
         "losing_contrast_pairs": losses,
@@ -280,3 +282,98 @@ def review_independent_evaluator_holdout(
     receipt = artifacts.put_bytes(canonical_bytes(report), media_type="application/json")
     return IndependentHoldoutReview(
         assessment, receipt.artifact_ref, not reasons, tuple(reasons), wins, losses, p)
+
+
+def verify_external_evaluator_certificate(
+    artifacts: ArtifactStore, *, certificate_ref: str,
+    expected_checkpoint_ref: str, pre_registered_pack_ref: str,
+    trusted_certifier_id: str, trusted_certifier_public_key: bytes,
+    trusted_custodian_id: str, trusted_custodian_public_key: bytes,
+) -> dict:
+    """Verify an external, separately signed certificate by re-running raw checks.
+
+    The certifier's key and the custodian's key must be independently installed
+    operator trust roots. This verifier neither issues nor applies certificates.
+    """
+    if (len(trusted_certifier_public_key) != 32
+            or trusted_certifier_public_key == trusted_custodian_public_key
+            or not trusted_certifier_id or trusted_certifier_id == trusted_custodian_id):
+        raise PermissionError("scientific reviewer and holdout custodian must have separate trust roots")
+    envelope = read_verified_json(artifacts, certificate_ref)
+    if envelope.get("schema") != "independent-evaluator-certificate-signature.v1":
+        raise PermissionError("independent certificate signature missing")
+    statement_ref = envelope.get("statement_ref")
+    statement = read_verified_json(artifacts, statement_ref)
+    if (statement.get("schema") != "independent-evaluator-certificate.v1"
+            or statement.get("certifier_id") != trusted_certifier_id
+            or statement.get("role") != "evaluator"
+            or statement.get("verdict") != "certified"
+            or statement.get("candidate_checkpoint_ref") != expected_checkpoint_ref
+            or statement.get("holdout_ref") != pre_registered_pack_ref):
+        raise PermissionError("certificate is not authorized for this exact Evaluator evidence")
+    try:
+        signature = base64.b64decode(envelope["ed25519_signature_base64"], validate=True)
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        Ed25519PublicKey.from_public_bytes(trusted_certifier_public_key).verify(
+            signature, canonical_bytes(statement))
+    except (ValueError, KeyError, binascii.Error, InvalidSignature) as exc:
+        raise PermissionError("independent certificate signature invalid") from exc
+    if _time(statement.get("issued_at")) >= _time(statement.get("expires_at")):
+        raise PermissionError("independent certificate time range invalid")
+    if not _time(statement.get("issued_at")) <= datetime.now(timezone.utc) < _time(statement.get("expires_at")):
+        raise PermissionError("independent certificate is not currently valid")
+
+    report = read_verified_json(artifacts, statement.get("review_receipt_ref"))
+    assessment = read_verified_json(artifacts, report.get("assessment_ref"))
+    criteria = assessment.get("criteria", {})
+    if (report.get("schema") != "independent-evaluator-holdout-review.v1"
+            or not report.get("eligible_for_external_certification_review")
+            or report.get("blocking_issues")
+            or report.get("certification_state") != "not_certified"
+            or report.get("live_activation_authorized") is not False
+            or statement.get("holdout_ref") != report.get("holdout_ref")
+            or report.get("candidate_checkpoint_ref") != expected_checkpoint_ref
+            or assessment.get("candidate_checkpoint_ref") != expected_checkpoint_ref
+            or statement.get("assessment_ref") != report.get("assessment_ref")
+            or report.get("holdout_ref") != pre_registered_pack_ref):
+        raise PermissionError("candidate is not backed by an independently review-eligible assessment")
+    witness = _verify_signature(
+        artifacts, attestation_ref=report["custody_signature_ref"],
+        trusted_public_key=trusted_custodian_public_key,
+        trusted_custodian_id=trusted_custodian_id)
+    if witness.get("custodian_id") == statement.get("certifier_id"):
+        raise PermissionError("holdout custodian cannot certify its own attestation")
+    checked = review_independent_evaluator_holdout(
+        artifacts, approved_pack_ref=pre_registered_pack_ref,
+        pre_registered_pack_ref=pre_registered_pack_ref,
+        diagnostic_manifest_ref=assessment["diagnostic_manifest_ref"],
+        training_exposure_ref=report["training_exposure_ref"],
+        development_exposure_ref=report["development_exposure_ref"],
+        baseline_refs=assessment["baseline_refs"],
+        candidate_refs=assessment["candidate_refs"],
+        attestation_ref=report["custody_signature_ref"],
+        trusted_custodian_id=trusted_custodian_id,
+        trusted_custodian_public_key=trusted_custodian_public_key,
+        expected_baseline_checkpoint_ref=report["baseline_checkpoint_ref"],
+        expected_candidate_checkpoint_ref=expected_checkpoint_ref,
+        minimum_accuracy=criteria["minimum_accuracy"],
+        minimum_contrast_accuracy=criteria["minimum_contrast_accuracy"],
+        minimum_per_state_accuracy=criteria["minimum_per_state_accuracy"],
+        minimum_matched_seeds=criteria["minimum_matched_seeds"],
+        minimum_practical_gain=report["minimum_practical_gain"],
+        minimum_decisive_contrast_pairs=report["minimum_decisive_contrast_pairs"],
+        maximum_pair_p_value=report["maximum_pair_p_value"],
+    )
+    if (not checked.eligible_for_external_certification_review
+            or checked.review_receipt_ref != statement["review_receipt_ref"]
+            or checked.assessment.artifact_ref != statement["assessment_ref"]):
+        raise PermissionError("independent certificate fails recomputed scientific evidence")
+    return {
+        "certificate_ref": certificate_ref,
+        "review_receipt_ref": checked.review_receipt_ref,
+        "candidate_checkpoint_ref": expected_checkpoint_ref,
+        "certifier_id": trusted_certifier_id,
+        "status": "external_certificate_signature_verified",
+        "caveat": "External signatures cannot independently verify custodian truthfulness.",
+    }
