@@ -46,3 +46,15 @@ def test_research_freeze_cannot_claim_training_or_certification(tmp_path):
     _evidence(tmp_path, scientific_certificate_issued=True)
     with pytest.raises(ValueError, match="certification"):
         freeze.verified_findings(tmp_path)
+
+
+def test_signed_storage_redirect_drops_github_authorization():
+    from urllib.request import Request
+    req = Request("https://api.github.com/repos/org/repo/actions/artifacts/1/zip",
+        headers={"Authorization": "Bearer explicit-test-token"})
+    redirected = freeze.SafeArtifactRedirect().redirect_request(req, None, 302,
+        "Found", {}, "https://storage.example/evidence.zip?signed=test")
+    assert not redirected.has_header("Authorization")
+    same_host = freeze.SafeArtifactRedirect().redirect_request(req, None, 302,
+        "Found", {}, "https://api.github.com/repos/org/repo/new-route")
+    assert same_host.has_header("Authorization")

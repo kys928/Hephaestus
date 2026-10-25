@@ -11,10 +11,22 @@ import json
 import os
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 TAG = "hf-staged-review-verified-v1"
 ROOT = Path("governed_hf_handoff")
+
+
+class SafeArtifactRedirect(HTTPRedirectHandler):
+    """Signed blob URLs authenticate themselves; do not forward GitHub auth."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urlsplit(newurl).scheme != "https":
+            raise ValueError("archive redirects must remain HTTPS")
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and urlsplit(req.full_url).netloc != urlsplit(newurl).netloc:
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 def verified_findings(root):
@@ -52,9 +64,10 @@ def main():
     if repo != "kys928/Hephaestus" or report.get("source_sha") != commit:
         raise ValueError("release source differs from verified workflow commit")
     token = os.environ["GITHUB_TOKEN"]
+    opener = build_opener(SafeArtifactRedirect())
     def request(method, url, payload=None, content_type="application/json", accept="application/vnd.github+json"):
         data = json.dumps(payload).encode() if isinstance(payload, dict) else payload
-        with urlopen(Request(url, data=data, method=method, headers={
+        with opener.open(Request(url, data=data, method=method, headers={
                 "Authorization": "Bearer " + token, "Accept": accept,
                 "Content-Type": content_type, "X-GitHub-Api-Version": "2022-11-28"}), timeout=60) as response:
             return response.read()
