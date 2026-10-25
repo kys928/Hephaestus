@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
+
+from hephaestus.schemas.scientific_evidence import ScientificEvidenceBinding
+from hephaestus.state.evidence_store import ScientificEvidenceStore, EVIDENCE_BINDINGS
+from hephaestus.storage.verified import canonical_bytes
 
 from hephaestus.control.staged_state import (
     StagedAutonomousServices, StagedOperationRequest, StagedOperationResult,
@@ -315,7 +320,55 @@ class StagedSemanticJudge:
 
 
 def make_staged_core_services(runtime, *, diagnosis_request_ref: str) -> StagedAutonomousServices:
-    """Production adapters only; all unrelated stages remain explicitly unset."""
+    """Verified input bootstrap and production scientific domain adapters.
+
+    The Controller must have authentic source evidence BEFORE its first
+    inference, rather than requiring an evidence-collection output that has
+    not happened yet. This registration is idempotent, content-addressed and
+    never grants approval or asserts diagnostic truth.
+    """
+    source = read_verified_json(runtime.artifact_store, diagnosis_request_ref)
+    if source.get("schema") != "staged-diagnosis-input.v1":
+        raise ValueError("entry evidence input schema mismatch")
+    identity = tuple(source.get(key) for key in ("run_id", "lineage_id", "stage_name"))
+    if not all(isinstance(value, str) and value for value in identity):
+        raise ValueError("entry evidence missing immutable campaign identity")
+    refs = source.get("evidence_refs")
+    if not isinstance(refs, list) or not refs or len(set(refs)) != len(refs):
+        raise ValueError("entry scientific source references missing or repeated")
+    for ref in refs:
+        if not isinstance(ref, str) or not ref.startswith("sha256:"):
+            raise ValueError("entry scientific evidence is not immutable")
+        raw = read_verified_json(runtime.artifact_store, ref)
+        if not isinstance(raw, dict) or not raw.get("evidence_kind"):
+            raise ValueError("entry scientific evidence lacks a factual kind")
+        if (raw.get("run_id") not in (None, identity[0])
+                or raw.get("lineage_id") not in (None, identity[1])):
+            raise ValueError("entry scientific evidence belongs to a different run")
+    initial = {
+        "run_id": identity[0], "lineage_id": identity[1],
+        "stage_name": identity[2], "kind": "staged_diagnosis_source_manifest",
+        "payload": {"diagnosis_request_ref": diagnosis_request_ref,
+                    "source_evidence_refs": refs,
+                    "source_count": len(refs), "claimed_scientific_quality": None},
+    }
+    source_manifest = runtime.artifact_store.put_bytes(
+        canonical_bytes(initial), media_type="application/json")
+    binding_id = "entry-" + hashlib.sha256(canonical_bytes(
+        [*identity, diagnosis_request_ref])).hexdigest()[:24]
+    binding = ScientificEvidenceBinding(
+        binding_id=binding_id, target_run_id=identity[0],
+        source_run_id=identity[0], lineage_id=identity[1],
+        stage_name=identity[2], kind=initial["kind"],
+        artifact_ref=source_manifest.artifact_ref,
+    )
+    saved = runtime.state_repository.get_latest(
+        EVIDENCE_BINDINGS, "binding_id", binding_id)
+    if saved is None:
+        ScientificEvidenceStore(runtime.state_repository,
+                                runtime.artifact_store).register(binding)
+    elif saved != binding.to_dict():
+        raise ValueError("immutable Controller evidence binding identity collision")
     entry = StagedScientificEntry(
         artifacts=runtime.artifact_store,
         diagnosis_service=runtime.diagnosis_service,
