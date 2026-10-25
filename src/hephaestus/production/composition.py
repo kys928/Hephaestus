@@ -104,6 +104,25 @@ class ProductionRuntime:
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
 
+    def with_training_services(self, services, *, execute_enabled: bool = False):
+        """Inject the actual guarded PEFT lifecycle into staged operations.
+
+        Disabled until the caller explicitly enables execution. This does not
+        configure unrelated stage services or silently launch a workload.
+        """
+        from dataclasses import replace
+        from .staged_training import StagedTrainingLifecycleAdapter, StagedCheckpointAndEvaluation
+        if services.evaluator is None:
+            raise ValueError("real staged checkpoint binding requires an evaluator service")
+        service = StagedTrainingLifecycleAdapter(
+            repository=self.state_repository, artifacts=self.artifact_store,
+            lifecycle=self.training_lifecycle, execute_enabled=execute_enabled,
+        )
+        return replace(
+            services, training_lifecycle=service,
+            evaluator=StagedCheckpointAndEvaluation(service, services.evaluator),
+        )
+
     def with_role_models(self, services, reasoner):
         from .model_roles import with_model_backed_roles
         if reasoner.artifact_store is not self.artifact_store:
