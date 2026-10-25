@@ -109,7 +109,9 @@ class CpuCausalProposalScorer:
         return value
 
     def propose(self, task: RoleTask, registry: EvidenceRegistry,
-                context: DeterministicRoleContext) -> dict[str, object]:
+                context: DeterministicRoleContext, *,
+                admissible_candidates: tuple[tuple[str, str, str], ...] | None = None
+                ) -> dict[str, object]:
         if task.role not in CANDIDATES:
             raise ValueError("unknown CPU role")
         if (not task.run_id or task.run_id != context.run_id
@@ -135,8 +137,13 @@ class CpuCausalProposalScorer:
             "Verified source statements:\n" + source_text + "\n"
             "Choose the best next review proposal. Possible proposal:\n"
         )
+        options = (tuple(CANDIDATES[task.role]) if admissible_candidates is None
+                   else tuple(admissible_candidates))
+        if (not options or len(set(options)) != len(options) or
+                any(row not in CANDIDATES[task.role] for row in options)):
+            raise PermissionError("CPU role proposals must be a nonempty bounded policy-admitted subset")
         scored = []
-        for decision, action, variable in CANDIDATES[task.role]:
+        for decision, action, variable in options:
             continuation = (
                 "Decision: " + decision + "; Action: " + action +
                 "; Primary variable: " + variable + "."
