@@ -20,6 +20,7 @@ from hephaestus.evaluation.scientific_state_certification import (
 )
 from hephaestus.storage.base import ArtifactStore
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
+from .semantic_custody import verify_semantic_leakage_audit
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +216,27 @@ def review_independent_evaluator_holdout(
     if training_ids & development_ids or training_hashes & development_hashes:
         raise PermissionError("training and development exposures overlap")
 
+    # Hash equality cannot detect paraphrased or near-duplicate leakage.
+    # Require an externally conducted, independently signed and fully scoped
+    # original-text audit before even declaring the science review eligible.
+    diagnostic = read_verified_json(artifacts, diagnostic_manifest_ref)
+    diagnostic_ids = diagnostic.get("case_ids")
+    if not isinstance(diagnostic_ids, list) or any(
+            not isinstance(case_id, str) or not case_id for case_id in diagnostic_ids):
+        raise PermissionError("independent diagnostic exposure inventory is incomplete")
+    semantic_audit_ref = witness.get("semantic_audit_ref")
+    verify_semantic_leakage_audit(
+        artifacts, audit_ref=semantic_audit_ref, holdout_ref=approved_pack_ref,
+        training_exposure_ref=training_exposure_ref,
+        development_exposure_ref=development_exposure_ref,
+        diagnostic_manifest_ref=diagnostic_manifest_ref,
+        holdout_case_ids=sealed_ids,
+        training_count=max(len(training_ids), len(training_hashes)),
+        development_count=max(len(development_ids), len(development_hashes)),
+        diagnostic_count=len(diagnostic_ids),
+        holdout_sealed_at=_time(witness["holdout_sealed_at"]),
+    )
+
     assessment = assess_scientific_states(
         artifacts, approved_pack_ref=approved_pack_ref,
         baseline_refs=baseline_refs, candidate_refs=candidate_refs,
@@ -259,6 +281,7 @@ def review_independent_evaluator_holdout(
         "holdout_ref": approved_pack_ref,
         "assessment_ref": assessment.artifact_ref,
         "custody_signature_ref": attestation_ref,
+        "semantic_audit_ref": semantic_audit_ref,
         "trusted_custodian_id": trusted_custodian_id,
         "training_exposure_ref": training_exposure_ref,
         "development_exposure_ref": development_exposure_ref,
