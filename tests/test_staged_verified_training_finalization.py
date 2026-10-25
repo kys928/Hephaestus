@@ -65,6 +65,7 @@ def _setup_finalized(tmp_path, *, checked_tokenizer=True,
     runtime, source = _setup(tmp_path, approved=approved_data)
     if real_model:
         from test_real_hf_training import _tiny_transformers_fixture
+        (tmp_path / "model-input").mkdir()
         model_dir, model_revision, count = _tiny_transformers_fixture(
             tmp_path / "model-input")
         tokenizer_dir = model_dir
