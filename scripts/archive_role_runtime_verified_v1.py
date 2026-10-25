@@ -35,37 +35,45 @@ def run() -> None:
     original = {}
     for kind in ("cpu", "gpu"):
         item = manifest["sources"][kind]
-        url = "https://api.github.com/repos/kys928/Hephaestus/actions/artifacts/" + str(item["artifact_id"]) + "/zip"
-        request = Request(url, headers={
-            "Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        })
-        with urlopen(request, timeout=50) as response:
-            blob = response.read(5_000_000)
-        require("sha256:" + digest(blob) == item["zip_sha256"], kind + ": raw archive mismatch")
-        with ZipFile(io.BytesIO(blob)) as z:
-            require(set(z.namelist()) == set(item["members"]), kind + ": members changed")
-            for name, ref in item["members"].items():
-                require("sha256:" + digest(z.read(name)) == ref, kind + "/" + name + ": file changed")
-            if kind == "cpu":
-                roles = json.loads(z.read("cpu-research-roles.json"))
-                staged = json.loads(z.read("cpu-staged-prefix.json"))
-                peft = json.loads(z.read("cpu-real-peft-and-judge.json"))
-                require(len(roles["inference"]) == 5 and not roles["full_45_operation_campaign_executed"], "CPU model claim")
-                require(len(staged["all_45_operation_coverage_matrix"]) == 45, "CPU inventory incomplete")
-                require(sum(bool(r["completion_marker"]) for r in staged["all_45_operation_coverage_matrix"]) == 5, "CPU stage count")
-                require(peft["certification_state"] == "not_certified" and not peft["promotion_applied"], "CPU certification mismatch")
-                cpu_json = staged
-            else:
-                gpu_json = json.loads(z.read("cuda_role_output.json"))
-                require(gpu_json["status"] == "five_frozen_role_inferences_completed", "GPU role status mismatch")
-                require(len(gpu_json["role_results"]) == 5, "GPU role count mismatch")
-                require(all(row["status"] == "accepted_model_generation" for row in gpu_json["role_results"]), "GPU role failed")
-                require(all(not row["suggestion_executed"] for row in gpu_json["role_results"]), "unexpected GPU mutation")
-        fname = kind + "-original-actions-evidence.zip"
+        download_dir = Path("downloaded") / kind
+        require(download_dir.is_dir(), kind + ": no GitHub Actions extraction")
+        actual = {p.name for p in download_dir.iterdir() if p.is_file()}
+        require(actual == set(item["members"]), kind + ": downloaded source names changed")
+        members = {}
+        for name, ref in item["members"].items():
+            raw = (download_dir / name).read_bytes()
+            require("sha256:" + digest(raw) == ref, kind + "/" + name + ": file changed")
+            members[name] = raw
+        if kind == "cpu":
+            roles = json.loads(members["cpu-research-roles.json"])
+            staged = json.loads(members["cpu-staged-prefix.json"])
+            peft = json.loads(members["cpu-real-peft-and-judge.json"])
+            require(len(roles["inference"]) == 5 and not roles["full_45_operation_campaign_executed"], "CPU model claim")
+            require(len(staged["all_45_operation_coverage_matrix"]) == 45, "CPU inventory incomplete")
+            require(sum(bool(r["completion_marker"]) for r in staged["all_45_operation_coverage_matrix"]) == 5, "CPU stage count")
+            require(peft["certification_state"] == "not_certified" and not peft["promotion_applied"], "CPU certification mismatch")
+            cpu_json = staged
+        else:
+            gpu_json = json.loads(members["cuda_role_output.json"])
+            require(gpu_json["status"] == "five_frozen_role_inferences_completed", "GPU role status mismatch")
+            require(len(gpu_json["role_results"]) == 5, "GPU role count mismatch")
+            require(all(row["status"] == "accepted_model_generation" for row in gpu_json["role_results"]), "GPU role failed")
+            require(all(not row["suggestion_executed"] for row in gpu_json["role_results"]), "unexpected GPU mutation")
+        # GitHub Actions download-artifact extracts the original ZIP. Repack
+        # original verified member bytes; record the NEW ZIP SHA separately.
+        buffer = io.BytesIO()
+        with ZipFile(buffer, "w", compression=ZIP_DEFLATED, compresslevel=8) as archive:
+            for name in sorted(members):
+                archive.writestr(name, members[name])
+        blob = buffer.getvalue()
+        fname = kind + "-verified-json-evidence.zip"
         (target / fname).write_bytes(blob)
-        original[fname] = {"sha256": "sha256:" + digest(blob), "bytes": len(blob)}
+        original[fname] = {
+            "sha256": "sha256:" + digest(blob),
+            "bytes": len(blob), "format": "repackaged_original_JSON_member_bytes",
+            "source_artifact_original_zip_sha256": item["zip_sha256"],
+            "source_members_verified_sha256": item["members"],
+        }
     require(gpu_json is not None and cpu_json is not None, "missing entire scientific source")
     cfg = ("RUNPOD_S3_ENDPOINT_URL", "RUNPOD_NETWORK_VOLUME_ID",
            "RUNPOD_DATACENTER_ID", "RUNPOD_S3_ACCESS_KEY_ID",
