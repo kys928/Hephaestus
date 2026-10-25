@@ -189,12 +189,9 @@ def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
     from hephaestus.storage.verified import canonical_bytes
     from hephaestus.schemas.diagnosis_contract import DiagnosticHypothesis
     from hephaestus.control.staged_state import StagedOutputRecord
-    from hephaestus.llm.inference_receipts import RoleGeneration
     from test_model_backed_staged_roles import ModelProposals, ROOT
     from test_closed_loop_planner import _diagnosis
     from test_certified_role_inference import _archive, _roles, FakeS3
-    import re
-    import json
 
     class SimulatedModelScientificWorker(ScientificSimulationWorker):
         def execute(self, request):
@@ -228,7 +225,7 @@ def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
     blobs = {role: _archive(role=role) for role in (
         "controller", "diagnosis", "planner", "evaluator", "judge")}
     s3 = FakeS3(blobs)
-    model = ModelProposals(judge_action="reject_candidate")
+    model = ModelProposals(judge_action="reject_checkpoint")
     reasoner = CertifiedRoleReasoner(
         _roles(blobs),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
