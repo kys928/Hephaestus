@@ -36,7 +36,7 @@ TRACK_QUERIES = {
 }
 MAX_METADATA_PER_QUERY = 8
 MAX_TRACK_CANDIDATES = 14
-MAX_PREVIEWS_PER_TRACK = 6
+MAX_PREVIEWS_PER_TRACK = 8
 ROW_LIMIT = 100
 OUTPUT = Path("capability_targeted_discovery_20261025.json")
 
@@ -131,10 +131,17 @@ def rank_status(track: str, audit: dict, *, declared_en: bool,
         return "frozen_tokenizer_incompatible_in_preview"
     if not declared_en:
         return "english_language_not_verified"
-    if audit["rows_checked"] < 10:
+    if audit["rows_checked"] < 20:
         return "insufficient_preview_rows"
     if audit["counts"][TRACK_SIGNAL[track]] == 0:
         return "target_capability_not_observed_in_preview"
+    # A single hit in a 100-row sample is not credible target coverage.
+    # Count and sample-frequency gates must BOTH be satisfied.
+    minimum_examples = max(3, (audit["rows_checked"] + 19) // 20)
+    if audit["counts"][TRACK_SIGNAL[track]] < minimum_examples:
+        return "target_coverage_too_sparse_in_preview"
+    if track == "termination":
+        return "terminal_punctuation_proxy_not_verified_eos_eot"
     return "provisional_target_review_only_not_approved"
 
 
@@ -152,6 +159,7 @@ def collect_tracks(base, tokenizer: Tokenizer, provider: HuggingFaceDatasetProvi
     tracks = {}
     for index, (track, queries) in enumerate(TRACK_QUERIES.items(), 1):
         attempts, candidates = [], {}
+        query_groups = []
         for position, query in enumerate(queries, 1):
             child = derived_request(base, query, index * 100 + position)
             discovery = registry.discover(child)
@@ -160,16 +168,32 @@ def collect_tracks(base, tokenizer: Tokenizer, provider: HuggingFaceDatasetProvi
                 "candidate_count": len(discovery.candidates),
                 "blocking_issues": [x.to_dict() for x in discovery.issues],
             })
-            for candidate in discovery.candidates:
+            per_query = sorted(discovery.candidates, key=lambda c: (
+                0 if "en" in c.languages else 1,
+                0 if c.license and c.license.casefold() not in {"unknown", "other", "cc"} else 1,
+                0 if c.revision else 1,
+                -int(c.metadata.get("downloads") or 0), c.dataset_id.casefold(),
+            ))
+            query_groups.append(per_query)
+            for candidate in per_query:
                 candidates.setdefault(candidate.dataset_id, candidate)
-        # Crucial: a separate track-specific budget, never an aggregate top-N
-        # cut that starves later capabilities.
-        ranked = sorted(candidates.values(), key=lambda c: (
-            0 if "en" in c.languages else 1,
-            0 if c.license else 1,
-            0 if c.revision else 1,
-            -int(c.metadata.get("downloads") or 0), c.dataset_id.casefold(),
-        ))[:MAX_TRACK_CANDIDATES]
+        # Round-robin across the four QUERIES within this capability.
+        # A single popular generic search must not starve the structured
+        # output / targeted answer / continuation search results.
+        ranked = []
+        seen = set()
+        depth = max((len(group) for group in query_groups), default=0)
+        for position in range(depth):
+            for group in query_groups:
+                if position < len(group):
+                    candidate = group[position]
+                    if candidate.dataset_id not in seen:
+                        ranked.append(candidate)
+                        seen.add(candidate.dataset_id)
+                if len(ranked) >= MAX_TRACK_CANDIDATES:
+                    break
+            if len(ranked) >= MAX_TRACK_CANDIDATES:
+                break
         reviews = []
         for candidate in ranked[:MAX_PREVIEWS_PER_TRACK]:
             if candidate.dataset_id not in cache:
@@ -221,7 +245,10 @@ def collect_tracks(base, tokenizer: Tokenizer, provider: HuggingFaceDatasetProvi
                 status = rank_status(
                     track, audit,
                     declared_en="en" in candidate.languages,
-                    known_license=bool(license_value),
+                    known_license=bool(
+                        license_value and str(license_value).casefold().strip()
+                        not in {"unknown", "other", "unspecified", "none", "cc", "n/a"}
+                    ),
                     immutably_pinned=bool(re.fullmatch(r"[a-fA-F0-9]{40}", sha)),
                     tokenizer_ok=ok,
                 )
