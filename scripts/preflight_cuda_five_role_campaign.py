@@ -111,6 +111,18 @@ def main() -> int:
             else:
                 report["issues"].append("v2_balance_route_semantics_require_review_before_spending")
             try:
+                catalog = _get("/catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY", key)
+                if isinstance(catalog, dict) and catalog.get("id") == "EU-CZ-1":
+                    report["datacenter_gpu_ids_matching_6000"] = [
+                        {p: item.get(p) for p in ("id", "availability")}
+                        for item in catalog.get("gpuAvailability", [])
+                        if isinstance(item, dict) and "6000" in str(item.get("id", ""))
+                    ]
+                else:
+                    report["issues"].append("gpu_catalog_not_scoped_to_pinned_datacenter")
+            except (urllib.error.URLError, ValueError, KeyError, TypeError) as exc:
+                report["issues"].append("gpu_availability_catalog_read_failed:" + type(exc).__name__)
+            try:
                 pods = _get("/pods", key)
                 items = pods.get("pods") if isinstance(pods, dict) else pods
                 report["pod_inventory_count"] = len(items) if isinstance(items, list) else None
