@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
 
 from hephaestus.control.staged_state import (
     StagedOperationRequest, StagedOperationResult, StagedOutputRecord,
@@ -104,6 +105,9 @@ class StagedTrainingLifecycleAdapter:
             raise ValueError("training maximum steps must be a positive integer")
         if not proposal.baseline_ref:
             raise ValueError("experiment has no baseline checkpoint/run identity")
+        seed = constraints.get("seed")
+        if type(seed) is not int or seed < 0:
+            raise ValueError("training seed must be an explicit nonnegative integer")
 
     @staticmethod
     def _result(handle: TrainingRunHandle, *, polling: bool) -> StagedOperationResult:
@@ -169,7 +173,11 @@ class StagedTrainingLifecycleAdapter:
                         "training_constraints": proposal.training_constraints,
                     }),),
                     metadata={"launch_configuration_verified": True,
-                              "run_id": proposal.run_id},
+                              "run_id": proposal.run_id,
+                              "config_identity": "sha256:" + hashlib.sha256(
+                                  canonical_bytes(proposal.training_constraints)).hexdigest(),
+                              "seed_identity": "train-seed:" + str(
+                                  proposal.training_constraints["seed"])},
                 )
             if request.substep == "lifecycle_launch":
                 proposal = self._proposal(request, finalized=True)
