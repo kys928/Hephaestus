@@ -97,6 +97,7 @@ def compose_verified_staged_dependencies(
     enable_huggingface_acquisition: bool = False,
     dataset_review_policy=None,
     candidate_review_refs=None,
+    dataset_record_mapping=None,
     enable_training_execution: bool = False,
     enable_generation_inference: bool = False,
     eval_pack_name: str = "semantic_behavior_v1",
@@ -145,7 +146,8 @@ def compose_verified_staged_dependencies(
         dataset_review_policy=dataset_review_policy, candidate_review_refs=candidate_review_refs)
     if dataset_review_policy is not None:
         services = runtime.with_huggingface_data_factory(services,
-            review_policy=dataset_review_policy, acquisition_enabled=enable_huggingface_acquisition)
+            review_policy=dataset_review_policy, acquisition_enabled=enable_huggingface_acquisition,
+            record_mapping=dataset_record_mapping)
     else:
         services = runtime.with_local_data_factory(
             services, acquisition_enabled=enable_local_acquisition)

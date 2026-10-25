@@ -38,6 +38,7 @@ def processing_profile_sha256(preprocessor) -> str:
         "contamination_reference": getattr(preprocessor.contamination_checker, "reference_set_id", None),
         "tokenizer_ref": getattr(preprocessor.tokenizer_checker, "tokenizer_ref", None),
         "tokenizer_checker_id": getattr(preprocessor.tokenizer_checker, "checker_id", None),
+        "tokenizer_file_sha256": getattr(preprocessor.tokenizer_checker, "tokenizer_file_sha256", None),
         "record_mapper_id": getattr(preprocessor.record_mapper, "mapper_id", None),
     })
 
@@ -112,6 +113,8 @@ class IndependentDatasetReviewPolicy:
             raise PermissionError("screening scope does not cover this source and its protected references")
         if (preprocessor.tokenizer_checker is None or
                 preprocessor.tokenizer_checker.tokenizer_ref != self.tokenizer_ref or
+                getattr(preprocessor.tokenizer_checker, "tokenizer_file_sha256", None) != self.tokenizer_sha256 or
+                preprocessor.record_mapper is None or
                 review.processing_profile_sha256 != processing_profile_sha256(preprocessor)):
             raise ValueError("frozen tokenizer checker and exact preprocessing profile are required")
         for evidence_ref in [*review.rights_evidence_refs, *review.reference_manifest_refs.values()]:

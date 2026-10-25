@@ -105,3 +105,49 @@ scopes. Protected reference identities and custodial read permissions remain
 missing and must be established before any full-corpus screening. Dataset
 approval must follow those checks. No candidate should be acquired merely to
 advance the operation counter.
+
+## Verified initial live result
+
+At commit `a53a09075c5e9dee5edddd94ae21585201fb8332`, [run 40223779819](https://github.com/kys928/Hephaestus/actions/runs/40223779819)
+passed 83 focused tests and executed the live handoff. All three Dataset Server
+preview revision headers matched the exact reviewed Hub revision. Actual staged
+discovery completed; actual staged selection persisted an inconclusive decision
+and refused every source. This does not increase the original campaign count.
+
+| Source | Immutable revision | Train-file byte ceiling | Preview unknowns/tokens | Verdict |
+| --- | --- | ---: | ---: | --- |
+| vara201 structured output | `0b0912704a030cc9924b9b1fa4c43d926ee66e55` | 1,887,934 | 1,840 / 72,775 (2.5283%) | Complete input fails 1%; origin/rights unresolved |
+| SAF English | `9358d6f0f87371c0a5f150502b14cb16e382195f` | 532,382 | 265 / 23,193 (1.1426%) | Fails 1%; explicit length-compliance evidence insufficient |
+| WikiText-2 raw train | `b08601e04326c79dfdd32d625aee71d232d685c3` | 6,357,543 | 0 / 6,902 (0%) | Preview compatible; rights reconciliation and full-source checks outstanding |
+
+The [initial artifact](https://github.com/kys928/Hephaestus/actions/runs/40223779819/artifacts/12610178692)
+ZIP SHA-256 is `47063ee8ed849450cbc532399e989bdfdc65b7bbce95a63dad1ef2c133c7fffc`.
+All 15 uploaded content files verified locally against its index. The index also
+listed one transient writer lock excluded by artifact upload's hidden-file
+policy; the next revision excludes transient hidden files from the index.
+The source data, protected references, scientific reports and permissions are
+still unapproved. Source-metadata evidence is not a certification.
+
+Source-rights follow-up inspected the [original Salesforce announcement](https://www.salesforce.com/blog/the-wikitext-long-term-dependency-language-modeling-dataset/?bc=OTH)
+and [author's mirror](https://state.smerity.com/direct/smerity/state/01HRTBE0WN2QV8PRC6JDH22DGW).
+They support Wikipedia origin and an attribution/share-alike license but do not
+settle the conflicting Hub version labels. The [SAF original author repository](https://github.com/SebOchs/SAF)
+links the ACL study and new Hugging Face version; its repository MIT label must
+not silently replace the Hub data's CC BY 4.0 terms. These are useful provenance
+links, not independent full-source rights clearance.
+
+## Findings freeze requested by the operator
+
+The final tested source and full evidence are archived under a separate research
+release, `hf-staged-review-verified-v1`. Its generated findings manifest pins the
+source commit, actual workflow run, measured source revisions/file digests,
+evidence ZIP hash, report hash and explicit unresolved conditions. Published
+assets are downloaded and checksum verified; an existing freeze with different
+evidence cannot be overwritten. This is a research findings freeze, **not** a
+merge, dataset approval, scientific certificate, or replacement for the original
+`role-runtime-verified-v1` milestone.
+
+The freeze step runs only for an explicitly marked `[freeze-hf-findings]` push.
+Subsequent ordinary implementation pushes run validation without attempting to
+replace the frozen release. Release hosting is not asserted platform immutable.
+The exact commit and asset hashes are the integrity references.

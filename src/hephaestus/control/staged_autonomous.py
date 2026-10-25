@@ -399,12 +399,17 @@ class GovernedStagedOrchestrator:
             readiness = getattr(service, "approval_readiness", None)
             issues = ("remote_dataset_review_service_missing",)
             if callable(readiness):
-                issues = readiness(StagedOperationRequest(
-                    workflow_id=self.workflow_id, run_id=self.run_id,
-                    lineage_id=self.lineage_id, stage_name=self.stage_name,
-                    phase=phase.value, substep=substep, operation_id=operation_id,
-                    attempt=1, input_refs=tuple(self._input_refs(state)),
-                    prior_outputs={k: v.output for k, v in state.steps.items()}))
+                try:
+                    issues = readiness(StagedOperationRequest(
+                        workflow_id=self.workflow_id, run_id=self.run_id,
+                        lineage_id=self.lineage_id, stage_name=self.stage_name,
+                        phase=phase.value, substep=substep, operation_id=operation_id,
+                        attempt=1, input_refs=tuple(self._input_refs(state)),
+                        prior_outputs={k: v.output for k, v in state.steps.items()}))
+                    if not isinstance(issues, tuple) or any(not isinstance(v, str) or not v for v in issues):
+                        issues = ("remote_dataset_readiness_invalid_result",)
+                except Exception as exc:  # delegated scientific boundary: failure is never approval
+                    issues = (f"remote_dataset_readiness_failed:{type(exc).__name__}",)
             if issues:
                 return StagedOperationResult(status="approval_pending", records=(request_record,),
                     blocking_issues=tuple(issues), resumable=True,

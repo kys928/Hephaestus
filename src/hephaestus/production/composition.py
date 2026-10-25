@@ -118,13 +118,17 @@ class ProductionRuntime:
                        data_preprocessor=service)
 
     def with_huggingface_data_factory(self, services, *, review_policy,
-                                     acquisition_enabled: bool = False):
+                                     acquisition_enabled: bool = False, record_mapping=None):
         """Opt-in remote acquisition after independent full-corpus clearance."""
         from dataclasses import replace
         from .staged_remote_data import StagedApprovedHuggingFaceDataFactory
+        preprocessor = self.data_preprocessor
+        if record_mapping is not None:
+            from hephaestus.data.schema_mapping import PinnedDatasetRecordMapper
+            preprocessor = replace(preprocessor, record_mapper=PinnedDatasetRecordMapper(record_mapping))
         service = StagedApprovedHuggingFaceDataFactory(
             repository=self.state_repository, artifacts=self.artifact_store,
-            preprocessor=self.data_preprocessor,
+            preprocessor=preprocessor,
             maximum_source_bytes=self.settings.maximum_dataset_bytes,
             acquisition_enabled=acquisition_enabled,
             remote_acquisition=self.dataset_acquisition, review_policy=review_policy)

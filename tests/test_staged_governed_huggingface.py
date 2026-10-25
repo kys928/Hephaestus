@@ -37,6 +37,7 @@ from test_production_data_acquisition import (
 class FixtureTokenizerChecker:
     tokenizer_ref = "sha256:" + "1" * 64
     checker_id = "explicit-test-only-tokenizer-checker"
+    tokenizer_file_sha256 = "2" * 64
 
     def check(self, texts):
         return True, {"fixture_only": True}
@@ -49,6 +50,7 @@ def _put(rt, payload):
 def _setup(tmp_path, *, trusted=True, review_changes=None):
     rt = _runtime(tmp_path)
     rt.data_preprocessor.tokenizer_checker = FixtureTokenizerChecker()
+    rt.data_preprocessor.record_mapper = PinnedDatasetRecordMapper(DatasetRecordMapping([], "text", raw_text=True))
     candidate = _candidate(provider_id="huggingface", revision=REVISION,
         languages=["en"], task_types=["text-generation"], trust_level="external_metadata",
         metadata={"acquisition_files": ["data/train.jsonl"]})
@@ -150,8 +152,15 @@ def test_cached_byte_tampering_blocks_manifest(tmp_path):
     assert service.execute(_req("manifest_production")).status == "blocked"
 
 
-def test_gate_cannot_complete_with_missing_review_even_with_permissive_approval(tmp_path):
+@pytest.mark.parametrize("readiness_failure", [None, "exception", "invalid"])
+def test_gate_cannot_complete_with_missing_review_even_with_permissive_approval(tmp_path, readiness_failure):
     rt, service, _, _, _, _, transport = _setup(tmp_path, trusted=False)
+    if readiness_failure:
+        def broken_readiness(req):
+            if readiness_failure == "exception":
+                raise RuntimeError("explicit readiness test failure")
+            return None
+        service = SimpleNamespace(approval_readiness=broken_readiness)
     class NeverCalled:
         def decision_for(self, request):
             raise AssertionError("an approval must not override scientific eligibility")
@@ -167,7 +176,7 @@ def test_gate_cannot_complete_with_missing_review_even_with_permissive_approval(
     result = orchestrator._approval_gate(state, SpinePhase.DATA_ACQUISITION_AUDIT,
         "acquisition_approval_gate", "op-approval")
     assert result.status == "approval_pending"
-    assert "independent_full_corpus_review_required" in result.blocking_issues
+    assert result.blocking_issues
     assert not transport.requests
 
 
@@ -207,3 +216,23 @@ def test_review_unknown_threshold_stays_one_percent_with_exact_counts(tmp_path):
     review.unknown_tokens = 11
     assert "dataset_unknown_token_limit_exceeded" in preview_issues(review, candidate,
         tokenizer_ref=review.tokenizer_ref, tokenizer_sha256=review.tokenizer_file_sha256)
+
+
+def test_real_tokenizer_counts_and_byte_drift_are_enforced(tmp_path):
+    pytest.importorskip("tokenizers")
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from hephaestus.data.frozen_tokenizer import FrozenTokenizerCompatibilityChecker
+    from hephaestus.utils.hashing import hash_file
+    tok = Tokenizer(WordLevel({"[UNK]": 0, "known": 1}, unk_token="[UNK]"))
+    tok.pre_tokenizer = Whitespace()
+    path = tmp_path / "frozen-tokenizer.json"
+    tok.save(str(path))
+    checker = FrozenTokenizerCompatibilityChecker(path, "original-tokenizer-id", hash_file(path), "[UNK]")
+    passed, evidence = checker.check([" ".join(["known"] * 99 + ["foreign"])])
+    assert passed and evidence["unknown_tokens"] == 1 and evidence["total_tokens"] == 100
+    assert not checker.check(["known foreign"])[0]
+    path.write_text('{}')
+    with pytest.raises(ValueError, match="bytes changed"):
+        checker.check(["known"])

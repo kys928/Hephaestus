@@ -3,7 +3,7 @@ on:
   push:
     branches: [experiment/governed-hf-staged-handoff-20261025]
   workflow_dispatch:
-permissions: {contents: read}
+permissions: {contents: write, actions: read}
 jobs:
   governed-handoff:
     runs-on: ubuntu-latest
@@ -28,6 +28,7 @@ jobs:
           tests/test_remote_data_preprocessing_bridge.py tests/test_staged_dataset_approval_custody.py
           tests/test_staged_real_discovery.py tests/test_staged_production_composition.py
           tests/test_staged_autonomous_orchestration.py tests/test_schema_aware_public_preview_review.py
+          tests/test_hf_findings_freeze.py
       - name: Revalidate real public previews and persist original Planner handoff (no corpus acquisition)
         run: python scripts/run_governed_hf_staged_handoff.py
       - name: SHA256 evidence index
@@ -37,13 +38,22 @@ jobs:
           import hashlib,json,pathlib
           root=pathlib.Path('governed_hf_handoff')
           root.mkdir(exist_ok=True)
-          files={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}
+          files={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*')
+                 if p.is_file() and not any(part.startswith('.') for part in p.relative_to(root).parts)}
           (root/'sha256-index.json').write_text(json.dumps(files,indent=2,sort_keys=True)+'\n')
           PY
       - uses: actions/upload-artifact@v4
+        id: evidence
         if: always()
         with:
           name: governed-hf-staged-handoff
           path: governed_hf_handoff/
           if-no-files-found: error
           retention-days: 90
+      - name: Freeze verified findings and checksum-verified evidence outside Actions retention
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[freeze-hf-findings]')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          EVIDENCE_ARTIFACT_SHA256: ${{ steps.evidence.outputs.artifact-digest }}
+        run: python scripts/freeze_governed_hf_findings.py

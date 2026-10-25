@@ -174,6 +174,10 @@ def main():
         if not result.completion_marker:
             break
     records = rt.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+    if not state.steps["data_acquisition_audit.dataset_discovery"].completion_marker:
+        raise ValueError("live staged discovery did not complete")
+    if state.steps["data_acquisition_audit.dataset_selection"].completion_marker:
+        raise ValueError("declared-only public previews cannot authorize source selection")
     for record in records:
         assert read_verified_json(rt.artifact_store, record["artifact_ref"]) == {
             k: v for k, v in record.items() if k != "artifact_ref"}
