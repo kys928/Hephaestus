@@ -88,8 +88,16 @@ class ProductionLoopRunner:
         stage_name: str,
         resume: bool = True,
     ) -> ProductionLoopState:
+        if (not program_id.strip() or not lineage_id.strip() or not stage_name.strip()
+                or self.maximum_cycles < 1):
+            raise ValueError("campaign requires nonempty identities and positive cycle limit")
         store = self.runtime.loop_state
-        state = store.get(program_id) if resume else None
+        existing = store.get(program_id)
+        if existing is not None and not resume:
+            # The operator must choose a fresh program ID; replaying an old
+            # program with resume=False must not reset a durable campaign.
+            raise ValueError("cannot overwrite an existing durable campaign")
+        state = existing
         if state is None:
             state = ProductionLoopState(
                 program_id=program_id,
@@ -98,9 +106,17 @@ class ProductionLoopRunner:
                 status="running",
             )
             store.save(state)
-        elif state.status in {"completed", "stopped", "blocked"}:
-            return state
         else:
+            if (state.lineage_id != lineage_id or state.stage_name != stage_name):
+                raise ValueError("campaign identity changed across resume")
+            if (state.cycle_index != len(state.completed_cycles)
+                    or len(state.completed_cycles) != len(set(state.completed_cycles))
+                    or state.cycle_index < 0):
+                raise ValueError("durable campaign cycle history is inconsistent")
+            if state.cycle_index > self.maximum_cycles:
+                raise ValueError("requested cycle ceiling is below persisted progress")
+            if state.status in {"completed", "stopped", "blocked"}:
+                return state
             state.status = "running"
             store.save(state)
 
