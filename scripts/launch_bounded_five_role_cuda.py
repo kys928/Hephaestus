@@ -46,15 +46,23 @@ write_failure() {
 }
 trap write_failure EXIT
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends git ca-certificates
+DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends git ca-certificates python3-venv
 git clone --filter=blob:none https://github.com/kys928/Hephaestus.git /tmp/hephaestus-role-src
 cd /tmp/hephaestus-role-src
 git checkout "$HEPHAESTUS_REPO_SHA"
-python -m pip install --disable-pip-version-check -e . \
+# Never override the distro's externally-managed Python installation.
+python -m venv --system-site-packages /tmp/hephaestus-frozen-role-venv
+PY=/tmp/hephaestus-frozen-role-venv/bin/python
+"$PY" -m pip install --disable-pip-version-check -e . \
   'transformers>=5.0,<6' 'peft>=0.16,<1' \
   'huggingface-hub>=0.35,<2' 'mistral-common>=1.8,<3' \
   'safetensors>=0.4,<1' 'accelerate>=1.0,<3'
-python scripts/run_frozen_five_role_cuda_probe.py
+"$PY" - <<'PYCHECK'
+import torch
+assert torch.cuda.is_available() and torch.cuda.device_count() == 1, "CUDA preflight failed"
+print({"torch":torch.__version__,"cuda":torch.version.cuda,"device":torch.cuda.get_device_name(0)})
+PYCHECK
+"$PY" scripts/run_frozen_five_role_cuda_probe.py
 '''
 
 
