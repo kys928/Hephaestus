@@ -115,3 +115,13 @@ def test_screening_scope_requires_exact_digest_and_no_training():
     scope["training_allowed"] = True
     with pytest.raises(PermissionError):
         driver.verify_scope(scope, driver.digest(canonical_bytes(scope)))
+
+
+def test_measurement_profile_preserves_original_prompt_target_and_line_boundaries():
+    path = Path(__file__).parents[1] / "scripts/run_quarantine_source_screening.py"
+    spec = importlib.util.spec_from_file_location("quarantine_driver", path)
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    row = {"question": "What?", "reference_answer": "First line.\nSecond line."}
+    assert driver.mapped_profile_text(row, is_saf=True) == "What?\nFirst line.\nSecond line."
+    assert driver.mapped_profile_text({"text": "A\nB"}, is_saf=False) == "A\nB"

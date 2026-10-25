@@ -77,9 +77,9 @@ jobs:
           files=['source-screening-evidence.zip']
           pathlib.Path('SHA256SUMS').write_text(''.join(hashlib.sha256(pathlib.Path(f).read_bytes()).hexdigest()+'  '+f+'\n' for f in files))
           PY
-          gh release create source-screening-triage-v1 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'Source-only screening triage v1; protected audits incomplete' --notes 'Full exact train-file triage for SAF and WikiText-2 raw. Aggregate measurements only. No independent custody, protected-reference or semantic leakage clearance, dataset approval, training, certification or 45-stage completion. Source scope and limitations are inside the checksummed evidence. Hosting is not platform immutable.' source-screening-evidence.zip SHA256SUMS
+          gh release create source-screening-triage-v2 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'Source-only screening triage v2; normalization profiles distinguished' --notes 'Full exact train-file triage for SAF and WikiText-2 raw. Distinguishes original newline-preserving preview normalization from the separately measured whitespace-flattening study in v1. Neither profile grants dataset eligibility. Aggregate measurements only. No independent custody, protected-reference or semantic leakage clearance, dataset approval, training, certification or 45-stage completion. Source scope and limitations are inside the checksummed evidence. Hosting is not platform immutable.' source-screening-evidence.zip SHA256SUMS
           mkdir verified-release
-          gh release download source-screening-triage-v1 --repo "$GITHUB_REPOSITORY" --dir verified-release
+          gh release download source-screening-triage-v2 --repo "$GITHUB_REPOSITORY" --dir verified-release
           cmp SHA256SUMS verified-release/SHA256SUMS
           cd verified-release
           sha256sum -c SHA256SUMS

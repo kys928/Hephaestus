@@ -100,6 +100,40 @@ is silently appointed here. Dataset approval, training, independent scientific
 certification and the 45-operation campaign remain blocked. No paid GPU is used.
 
 The dedicated workflow archives successful aggregate findings under a new
-research prerelease `source-screening-triage-v1` when explicitly requested in
+research prerelease `source-screening-triage-v2` when explicitly requested in
 its commit marker, with download/recheck of published checksums. Existing
 milestone assets are untouched. GitHub hosting is not claimed immutable.
+
+## First live run and normalization correction
+
+[Run 40227928728](https://github.com/kys928/Hephaestus/actions/runs/40227928728)
+passed 68 focused tests and scanned both complete named train files. Its
+[source-screening-triage-v1 archive](https://github.com/kys928/Hephaestus/releases/tag/source-screening-triage-v1)
+pins `102f499c807f9afddcea6d4e7ac472de4d142549`; evidence ZIP digest is
+`sha256:81f38efa1c76a70e3e13e47c4158c7361828a64699d7d97bd12dc294e253875a`.
+All nine content files and the index were independently downloaded and checked.
+
+SAF has 1,700 source rows but **26 unique normalized question/reference pairs**
+(1,674 repeats). WikiText has 23,767 nonempty rows, 21,707 unique normalized
+rows, 2,060 repeats and three retrieved lexical near-duplicate candidate pairs.
+Regex screening flagged 78 SAF rows and 54 WikiText rows for human review.
+SAF IP-address candidates may include networking exercises; the scanner cannot
+declare those matches personal data or clear them without original-text review.
+Both sources had zero normalized prompt-substring/shared-five-word hits against
+the six existing public behavioral prompts. This is not protected leakage clearance.
+
+The first scan's `NFKC+all-whitespace-to-spaces` normalization reported zero
+unknown tokens. **That is a distinct profile from the original preview**, which
+normalizes each field while preserving newlines and a prompt/target newline.
+It must not silently supersede the preview's 1.14% SAF result or repair eligibility.
+The follow-up rerun reports both profiles, a first-100-row original-profile
+recheck and original-tokenizer newline/space controls. Its primary tokenizer
+measurement now uses the existing newline-preserving normalization. The v1
+archive remains unchanged as evidence of the profile-specific experiment; it
+is not accepted eligibility or an approved preprocessing profile.
+
+Known reference metadata are included in the provisioning request: the original
+training bytes digest `sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c`,
+the repository diagnostic probe's exact digest and the public behavior pack's
+file digest. These are incomplete exposure records, not four completed
+custodial manifests. No original training or private holdout bytes were read.

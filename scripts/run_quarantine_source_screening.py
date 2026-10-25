@@ -13,11 +13,14 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import platform
+from importlib.metadata import version
 from urllib.request import Request, urlopen
 
 from hephaestus.data.quarantine_screening import (
     normalized, pii_counts, duplicate_counts, public_probe_overlap,
 )
+from hephaestus.data.normalization import normalize_text
 from hephaestus.state.screening_store import ScreeningStore
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.verified import canonical_bytes
@@ -56,6 +59,27 @@ def public_prompts(pack):
         for p in pack.get(field, []) if isinstance(p.get("prompt"), str)]
 
 
+def mapped_profile_text(row, *, is_saf):
+    """Match the existing preview's field normalization and newline boundary.
+
+    Flattening newlines is a distinct study, never a drop-in eligibility repair.
+    """
+    if is_saf:
+        return normalize_text(row["question"]) + "\n" + normalize_text(row["reference_answer"])
+    return normalize_text(row["text"])
+
+
+def token_measurement(tokenizer, texts, unknown_id):
+    total = unknown = 0
+    for text in texts:
+        ids = tokenizer.encode(text).ids
+        total += len(ids)
+        unknown += ids.count(unknown_id)
+    return {"total_tokens": total, "unknown_tokens": unknown,
+            "maximum_unknown_fraction": .01,
+            "compatible": total > 0 and unknown * 100 <= total}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--accepted-scope-ref", required=True)
@@ -85,6 +109,14 @@ def main():
         "execution_boundary": "custodian_environment",
         "public_probe_pack_file_sha256": pack_ref,
         "public_pack_is_not_a_sealed_holdout": True,
+        "known_public_reference_metadata_not_complete_custodial_manifests": {
+            "original_training_bytes_ref": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+            "original_training_location": "hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+            "diagnostic_probe_repository_file": "docs/evidence/first-targeted-post-failure-diagnostics-001-33874832481/probe.json",
+            "diagnostic_probe_file_sha256": "sha256:c943334f2f6e7162380be74748506d26dd13542fece21d42672d35f3abbfc2e9",
+            "development_public_probe_pack_file_sha256": pack_ref,
+            "independent_holdout": None,
+            "these_are_incomplete_exposure_metadata_not_accepted_reference_manifests": True},
         "required_inputs": ["four complete original-text inventory manifests",
             "independently pinned Ed25519 public key", "signed exact-scope read authorization",
             "custodian-side lexical and semantic audits; only aggregate receipts returned"],
@@ -132,18 +164,19 @@ def main():
             texts = [" ".join(row[k] for k in fields) for row in rows]
             if sum(map(len, texts)) > 100_000_000:
                 raise ValueError("decoded source exceeds audit resource ceiling")
-            accepted, rejected = [], Counter()
-            for text in texts:
+            accepted, flattened, rejected = [], [], Counter()
+            preview_texts = []
+            for row, text in zip(rows, texts, strict=True):
                 keep, reason = english_likelihood(text)
                 if keep:
-                    accepted.append(normalized(text))
+                    accepted.append(mapped_profile_text(row, is_saf=is_saf))
+                    flattened.append(normalized(text))
                 else:
                     rejected[reason] += 1
-            total = unknown = 0
-            for text in accepted:
-                ids = tokenizer.encode(text).ids
-                total += len(ids)
-                unknown += ids.count(unknown_id)
+            for row in rows[:100]:
+                text = mapped_profile_text(row, is_saf=is_saf)
+                if english_likelihood(text)[0]:
+                    preview_texts.append(text[:24000])
             report = {"schema": "quarantined-source-screening-report.v1", "source": spec,
                 "scope_ref": scope_ref, "rights_ref": rights_ref,
                 "source_file_sha256": digest(data), "source_rows_checked": len(rows),
@@ -151,12 +184,19 @@ def main():
                 "pii_triage": pii_counts(rows), "mapped_field_duplicates": duplicate_counts(texts),
                 "public_probe_overlap": public_probe_overlap(texts, prompts),
                 "public_probe_pack_file_sha256": pack_ref,
-                "normalization": "NFKC+whitespace; original required fields; no vocabulary replacement",
+                "normalization": "existing normalize_text per field; preserve line breaks and prompt-target newline; no vocabulary replacement",
                 "english_heuristic_kept_rows": len(accepted), "english_heuristic_rejected": dict(rejected),
                 "tokenizer": {"tokenizer_ref": TOKENIZER_ID,
-                    "file_sha256": EXPECTED_TOKENIZER_BYTES_SHA256, "total_tokens": total,
-                    "unknown_tokens": unknown, "maximum_unknown_fraction": .01,
-                    "compatible": total > 0 and unknown * 100 <= total},
+                    "file_sha256": EXPECTED_TOKENIZER_BYTES_SHA256,
+                    **token_measurement(tokenizer, accepted, unknown_id)},
+                "first_100_existing_preview_profile_recheck": token_measurement(tokenizer, preview_texts, unknown_id),
+                "flattened_whitespace_study": {
+                    "normalization": "NFKC plus all whitespace flattened to spaces; distinct unapproved profile",
+                    "changes_line_boundaries": True, "eligibility_change_authorized": False,
+                    **token_measurement(tokenizer, flattened, unknown_id)},
+                "tokenizer_control_counts": {label: token_measurement(tokenizer, [text], unknown_id)
+                    for label, text in {"newline": "\n", "space": " ", "line_preserving": "one\ntwo",
+                        "space_separated": "one two"}.items()},
                 "semantic_contamination": {"status": "not_run", "reason": "custodial originals unavailable"},
                 "protected_reference_leakage": {"status": "not_run", "reference_manifest_refs": {}},
                 "custody_request_ref": custody_ref, "training_allowed": False,
@@ -173,6 +213,9 @@ def main():
     if pack_path.read_bytes() != pack_bytes:
         raise ValueError("frozen public pack changed during screening")
     summary = {"schema": "source-screening-campaign.v1", "source_sha": os.environ.get("GITHUB_SHA"),
+        "environment": {"python": platform.python_version(), "platform": platform.platform(),
+            "tokenizers": version("tokenizers"), "pyarrow": version("pyarrow"),
+            "cryptography": version("cryptography")},
         "scope_ref": scope_ref, "reports": reports, "custody_request_ref": custody_ref,
         "all_protected_audits_complete": False, "source_quarantine_deleted": True,
         "existing_cpu_campaign_progress": "11/45 unchanged", "training_executed": False,
