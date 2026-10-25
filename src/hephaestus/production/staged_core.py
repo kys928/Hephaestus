@@ -61,6 +61,7 @@ class StagedScientificEntry:
                 raise PermissionError("diagnosis input was pinned for a different scientific run")
         evidence_refs = payload.get("evidence_refs")
         if (not isinstance(evidence_refs, list) or not evidence_refs
+                or not all(isinstance(ref, str) for ref in evidence_refs)
                 or len(set(evidence_refs)) != len(evidence_refs)):
             raise ValueError("diagnosis requires independently pinned evidence references")
         rows = []
@@ -334,7 +335,9 @@ def make_staged_core_services(runtime, *, diagnosis_request_ref: str) -> StagedA
     if not all(isinstance(value, str) and value for value in identity):
         raise ValueError("entry evidence missing immutable campaign identity")
     refs = source.get("evidence_refs")
-    if not isinstance(refs, list) or not refs or len(set(refs)) != len(refs):
+    if (not isinstance(refs, list) or not refs
+            or not all(isinstance(ref, str) for ref in refs)
+            or len(set(refs)) != len(refs):
         raise ValueError("entry scientific source references missing or repeated")
     for ref in refs:
         if not isinstance(ref, str) or not ref.startswith("sha256:"):
