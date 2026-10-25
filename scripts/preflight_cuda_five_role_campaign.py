@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 import urllib.request
@@ -29,6 +30,32 @@ def _get(path: str, key: str) -> object:
         method="GET")
     with urllib.request.urlopen(req, timeout=25) as res:
         return json.loads(res.read(2_000_000))
+
+
+def _legacy_readonly_balance(key: str) -> float:
+    """Read RunPod's documented current prepaid USD balance, never mutate.
+
+    REST v2 OpenAPI currently has no unambiguous balance endpoint. RunPod's
+    authenticated GraphQL myself.clientBalance query is only a temporary
+    narrow read-only fallback; it must be removed before GraphQL retirement.
+    """
+    payload = json.dumps({"query": "query { myself { clientBalance } }"}).encode()
+    req = urllib.request.Request(
+        "https://api.runpod.io/graphql",
+        data=payload, method="POST",
+        headers={
+            "Authorization": "Bearer " + key,
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as res:
+        obj = json.loads(res.read(50000))
+    if not isinstance(obj, dict) or obj.get("errors"):
+        raise ValueError("RunPod prepaid-balance query was rejected")
+    amount = obj.get("data", {}).get("myself", {}).get("clientBalance")
+    if type(amount) not in (float, int) or not math.isfinite(amount):
+        raise ValueError("RunPod credit balance is missing or invalid")
+    return float(amount)
 
 
 def _paths(spec: object) -> tuple[list[str], list[str]]:
@@ -72,17 +99,27 @@ def main() -> int:
             report["openapi_sha256"] = "sha256:" + hashlib.sha256(
                 json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             if len(credits) != 1:
-                report["issues"].append("current_runpod_balance_endpoint_not_unambiguous")
+                report["balance_endpoint"] = "documented_readonly_graphql_fallback"
+                try:
+                    amount = _legacy_readonly_balance(key)
+                    report["current_balance_usd"] = round(amount, 4)
+                    report["minimum_new_pod_credit_usd"] = 4.0
+                    if amount < 4.0:
+                        report["issues"].append("verified_balance_below_new_pod_threshold")
+                except (urllib.error.URLError, ValueError, KeyError, TypeError) as exc:
+                    report["issues"].append("runpod_current_credit_read_failed:" + type(exc).__name__)
             else:
-                doc = _get(credits[0], key)
-                # Fail closed when the API schema cannot be safely interpreted.
-                # Never guess whether figures mean cents, USD or available credits.
-                report["balance_response_type"] = type(doc).__name__
-                report["issues"].append("balance_units_and_available_credit_not_independently_validated")
+                report["issues"].append("v2_balance_route_semantics_require_review_before_spending")
             try:
                 pods = _get("/pods", key)
                 items = pods.get("pods") if isinstance(pods, dict) else pods
                 report["pod_inventory_count"] = len(items) if isinstance(items, list) else None
+                if isinstance(items, list):
+                    report["pod_inventory"] = [
+                        {key: pod.get(key) for key in ("id", "name", "status", "desiredStatus")
+                         if pod.get(key) is not None}
+                        for pod in items if isinstance(pod, dict)
+                    ][:10]
             except (urllib.error.URLError, ValueError, KeyError, TypeError) as exc:
                 report["issues"].append("pod_inventory_read_failed:" + type(exc).__name__)
         except (urllib.error.URLError, ValueError, KeyError, TypeError) as exc:
