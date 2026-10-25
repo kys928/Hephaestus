@@ -19,7 +19,17 @@ jobs:
           python-version: '3.12'
       - name: Install actual PEFT/Transformers test dependencies
         run: python -m pip install -e '.[peft-training,test]'
-      - name: Prove actual optimizer update and generation from finalized proposal
+      - name: Prove actual optimizer, generation, semantic comparison and Judge
+        env:
+          HEPHAESTUS_CPU_CAMPAIGN_REPORT: cpu-campaign-evidence/campaign.json
         run: |
           pytest -q -m real_cpu tests/test_staged_verified_training_finalization.py -rs
           pytest -q tests/test_staged_verified_training_finalization.py -rs
+      - name: Publish measured test-only campaign evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-tiny-peft-campaign-evidence
+          path: cpu-campaign-evidence/campaign.json
+          if-no-files-found: error
+          retention-days: 14
