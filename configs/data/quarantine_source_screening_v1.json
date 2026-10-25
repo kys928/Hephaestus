@@ -1,0 +1,43 @@
+{
+  "schema": "quarantine-source-screening-scope.v1",
+  "operator_authorization_basis": "Current operator request: resolve source rights, establish custodian-controlled frozen reference manifests, then obtain scoped screening access and perform the actual audits.",
+  "sources": [
+    {
+      "dataset_id": "Short-Answer-Feedback/saf_communication_networks_english",
+      "revision": "9358d6f0f87371c0a5f150502b14cb16e382195f",
+      "file": "data/train-00000-of-00001-33368fd062630adb.parquet",
+      "bytes": 532382,
+      "sha256": "64521e142fb649a5ad9bfac665fcc0b622a7ad72702636a86b892268dd361980",
+      "rows": 1700,
+      "rights_basis": "CC-BY-4.0 source card + original author study",
+      "rights_status": "screening_only_no_training_clearance"
+    },
+    {
+      "dataset_id": "Salesforce/wikitext",
+      "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+      "file": "wikitext-2-raw-v1/train-00000-of-00001.parquet",
+      "bytes": 6357543,
+      "sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7",
+      "rows": 36718,
+      "rights_basis": "CC-BY-SA-3.0 metadata and CC-BY-SA-4.0 card; preserve both notices; private screening only",
+      "rights_status": "screening_only_no_training_clearance"
+    }
+  ],
+  "purposes": [
+    "source_pii_triage",
+    "source_exact_duplicate_inventory",
+    "source_lexical_near_duplicate_candidates",
+    "original_tokenizer_recheck",
+    "public_behavior_pack_lexical_overlap"
+  ],
+  "training_allowed": false,
+  "redistribution_allowed": false,
+  "protected_reference_access_allowed": false,
+  "candidate_selection_approved": false,
+  "quarantine_retention": "ephemeral runner only; raw bytes deleted at exit",
+  "excluded_source": "vara201/ecommerce-orders-structured-output: unresolved example provenance; no corpus access",
+  "limitations": [
+    "This source-only scope does not satisfy DatasetScreeningAccessScope full scientific clearance.",
+    "No private reference reading, semantic audit, independent attestation, acquisition into training cache, or training approval."
+  ]
+}
