@@ -43,6 +43,13 @@ class EvaluatorRoleActivation:
     # Only isolated tests explicitly opt into simulated routing. Default
     # production resolution refuses a CPU-simulated active role.
     allow_simulated_for_tests: bool = False
+    # These two independent public keys and the pre-registered holdout digest
+    # are deployment-operator trust roots, NEVER user/model-supplied args.
+    trusted_certifier_id: str | None = None
+    trusted_certifier_public_key: bytes | None = None
+    trusted_custodian_id: str | None = None
+    trusted_custodian_public_key: bytes | None = None
+    pre_registered_holdout_ref: str | None = None
 
     def _valid_checkpoint(self, checkpoint: str) -> tuple[CertifiedRoleModel, Path, str, str]:
         original = self.stack.resolve("evaluator")
@@ -80,6 +87,12 @@ class EvaluatorRoleActivation:
             return original, None
         if current.get("status", "").endswith("_simulated") and not self.allow_simulated_for_tests:
             raise PermissionError("simulated role activation cannot route production inference")
+        if current.get("status") == "active_verified":
+            certificate_ref = current.get("independent_certificate_ref")
+            if (not isinstance(certificate_ref, str) or
+                    not certificate_ref.startswith("sha256:") or
+                    not self.artifacts.verify(certificate_ref)):
+                raise PermissionError("active Evaluator certificate receipt is missing or altered")
         # Inference must not rehash the entire training checkpoint (which
         # includes potentially multi-GB optimizer state) on every request.
         # Activation already verified every component. Here reverify only
@@ -132,7 +145,8 @@ class EvaluatorRoleActivation:
         )
 
     def activate(self, *, lineage_id: str, run_id: str, checkpoint_ref: str,
-                 approval_ref: str, generator, simulated: bool = False) -> dict:
+                 approval_ref: str, generator, simulated: bool = False,
+                 independent_certificate_ref: str | None = None) -> dict:
         """Health-check an already-promoted checkpoint before publishing routing.
 
         'simulated' is never a production activation. No global model flags
@@ -160,8 +174,31 @@ class EvaluatorRoleActivation:
             ]
             if not promotions:
                 raise PermissionError("missing authoritative applied certified promotion")
+            independent_certificate = None
+            if not simulated:
+                if (not independent_certificate_ref or
+                        not self.pre_registered_holdout_ref or
+                        not self.trusted_certifier_id or
+                        not self.trusted_custodian_id or
+                        not self.trusted_certifier_public_key or
+                        not self.trusted_custodian_public_key):
+                    raise PermissionError(
+                        "production Evaluator activation requires independently signed "
+                        "holdout custody, scientific certification and pinned trust roots")
+                from hephaestus.evaluation.independent_holdout_review import (
+                    verify_external_evaluator_certificate,
+                )
+                independent_certificate = verify_external_evaluator_certificate(
+                    self.artifacts, certificate_ref=independent_certificate_ref,
+                    expected_checkpoint_ref=checkpoint_ref,
+                    pre_registered_pack_ref=self.pre_registered_holdout_ref,
+                    trusted_certifier_id=self.trusted_certifier_id,
+                    trusted_certifier_public_key=self.trusted_certifier_public_key,
+                    trusted_custodian_id=self.trusted_custodian_id,
+                    trusted_custodian_public_key=self.trusted_custodian_public_key,
+                )
             operation_id = "evaluator-activation-" + hashlib.sha256(canonical_bytes(
-                [lineage_id, run_id, checkpoint_ref, approval_ref]
+                [lineage_id, run_id, checkpoint_ref, approval_ref, independent_certificate_ref]
             )).hexdigest()[:32]
             for row in self._events():
                 if row.get("operation_id") == operation_id and row.get("status") in (
@@ -182,6 +219,9 @@ class EvaluatorRoleActivation:
                 "checkpoint_manifest_hash": manifest_hash, "adapter_tree_hash": tree_hash,
                 "model_id": spec.model_id, "revision": spec.revision,
                 "approval_ref": approvals["approval_ref"],
+                "independent_certificate_ref": (
+                    independent_certificate["certificate_ref"]
+                    if independent_certificate is not None else None),
                 "promotion_execution_id": promotions[-1]["execution_id"],
                 "previous_operation_id": previous["operation_id"] if previous else None,
             }
