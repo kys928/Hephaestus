@@ -44,6 +44,24 @@ def main() -> int:
         "relevant_lines":relevant[-30:],
         "tail_lines":[redact(s) for s in lines[-12:]],
     }
+    try:
+        status_key = f"hephaestus/research/cuda-roles-20261025/{RUN_ID}/role_result.json"
+        stage_stream = client.get_object(Bucket=bucket, Key=status_key)["Body"]
+        stage = json.loads(stage_stream.read(2_000_000))
+        stage_stream.close()
+        payload["live_status"] = stage.get("status")
+        payload["actual_role_results"] = [
+            {
+                "role": row.get("role"),
+                "status": row.get("status"),
+                "inference_receipt_ref": row.get("inference_receipt_ref"),
+                "error_type": row.get("error_type"),
+                "error_message": redact(str(row.get("error_message", ""))),
+            }
+            for row in stage.get("role_results", []) if isinstance(row, dict)
+        ]
+    except Exception as exc:
+        payload["status_read_error_type"] = type(exc).__name__
     DEST.parent.mkdir(exist_ok=True)
     DEST.write_text(json.dumps(payload,sort_keys=True,indent=2)+"\n")
     print(json.dumps(payload,sort_keys=True))
