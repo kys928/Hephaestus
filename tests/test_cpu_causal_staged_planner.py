@@ -66,9 +66,12 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         "output": sixth.output,
         "completed": sixth.completion_marker,
     }, default=str))
+    assert sixth.completion_marker, (
+        "Real causal Planner did not admit an intervention: " +
+        str(sixth.blocking_issues))
     if sixth.completion_marker:
         assert sixth.status == "completed"
-        ref = sixth.metadata["cpu_causal_model_inference_ref"]
+        ref = sixth.output["cpu_causal_model_inference_ref"]
         lm = read_verified_json(rt.artifact_store, ref)
         assert lm["schema"] == SCOPE
         assert lm["role"] == "planner"
