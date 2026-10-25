@@ -1,0 +1,28 @@
+name: CUDA five-role campaign — billing and model preflight (read only)
+on:
+  push:
+    branches: [feature/cuda-five-role-preflight-20261025]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  read-only-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check RunPod v2 API and refuse unsupported credit/model assumptions
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          HEPHAESTUS_CUDA_PREFLIGHT_OUTPUT: evidence/cuda_preflight.json
+        run: python scripts/preflight_cuda_five_role_campaign.py
+      - name: Upload evidence without keys
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: five-role-cuda-readonly-preflight
+          path: evidence/cuda_preflight.json
+          retention-days: 7
+          if-no-files-found: error
