@@ -50,13 +50,13 @@ jobs:
           pathlib.Path('schema_aware_public_preview_review_custody.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n',encoding='utf-8')
           print(json.dumps(out,sort_keys=True))
           PY
-      - name: Upload original four-track results (no raw dataset rows)
+      - name: Upload schema-aware review and pinned custody (no raw preview rows)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: schema-aware-real-hf-public-preview-review
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           path: |
-            capability_targeted_discovery_20261025.json
-            capability_targeted_discovery_custody.json
+            schema_aware_public_preview_review.json
+            schema_aware_public_preview_review_custody.json
