@@ -7,6 +7,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+pytest.importorskip("boto3")
+pytest.importorskip("tokenizers")
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
