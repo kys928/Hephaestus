@@ -178,3 +178,84 @@ def test_campaign_identity_is_immutable_and_cannot_reset_existing_state(tmp_path
         ProductionLoopRunner(runtime, StagedProductionCycleDriver(_factory(first)),
                              maximum_cycles=0).run(program_id="identity-campaign",
                              lineage_id="original", stage_name="smoke_test")
+
+
+def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
+    """One real model-backed control cycle; generation remains a declared CPU stub."""
+    from hephaestus.control.staged_state import WORKFLOW_RECORD_COLLECTION
+    from hephaestus.llm.role_contract import RoleMasteryContract
+    from hephaestus.llm.certified_runtime import CertifiedRoleReasoner, VerifiedRoleAdapters
+    from hephaestus.schemas.scientific_evidence import ScientificEvidenceBinding
+    from hephaestus.storage.verified import canonical_bytes
+    from hephaestus.schemas.diagnosis_contract import DiagnosticHypothesis
+    from hephaestus.control.staged_state import StagedOutputRecord
+    from hephaestus.llm.inference_receipts import RoleGeneration
+    from test_model_backed_staged_roles import ModelProposals, ROOT
+    from test_closed_loop_planner import _diagnosis
+    from test_certified_role_inference import _archive, _roles, FakeS3
+    import re
+    import json
+
+    class SimulatedModelScientificWorker(ScientificSimulationWorker):
+        def execute(self, request):
+            result = super().execute(request)
+            if request.substep == "evidence_based_diagnosis":
+                report = _diagnosis(hypotheses=[DiagnosticHypothesis(
+                    "hyp-eval", "evaluation_integrity",
+                    "Diagnose the verified, frozen Evaluation D failure.",
+                    supporting_evidence_refs=[initial.artifact_ref],
+                    recommended_intervention_kinds=["repair_evaluation", "collect_more_evidence"],
+                    confidence=0.8)])
+                report.run_id = request.run_id
+                report.lineage_id = request.lineage_id
+                report.stage_name = request.stage_name
+                return replace(result, records=(StagedOutputRecord("diagnosis_report", report.to_dict()),))
+            return result
+
+    runtime = _runtime(tmp_path)
+    program = "model-campaign"
+    run_id = program + "-cycle-1"
+    lineage = "model-evaluator-lineage"
+    initial = runtime.artifact_store.put_bytes(canonical_bytes({
+        "run_id": run_id, "lineage_id": lineage, "stage_name": "smoke_test",
+        "kind": "eval_report",
+        "payload": {"status": "failed", "eval_integrity_verified": True},
+    }))
+    runtime.model_evidence.store.register(ScientificEvidenceBinding(
+        "initial-failure", run_id, run_id, lineage, "smoke_test",
+        "eval_report", initial.artifact_ref,
+    ))
+    blobs = {role: _archive(role=role) for role in (
+        "controller", "diagnosis", "planner", "evaluator", "judge")}
+    s3 = FakeS3(blobs)
+    model = ModelProposals(judge_action="reject_candidate")
+    reasoner = CertifiedRoleReasoner(
+        _roles(blobs),
+        RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
+        VerifiedRoleAdapters(s3, "read-only", tmp_path / "model-cache"),
+        model, runtime.artifact_store,
+    )
+    worker = SimulatedModelScientificWorker()
+    def provide(rt, state, cycle):
+        worker.runtime = rt
+        services = _services(worker)
+        services.action_executor = None
+        return StagedAutonomousDependencies(
+            services=rt.with_role_models(services, reasoner),
+            state_repository=rt.state_repository, artifact_store=rt.artifact_store,
+        )
+
+    state = ProductionLoopRunner(
+        runtime, StagedProductionCycleDriver(provide), maximum_cycles=1,
+    ).run(program_id=program, lineage_id=lineage, stage_name="smoke_test")
+    assert state.cycle_index == 1 and state.status == "stopped"
+    assert model.calls == ["controller", "diagnosis", "planner", "evaluator", "judge"]
+    records = runtime.state_repository.all(WORKFLOW_RECORD_COLLECTION)
+    proposals = [r["payload"] for r in records if r["kind"] == "experiment_proposal"]
+    assert len(proposals) == 1 and proposals[0]["metadata"]["model_originated"] is True
+    assert proposals[0]["primary_variable"] == "diagnostic_measurement"
+    assert state.latest_experiment_id == proposals[0]["experiment_id"]
+    actions = [r for r in runtime.state_repository.all(ACTION_EXECUTIONS)
+               if r.get("status") == "applied"]
+    assert len(actions) == 1 and actions[0]["effective_action"] == "reject_candidate"
+    assert len(s3.gets) == 5
