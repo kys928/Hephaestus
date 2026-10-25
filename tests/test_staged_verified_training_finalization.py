@@ -34,6 +34,21 @@ class CheckedTokenizer:
         }
 
 
+class RealCheckedTokenizer:
+    def __init__(self, ref):
+        self.tokenizer_ref = ref
+        self.checker_id = "local-transformers-tokenizer-encode-v1"
+    def check(self, texts):
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_ref, local_files_only=True)
+        lengths = [len(tokenizer(str(text), add_special_tokens=True)["input_ids"])
+                   for text in texts]
+        return bool(lengths and all(0 < n <= 32 for n in lengths)), {
+            "verified_tokens": sum(lengths), "checked_rows": len(lengths),
+            "model_tokenizer_path": self.tokenizer_ref,
+        }
+
+
 def _req():
     return StagedOperationRequest(
         workflow_id="wf-local-data", run_id="data-run",
@@ -45,24 +60,35 @@ def _req():
 
 
 def _setup_finalized(tmp_path, *, checked_tokenizer=True,
-                     approved_recipe=True, wrong_model=False, approved_data=True):
+                     approved_recipe=True, wrong_model=False, approved_data=True,
+                     real_model=False):
     runtime, source = _setup(tmp_path, approved=approved_data)
-    model_dir = tmp_path / "pinned-model"
-    tokenizer_dir = tmp_path / "pinned-tokenizer"
-    model_dir.mkdir()
-    tokenizer_dir.mkdir()
-    (model_dir / "config.json").write_text('{"model_type":"tiny_cpu_fixture"}')
-    (tokenizer_dir / "tokenizer.json").write_text('{"version":"fixture"}')
-    model_revision = directory_content_identity(model_dir)
-    tokenizer_revision = directory_content_identity(tokenizer_dir)
+    if real_model:
+        from test_real_hf_training import _tiny_transformers_fixture
+        model_dir, model_revision, count = _tiny_transformers_fixture(
+            tmp_path / "model-input")
+        tokenizer_dir = model_dir
+        tokenizer_revision = model_revision
+    else:
+        model_dir = tmp_path / "pinned-model"
+        tokenizer_dir = tmp_path / "pinned-tokenizer"
+        model_dir.mkdir()
+        tokenizer_dir.mkdir()
+        (model_dir / "config.json").write_text('{"model_type":"tiny_cpu_fixture"}')
+        (tokenizer_dir / "tokenizer.json").write_text('{"version":"fixture"}')
+        model_revision = directory_content_identity(model_dir)
+        tokenizer_revision = directory_content_identity(tokenizer_dir)
+        count = 300
     if checked_tokenizer:
-        runtime.data_preprocessor.tokenizer_checker = CheckedTokenizer(str(tokenizer_dir))
+        runtime.data_preprocessor.tokenizer_checker = (
+            RealCheckedTokenizer(str(tokenizer_dir)) if real_model else
+            CheckedTokenizer(str(tokenizer_dir)))
     if approved_data:
         _completed_source(runtime, _factory(runtime))
     candidate = ModelCandidate(
         candidate_id="verified-local-model", provider_id="local_fixture",
         model_id=str(model_dir), revision=model_revision,
-        architecture_family="decoder_only",
+        architecture_family="gpt2" if real_model else "decoder_only",
         tokenizer_ref=str(tokenizer_dir), license="apache-2.0",
         capabilities=["causal_lm"], missing_metadata=[], risk_signals=[],
         evidence_refs=["model://verified-local-fixture"],
@@ -81,7 +107,7 @@ def _setup_finalized(tmp_path, *, checked_tokenizer=True,
                model_selection.to_dict(), ordinal=21)
     peft_config = {
         "rank": 4, "alpha": 8.0, "dropout": 0.0,
-        "target_modules": ["q_proj", "v_proj"],
+        "target_modules": ["c_attn"] if real_model else ["q_proj", "v_proj"],
         "continuation_kind": "fresh", "bias": "none",
     }
     approved = {
@@ -108,8 +134,13 @@ def _setup_finalized(tmp_path, *, checked_tokenizer=True,
             "training_recipe_ref": recipe_ref, "seed": 19,
             "max_steps": 2, "optimizer": "adamw",
             "scheduler": "constant", "context_length": 128,
-            "vocabulary_size": 256,
-            "special_token_ids": {"eos_token_id": 2, "pad_token_id": 0},
+            "vocabulary_size": 9 if real_model else 256,
+            "parameter_count": count, "hidden_size": 16,
+            "device": "cpu", "dtype": "float32",
+            "learning_rate": 0.01, "batch_size": 1, "max_total_tokens": 256,
+            "local_files_only": True,
+            "special_token_ids": ({"eos_token_id": 1, "pad_token_id": 0, "unk_token_id": 2}
+                                  if real_model else {"eos_token_id": 2, "pad_token_id": 0}),
         },
     )
     _write_row(runtime, "experiment_proposal", "experiment_proposal",
