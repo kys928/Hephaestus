@@ -1,0 +1,51 @@
+name: Frozen five-role CUDA smoke — bounded paid RunPod test
+on:
+  push:
+    branches: [feature/cuda-five-role-preflight-20261025]
+    paths:
+      - '.github/workflows/frozen-five-role-cuda-execution.yml'
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: hephaestus-one-bounded-five-role-cuda-pod
+  cancel-in-progress: false
+jobs:
+  one-pod-five-real-roles:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 27
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      HEPHAESTUS_CUDA_PREFLIGHT_OUTPUT: evidence/cuda_preflight.json
+      HEPHAESTUS_ROLE_ASSET_REPORT: evidence/cuda_role_assets.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install independent registry, role and S3 verifiers
+        run: python -m pip install -e '.[s3,test]' 'cryptography>=44,<47'
+      - name: Run frozen role registry, archive and inference-contract boundaries
+        run: |
+          pytest -q tests/test_certified_role_stack.py tests/test_certified_role_inference.py
+          python -m py_compile scripts/preflight_cuda_five_role_campaign.py scripts/preflight_five_role_s3_artifacts.py scripts/launch_bounded_five_role_cuda.py scripts/run_frozen_five_role_cuda_probe.py
+      - name: Current credit, immutable assets, one bounded GPU, real role inference and teardown
+        run: python scripts/launch_bounded_five_role_cuda.py
+      - name: Publish no-secret original CUDA campaign receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hephaestus-frozen-five-role-cuda-attempt
+          path: |
+            evidence/cuda_preflight.json
+            evidence/cuda_role_assets.json
+            evidence/cuda_five_role_launcher_result.json
+            evidence/cuda_role_output.json
+          if-no-files-found: warn
+          retention-days: 14
