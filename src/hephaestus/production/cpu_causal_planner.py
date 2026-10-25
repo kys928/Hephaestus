@@ -96,7 +96,7 @@ class CpuResearchCausalPlanner:
                 decision=chosen["decision"], action=chosen["action"],
                 primary_variable=chosen["primary_variable"],
                 confidence=probability,
-                evidence_refs=tuple(r.ref for r in task.evidence),
+                evidence_refs=tuple(raw["context_evidence_refs"]),
                 uncertainties=("CPU causal proposal likelihood is not calibrated scientific confidence",),
                 rationale="A pinned real pretrained CPU causal LM ranked policy-admitted interventions.",
             )
