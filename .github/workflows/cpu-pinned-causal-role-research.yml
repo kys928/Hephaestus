@@ -25,11 +25,15 @@ jobs:
         run: python -m pip install -e '.[peft-training,test]' 'transformers>=4.49,<6' 'huggingface-hub>=0.34,<2'
       - name: Verify real pinned pretrained model produces five evidence-conditioned proposals
         run: pytest -q tests/test_cpu_causal_lm_research.py -rs
+      - name: Run genuine evidence-governed causal Planner inside staged workflow
+        env:
+          HEPHAESTUS_CPU_STAGED_CAUSAL_REPORT: evidence/cpu-staged-causal-planner.json
+        run: pytest -q tests/test_cpu_causal_staged_planner.py -rs
       - name: Retain measured causal-model research receipts (temporary)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: real-cpu-pinned-causal-lm-five-role-evidence
-          path: evidence/cpu-real-pretrained-causal-role-output.json
+          path: evidence/*.json
           if-no-files-found: warn
           retention-days: 14
