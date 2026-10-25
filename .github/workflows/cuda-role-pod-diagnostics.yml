@@ -16,7 +16,7 @@ jobs:
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
-      HEPHAESTUS_DIAGNOSTIC_RUN_ID: hephaestus-five-role-cuda-40189727864
+      HEPHAESTUS_DIAGNOSTIC_RUN_ID: hephaestus-five-role-cuda-40190358524
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
