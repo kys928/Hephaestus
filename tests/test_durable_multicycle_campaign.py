@@ -200,6 +200,17 @@ def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
     class SimulatedModelScientificWorker(ScientificSimulationWorker):
         def execute(self, request):
             result = super().execute(request)
+            if request.substep == "governed_verdict":
+                # smoke_test permits continue_lineage_best, not reject_candidate.
+                # Preserve the stage policy rather than bending it for the test.
+                metadata = {**result.metadata, "proposed_action": "continue_lineage_best"}
+                return replace(result, metadata=metadata, records=(
+                    StagedOutputRecord("judge_exit", {
+                        "run_id": request.run_id,
+                        "proposed_action": "continue_lineage_best",
+                        "confidence": 0.78,
+                    }),
+                ))
             if request.substep == "evidence_based_diagnosis":
                 report = _diagnosis(hypotheses=[DiagnosticHypothesis(
                     "hyp-eval", "evaluation_integrity",
@@ -229,7 +240,7 @@ def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
     blobs = {role: _archive(role=role) for role in (
         "controller", "diagnosis", "planner", "evaluator", "judge")}
     s3 = FakeS3(blobs)
-    model = ModelProposals(judge_action="reject_checkpoint")
+    model = ModelProposals(judge_action="continue_lineage_best")
     reasoner = CertifiedRoleReasoner(
         _roles(blobs),
         RoleMasteryContract.load(ROOT / "configs/models/hephaestus_role_mastery_runtime_v1.json"),
@@ -258,5 +269,5 @@ def test_role_model_proposal_flows_into_real_production_loop(tmp_path):
     assert state.latest_experiment_id == proposals[0]["experiment_id"]
     actions = [r for r in runtime.state_repository.all(ACTION_EXECUTIONS)
                if r.get("status") == "applied"]
-    assert len(actions) == 1 and actions[0]["effective_action"] == "reject_candidate"
+    assert len(actions) == 1 and actions[0]["effective_action"] == "continue_lineage_best"
     assert len(s3.gets) == 5
