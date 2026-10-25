@@ -15,6 +15,7 @@ import pytest
 from hephaestus.backends.hf_causal_lm import directory_content_identity
 from hephaestus.control.staged_state import StagedOperationRequest
 from hephaestus.production.staged_finalization import StagedExperimentFinalizer
+from hephaestus.production.staged_training import StagedTrainingLifecycleAdapter
 from hephaestus.schemas.discovery_contract import ModelCandidate, ModelSelectionDecision
 from hephaestus.schemas.experiment_contract import ExperimentProposal
 from hephaestus.storage.verified import canonical_bytes
@@ -31,11 +32,6 @@ class CheckedTokenizer:
         return bool(texts and all(isinstance(x, str) for x in texts)), {
             "checked_rows": len(texts), "tokenizer_ref": self.tokenizer_ref,
         }
-
-
-class NeverExecuteTraining:
-    def execute(self, request):
-        raise AssertionError("finalizer must not launch or call training")
 
 
 def _req():
@@ -119,7 +115,9 @@ def _setup_finalized(tmp_path, *, checked_tokenizer=True,
     _write_row(runtime, "experiment_proposal", "experiment_proposal",
                proposal.to_dict(), ordinal=22)
     service = StagedExperimentFinalizer(
-        runtime.state_repository, runtime.artifact_store, NeverExecuteTraining(),
+        runtime.state_repository, runtime.artifact_store,
+        StagedTrainingLifecycleAdapter(runtime.state_repository, runtime.artifact_store,
+                                       runtime.training_lifecycle, execute_enabled=False),
         approved_recipe_refs=frozenset((recipe.artifact_ref,)),
     )
     return runtime, service, _req(), source
