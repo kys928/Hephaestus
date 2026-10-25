@@ -130,3 +130,55 @@ def test_downstream_services_refuse_missing_verified_workflow_receipts(tmp_path,
     assert result.status == "blocked"
     assert not result.records
     assert result.blocking_issues
+
+
+class RoleGeneratorFixture:
+    def generate(self, **kwargs):
+        raise AssertionError("must never run")
+
+
+def test_production_composition_blocks_disguised_role_inference_fixture(tmp_path):
+    from hephaestus.llm.certified_runtime import CertifiedRoleReasoner
+    from hephaestus.production.staged_composition import compose_verified_staged_dependencies
+    rt = _runtime(tmp_path)
+    reasoner = CertifiedRoleReasoner(
+        stack=object(), contract=object(), adapters=object(),
+        generator=RoleGeneratorFixture(), artifact_store=rt.artifact_store,
+    )
+    with pytest.raises(PermissionError, match="frozen CUDA"):
+        compose_verified_staged_dependencies(
+            rt, core_services=make_staged_core_services(
+                rt, diagnosis_request_ref=_source(rt)),
+            approval_service=type("NoGrantApprovals", (), {
+                "decision_for": lambda self, req: None,
+            })(),
+            reasoner=reasoner, generation_backend=object(),
+            baseline_run_artifact_ref="sha256:" + "a" * 64,
+            approved_recipe_refs=("sha256:" + "b" * 64,),
+            approved_baseline_refs=("frozen-parent",),
+        )
+
+
+def test_production_composition_blocks_unverified_generation_backend(tmp_path):
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator,
+    )
+    from hephaestus.production.staged_composition import compose_verified_staged_dependencies
+    rt = _runtime(tmp_path)
+    reasoner = CertifiedRoleReasoner(
+        stack=object(), contract=object(), adapters=object(),
+        generator=PinnedTransformersRoleGenerator(hf_cache_dir=tmp_path / "cached"),
+        artifact_store=rt.artifact_store,
+    )
+    with pytest.raises(PermissionError, match="real Transformers"):
+        compose_verified_staged_dependencies(
+            rt, core_services=make_staged_core_services(
+                rt, diagnosis_request_ref=_source(rt)),
+            approval_service=type("NoGrantApprovals", (), {
+                "decision_for": lambda self, req: None,
+            })(),
+            reasoner=reasoner, generation_backend=object(),
+            baseline_run_artifact_ref="sha256:" + "a" * 64,
+            approved_recipe_refs=("sha256:" + "b" * 64,),
+            approved_baseline_refs=("frozen-parent",),
+        )
