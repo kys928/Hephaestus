@@ -106,9 +106,15 @@ def test_real_diagnosis_and_planner_handoff_execute_from_sha_bound_sources(tmp_p
 @pytest.mark.parametrize("variant", ["wrong_run", "incomplete"])
 def test_bad_evidence_never_generates_an_approved_plan(tmp_path, variant):
     rt = _runtime(tmp_path)
+    if variant == "wrong_run":
+        # The stronger Controller bootstrap refuses cross-run evidence at
+        # composition time, before the first operation is ever admitted.
+        with pytest.raises(ValueError, match="different run"):
+            make_staged_core_services(
+                rt, diagnosis_request_ref=_source(rt, wrong_run=True))
+        return
     svc = make_staged_core_services(
-        rt, diagnosis_request_ref=_source(
-            rt, complete=variant != "incomplete", wrong_run=variant == "wrong_run"))
+        rt, diagnosis_request_ref=_source(rt, complete=False))
     deps = StagedAutonomousDependencies(
         services=svc, state_repository=rt.state_repository,
         artifact_store=rt.artifact_store,
