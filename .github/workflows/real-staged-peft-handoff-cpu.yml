@@ -5,8 +5,11 @@ on:
   pull_request:
     paths:
       - 'src/hephaestus/production/staged_training.py'
+      - 'src/hephaestus/production/staged_records.py'
+      - 'src/hephaestus/production/staged_discovery.py'
       - 'src/hephaestus/production/composition.py'
       - 'tests/test_staged_real_training_handoff.py'
+      - 'tests/test_staged_real_discovery.py'
       - '.github/workflows/real-staged-peft-handoff-cpu.yml'
 permissions: {contents: read}
 jobs:
@@ -23,6 +26,6 @@ jobs:
       - name: Verify actual staged training adapter and negative cases
         run: |
           python -m compileall -q src/hephaestus/production/staged_training.py
-          pytest -q tests/test_staged_real_training_handoff.py
+          pytest -q tests/test_staged_real_training_handoff.py tests/test_staged_real_discovery.py
       - name: Full CPU regression suite
         run: pytest -q tests/
