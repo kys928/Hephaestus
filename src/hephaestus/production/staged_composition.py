@@ -133,7 +133,8 @@ def compose_verified_staged_dependencies(
     if type(generation_backend) is not TransformersCausalLMGenerationBackend:
         raise PermissionError("production generation requires real Transformers inference backend")
 
-    services = runtime.with_discovery_services(core_services)
+    services = runtime.with_discovery_services(
+        core_services, require_planner_approval_receipt=True)
     services = runtime.with_local_data_factory(
         services, acquisition_enabled=enable_local_acquisition)
     services = runtime.with_training_services(
