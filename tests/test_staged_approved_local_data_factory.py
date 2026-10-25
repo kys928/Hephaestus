@@ -153,7 +153,7 @@ def test_dataset_preparation_disabled_by_default(tmp_path):
 
 def test_nonexistent_or_unscoped_operator_approval_rejected(tmp_path):
     runtime, source = _setup(tmp_path, approved=False)
-    outcome = _factory(runtime).execute(_req("dataset_acquisition"))
+    outcome = _factory(runtime).execute(_req("dataset_acquisition", approved=False))
     assert outcome.status == "blocked"
     assert "local_data_factory_blocked:PermissionError" in outcome.blocking_issues
 
