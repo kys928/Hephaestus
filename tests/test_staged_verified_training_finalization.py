@@ -296,17 +296,35 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
         json.dumps(pack, sort_keys=True), encoding="utf-8")
 
     model_dir = Path(proposal.training_constraints["model_id"])
+    # The production generator correctly requires a finalized checkpoint
+    # manifest even for a frozen, never-trained parent. Package the genuine
+    # pretrained tiny weights into a separately verifiable baseline snapshot.
+    import shutil
+    frozen_checkpoint = tmp_path / "frozen-parent-finalized"
+    shutil.copytree(model_dir, frozen_checkpoint / "model")
+    shutil.copytree(model_dir, frozen_checkpoint / "tokenizer")
+    component_hashes = {
+        p.relative_to(frozen_checkpoint).as_posix(): "sha256:" + hashlib.sha256(
+            p.read_bytes()).hexdigest()
+        for p in frozen_checkpoint.rglob("*") if p.is_file()
+    }
+    (frozen_checkpoint / "checkpoint_manifest.json").write_text(json.dumps({
+        "components": component_hashes,
+        "manifest_hash": "sha256:" + hashlib.sha256(canonical_bytes(component_hashes)).hexdigest(),
+        "partial_write": False,
+    }), encoding="utf-8")
+    assert validate_checkpoint_manifest(frozen_checkpoint)[0]
     baseline_instructions = tmp_path / "frozen-parent-loading.json"
     baseline_instructions.write_text(json.dumps({
         "backend": "transformers_causal_lm",
-        "model_artifact_ref": str(model_dir),
-        "tokenizer_artifact_ref": str(model_dir),
+        "model_artifact_ref": str(frozen_checkpoint / "model"),
+        "tokenizer_artifact_ref": str(frozen_checkpoint / "tokenizer"),
         "trust_remote_code": False,
     }), encoding="utf-8")
     baseline = TrainingRunHandle(
         run_id=proposal.baseline_ref, experiment_id=proposal.experiment_id,
         backend_id="transformers_causal_lm", status="completed",
-        checkpoint_refs=[str(model_dir)],
+        checkpoint_refs=[str(frozen_checkpoint)],
         metadata={"generation_handoff_ref": str(baseline_instructions)},
     )
     generation = EvaluationGenerationService(
