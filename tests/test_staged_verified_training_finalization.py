@@ -357,6 +357,61 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     assert any("certification_state=" in reason for reason in verdict.reasons)
     assert not any("certification_state=certification_passed" in reason for reason in verdict.reasons)
     assert verdict.next_action.value != "promote_checkpoint"
+    # Publish the actual observed CPU-only campaign proof through CI, rather
+    # than letting a passing unit assertion hide the quantitative outcome.
+    import os
+    report_path = os.environ.get("HEPHAESTUS_CPU_CAMPAIGN_REPORT")
+    if report_path:
+        evidence_bundle = {
+            "schema": "hephaestus-real-tiny-peft-campaign.v1",
+            "scientific_scope": "local_random_initialization_cpu_smoke_only",
+            "dataset_selection_id": proposal.dataset_selection_id,
+            "model_selection_id": proposal.model_selection_id,
+            "trainable_dataset_hash": proposal.training_constraints["processed_dataset_hash"],
+            "model_revision": proposal.training_constraints["model_revision"],
+            "training": {
+                "status": result.status,
+                "metrics": json.loads(Path(result.metrics_ref).read_text()),
+                "final_checkpoint_ref": str(checkpoint),
+                "checkpoint_manifest": validate_checkpoint_manifest(checkpoint)[1],
+                "peft_adapter_existed": True,
+            },
+            "generation": {
+                "pack_name": "tiny_cpu_repair_v1",
+                "pack_content_hash": pack["content_hash"],
+                "baseline_receipt_ref": before.run_handle.metadata["generation_report"]["receipt_ref"],
+                "candidate_receipt_ref": after.run_handle.metadata["generation_report"]["receipt_ref"],
+                "baseline_sample_hashes": [item.output_hash for item in before.report.samples],
+                "candidate_sample_hashes": [item.output_hash for item in after.report.samples],
+                "sample_count_each": len(after.report.samples),
+            },
+            "evaluation": {
+                "comparison_id": compared.comparison_id,
+                "primary_outcome": compared.primary_outcome,
+                "deterministic_gate_status": compared.deterministic_gate_status,
+                "recommendation": compared.recommendation,
+                "effect_summary": compared.effect_summary,
+                "blocking_issue_codes": [item.code for item in compared.issues if item.blocking],
+            },
+            "judge": {
+                "verdict": verdict.verdict,
+                "next_action": verdict.next_action.value,
+                "reasons": verdict.reasons,
+            },
+            "certification_state": "not_certified",
+            "promotion_applied": False,
+            "active_evaluator_changed": False,
+            "limitations": [
+                "not a 45-step independently operating full production campaign",
+                "synthetically initialized tiny GPT2 is not the real Granite Evaluator",
+                "tiny test-only generation pack is not independently unseen",
+                "no independent scientific certificate or live activation",
+            ],
+        }
+        dest = Path(report_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(evidence_bundle, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8")
     # The tiny training pack is deliberately not a sealed scientific holdout:
     # generation+Judge execution is not a scientifically certified improvement.
 
