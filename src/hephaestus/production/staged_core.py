@@ -331,12 +331,5 @@ def make_staged_core_services(runtime, *, diagnosis_request_ref: str) -> StagedA
             runtime.recovery, runtime.state_repository, runtime.artifact_store),
         judge_exit=StagedSemanticJudge(
             runtime.state_repository, runtime.artifact_store, runtime.judge),
-        evaluator=StagedMissingEvaluation(),
+        evaluator=None,
     )
-
-
-class StagedMissingEvaluation:
-    """Explicit fail-closed dependency, replaced by real evaluation composition."""
-
-    def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
-        return _bad("evaluation_not_yet_composed")
