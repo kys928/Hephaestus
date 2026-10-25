@@ -77,3 +77,58 @@ recovery campaign has independently produced an unseen-holdout certificate.
 
 No RunPod Pod or GPU was created, no production adapter replaced, no PR merged,
 and protected benchmarks remain unchanged.
+
+
+## Independent scientific-state custody and external certification gates
+
+Added `evaluation/independent_holdout_review.py`. This module **does not
+self-certify a candidate**. It requires an operator-pre-registered immutable
+holdout digest and separately provisioned Ed25519 custodian public key, then
+authenticates the custodian's signed statement over the precise holdout,
+train/development exposure manifests, diagnostic provenance, baseline/candidate
+checkpoints, and repeated prediction evidence. The signed custodian claims
+that labels remained blinded until predictions were fixed, no training access
+was granted, and checkpoint bytes were checked by an independent evaluator.
+
+It detects exact training/development/diagnostic collisions using case IDs and
+example fingerprints, recomputes the existing eight-state individual,
+protected-state and contrast scores from content-addressed predictions and
+checks repeatability across at least three matched seeds. A preregistered
+practical gain and a one-sided paired sign test across **distinct contrast
+pairs** (not repeated seed-pairs) must pass before the report says
+`eligible_for_external_certification_review`. The output remains
+`not_certified` with `live_activation_authorized=false`.
+
+The `verify_external_evaluator_certificate` entry point requires a
+*second*, different operator-trusted Ed25519 certifier identity/key. It
+verifies the separately signed externally issued certificate, its timestamp,
+exact candidate checkpoint/holdout/assessment IDs and independently re-runs
+the raw review. It cannot mint an external certificate.
+
+`EvaluatorRoleActivation.activate(simulated=False)` now **refuses** to
+activate a role without the exact independent certificate ref and the
+separate custodian/certifier trust roots provisioned onto the manager by an
+operator. Even then it must separately pass existing lineage promotion,
+checkpoint integrity, activation authorization, and real GPU model-probe
+checks. Simulated CPU tests do not satisfy any live-activation requirement.
+An active verified route also checks that the certificate receipt bytes still
+exist under their original hash. The frozen registry remains unchanged.
+
+### Limitations and required real-world evidence
+
+The positive signature/certification-verifier tests use **explicitly fabricated
+small scientific-state examples signed by test-generated keys**, which proves
+signature and enforcement wiring but cannot establish any real Evaluator
+improvement. There is **no real external custody signature, independently
+unseen D holdout, signed research certifier verdict or Granite GPU validation**
+in this PR, and therefore **no valid real Evaluator certificate**.
+
+A digital signature establishes which trusted key signed a statement; it does
+not prove that the signer's claim is truthful, that all semantic contamination
+was eliminated, or that the contrast pairs are independent statistical
+draws. Trust-root provisioning, offline holdout custody, record of exactly
+which examples every training/evaluation system was exposed to, and external
+scientific review remain separate real operational responsibilities. The
+statistical test assumes independent contrast-pair observations.
+
+No route was activated in production and no costed infrastructure was used.
