@@ -233,7 +233,9 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     started = worker.launch(proposal)
     assert started.status == "running", started.to_dict()
     result = _wait(worker, proposal.run_id, {"completed", "failed"}, timeout=100)
-    assert result.status == "completed", result.to_dict()
+    assert result.status == "completed", (result.to_dict(),
+        Path(str(result.metadata.get("log_ref", ""))).read_text(encoding="utf-8")[-5000:]
+        if result.metadata.get("log_ref") else "no worker log")
     assert result.checkpoint_refs
     checkpoint = Path(result.checkpoint_refs[-1])
     assert validate_checkpoint_manifest(checkpoint)[0]
