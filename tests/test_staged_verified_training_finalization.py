@@ -317,7 +317,8 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     )
     before = generation.generate(baseline)
     after = generation.generate(restored)
-    assert before.report.completed and after.report.completed
+    assert before.report.completed and after.report.completed, (
+        before.report.to_dict(), after.report.to_dict())
     assert len(before.report.samples) == len(after.report.samples) == 2
     compared = ExperimentEvaluationService(
         pack_name="tiny_cpu_repair_v1", config_dir=config_dir,
