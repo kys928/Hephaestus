@@ -31,12 +31,23 @@ class CpuResearchCausalPlanner:
 
     def _scientifically_admitted_options(self, diagnosis):
         domain = self.planner.propose_interventions(diagnosis)
+        budget = diagnosis.metadata.get("budget", {})
+        if not isinstance(budget, dict):
+            budget = {}
+        has_positive_limit = any(
+            type(budget.get(k)) in (int, float) and
+            math.isfinite(budget[k]) and budget[k] > 0
+            for k in ("max_compute_hours", "max_cost_usd", "max_training_steps"))
+        admitted_without_budget = {
+            "collect_more_evidence", "repair_evaluation", "stop", "rollback"}
         admissible = set()
         for decision, action, variable in CANDIDATES["planner"]:
             kind, policy_action, variable_map = PLANNER_DECISIONS[decision]
             if action != policy_action:
                 continue
             real_variable = variable_map.get(variable)
+            if kind not in admitted_without_budget and not has_positive_limit:
+                continue
             if any(row.intervention_kind == kind and
                    row.primary_variable == real_variable for row in domain):
                 admissible.add((decision, action, variable))
