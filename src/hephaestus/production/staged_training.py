@@ -216,3 +216,16 @@ class StagedTrainingLifecycleAdapter:
         except (ValueError, KeyError, TypeError, OSError) as exc:
             return StagedOperationResult(status="blocked", resumable=False,
                 blocking_issues=(f"training_handoff_invalid:{type(exc).__name__}",))
+
+
+@dataclass(slots=True)
+class StagedCheckpointAndEvaluation:
+    """Give checkpoint_resolution to real training; keep existing evaluator."""
+
+    training: StagedTrainingLifecycleAdapter
+    evaluator: object
+
+    def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
+        if request.substep == "checkpoint_resolution":
+            return self.training.execute(request)
+        return self.evaluator.execute(request)
