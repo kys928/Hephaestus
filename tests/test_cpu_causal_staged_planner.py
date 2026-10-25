@@ -82,6 +82,24 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
     else:
         assert sixth.status in {"blocked", "terminal_failure"}
         assert sixth.blocking_issues
+    failure_detail = None
+    if sixth.status == "terminal_failure":
+        from hephaestus.control.staged_state import StagedOperationRequest
+        audit_request = StagedOperationRequest(
+            workflow_id=workflow.workflow_id, run_id=workflow.run_id,
+            lineage_id=workflow.lineage_id,
+            stage_name=workflow.stage_name,
+            phase="planner", substep="intervention_ranking",
+            operation_id=sixth.operation_id, attempt=1,
+            input_refs=tuple(sixth.input_refs),
+            prior_outputs={key: value.output for key, value in workflow.steps.items()},
+        )
+        try:
+            core.planner.execute(audit_request)
+            failure_detail = "unexpected_manual_success_after_recorded_failure"
+        except Exception as exc:
+            failure_detail = type(exc).__name__ + ":" + str(exc)[:500]
+        print("CPU_CAUSAL_STAGE_REPLAY_DIAGNOSTIC", failure_detail)
     report = {
         "schema":"hephaestus-cpu-real-causal-staged-planner.v1",
         "actual_pinned_cpu_causal_lm_loaded": True,
@@ -90,6 +108,7 @@ def test_real_staged_cpu_planner_scientifically_admits_causal_model_choice(tmp_p
         "sixth_stage_complete": bool(sixth.completion_marker),
         "sixth_stage_status": sixth.status,
         "sixth_stage_blocking": list(sixth.blocking_issues),
+        "failure_detail": failure_detail,
         "next_substep": workflow.current_substep,
         "full_45_scientific_campaign": False,
         "production_certified": False,
