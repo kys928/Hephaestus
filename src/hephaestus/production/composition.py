@@ -175,8 +175,6 @@ class ProductionRuntime:
         from dataclasses import replace
         from .staged_training import StagedTrainingLifecycleAdapter, StagedCheckpointAndEvaluation, StagedTrainingStatusMonitor
         from .staged_finalization import StagedExperimentFinalizer
-        if services.evaluator is None:
-            raise ValueError("real staged checkpoint binding requires an evaluator service")
         service = StagedTrainingLifecycleAdapter(
             repository=self.state_repository, artifacts=self.artifact_store,
             lifecycle=self.training_lifecycle, execute_enabled=execute_enabled,
