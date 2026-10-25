@@ -217,3 +217,24 @@ class StagedCheckpointAndEvaluation:
         if request.substep == "checkpoint_resolution":
             return self.training.execute(request)
         return self.evaluator.execute(request)
+
+
+@dataclass(slots=True)
+class StagedTrainingStatusMonitor:
+    """Actual training poll belongs to the lifecycle, not a simulator.
+
+    Other runtime-monitor substeps retain their existing concrete delegate;
+    unconfigured delegates stay blocked rather than returning false success.
+    """
+
+    training: StagedTrainingLifecycleAdapter
+    delegate: object | None
+
+    def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
+        if request.substep == "training_status_poll":
+            return self.training.execute(request)
+        if self.delegate is None:
+            return StagedOperationResult(
+                status="blocked", resumable=False,
+                blocking_issues=("runtime_monitor_service_missing",))
+        return self.delegate.execute(request)
