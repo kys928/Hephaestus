@@ -48,6 +48,7 @@ class StagedExperimentFinalizer:
     # HF downloads require the dedicated operator-approved acquisition flow.
     local_models_only: bool = True
     approved_recipe_refs: frozenset[str] = field(default_factory=frozenset)
+    approved_baseline_refs: frozenset[str] = field(default_factory=frozenset)
 
     def _load(self, request: StagedOperationRequest, substep: str, kind: str):
         return verified_workflow_payload(
@@ -144,6 +145,8 @@ class StagedExperimentFinalizer:
                 original.stage_name != request.stage_name or
                 not original.baseline_ref or not original.experiment_id):
             raise ValueError("Planner proposal is not owned by this campaign")
+        if original.baseline_ref not in self.approved_baseline_refs:
+            raise PermissionError("baseline is not pinned by independent campaign policy")
         dsel, data, evidence, processed, processing, contract, tokenizer, dagrant = self._data(request)
         msel, model, mgrant = self._model(request)
         if (original.dataset_selection_id not in (None, dsel.decision_id) or
