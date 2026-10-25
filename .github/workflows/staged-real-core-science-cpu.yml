@@ -1,0 +1,26 @@
+name: Production-owned staged science adapters (CPU)
+on:
+  pull_request:
+    paths:
+      - 'src/hephaestus/production/staged_core.py'
+      - 'src/hephaestus/production/staged_composition.py'
+      - 'src/hephaestus/production/composition.py'
+      - 'src/hephaestus/production/staged_training.py'
+      - 'tests/test_staged_real_core_science.py'
+      - '.github/workflows/staged-real-core-science-cpu.yml'
+permissions: {contents: read}
+jobs:
+  evidence-bound-stage-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal CPU tests and signature verification
+        run: python -m pip install -e '.[test]' 'cryptography>=44,<47'
+      - name: Run genuine scientific-service boundary tests
+        run: pytest -q tests/test_staged_real_core_science.py tests/test_staged_production_composition.py
+      - name: Full CPU regression suite
+        run: pytest -q tests/
