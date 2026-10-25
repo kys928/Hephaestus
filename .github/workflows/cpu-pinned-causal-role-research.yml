@@ -1,0 +1,35 @@
+name: Real pinned SmolLM2 causal-LM CPU role research (no certification)
+on:
+  push:
+    branches: [feature/cpu-causal-lm-real-role-bridge-20261025]
+  pull_request:
+    paths:
+      - 'src/hephaestus/llm/cpu_causal_research.py'
+      - 'tests/test_cpu_causal_lm_research.py'
+      - '.github/workflows/cpu-pinned-causal-role-research.yml'
+permissions: {contents: read}
+jobs:
+  pretrained-genuine-causal-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      HEPHAESTUS_REAL_CPU_LM_REPORT: evidence/cpu-real-pretrained-causal-role-output.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyTorch and real Transformers (no mock inference)
+        run: python -m pip install -e '.[peft-training,test]' 'transformers>=4.49,<6' 'huggingface-hub>=0.34,<2'
+      - name: Verify real pinned pretrained model produces five evidence-conditioned proposals
+        run: pytest -q tests/test_cpu_causal_lm_research.py -rs
+      - name: Retain measured causal-model research receipts (temporary)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-cpu-pinned-causal-lm-five-role-evidence
+          path: evidence/cpu-real-pretrained-causal-role-output.json
+          if-no-files-found: warn
+          retention-days: 14
