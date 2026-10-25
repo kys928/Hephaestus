@@ -169,6 +169,13 @@ def test_three_complete_spine_cycles_with_failure_memory_and_restart(tmp_path):
         assert attested["scientific_certification"] == "not_certified"
         assert attested["scope"] == "control_record_integrity_only_not_real_model_proof"
 
+    altered = StagedWorkflowState.from_dict(workflow.to_dict())
+    altered.steps["evaluator.candidate_generation"].output_refs.append(
+        "evidence://tampered-after-completion")
+    with pytest.raises(ValueError, match="disagree"):
+        verify_completed_staged_trace(
+            altered, restarted.state_repository, restarted.artifact_store)
+
     reloaded = _runtime(tmp_path)
     same = ProductionLoopRunner(
         reloaded, StagedProductionCycleDriver(_factory(ScientificSimulationWorker())),
