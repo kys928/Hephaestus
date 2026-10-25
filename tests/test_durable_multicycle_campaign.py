@@ -15,7 +15,6 @@ from hephaestus.production.composition import ProductionCompositionRoot, Product
 from hephaestus.production.loop import ProductionLoopRunner
 from hephaestus.production.staged_driver import StagedProductionCycleDriver
 from hephaestus.production.state import ACTION_EXECUTIONS
-from hephaestus.state.experiment_memory import ExperimentMemoryQuery
 from hephaestus.storage.verified import read_verified_json
 from test_staged_autonomous_orchestration import FakeOperationRouter, _services
 
@@ -175,7 +174,7 @@ def test_campaign_identity_is_immutable_and_cannot_reset_existing_state(tmp_path
     with pytest.raises(ValueError, match="cannot overwrite"):
         runner.run(program_id="identity-campaign", lineage_id="original",
                    stage_name="smoke_test", resume=False)
-    with pytest.raises(ValueError, match="cycle ceiling"):
+    with pytest.raises(ValueError, match="positive cycle limit"):
         ProductionLoopRunner(runtime, StagedProductionCycleDriver(_factory(first)),
                              maximum_cycles=0).run(program_id="identity-campaign",
                              lineage_id="original", stage_name="smoke_test")
