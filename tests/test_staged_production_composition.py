@@ -15,6 +15,11 @@ from hephaestus.production.staged_trace import verify_completed_staged_trace
 from test_staged_autonomous_orchestration import FakeOperationRouter
 
 
+class _NoGrantApprovalProvider:
+    def decision_for(self, request):
+        return None
+
+
 def _runtime(tmp_path):
     return ProductionCompositionRoot(ProductionCompositionSettings(
         state_root=tmp_path / "state", artifact_root=tmp_path / "artifacts",
@@ -27,7 +32,7 @@ def test_missing_scientific_services_block_even_when_state_and_approvals_exist(t
         services=StagedAutonomousServices(),
         state_repository=rt.state_repository,
         artifact_store=rt.artifact_store,
-        approval_service=object(),
+        approval_service=_NoGrantApprovalProvider(),
     )
     with pytest.raises(ValueError, match="missing"):
         staged_binding_inventory(deps)
@@ -39,7 +44,7 @@ def test_test_double_cannot_masquerade_as_production_scientific_worker(tmp_path)
         services=StagedAutonomousServices(judge_entry=FakeOperationRouter()),
         state_repository=rt.state_repository,
         artifact_store=rt.artifact_store,
-        approval_service=object(),
+        approval_service=_NoGrantApprovalProvider(),
     )
     with pytest.raises(ValueError, match="simulated"):
         staged_binding_inventory(deps)
