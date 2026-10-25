@@ -148,8 +148,9 @@ class ProductionRuntime:
         )
         return replace(services, generation=service, evaluator=service)
 
-    def with_discovery_services(self, services):
-        """Bind real allowlisted dataset/model discovery and selection."""
+    def with_discovery_services(self, services, *,
+                                require_planner_approval_receipt: bool = False):
+        """Bind real allowlisted discovery; optionally require verified Planner approval custody."""
         from dataclasses import replace
         from .staged_discovery import StagedDiscoveryAdapter
         service = StagedDiscoveryAdapter(
@@ -158,6 +159,7 @@ class ProductionRuntime:
             dataset_selector=self.dataset_selector,
             model_coordinator=self.coordinator,
             model_selector=self.model_selector,
+            require_planner_approval_receipt=require_planner_approval_receipt,
         )
         return replace(services, dataset_discovery=service,
                        dataset_selection=service, model_discovery=service,
