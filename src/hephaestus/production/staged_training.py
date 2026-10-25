@@ -216,6 +216,9 @@ class StagedCheckpointAndEvaluation:
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
         if request.substep == "checkpoint_resolution":
             return self.training.execute(request)
+        if self.evaluator is None:
+            return StagedOperationResult(status="blocked", resumable=False,
+                blocking_issues=("staged_evaluation_not_composed",))
         return self.evaluator.execute(request)
 
 
