@@ -109,6 +109,18 @@ class StagedScientificEntry:
                     constraints={"input_ref": self.diagnosis_request_ref},
                 )
                 result = self.diagnosis_service.diagnose(diagnosis_request)
+                # An operator-pinned CPU research cap can constrain *planning*
+                # without serving as an approval, a training fact or a grant.
+                cap = source.get("bounded_research_limits")
+                if cap is not None:
+                    if (not isinstance(cap, dict) or set(cap) != {"max_training_steps"}
+                            or type(cap["max_training_steps"]) is not int
+                            or not 1 <= cap["max_training_steps"] <= 8):
+                        raise ValueError("invalid bounded CPU research-only plan limit")
+                    result.metadata["budget"] = {
+                        "max_training_steps": cap["max_training_steps"]}
+                    result.metadata["budget_source_ref"] = self.diagnosis_request_ref
+                    result.metadata["budget_is_approval"] = False
                 if (result.run_id != req.run_id or result.lineage_id != req.lineage_id
                         or not result.report_id):
                     raise ValueError("diagnosis returned unrelated scientific source")
