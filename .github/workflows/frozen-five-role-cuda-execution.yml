@@ -24,6 +24,7 @@ jobs:
       RUNPOD_API_BASE_URL: https://api.runpod.io/v2
       HEPHAESTUS_CUDA_PREFLIGHT_OUTPUT: evidence/cuda_preflight.json
       HEPHAESTUS_ROLE_ASSET_REPORT: evidence/cuda_role_assets.json
+      PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
