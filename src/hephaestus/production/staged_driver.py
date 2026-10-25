@@ -22,6 +22,7 @@ from hephaestus.policy.action_registry import evaluate_action_boundary
 from .composition import ProductionRuntime
 from .loop import ProductionCycleResult
 from .state import ProductionLoopState
+from .staged_trace import verify_completed_staged_trace
 
 
 class StagedActionIntentService:
@@ -175,6 +176,13 @@ class StagedProductionCycleDriver:
             if not completed:
                 raise ValueError(f"completed cycle has no phase operations: {phase.value}")
             phase_evidence[phase.value] = completed
+        # A completed cycle must carry a revalidated, content-addressed
+        # 45-operation trace. This authenticates control receipts, not claims
+        # of genuine model execution or independent scientific certification.
+        trace_ref = verify_completed_staged_trace(
+            progress, runtime.state_repository, runtime.artifact_store)
+        evidence["operation_trace_ref"] = trace_ref
+        evidence["operation_trace_scope"] = "control_record_integrity_only"
         return ProductionCycleResult(
             cycle_id=f"{state.program_id}:cycle:{cycle_index}",
             run_id=run_id,
