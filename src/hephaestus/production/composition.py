@@ -104,6 +104,19 @@ class ProductionRuntime:
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
 
+    def with_local_data_factory(self, services, *, acquisition_enabled: bool = False):
+        """Use real bounded preprocessing only after verified local acquisition."""
+        from dataclasses import replace
+        from .staged_data_factory import StagedApprovedLocalDataFactory
+        service = StagedApprovedLocalDataFactory(
+            repository=self.state_repository, artifacts=self.artifact_store,
+            preprocessor=self.data_preprocessor,
+            maximum_source_bytes=self.settings.maximum_dataset_bytes,
+            acquisition_enabled=acquisition_enabled,
+        )
+        return replace(services, dataset_acquisition=service,
+                       data_preprocessor=service)
+
     def with_evaluation_services(self, services, *,
                                  baseline_run_artifact_ref: str,
                                  generation_backend,
