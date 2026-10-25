@@ -276,7 +276,7 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
     pack["eval_pack_id"] = "tiny_cpu_repair"
     pack["source_ref"] = "configs/eval_packs/tiny_cpu_repair_v1.yaml"
     pack["decoding_config"] = {
-        "temperature": 0.0, "top_p": 1.0, "max_new_tokens": 8, "seeds": [11, 29],
+        "temperature": 1.0, "top_p": 1.0, "max_new_tokens": 8, "seeds": [11, 29],
     }
     for bundle in ("generation_probes", "continuation_prompts", "ranking_sets",
                    "regression_prompts", "structure_tests", "repetition_checks",
@@ -333,16 +333,9 @@ def test_admitted_verified_proposal_runs_real_tiny_lora_and_generates_on_cpu(tmp
         pack_name="tiny_cpu_repair_v1", config_dir=config_dir,
         artifact_store=runtime.artifact_store,
     )
-    from hephaestus.generation.backends import load_generation_instructions
-    # Isolate the actual Transformers backend failure before the generation
-    # service normalizes unexpected exceptions into structured missing evidence.
-    probe = generation.backend.generate_batch(
-        list(generation.plan().tasks),
-        run_id="debug-frozen-baseline",
-        loading_instructions=load_generation_instructions(str(baseline_instructions)),
-        decoding_config=generation.plan().decoding_config,
-    )
-    assert len(probe) == 2
+    # Sample with frozen explicit seeds; an untrained tiny GPT2 can greedily
+    # emit only special tokens (correctly rejected as empty output).
+    # The sampled test configuration is deterministic for each seed.
     before = generation.generate(baseline)
     after = generation.generate(restored)
     assert before.report.completed and after.report.completed, (
