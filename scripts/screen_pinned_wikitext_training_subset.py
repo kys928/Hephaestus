@@ -54,7 +54,7 @@ def produce_report() -> dict[str, object]:
             f"resolve/{source['revision']}/")
     card = fetch_bounded(base + "README.md", 128 * 1024)
     card_text = card.decode("utf-8").lower()
-    if not all(label in card_text for label in ("cc-by-sa-3.0", "cc-by-sa-4.0")):
+    if not all(label in card_text for label in ("cc-by-sa-3.0", "gfdl", "cc by-sa 4.0")):
         raise ValueError("unresolved license declarations changed; halt for review")
     file_path = ROOT / "configs/eval_packs/semantic_behavior_v1.yaml"
     pack = file_path.read_bytes()
