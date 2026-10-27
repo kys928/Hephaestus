@@ -31,6 +31,10 @@ jobs:
         run: python scripts/run_existing_peft_cpu_development_cycle.py --steps 8 --output cpu-peft-development-cycle
       - name: Independently replay checkpoint and baselines
         run: python scripts/run_existing_peft_cpu_development_cycle.py --verify-only --output cpu-peft-development-cycle
+      - name: Run the existing pinned real 135M CPU research scorer for five advisory role slots
+        run: python scripts/run_cpu_role_advisories_after_peft.py --output cpu-peft-development-cycle --cache-dir cpu-research-model-cache
+      - name: Verify all five real model inference receipts without any protected action
+        run: python scripts/run_cpu_role_advisories_after_peft.py --verify-only --output cpu-peft-development-cycle
       - name: Save SHA-256 custody (not certification)
         if: always()
         run: |
@@ -48,6 +52,7 @@ jobs:
                    'actual_peft':(root/'peft_cycle_manifest.json').is_file(),
                    'approved_external_source_acquisition':False,
                    'frozen_five_role_stack_executed':False,
+                   'cpu_research_role_receipts_verified':(root/'cpu_role_advisory_report.json').is_file(),
                    'canonical_45_campaign_advanced':False,
                    'independent_scientific_certification':False,
                    'gpu_executed':False}
