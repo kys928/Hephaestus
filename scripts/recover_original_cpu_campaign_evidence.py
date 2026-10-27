@@ -11,7 +11,8 @@ import io
 import json
 from pathlib import Path
 import os
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.parse import urlparse
 import zipfile
 
 RUN_ID = 40216554433
@@ -83,7 +84,16 @@ def main()->None:
                  "Accept":"application/vnd.github+json",
                  "User-Agent":"hephaestus-original-state-recovery/1"},
     )
-    with urlopen(request,timeout=30) as response:
+    class DropBearerOnArtifactRedirect(HTTPRedirectHandler):
+        # GH REST requires the token; the signed third-party archive redirect
+        # must NOT inherit it, or storage rejects Authorization: Bearer.
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            redir=super().redirect_request(req,fp,code,msg,headers,newurl)
+            if redir is not None and urlparse(newurl).hostname!="api.github.com":
+                redir.headers.pop("Authorization",None)
+                redir.unredirected_hdrs.pop("Authorization",None)
+            return redir
+    with build_opener(DropBearerOnArtifactRedirect()).open(request,timeout=30) as response:
         blob=response.read(50_000+1)
     if len(blob)>50_000:
         raise ValueError("historical artifact exceeds byte ceiling")
