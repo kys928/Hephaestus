@@ -1,0 +1,66 @@
+name: Real existing PEFT adapter CPU integration (noncertified)
+on:
+  push:
+    branches:
+      - integration/cpu-peft-existing-adapters-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  existing-peft-training-real-outputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU scientific dependencies (no CUDA/GPU)
+        run: |
+          python -m pip install --disable-pip-version-check --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+          python -m pip install --disable-pip-version-check -e '.[test,peft-training]'
+      - name: Run real PEFT and local-source admission regression tests
+        run: pytest -q tests/test_existing_peft_cpu_development_bridge.py
+      - name: Execute one real existing-adapter PEFT cycle
+        run: python scripts/run_existing_peft_cpu_development_cycle.py --steps 8 --output cpu-peft-development-cycle
+      - name: Independently replay checkpoint and baselines
+        run: python scripts/run_existing_peft_cpu_development_cycle.py --verify-only --output cpu-peft-development-cycle
+      - name: Save SHA-256 custody (not certification)
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,os
+          root=pathlib.Path('cpu-peft-development-cycle')
+          hashes={}
+          for p in sorted(root.rglob('*')):
+              if p.is_file():
+                  hashes[p.relative_to(root).as_posix()] = 'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
+          custody={'schema':'hephaestus-existing-peft-cpu-development-custody.v1',
+                   'run_commit':os.getenv('GITHUB_SHA'),
+                   'file_sha256':hashes,
+                   'source':'repository_original_generated_math',
+                   'actual_peft':(root/'peft_cycle_manifest.json').is_file(),
+                   'approved_external_source_acquisition':False,
+                   'frozen_five_role_stack_executed':False,
+                   'canonical_45_campaign_advanced':False,
+                   'independent_scientific_certification':False,
+                   'gpu_executed':False}
+          pathlib.Path('cpu-peft-custody.json').write_text(json.dumps(custody,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'files':len(hashes),'run':custody['run_commit'],'actual_peft':custody['actual_peft']}))
+          PY
+      - name: Upload actual LoRA adapter, generation and replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: existing-peft-cpu-development-evidence
+          path: |
+            cpu-peft-development-cycle/
+            cpu-peft-custody.json
+          retention-days: 30
+          if-no-files-found: error
