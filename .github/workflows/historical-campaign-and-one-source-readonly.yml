@@ -1,8 +1,5 @@
 name: Historical 11-state recovery and one HF source clearance research (read only)
 on:
-  push:
-    branches:
-      - integration/historical-state-recovery-and-single-source-20261027
   workflow_dispatch:
 permissions:
   actions: read
