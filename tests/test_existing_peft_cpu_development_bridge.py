@@ -62,3 +62,40 @@ def test_actual_existing_peft_training_and_generation_judge_replay(tmp_path):
     f.write_bytes(f.read_bytes()+b"\n")
     with pytest.raises(ValueError,match="output modified"):
         verify_peft_cycle(root)
+
+
+
+def test_existing_approved_source_handoff_never_invents_missing_receipts(tmp_path):
+    from hephaestus.control.staged_state import StagedOperationRequest
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.storage.sqlite import SQLiteStateRepository
+    from hephaestus.development.approved_source_handoff import ApprovedSourceCpuPeftHandoff
+    from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
+
+    tool=ApprovedSourceCpuPeftHandoff(
+        repository=SQLiteStateRepository(tmp_path/"state.sqlite"),
+        artifacts=FileSystemArtifactStore(tmp_path/"artifacts"),
+        lifecycle=TransformersTrainingLifecycleService(tmp_path/"real-runs"),
+    )
+    request=StagedOperationRequest(
+        workflow_id="unapproved",run_id="unapproved-data-run",
+        lineage_id="lineage",stage_name="smoke_test",
+        phase="training_engineer",substep="training_input_binding",
+        operation_id="binding-unapproved",attempt=1,input_refs=(),
+        prior_outputs={},
+    )
+    with pytest.raises((PermissionError,ValueError,KeyError,FileNotFoundError)):
+        tool.verify(request)
+    request.substep="dataset_acquisition"
+    with pytest.raises(PermissionError,match="only at production"):
+        tool.verify(request)
+
+
+def test_five_cpu_role_advisories_cannot_be_replayed_without_genuine_peft_receipts(tmp_path):
+    from hephaestus.development.cpu_role_after_peft import verify_cpu_role_advisories
+    from hephaestus.llm.cpu_causal_research import CANDIDATES
+    assert len(CANDIDATES)==5
+    assert set(CANDIDATES)=={"controller","diagnosis","planner","evaluator","judge"}
+    assert "approved" not in {item[0] for item in CANDIDATES["judge"]}
+    with pytest.raises((FileNotFoundError,ValueError)):
+        verify_cpu_role_advisories(tmp_path)
