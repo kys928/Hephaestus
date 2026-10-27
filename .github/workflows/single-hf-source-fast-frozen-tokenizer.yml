@@ -1,0 +1,33 @@
+name: Single HF candidate fast frozen-tokenizer preview (no acquisition)
+on:
+  push:
+    branches:
+      - integration/historical-state-recovery-and-single-source-20261027
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  immutable-math-source-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'boto3>=1.34,<2' 'tokenizers>=0.19,<0.23' pytest
+      - name: Check raw newline and frozen 1% threshold on test data
+        run: pytest -q tests/test_historical_recovery_and_one_source.py
+      - name: Actual public HF preview with original frozen tokenizer
+        run: python scripts/screen_single_hf_math_source_public_preview.py
+      - name: Archive exact source screening only, no training authority
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-hq-first100-original-tokenizer-screening
+          path: one_hf_source_public_preview_screen.json
+          if-no-files-found: warn
