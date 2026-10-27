@@ -1,0 +1,66 @@
+name: First complete CPU development improvement cycle (noncertified)
+on:
+  push:
+    branches:
+      - integration/first-cpu-development-cycle-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+jobs:
+  actual-cpu-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyTorch CPU wheels and Hephaestus in development mode
+        run: |
+          python -m pip install --disable-pip-version-check --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
+          python -m pip install --disable-pip-version-check -e . 'pytest>=8,<9'
+      - name: Run deterministic and real-gradient scientific boundary tests
+        run: pytest -q tests/test_first_cpu_development_cycle.py
+      - name: Execute real CPU arithmetic-to-JSON causal-LM development cycle
+        run: python scripts/run_first_cpu_development_cycle.py --steps 85 --output cpu-development-cycle
+      - name: Verify manifest, checkpoint and evaluation replay from persisted bytes
+        run: python scripts/run_first_cpu_development_cycle.py --verify-only --output cpu-development-cycle
+      - name: Persist no-training-authority custody and SHA manifests
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,os
+          root=pathlib.Path('cpu-development-cycle')
+          hashes={p.name:'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in sorted(root.glob('*')) if p.is_file()}
+          custody={
+              'schema':'hephaestus-noncertified-real-cpu-cycle-custody.v1',
+              'run_commit':os.environ.get('GITHUB_SHA'),
+              'file_sha256':hashes,
+              'development_scope':'original_non_third_party_math_data',
+              'real_training':(root/'trained_cpu_gru_weights.pt').is_file(),
+              'protected_evaluation_access':False,
+              'dataset_selection_approved':False,
+              'campaign_45_advanced':False,
+              'paid_gpu':False,
+              'independent_certification':False,
+          }
+          pathlib.Path('cpu-cycle-custody.json').write_text(
+              json.dumps(custody,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(custody,sort_keys=True))
+          PY
+      - name: Archive model weights and exact evaluation/Judge evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-genuine-cpu-development-cycle-evidence
+          path: |
+            cpu-development-cycle/
+            cpu-cycle-custody.json
+          retention-days: 30
+          if-no-files-found: error
