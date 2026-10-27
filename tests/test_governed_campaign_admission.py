@@ -9,7 +9,7 @@ import pytest
 
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_state import (
-    PHASE_SUBSTEPS, WORKFLOW_RECORD_COLLECTION, WORKFLOW_STATE_COLLECTION,
+    PHASE_SUBSTEPS, REQUIRED_RECORD_KINDS, WORKFLOW_RECORD_COLLECTION, WORKFLOW_STATE_COLLECTION,
     StagedStepState, StagedWorkflowState, StagedAutonomousDependencies,
     StagedAutonomousServices,
 )
@@ -34,11 +34,11 @@ def _repo(tmp_path):
     return SQLiteStateRepository(tmp_path / "state.sqlite"), FileSystemArtifactStore(tmp_path / "objects")
 
 
-def _record(repository, store, *, phase, substep, op, payload):
+def _record(repository, store, *, phase, substep, op, payload, kind="substep_result"):
     wrapped = {
-        "record_id": f"fixture-record-{phase}-{substep}-{payload['attempt']}",
+        "record_id": f"fixture-record-{phase}-{substep}-{kind}-{payload['attempt']}",
         **IDENTITY, "phase": phase, "substep": substep,
-        "operation_id": op, "sequence": 1, "kind": "substep_result",
+        "operation_id": op, "sequence": 1, "kind": kind,
         "payload": payload,
     }
     ref = store.put_bytes(canonical_bytes(wrapped), media_type="application/json")
@@ -51,9 +51,16 @@ def _fixture(tmp_path, *, n=11, pending=True, omit_approval=False):
     state = StagedWorkflowState(**IDENTITY)
     for i, (phase, substep) in enumerate(ORDER[:n]):
         op = f"fixture-op-{i}"
-        step = StagedStepState(phase, substep, op, status="completed",
-                               attempt=1, completion_marker=True, resumable=False)
+        critical=REQUIRED_RECORD_KINDS.get(substep)
+        step = StagedStepState(
+            phase, substep, op, status="completed", attempt=1,
+            completion_marker=True, resumable=False,
+            output={"record_kinds":[critical] if critical else []},
+        )
         state.steps[f"{phase}.{substep}"] = step
+        if critical:
+            _record(repo, store, phase=phase, substep=substep, op=op,
+                    kind=critical, payload={"attempt":1,"fixture_science_record":True})
         _record(repo, store, phase=phase, substep=substep, op=op,
                 payload={"status": "completed", "attempt": 1,
                          "resumable": False, "completion_marker": True,
@@ -125,6 +132,14 @@ def test_forged_completion_with_missing_real_receipt_fails(tmp_path):
 def test_missing_real_pending_approval_request_blocks(tmp_path):
     repo, store, _ = _fixture(tmp_path, omit_approval=True)
     with pytest.raises(ValueError, match="genuine persisted request"):
+        _inspect(repo, store)
+
+
+def test_stage_status_without_original_science_record_declaration_fails(tmp_path):
+    repo, store, state = _fixture(tmp_path)
+    state.steps["judge_entry.judge_entry_decision"].output["record_kinds"]=[]
+    repo.append(WORKFLOW_STATE_COLLECTION, state.to_dict())
+    with pytest.raises(ValueError, match="scientific stage lacks declared"):
         _inspect(repo, store)
 
 
