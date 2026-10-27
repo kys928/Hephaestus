@@ -42,6 +42,9 @@ def screen(meta:dict, splits:dict, preview:dict,tokenizer:Tokenizer)->dict:
     counts=Counter()
     total=bad=0
     pair_count=0
+    accepted_tokens=accepted_unknown=accepted_windows=0
+    accepted_rows=0
+    accepted_unique=set()
     dedup=set()
     for entry in preview.get("rows",[])[:100]:
         row=entry.get("row",{})
@@ -58,13 +61,23 @@ def screen(meta:dict, splits:dict, preview:dict,tokenizer:Tokenizer)->dict:
         key=sha256(" ".join(raw.casefold().split()).encode()).hexdigest()
         if key in dedup:counts["exact_normalized_repeat"]+=1
         dedup.add(key)
-        if re.search(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}",raw,re.I):counts["potential_email"]+=1
+        potential_email=bool(re.search(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}",raw,re.I))
+        if potential_email: counts["potential_email"]+=1
         if len(ids)>=PREFIX+TARGET:
             # Count windows where prompt and target lie inside one source row.
             # No EOS, no interpolation over adjacent stories.
             windows=1+(len(ids)-(PREFIX+TARGET))//STRIDE
             pair_count+=windows
             counts["long_enough_for_continuation"]+=1
+            # Screening profile: reject incompatible *original* source rows;
+            # never flatten newline to disguise incompatible tokens.
+            if (ids.count(unk_id)*100<=len(ids)
+                    and not potential_email and key not in accepted_unique):
+                accepted_rows+=1
+                accepted_tokens+=len(ids)
+                accepted_unknown+=ids.count(unk_id)
+                accepted_windows+=windows
+                accepted_unique.add(key)
         counts["valid_rows"]+=1
     frac=bad/max(total,1)
     return {
@@ -83,6 +96,18 @@ def screen(meta:dict, splits:dict, preview:dict,tokenizer:Tokenizer)->dict:
         "continuation_window":{"prefix_tokens":PREFIX,"target_tokens":TARGET,
                                "stride":STRIDE,"complete_in_source_windows":pair_count,
                                "new_eos_inserted":False},
+        "filtered_preview_profile":{
+            "filter":"complete_in_row_160_tokens+raw_token_unk_rate_le_1_percent+dedup+no_email_regex",
+            "accepted_rows":accepted_rows,
+            "accepted_unique_rows":len(accepted_unique),
+            "accepted_source_tokens":accepted_tokens,
+            "accepted_unknown_tokens":accepted_unknown,
+            "accepted_unknown_fraction":accepted_unknown/max(1,accepted_tokens),
+            "accepted_windows":accepted_windows,
+            "did_not_flatten_newline":True,
+            "did_not_change_original_tokenizer":True,
+            "preview_subset_only_not_full_source":True,
+        },
         "fit_for_original_diagnosis":"next_token_continuation_only_not_structured_json_or_bounded_short_answers",
         "full_corpus_privacy_and_duplicates_cleared":False,
         "independent_protected_evaluation_overlap_checked":False,
@@ -90,9 +115,11 @@ def screen(meta:dict, splits:dict, preview:dict,tokenizer:Tokenizer)->dict:
         "complete_training_corpus_scanned":False,
         "selection_approved":False,"acquisition_approved":False,
         "training_authorized":False,
-        "disposition":("PROVISIONAL_preview_compatible_NOT_CLEARED"
-                       if total and frac<=.01 and pair_count>0
-                       else "HOLD_preview_tokenizer_or_continuation_failure"),
+        "disposition":(
+            "PROVISIONAL_FILTERED_PREVIEW_NOT_SOURCE_CLEARED"
+            if accepted_rows>=10 and accepted_windows>=10
+            else "HOLD_no_sufficient_raw-compatible_subset"
+        ),
     }
 
 
@@ -124,7 +151,7 @@ def main():
         json.dumps(report,sort_keys=True,indent=2)+"\n")
     print(json.dumps({key:report[key] for key in (
         "dataset_id","revision","preview_scanned_rows","raw_source_tokenizer",
-        "continuation_window","first_rows_at_exact_hub_revision","disposition"
+        "continuation_window","filtered_preview_profile","first_rows_at_exact_hub_revision","disposition"
     )},sort_keys=True))
 
 
