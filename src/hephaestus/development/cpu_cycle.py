@@ -334,7 +334,47 @@ def run_cycle(out: Path, *, steps: int = MAX_STEPS) -> dict:
         raise AssertionError("baseline/candidate frozen pack drifted")
     difference = candidate["mean_score"] - baseline["mean_score"]
     regression_delta = candidate_reg["mean_score"] - baseline_reg["mean_score"]
-    hard_regression = candidate_reg["hard_pass_count"] < baseline_reg["hard_pass_count"]
+
+    def check_summary(run: dict, name: str) -> dict:
+        checks = [
+            chk for s in run["samples"] for chk in s["checks"]["checks"]
+            if chk["name"] == name
+        ]
+        if len(checks) != len(plan["tasks"]):
+            raise ValueError(f"missing core target evaluation check: {name}")
+        return {"passed": sum(bool(chk["passed"]) for chk in checks),
+                "total": len(checks)}
+
+    exact_baseline = check_summary(baseline, "correct_sum")
+    exact_candidate = check_summary(candidate, "correct_sum")
+    schema_baseline = check_summary(baseline, "valid_typed_json")
+    schema_candidate = check_summary(candidate, "valid_typed_json")
+
+    # Only *new failures* on identically paired frozen regression checks count
+    # as regressions. Aggregate score gains cannot erase such failures.
+    before_checks = {
+        (sample["task_id"], chk["name"]): chk
+        for sample in baseline_reg["samples"]
+        for chk in sample["checks"]["checks"]
+    }
+    after_checks = {
+        (sample["task_id"], chk["name"]): chk
+        for sample in candidate_reg["samples"]
+        for chk in sample["checks"]["checks"]
+    }
+    if before_checks.keys() != after_checks.keys():
+        raise ValueError("frozen baseline and candidate check identities differ")
+    newly_failed = sorted(
+        f"{key[0]}:{key[1]}" for key, old in before_checks.items()
+        if old["hard"] and old["passed"] and not after_checks[key]["passed"]
+    )
+    hard_regression = bool(newly_failed)
+    # Valid JSON is secondary. Arithmetic correctness is the *primary*
+    # precommitted task objective. A repeated fixed JSON answer cannot win.
+    substantive_improvement = (
+        exact_candidate["passed"] > exact_baseline["passed"] and
+        schema_candidate["passed"] >= schema_baseline["passed"]
+    )
     # A single development run never has enough evidence for promotion;
     # existing JudgePolicy chooses a finite, nonpromotion action.
     judge_action = JudgePolicy().decide_exit_action(
@@ -345,19 +385,34 @@ def run_cycle(out: Path, *, steps: int = MAX_STEPS) -> dict:
     )
     if str(judge_action.value) not in {"reject_checkpoint", "continue_lineage_best"}:
         raise PermissionError("development cycle cannot issue promotion or approval")
+    result = (
+        "regression_observed" if hard_regression else
+        "measured_task_improvement_noncertified" if substantive_improvement else
+        "format_learning_without_answer_correctness" if
+            schema_candidate["passed"] > schema_baseline["passed"] else
+        "no_substantive_task_improvement"
+    )
     verdict = {
         "schema": "hephaestus-development-judge-decision.v1",
         "target_score_delta": difference,
         "frozen_regression_score_delta": regression_delta,
         "hard_frozen_regression": hard_regression,
+        "newly_failed_hard_frozen_checks": newly_failed,
+        "original_frozen_regression_runs_per_task": 1,
+        "full_frozen_pack_repeatability_completed": False,
+        "primary_metric": "correct_sum",
+        "primary_metric_baseline": exact_baseline,
+        "primary_metric_candidate": exact_candidate,
+        "secondary_metric": "valid_typed_json",
+        "secondary_metric_baseline": schema_baseline,
+        "secondary_metric_candidate": schema_candidate,
+        "substantive_improvement": substantive_improvement,
         "target_evidence": "measured_model_text_on_precommitted_heldout_prompts",
-        "result": ("regression_observed" if hard_regression else
-                   "target_improved_noncertified" if difference > 0 else
-                   "no_measured_target_improvement"),
+        "result": result,
         "judge_policy_action": judge_action.value,
         "recommendation": ("investigate_regression" if hard_regression else
-                           "gather_repeatability_evidence" if difference > 0 else
-                           "diagnose_undertraining_or_data"),
+                           "collect_repeatability_evidence" if substantive_improvement else
+                           "diagnose_arithmetic_generalization_failure"),
         "human_review_completed": False, "training_approved_for_production": False,
         "promotion_authorized": False, "scientific_certification": False,
         "independent_holdout_examined": False,
