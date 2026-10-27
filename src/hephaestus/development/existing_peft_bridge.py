@@ -70,6 +70,15 @@ def _local_model(root: Path) -> tuple[Path, str, int, Any]:
         pad_token_id=tokenizer.pad_token_id, eos_token_id=tokenizer.eos_token_id,
         bos_token_id=tokenizer.bos_token_id,
     ))
+    # Avoid sampling only nonprinting special tokens from the locally
+    # initialized base. This is a symmetric, saved generation policy used by
+    # BOTH baseline and trained candidate, not synthetic text substitution.
+    model.generation_config.suppress_tokens = [
+        tokenizer.pad_token_id, tokenizer.unk_token_id,
+        tokenizer.bos_token_id,
+        *tokenizer.additional_special_tokens_ids,
+    ]
+    model.generation_config.min_new_tokens = 1
     model.save_pretrained(modeldir, safe_serialization=True)
     tokenizer.save_pretrained(modeldir)
     return modeldir, directory_content_identity(modeldir), sum(p.numel() for p in model.parameters()), tokenizer
