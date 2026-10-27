@@ -86,9 +86,10 @@ def test_existing_approved_source_handoff_never_invents_missing_receipts(tmp_pat
     )
     with pytest.raises((PermissionError,ValueError,KeyError,FileNotFoundError)):
         tool.verify(request)
-    request.substep="dataset_acquisition"
+    from dataclasses import replace
+    wrong=replace(request, substep="dataset_acquisition")
     with pytest.raises(PermissionError,match="only at production"):
-        tool.verify(request)
+        tool.verify(wrong)
 
 
 def test_five_cpu_role_advisories_cannot_be_replayed_without_genuine_peft_receipts(tmp_path):
