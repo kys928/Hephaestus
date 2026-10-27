@@ -1,0 +1,54 @@
+name: Exact WikiText candidate subset screen (not acquisition)
+on:
+  push:
+    branches: [integration/pinned-wikitext-subset-clearance-20261028]
+  pull_request:
+    paths:
+      - 'src/hephaestus/data/continuation_eligibility.py'
+      - 'scripts/screen_pinned_wikitext_training_subset.py'
+      - 'tests/test_continuation_eligibility.py'
+      - '.github/workflows/pinned-wikitext-subset-screen.yml'
+permissions: {contents: read}
+jobs:
+  measure-source-subset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install source scanning only
+        run: python -m pip install -e '.[test,dataset-preparation]'
+      - name: Check strict row acceptance contract
+        run: pytest -q tests/test_continuation_eligibility.py -rs
+      - name: Full exact pinned source train scan + original S3 tokenizer
+        run: python scripts/screen_pinned_wikitext_training_subset.py
+      - name: Assert outcome is genuinely unapproved and evidence hash
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          import json, pathlib
+          p=pathlib.Path("wikitext_continuation_subset_quarantine.json")
+          r=json.loads(p.read_bytes())
+          assert r["accepted_unique_rows"] > 0 and r["eligible_within_row_windows"] > 0
+          assert not r["dataset_approved"] and not r["training_allowed"] and not r["acquisition_allowed"]
+          assert not r["protected_reference_audits_complete"]
+          assert r["unknown_tokens"] * 100 <= r["eligible_tokens"]
+          pathlib.Path("wikitext-screen-sha256.txt").write_text(sha256(p.read_bytes()).hexdigest()+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pinned-wikitext-continuation-subset-source-only
+          path: |
+            wikitext_continuation_subset_quarantine.json
+            wikitext-screen-sha256.txt
+          if-no-files-found: warn
+          retention-days: 30
