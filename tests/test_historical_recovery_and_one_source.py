@@ -28,6 +28,7 @@ def test_historical_campaign_status_never_replaces_original_state():
 
 
 def test_hf_one_source_raw_newline_unknown_not_hidden():
+    pytest.importorskip("tokenizers", reason="optional real HF tokenizer review dependency")
     screen=_script("screen_single_hf_math_source_public_preview")
     class Encoded:
         def __init__(self, ids):
@@ -56,6 +57,7 @@ def test_hf_one_source_raw_newline_unknown_not_hidden():
 
 
 def test_source_bad_license_and_revision_fail_closed():
+    pytest.importorskip("tokenizers", reason="optional real HF tokenizer review dependency")
     screen=_script("screen_single_hf_math_source_public_preview")
     class Dummy:
         def token_to_id(self,n):return 999
@@ -65,6 +67,7 @@ def test_source_bad_license_and_revision_fail_closed():
 
 
 def test_s3_locator_honestly_reports_page_limit_and_possible_sqlite():
+    pytest.importorskip("boto3", reason="optional S3 metadata-only inspection dependency")
     search=_script("locate_original_campaign_s3_state")
     class Fake:
         def __init__(self):self.n=0
