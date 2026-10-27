@@ -44,3 +44,31 @@ Required independent source-level admission remains missing:
 5. New original durable campaign launched from operation **1**, on a persistent mounted store. Historical 11/45 temporary smoke cannot be imported. The original project CPU-first vs certified CUDA production admission also needs an explicit honest execution-mode plan; don't call advisory CPU scorer certified CUDA.
 
 **No training, source acquisition, S3 writes, GPU spending, promotion or certification was performed by this screening.** It provides a precise source-scoped *candidate* for the independently authorized scientific review, not an approval.
+
+
+## Critical handoff gap found during native production preprocessing review
+
+The existing `AutonomousDataPreprocessor._process_acquisition` loads the
+acquired full-file rows and delegates to a generic `record_filter.keep`.
+Nothing currently binds the filtered **7,232-row** selection commitment above
+to that filter or checks that the source reviewer accepted that exact filter.
+Without that binding, an approved full source could inadvertently train on
+unreviewed PII candidate or incompatible rows.
+
+Separately, `chunk_records` currently uses Python `text.split()` and rejoins
+whitespace; its `chunk_size_tokens` means *whitespace words*, not the original
+frozen tokenizer's integer tokens. Thus its output must NOT be represented
+as the 13,380 measured 128+32 true-token continuation windows.
+
+Required before real stage acquisition-to-training handoff: bind a trusted
+source-subset selection manifest and exact byte-hashed native record filter in
+the operator-accepted processing profile; verify accepted row count/commitment
+against the full acquired file *before* emitting trainable material; adopt an
+explicit frozen-tokenizer-aware same-row chunking recipe if the approved
+experiment uses the measured 128+32 continuation objective; and run the
+original frozen-tokenizer checker on actual final training records. A source
+screen is NOT permission to substitute a different preprocessing recipe.
+
+No native role contracts, tokenizer or frozen eval packs were altered to
+paper over this. Continue to fail closed until an independent reviewer approves
+the exact intended preprocessing and private-reference audit.
