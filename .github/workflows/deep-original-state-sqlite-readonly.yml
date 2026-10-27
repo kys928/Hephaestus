@@ -1,0 +1,31 @@
+name: Deep read-only audit of all real historical S3 SQLite candidates
+on:
+  push:
+    branches: [integration/historical-state-recovery-and-single-source-20261027]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  open-only-candidate-sqlite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'boto3>=1.34,<2'
+      - name: Read bounded exact SQLite bytes only and count real staged state collections
+        run: python scripts/inspect_possible_historical_sqlite_s3_readonly.py
+      - name: Preserve aggregate SHA custody, not database or source bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-real-sqlite-collection-readonly-audit
+          path: original_state_sqlite_readonly_audit.json
+          if-no-files-found: error
+          retention-days: 30
