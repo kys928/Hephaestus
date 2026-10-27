@@ -65,6 +65,13 @@ def test_full_real_optimizer_judge_and_replay_no_campaign_counter_move(tmp_path)
     assert judge["training_approved_for_production"] is False
     assert judge["scientific_certification"] is False
     assert judge["independent_holdout_examined"] is False
+    assert judge["primary_metric"] == "correct_sum"
+    assert judge["secondary_metric"] == "valid_typed_json"
+    assert judge["full_frozen_pack_repeatability_completed"] is False
+    if (judge["primary_metric_candidate"]["passed"] == 0 and
+            judge["primary_metric_baseline"]["passed"] == 0):
+        assert not judge["substantive_improvement"]
+        assert judge["result"] != "measured_task_improvement_noncertified"
     with pytest.raises(FileExistsError):
         run_cycle(dest, steps=4)
     candidate = dest / "candidate_evaluation.json"
