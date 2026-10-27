@@ -1,0 +1,85 @@
+name: Historical 11-state recovery and one HF source clearance research (read only)
+on:
+  push:
+    branches:
+      - integration/historical-state-recovery-and-single-source-20261027
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  recover-and-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only S3/HF metadata and original tokenizer dependencies
+        run: |
+          python -m pip install -e '.[test]' 'boto3>=1.34,<2' 'tokenizers>=0.19,<0.23'
+      - name: Recover byte-identical original 11/45 CI archive but never synthesize state
+        run: python scripts/recover_original_cpu_campaign_evidence.py
+      - name: Paginate the existing S3 volume for any real historical persisted state
+        run: python scripts/locate_original_campaign_s3_state.py
+      - name: Assess one permissively-licensed math source with actual immutable tokenizer and live public preview
+        run: python scripts/screen_single_hf_math_source_public_preview.py
+      - name: Independently validate strictly nonadmissive results
+        run: |
+          python - <<'PY'
+          import json
+          h=json.load(open("historical_campaign_recovery.json"))
+          s=json.load(open("historical_state_s3_locator.json"))
+          d=json.load(open("one_hf_source_public_preview_screen.json"))
+          assert h["original_measured_completed_operation_count"]==11
+          assert not h["original_workflow_resumable_from_this_archive"]
+          assert not h["original_content_addressed_operation_store_in_archive"]
+          assert not s["historical_receipts_recovered"]
+          assert not s["training_data_acquired"]
+          assert d["acquisition_approval"] is False
+          assert d["training_authorized"] is False
+          assert d["raw_newline_tokenizer"]["total_tokens"]>0
+          assert d["original_tokenizer_ref"].startswith("sha256:")
+          print({"original_smoke_archive_authenticated":True,
+                 "actual_original_state_not_reconstructed":True,
+                 "HF_source_preview_admitted_for_training":False})
+          PY
+      - name: SHA-256 read-only evidence custody
+        if: always()
+        run: |
+          python - <<'PY'
+          import json,hashlib,os,pathlib
+          files={}
+          for name in ("historical_campaign_recovery.json","historical_state_s3_locator.json","one_hf_source_public_preview_screen.json"):
+              p=pathlib.Path(name)
+              if p.is_file():
+                  files[name]="sha256:"+hashlib.sha256(p.read_bytes()).hexdigest()
+          record={"schema":"hephaestus-original-state-and-one-source-readonly-custody.v1",
+                  "commit_sha":os.environ.get("GITHUB_SHA"),"sha256":files,
+                  "approval_issued":False,"corpus_acquired":False,
+                  "original_campaign_resumed":False,"gpu_spend":False}
+          pathlib.Path("original_recovery_and_single_source_custody.json").write_text(
+              json.dumps(record,indent=2,sort_keys=True)+"\n")
+          print(json.dumps({"artifact_count":len(files),
+                            "training_source_cleared":False},sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-state-and-one-hf-source-readonly-evidence
+          path: |
+            historical_campaign_recovery.json
+            historical_state_s3_locator.json
+            one_hf_source_public_preview_screen.json
+            original_recovery_and_single_source_custody.json
+          retention-days: 90
+          if-no-files-found: error
