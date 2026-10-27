@@ -14,8 +14,9 @@ from typing import Any
 
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_state import (
-    GOVERNED_AUTONOMOUS_MODE, PHASE_SUBSTEPS, WORKFLOW_RECORD_COLLECTION,
-    WORKFLOW_STATE_COLLECTION, StagedAutonomousDependencies, StagedWorkflowState,
+    GOVERNED_AUTONOMOUS_MODE, PHASE_SUBSTEPS, REQUIRED_RECORD_KINDS,
+    WORKFLOW_RECORD_COLLECTION, WORKFLOW_STATE_COLLECTION,
+    StagedAutonomousDependencies, StagedWorkflowState,
 )
 from hephaestus.control.staged_autonomous import build_staged_autonomous_orchestrator
 from hephaestus.storage.verified import read_verified_json
@@ -139,6 +140,28 @@ def inspect_governed_campaign(
                 matched += 1
         if matched != 1:
             raise ValueError(f"operation receipt not uniquely verified: {key}")
+        # The control receipt alone is necessary but not sufficient: a stage
+        # that claims scientific work must have its *actual* recorded science
+        # output on the SAME operation identity, with immutable source bytes.
+        critical_kind = REQUIRED_RECORD_KINDS.get(substep)
+        if step.completion_marker and critical_kind:
+            if critical_kind not in step.output.get("record_kinds", []):
+                raise ValueError(f"completed scientific stage lacks declared original record: {key}")
+            records = [
+                r for r in scoped_rows
+                if (r.get("phase"), r.get("substep"), r.get("operation_id"),
+                    r.get("kind")) == (phase, substep, step.operation_id, critical_kind)
+            ]
+            if len(records) != 1:
+                raise ValueError(f"scientific stage has no unique original source record: {key}")
+            critical = records[0]
+            source_ref = critical.get("artifact_ref")
+            if not isinstance(source_ref, str) or not source_ref.startswith("sha256:"):
+                raise ValueError(f"scientific stage has no hashed original source record: {key}")
+            if read_verified_json(artifacts, source_ref) != {
+                k: v for k, v in critical.items() if k != "artifact_ref"
+            }:
+                raise ValueError(f"scientific source record bytes differ: {key}")
         verified_receipts += 1
         if not step.completion_marker:
             first_incomplete = ordinal
