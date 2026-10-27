@@ -24,10 +24,14 @@ jobs:
         run: pytest -q tests/test_historical_recovery_and_one_source.py
       - name: Actual public HF preview with original frozen tokenizer
         run: python scripts/screen_single_hf_math_source_public_preview.py
+      - name: Check alternative synthetic English continuation source (read-only public preview)
+        run: python scripts/screen_one_hf_tinystories_public_preview.py
       - name: Archive exact source screening only, no training authority
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: math-hq-first100-original-tokenizer-screening
-          path: one_hf_source_public_preview_screen.json
+          path: |
+            one_hf_source_public_preview_screen.json
+            tinystories_frozen_tokenizer_public_preview.json
           if-no-files-found: warn
