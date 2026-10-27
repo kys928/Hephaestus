@@ -181,7 +181,7 @@ def inspect_governed_campaign(
     next_step = _ORDER[completed] if completed < len(_ORDER) else None
     pending = state.steps.get(next_step) if next_step else None
     request = dict(pending.approval_request) if pending and pending.approval_request else None
-    issues = tuple(pending.blocking_issues or state.blocking_issues)
+    issues = tuple(pending.blocking_issues if pending and pending.blocking_issues else state.blocking_issues)
     if (next_step and next_step.endswith(".acquisition_approval_gate")
             and pending and pending.status == "approval_pending"):
         if not request or request.get("substep") != "acquisition_approval_gate":
