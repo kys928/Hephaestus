@@ -1,0 +1,9 @@
+# Fresh campaign custody after recovery of temporary 11-stage research smoke
+
+Original CI run 40216554433 exercised 11 genuine CPU research smoke operations in a pytest temporary directory. Its archived ZIP contains only two JSON reports, not the original SQLite state or content-addressed scientific store. The complete 45,990-object S3 listing and subsequent inspection of all 16 SQLite candidates found no native staged-workflow state. This is **historical test evidence**, not a resumable production campaign.
+
+The new durable workspace bootstrap exclusively reserves a new directory, writes a SHA-backed origin declaration and one empty native StagedWorkflowState transactionally to SQLite. At creation it is strictly **0/45**, without importing the old statuses, approvals, datasets or role inferences. Validation reopens the existing DB and hash-addressed artifact and calls the established inspect_governed_campaign for all subsequent original stage receipts.
+
+The tests exercise genuine SQLite/file hashes but are *test-only*. They do not prove a new live campaign ran and are not evidence of source clearance. The caller must use a private persistent storage mount outside the GitHub checkout, assemble genuinely admitted scientific bindings and independent approvals, and run the **existing** GovernedStagedOrchestrator on the same repository/store. A tmpdir on a CI runner does not count as durable campaign storage. The module does not execute training, upload private evidence, or supply any scientific fixture.
+
+Remaining boundaries: actual source-rights/PII/holdout review (WikiText-2 raw remains HOLD); source-scoped selection and acquisition grants; full model/optimizer/generation and evaluation execution; five distinct frozen CUDA role runtime where required; replay and independent certification. This PR grants none of them.
