@@ -192,6 +192,32 @@ def resume_real_governed_campaign(
     if dependencies.artifact_store is None or dependencies.approval_service is None:
         raise PermissionError("content-addressed custody and scoped approval provider required")
     from hephaestus.production.staged_composition import staged_binding_inventory
+    from hephaestus.production.model_roles import ModelBackedStage
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator,
+    )
+    # A CPU advisory scorer is NOT five distinct frozen role masters. Require
+    # exactly the same certified CUDA topology as production composition;
+    # staged_binding_inventory alone authenticates service signatures only.
+    role_fields = (
+        ("controller", "judge_entry"), ("diagnosis", "diagnosis"),
+        ("planner", "planner"), ("evaluator", "evaluator"),
+        ("judge", "judge_exit"),
+    )
+    roles = [getattr(dependencies.services, field) for _, field in role_fields]
+    if not all(
+        type(service) is ModelBackedStage and service.role == role
+        for (role, _), service in zip(role_fields, roles, strict=True)
+    ):
+        raise PermissionError("five certified model-backed scientific role services required")
+    shared = roles[0].reasoner
+    if (type(shared) is not CertifiedRoleReasoner
+            or any(service.reasoner is not shared for service in roles)
+            or type(shared.generator) is not PinnedTransformersRoleGenerator
+            or shared.generator.device != "cuda:0"
+            or not shared.stack.production_certified
+            or not shared.stack.runtime_registry_ready):
+        raise PermissionError("frozen genuine five-role CUDA runtime is not admitted")
     # Force native check of all 45 *real* production adapters before state IO.
     staged_binding_inventory(dependencies)
     admission = inspect_governed_campaign(
