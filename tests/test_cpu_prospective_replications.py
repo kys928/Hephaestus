@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 import pytest
-from scripts.analyze_cpu_prospective_replications import analyze_reports
+import importlib.util
+from pathlib import Path
+_module_spec = importlib.util.spec_from_file_location("cpu_replications", Path(__file__).resolve().parents[1] / "scripts" / "analyze_cpu_prospective_replications.py")
+_module = importlib.util.module_from_spec(_module_spec)
+_module_spec.loader.exec_module(_module)
+analyze_reports = _module.analyze_reports
 
 
 def sample(seed):
