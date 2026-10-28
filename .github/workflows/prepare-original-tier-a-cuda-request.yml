@@ -1,5 +1,12 @@
 name: Prepare original Tier A CUDA signed-resource request (CPU only)
 on:
+  push:
+    branches: ['feature/tier-a-cuda-runpod-execution-custody-20261028']
+    paths:
+      - '.github/workflows/prepare-original-tier-a-cuda-request.yml'
+      - 'configs/research/tier_a_original_cuda_45_v1.json'
+      - 'scripts/run_original_tier_a_cuda_worker.py'
+      - 'src/hephaestus/production/signed_cuda_grants.py'
   workflow_dispatch:
 permissions:
   contents: read
