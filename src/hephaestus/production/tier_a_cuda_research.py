@@ -93,7 +93,7 @@ def authenticate_original_tier_a_training(context, *, trusted_registry_sha256):
     if context.campaign_config.recipe_sha256 != recipe_ref:
         raise PermissionError("corrected training recipe is not the original reviewed digest")
     # Materialize only training labels, never protected or frozen evaluation text.
-    raw = b"".join(canonical_bytes(item) + b"\\n" for item in transformed)
+    raw = b"".join(canonical_bytes(item) + b"\n" for item in transformed)
     persisted = context.artifacts.put_bytes(raw, media_type="application/jsonl")
     if persisted.artifact_ref != transformed_ref:
         raise PermissionError("new immutable supervised training bytes differ from reviewed transform")
