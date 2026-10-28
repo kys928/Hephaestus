@@ -124,10 +124,11 @@ def verify_cuda_target_checkpoint(receipt, *, expected_source=None, expected_sco
 
 
 class CudaExactTokenTrainer:
-    def __init__(self, context, *, scope, grants):
+    def __init__(self, context, *, scope, grants, original_role_runtime=None):
         self.context=context
         self.scope=scope.validate()
         self.grants=grants
+        self.original_role_runtime=original_role_runtime
 
     def run(self, operation_id):
         import torch
@@ -140,6 +141,10 @@ class CudaExactTokenTrainer:
         grant_ref=verified_cuda_grant(ctx,operation_id,scope=scope,service=self.grants,
                                      purpose="target_training")
         device=require_cuda_device(scope)
+        if self.original_role_runtime is not None:
+            # The certified role generator retains one large model on CUDA.
+            # Original role inference and target optimization must not coexist.
+            self.original_role_runtime.close()
         ctx.check_authority(for_execution=False)
         handoff=authenticate_original_tier_a_training(
             ctx,trusted_registry_sha256=scope.trusted_registry_sha256)
@@ -239,6 +244,7 @@ class CudaExactTokenTrainer:
             receipt={"schema":"cuda-target-optimizer-step.v1","run_id":scope.run_id,
                 "operation_id":operation_id,"completed_steps":step+1,
                 "execution_device":"cuda:0","cuda_runtime_version":torch.version.cuda,
+                "training_recipe":TRAINING_RECIPE,
                 "gpu_name":torch.cuda.get_device_name(device),
                 "source_policy_ref":handoff.source_policy_ref,
                 "chat_trainable_ref":ref,"gpu_scope_ref":scope_ref,
