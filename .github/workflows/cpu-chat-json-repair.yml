@@ -1,0 +1,64 @@
+name: Original development CPU supervised JSON repair
+on:
+  push:
+    branches: ['feature/cpu-json-supervised-repair-20261028']
+    paths:
+      - 'configs/research/cpu_chat_json_repair_v1.json'
+      - 'scripts/run_cpu_chat_json_repair.py'
+      - 'tests/test_cpu_chat_json_repair.py'
+      - '.github/workflows/cpu-chat-json-repair.yml'
+  pull_request:
+    paths:
+      - 'configs/research/cpu_chat_json_repair_v1.json'
+      - 'scripts/run_cpu_chat_json_repair.py'
+      - 'tests/test_cpu_chat_json_repair.py'
+      - '.github/workflows/cpu-chat-json-repair.yml'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_cpu_chat_json_repair.py
+      - run: python -m py_compile scripts/run_cpu_chat_json_repair.py
+  real-supervised-cpu-repair:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,peft-training]'
+      - run: python -m pytest -q tests/test_cpu_chat_json_repair.py
+      - name: Real pinned CPU LoRA train on all 96 original generated tasks and score 24 frozen development cases
+        run: python scripts/run_cpu_chat_json_repair.py --output /tmp/cpu-json-repair-evidence
+      - name: Hash original immutable research evidence
+        if: success()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import json
+          root=Path('/tmp/cpu-json-repair-evidence')
+          files={p.relative_to(root).as_posix(): sha256(p.read_bytes()).hexdigest()
+                 for p in sorted(root.rglob('*')) if p.is_file()}
+          (root/'archive_sha256.json').write_text(json.dumps(files,sort_keys=True,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: original-json-repair-cpu-evidence
+          path: /tmp/cpu-json-repair-evidence/
