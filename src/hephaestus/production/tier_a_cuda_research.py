@@ -50,6 +50,11 @@ class TierACudaDataHandoff:
         return self
 
 
+def serialize_reviewed_supervised_records(records):
+    """Canonical JSONL: exactly the bytes hashed by the original chat recipe."""
+    return b"".join(canonical_bytes(row) + b"\n" for row in records)
+
+
 def authenticate_original_tier_a_training(context, *, trusted_registry_sha256):
     """Recheck actual approved rows and exact chat/EOS labels, without training.
 
@@ -93,7 +98,7 @@ def authenticate_original_tier_a_training(context, *, trusted_registry_sha256):
     if context.campaign_config.recipe_sha256 != recipe_ref:
         raise PermissionError("corrected training recipe is not the original reviewed digest")
     # Materialize only training labels, never protected or frozen evaluation text.
-    raw = b"".join(canonical_bytes(item) + b"\n" for item in transformed)
+    raw = serialize_reviewed_supervised_records(transformed)
     persisted = context.artifacts.put_bytes(raw, media_type="application/jsonl")
     if persisted.artifact_ref != transformed_ref:
         raise PermissionError("new immutable supervised training bytes differ from reviewed transform")
