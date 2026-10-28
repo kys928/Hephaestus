@@ -1,0 +1,30 @@
+name: WikiText native acquisition-to-preprocessing guard (CPU)
+on:
+  push:
+    branches: [integration/wikitext-native-preprocessor-safety-20261028]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  refuse-unreviewed-materialization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install no-GPU preprocessing and test dependencies
+        run: python -m pip install -e '.[test,dataset-preparation]'
+      - name: Verify native reviewed-WikiText guard and normal approved sources
+        run: >-
+          pytest -q
+          tests/test_remote_data_preprocessing_bridge.py
+          tests/test_continuation_eligibility.py
+          tests/test_staged_approved_local_data_factory.py
+          tests/test_staged_dataset_approval_custody.py
+      - name: Verify no real dataset was acquired or authorized in this CI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          assert not Path('trainable.jsonl').exists()
+          print('No WikiText source acquired, no new training data, no approvals issued')
+          PY
