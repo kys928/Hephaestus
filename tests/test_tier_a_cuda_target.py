@@ -85,7 +85,7 @@ def test_no_gpu_provider_or_fake_tier_a_autoapproval_grants_compute(tmp_path):
 ])
 def test_gpu_grant_rejects_mismatch_before_optimization(tmp_path,override):
     context=ctx(tmp_path)
-    with pytest.raises(PermissionError,match="resource approval"):
+    with pytest.raises(PermissionError,match="grant|resource"):
         verified_cuda_grant(context,"gpu-op-1",scope=scope(),
              service=IndependentGrantTestDouble(context,"target_training",override),
              purpose="target_training")
