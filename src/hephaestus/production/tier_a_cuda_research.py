@@ -82,14 +82,21 @@ def authenticate_original_tier_a_training(context, *, trusted_registry_sha256):
         raise ValueError("original corrected training epoch is incomplete")
     from hephaestus.storage.verified import read_verified_json
     frozen = read_verified_json(context.artifacts, policy.protocol_ref)
-    if frozen.get("schema") not in ("prospective-evaluation-protocol.v1",
-                                     "prospective-evaluation-protocol.v2"):
+    if (frozen.get("schema") != "internal-prospective-evaluation.v1"
+            or frozen.get("external_certification") is not False
+            or frozen.get("historical_reference") is not False):
         raise PermissionError("original evaluation separation cannot be authenticated")
+    context.admission.evaluation_store.require_frozen(policy.experiment_id, policy.protocol_ref)
     recipe_file = Path(__file__).resolve().parents[3] / "configs/research/cpu_chat_json_repair_v1.json"
     import json
     recipe_ref = "sha256:" + sha256(canonical_bytes(json.loads(recipe_file.read_bytes()))).hexdigest()
     if context.campaign_config.recipe_sha256 != recipe_ref:
         raise PermissionError("corrected training recipe is not the original reviewed digest")
+    # Materialize only training labels, never protected or frozen evaluation text.
+    raw = b"".join(canonical_bytes(item) + b"\\n" for item in transformed)
+    persisted = context.artifacts.put_bytes(raw, media_type="application/jsonl")
+    if persisted.artifact_ref != transformed_ref:
+        raise PermissionError("new immutable supervised training bytes differ from reviewed transform")
     return TierACudaDataHandoff(
         source_policy_ref=context.admission.policy_ref,
         source_review_ref=context.review_ref,
