@@ -136,6 +136,15 @@ def verify_cpu_research_trace(workflow, context):
     from hephaestus.training.cpu_research import verify_cpu_checkpoint
     if not verify_cpu_checkpoint(training) or not training["weights_changed"]:
         raise ValueError("CPU trace has no actual optimizer/checkpoint proof")
+    recipe = context.profile.training_recipe
+    if recipe == "chat_json_r8_full_epoch_96_v1":
+        if (training.get("training_recipe") != recipe or
+                training.get("completed_optimizer_steps") != 96 or
+                training.get("full_dataset_epoch_completed") is not True or
+                len(set(training.get("consumed_sample_indices", ()))) != 96 or
+                baseline.get("generation_settings_id") != "greedy-chat64-json-eos-no-truncation.v2" or
+                candidate.get("generation_settings_id") != baseline.get("generation_settings_id")):
+            raise ValueError("native JSON recipe lacks genuine complete optimizer epoch or frozen generation parity")
     return {"schema": "cpu-internal-research-verified-45.v1", "native_trace_ref": trace_ref,
         "profile_ref": context.profile_ref, "policy_ref": context.admission.policy_ref,
         "verified_operations": 45, "verified_domain_operations": real_domain,
@@ -143,6 +152,9 @@ def verify_cpu_research_trace(workflow, context):
         "prospective": prospective, "cpu_seed": context.campaign_config.cpu_seed,
         "dataset_seed": context.campaign_config.dataset_seed,
         "experiment_id": context.campaign_config.experiment_id,
+        "training_recipe": recipe,
+        "original_generated_evaluation_reused": True,
+        "new_independent_holdout_claimed": False,
         "claim_scope": "internal_prospective_generated_task_research",
         "five_frozen_cuda_roles_executed": False, "independent_scientific_certification": False,
         "historical_issue_102_exit_gates_all_satisfied": False}
