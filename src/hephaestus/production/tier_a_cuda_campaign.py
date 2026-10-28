@@ -63,6 +63,10 @@ def run_or_resume_original_tier_a_cuda_campaign(
             or workspace.workflow_id!=scope.workflow_id
             or workspace.run_id!=scope.run_id):
         raise PermissionError("original CUDA workflow target/runtime drift")
+    if not verify_only:
+        from hephaestus.production.authorized_cuda_context import AuthorizedCudaResearchContext
+        context=AuthorizedCudaResearchContext.from_signed_approved(
+            context,grants=gpu_resource_approval_service,scope=scope)
     if verify_only:
         state=context.repository.get_latest(
             WORKFLOW_STATE_COLLECTION,"workflow_id",scope.workflow_id)
