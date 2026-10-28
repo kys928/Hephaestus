@@ -24,7 +24,8 @@ class CpuProfiledStage:
     def execute(self, req):
         ctx = self.context
         if (req.workflow_id, req.run_id, req.lineage_id, req.stage_name) != (
-                ctx.scope["workflow_id"], ctx.scope["run_id"], "cpu-internal-lineage", "smoke_test"):
+                ctx.campaign_config.workflow_id, ctx.campaign_config.run_id,
+                ctx.campaign_config.lineage_id, ctx.campaign_config.stage_name):
             raise PermissionError("CPU stage identity differs from authorized campaign")
         ctx.check_authority()
         base = self.delegate.execute(req)
