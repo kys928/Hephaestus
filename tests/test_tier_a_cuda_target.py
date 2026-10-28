@@ -183,7 +183,7 @@ def test_native_45_router_uses_true_cuda_target_training_generation_and_judge(
     assert isinstance(out.services.runtime_monitor.delegate,
                       __import__("hephaestus.roles.tier_a_cuda_science",fromlist=["CudaResearchMonitorRole"]).CudaResearchMonitorRole)
     assert isinstance(out.services.generation.delegate,CudaResearchEvaluatorRole)
-    assert isinstance(out.services.evaluator.delegate,CudaResearchEvaluatorRole)
+    assert isinstance(out.services.evaluator.delegate.delegate,CudaResearchEvaluatorRole)
     assert isinstance(out.services.judge_exit.delegate.delegate,CudaResearchJudgeRole)
     assert out.services.judge_exit.role=="judge"
     assert out.services.evaluator.role=="evaluator"
