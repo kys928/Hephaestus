@@ -50,13 +50,25 @@ class CudaProspectiveEvaluator:
             "gpu_grant_ref":grant_ref,"operation_id":operation_id,
             "checkpoint":str(checkpoint) if checkpoint else "pinned-pretrained-baseline",
             "repeat":repeat,"profile_ref":ctx.profile_ref})
+        if checkpoint is not None:
+            # Revalidate original optimizer receipt rather than computing an
+            # expected hash from the candidate's mutable present-day bytes.
+            from hephaestus.production.tier_a_cuda_research import authenticate_original_tier_a_training
+            handoff=authenticate_original_tier_a_training(
+                ctx,trusted_registry_sha256=self.scope.trusted_registry_sha256)
+            latest=ctx.repository.get_latest(
+                "cuda_target_optimizer_steps","run_id",self.scope.run_id)
+            if latest is None or latest.get("completed_steps")!=96:
+                raise PermissionError("CUDA candidate has no complete original optimizer history")
+            receipt=read_verified_json(ctx.artifacts,latest["receipt_ref"])
+            if receipt.get("checkpoint_ref")!=str(checkpoint):
+                raise PermissionError("CUDA candidate checkpoint is not the original finalized step")
+            verify_cuda_target_checkpoint(
+                receipt,expected_source=handoff.transformed_training_ref)
         cached=ctx.state.get("cuda-eval:"+operation_id,input_ref)
         if cached:
-            if checkpoint:
-                verify_cuda_target_checkpoint({"schema":"cuda-target-training-result.v1",
-                    "execution_device":"cuda:0","checkpoint_ref":str(checkpoint),
-                    "checkpoint_manifest_sha256":__import__("hephaestus.training.cpu_research",fromlist=["hash_file"]).hash_file(Path(checkpoint)/"checkpoint_manifest.json"),
-                    "adapter_sha256":__import__("hephaestus.training.cpu_research",fromlist=["hash_file"]).hash_file(Path(checkpoint)/"adapter_model.safetensors")})
+            if cached.get("execution_device")!="cuda:0":
+                raise PermissionError("cached CUDA evaluation cannot claim CPU generation")
             return cached
         rows=read_verified_json(ctx.artifacts,policy["evaluation_ref"])["examples"]
         if len(rows)!=24:
