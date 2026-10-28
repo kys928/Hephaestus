@@ -1,0 +1,97 @@
+name: Genuine native CPU 45-operation corrected JSON research
+on:
+  push:
+    branches: ['feature/cpu-native-json-45-campaign-20261028']
+    paths:
+      - 'src/hephaestus/schemas/cpu_campaign_config.py'
+      - 'src/hephaestus/schemas/cpu_research.py'
+      - 'src/hephaestus/training/cpu_research.py'
+      - 'src/hephaestus/training/cpu_chat_json_recipe.py'
+      - 'src/hephaestus/evaluation/cpu_prospective.py'
+      - 'src/hephaestus/production/cpu_research.py'
+      - 'src/hephaestus/roles/cpu_research_execution.py'
+      - 'src/hephaestus/roles/cpu_research_planning.py'
+      - 'src/hephaestus/roles/cpu_research_evaluation.py'
+      - 'scripts/run_cpu_research_campaign.py'
+      - 'configs/research/cpu_native_json_45_v2.json'
+      - 'tests/test_cpu_native_json_45.py'
+      - '.github/workflows/cpu-native-json-45.yml'
+  pull_request:
+    paths:
+      - 'src/hephaestus/training/cpu_chat_json_recipe.py'
+      - 'src/hephaestus/training/cpu_research.py'
+      - 'src/hephaestus/evaluation/cpu_prospective.py'
+      - 'tests/test_cpu_native_json_45.py'
+      - '.github/workflows/cpu-native-json-45.yml'
+permissions:
+  contents: read
+jobs:
+  native-scientific-cpu:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,peft-training,independent-certification]'
+      - name: Run real recipe, security and previous native policy regressions
+        run: |
+          python -m pytest -q tests/test_cpu_native_json_45.py tests/test_cpu_campaign_config.py \
+            tests/test_internal_cpu_execution.py tests/test_generated_original_data.py \
+            tests/test_internal_research_policy.py tests/test_staged_dataset_approval_custody.py
+      - name: Execute one uninterrupted genuinely governed native 45-operation CPU campaign
+        run: |
+          python scripts/run_cpu_research_campaign.py \
+            --config configs/research/cpu_native_json_45_v2.json \
+            --output /tmp/cpu-native-json-45-original-evidence
+      - name: Resume without repeating science or changing source, epoch or eval identities
+        run: |
+          python scripts/run_cpu_research_campaign.py --resume \
+            --config configs/research/cpu_native_json_45_v2.json \
+            --output /tmp/cpu-native-json-45-original-evidence
+      - name: Verify original 45 native state receipts and 96 actual optimizer steps
+        run: |
+          python scripts/run_cpu_research_campaign.py --verify-only \
+            --config configs/research/cpu_native_json_45_v2.json \
+            --output /tmp/cpu-native-json-45-original-evidence
+      - name: Checkpoint SQLite WAL and cryptographically inventory original members
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,sqlite3
+          root=pathlib.Path('/tmp/cpu-native-json-45-original-evidence')
+          if root.exists() and (root/'state.sqlite').is_file():
+              db=sqlite3.connect(root/'state.sqlite')
+              db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+              if db.execute('PRAGMA quick_check').fetchone()[0]!='ok':
+                  raise SystemExit('SQLite custody failed')
+              db.close()
+          if root.exists():
+              files={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                     for p in sorted(root.rglob('*')) if p.is_file() and not p.is_symlink()
+                     and p.name!='archive_sha256.json'}
+              (root/'archive_sha256.json').write_text(json.dumps(files,sort_keys=True,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-cpu-json-repair-45-original-evidence
+          path: /tmp/cpu-native-json-45-original-evidence/
+          retention-days: 30
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_cpu_native_json_45.py tests/test_cpu_campaign_config.py
+      - run: python -m py_compile src/hephaestus/training/cpu_chat_json_recipe.py scripts/run_cpu_research_campaign.py
