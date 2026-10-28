@@ -15,7 +15,7 @@ _CATEGORIES = frozenset({"research_summary", "public_dataset", "public_model",
                           "protected_holdout", "private_reference", "private_checkpoint"})
 _PUBLIC = frozenset({"research_summary", "public_dataset", "public_model"})
 _TYPES = {"github_release", "huggingface_model", "huggingface_dataset", "kaggle_dataset", "kaggle_model"}
-_KAGGLE_MODEL_REVISION = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[1-9][0-9]*\\Z")
+_KAGGLE_MODEL_REVISION = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[1-9][0-9]*\Z")
 
 
 @dataclass(frozen=True, slots=True)
