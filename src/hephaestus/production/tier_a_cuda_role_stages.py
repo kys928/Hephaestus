@@ -207,6 +207,11 @@ def prepare_native_tier_a_cuda_role_observations(
                 context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
             "judge_exit": CudaResearchJudgeRole(context),
         }
+        # The native router uses model_discovery/model_selection and bounded
+        # recovery as separate fields, not training_lifecycle/runtime_monitor.
+        gpu_science["model_discovery"] = gpu_science["training_lifecycle"]
+        gpu_science["model_selection"] = gpu_science["training_lifecycle"]
+        gpu_science["recovery"] = gpu_science["runtime_monitor"]
         deps.services = replace(deps.services,**{
             field: CpuProfiledStage(service,context)
             for field,service in gpu_science.items()
