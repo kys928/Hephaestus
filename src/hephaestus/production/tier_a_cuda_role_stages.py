@@ -196,15 +196,19 @@ def prepare_native_tier_a_cuda_role_observations(
         # and never a renamed CPU generation receipt.
         gpu_science = {
             "evidence_collector": CudaResearchEvidenceCollector(
-                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service,
+                original_role_runtime=bridge.reasoner.generator),
             "training_lifecycle": CudaResearchTrainingRole(
                 context,scope=cuda_target_scope,grants=gpu_resource_approval_service,
-                original=deps.services.training_lifecycle),
+                original=deps.services.training_lifecycle,
+                original_role_runtime=bridge.reasoner.generator),
             "runtime_monitor": CudaResearchMonitorRole(context),
             "generation": CudaResearchEvaluatorRole(
-                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service,
+                original_role_runtime=bridge.reasoner.generator),
             "evaluator": CudaResearchEvaluatorRole(
-                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service,
+                original_role_runtime=bridge.reasoner.generator),
             "judge_exit": CudaResearchJudgeRole(context),
         }
         # The native router uses model_discovery/model_selection and bounded
