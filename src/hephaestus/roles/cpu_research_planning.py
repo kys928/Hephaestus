@@ -72,7 +72,9 @@ class CpuResearchPlannerRole:
             plan = InterventionProposal("bounded-original-task-repair", diagnosis["report_id"], "replace_or_mix_dataset",
                 f"Test whether {policy.maximum_training_steps} genuine low-rank optimizer updates on isolated original tasks improve prospective correctness.",
                 "training_data", controlled_variables={"model_profile_ref": ctx.profile_ref,
-                    "evaluation_protocol_ref": policy.protocol_ref, "optimizer": "AdamW-lr0.0002-lora-r2"},
+                    "evaluation_protocol_ref": policy.protocol_ref,
+                    "optimizer": ("AdamW-lr0.0005-lora-r8-chat-json" if
+                        ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else "AdamW-lr0.0002-lora-r2")},
                 expected_cost={"maximum_training_steps": policy.maximum_training_steps},
                 success_criteria={"correctness_increases": True, "new_hard_regressions": 0},
                 failure_criteria={"nonfinite_gradient": True, "any_new_hard_regression": True},
