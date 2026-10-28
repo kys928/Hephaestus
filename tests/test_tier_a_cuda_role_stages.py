@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from hephaestus.control.staged_state import (
     StagedOperationRequest, StagedOperationResult, StagedOutputRecord,
+    StagedApprovalDecision,
 )
 from hephaestus.production.tier_a_cuda_role_stages import (
     ANCHORS, OriginalCudaResearchObservation,
@@ -45,6 +46,23 @@ def req(substep="evidence_based_diagnosis"):
         "diagnosis",substep,"native-op",1,(),{})
 
 
+class TestOnlyGpuGrant:
+    """Mocked security gate for logic testing, NEVER a trusted production approver."""
+    def __init__(self,store,role):
+        self.store,self.role=store,role
+    def decision_for(self,request):
+        doc={"schema":"original-cuda-resource-grant.v1",
+             "workflow_id":request.workflow_id,"run_id":request.run_id,
+             "operation_id":request.operation_id,
+             "source_policy_ref":request.subject_ref,"role":self.role,
+             "device":"cuda:0","status":"approved",
+             "authorized_by":"unit-test-fixture-not-a-real-custodian",
+             "external_scientific_certification":False}
+        ref=self.store.put_bytes(canonical_bytes(doc),media_type="application/json").artifact_ref
+        return StagedApprovalDecision(request.request_id,request.operation_id,
+            request.subject_ref,"approved",ref,request.requirements)
+
+
 def stage(tmp_path,*,cuda=True):
     store=FileSystemArtifactStore(tmp_path/"artifacts")
     context=SimpleNamespace(artifacts=store,
@@ -52,7 +70,7 @@ def stage(tmp_path,*,cuda=True):
     reasoner=TestOnlyReasoner(store,cuda=cuda)
     return OriginalCudaResearchObservation(
         "diagnosis","evidence_based_diagnosis",DomainDelegate(),
-        context,reasoner),reasoner
+        context,reasoner,resource_approval_service=TestOnlyGpuGrant(store,"diagnosis")),reasoner
 
 
 def test_exactly_five_distinct_original_cuda_advisory_entry_points():
@@ -90,4 +108,24 @@ def test_non_role_substep_does_not_generate_model_observation(tmp_path):
 def test_unadmitted_bridge_cannot_bind_native_45_stage_science():
     with pytest.raises(PermissionError):
         prepare_native_tier_a_cuda_role_observations(
-            object(),SimpleNamespace(gpu_execution_authorized=True))
+            object(),SimpleNamespace(gpu_execution_authorized=True),
+            gpu_resource_approval_service=None)
+
+
+def test_original_cuda_inference_without_distinct_gpu_resource_approval_fails(tmp_path):
+    service,reasoner=stage(tmp_path)
+    service.resource_approval_service=None
+    with pytest.raises(PermissionError,match="resource approval"):
+        service.execute(req())
+    assert not reasoner.calls
+
+
+def test_old_tier_a_autoapproval_cannot_be_used_as_gpu_spending_permission(tmp_path):
+    service,reasoner=stage(tmp_path)
+    class Denied:
+        def decision_for(self,request):
+            return None
+    service.resource_approval_service=Denied()
+    with pytest.raises(PermissionError,match="resource grant"):
+        service.execute(req())
+    assert not reasoner.calls
