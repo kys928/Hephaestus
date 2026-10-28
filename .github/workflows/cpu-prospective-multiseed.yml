@@ -2,6 +2,16 @@ name: CPU prospective three-seed learning study
 on:
   push:
     branches: ['feature/cpu-prospective-multiseed-evidence-20261028']
+    # Expensive genuine CPU replications only when scientific inputs change.
+    # Test-only and documentation fixes use the ordinary fast regression CI.
+    paths:
+      - 'src/hephaestus/data/generated_factory.py'
+      - 'src/hephaestus/data/generated_validation.py'
+      - 'src/hephaestus/evaluation/cpu_prospective.py'
+      - 'src/hephaestus/production/cpu_research.py'
+      - 'src/hephaestus/training/cpu_research.py'
+      - 'scripts/run_cpu_research_campaign.py'
+      - 'configs/research/cpu_prospective_seed*.json'
   workflow_dispatch:
 permissions:
   contents: read
