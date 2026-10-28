@@ -1,0 +1,62 @@
+name: Prepare original Tier A CUDA signed-resource request (CPU only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare-independent-gpu-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only Torch and original research dependencies
+        run: |
+          python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,peft-training]'
+      - name: Cache original pinned 135M base (not original five frozen role models)
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          from hephaestus.llm.cpu_causal_research import MODEL_ID,MODEL_REVISION
+          snapshot_download(MODEL_ID,revision=MODEL_REVISION,
+            cache_dir="/tmp/original-tier-a-prep-cache",
+            allow_patterns=["config.json","model.safetensors","tokenizer.json",
+                            "tokenizer_config.json","special_tokens_map.json",
+                            "generation_config.json","vocab.json","merges.txt"])
+          PY
+      - name: Prepare FRESH immutable native source and unsigned independent GPU grant request
+        run: |
+          python scripts/run_original_tier_a_cuda_worker.py \
+            --prepare-only \
+            --workspace "$RUNNER_TEMP/original-tier-a-cuda-45-prepared" \
+            --config configs/research/tier_a_original_cuda_45_v1.json \
+            --target-model-cache /tmp/original-tier-a-prep-cache \
+            --original-role-model-cache /tmp/original-frozen-five-not-loaded \
+            --original-adapter-cache /tmp/original-frozen-adapters-not-loaded \
+            --maximum-gpu-seconds 3600
+      - name: Inventory immutable source request bytes; no false approvals
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path(__import__("os").environ["RUNNER_TEMP"])/"original-tier-a-cuda-45-prepared"
+          req=json.loads((root/"cuda-grant-unsigned-request.json").read_bytes())
+          assert req["status"]=="requested"
+          assert req["device"]=="cuda:0"
+          assert len(req["operations"])==9
+          assert req["external_certification"] is False
+          assert (root/"state.sqlite").is_file() and (root/"context_ref.txt").is_file()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-tier-a-cuda-unsigned-request-and-prepared-native-source
+          path: ${{ runner.temp }}/original-tier-a-cuda-45-prepared/
+          include-hidden-files: true
+          retention-days: 30
