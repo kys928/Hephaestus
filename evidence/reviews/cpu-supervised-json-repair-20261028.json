@@ -1,0 +1,52 @@
+{
+  "schema": "hephaestus-research-evidence-index.v1",
+  "finding_id": "cpu-chat-supervised-json-repair-20261028",
+  "claim_scope": "original_generated_development_only",
+  "source": {
+    "github_actions_run": "https://github.com/kys928/Hephaestus/actions/runs/40746973738",
+    "artifact_url": "https://github.com/kys928/Hephaestus/actions/runs/40746973738/artifacts/12842406174",
+    "artifact_zip_sha256": "sha256:41351555907d6804038e4a9a066df5832a7ac85983b86ec41658eb1067e3bf0e",
+    "manifest_member_count": 4,
+    "manifest_sha256_all_valid": true
+  },
+  "experiment": {
+    "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "model_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "cpu_seed": 1117,
+    "generator_seed": 20261028,
+    "training_examples": 96,
+    "completed_optimizer_steps": 96,
+    "epoch_completed": true,
+    "original_development_sha256": "sha256:4c9d54866719545f9a54466cd6da7b9aed4b79f935160d61e42e0639675c3f1f",
+    "adapter_sha256": "sha256:a782d0ca344559659893a64d8bc1e8a90f597cf9cf0bbef06b433c555c1da195",
+    "heldout_evaluation_used": false
+  },
+  "results": {
+    "valid_json_before": 0,
+    "valid_json_after": 24,
+    "correct_before": 0,
+    "correct_after": 6,
+    "total_cases": 24,
+    "per_family_correct_after": {
+      "arithmetic": 1,
+      "json": 0,
+      "reasoning": 5,
+      "symbolic": 0
+    }
+  },
+  "preflight": {
+    "run_url": "https://github.com/kys928/Hephaestus/actions/runs/40747872165",
+    "original_frozen_roles": 5,
+    "read_only_passed": true,
+    "gpu_executed": false,
+    "gpu_authorized": false,
+    "external_certification": false
+  },
+  "limitations": [
+    "One training seed and one original generated development set",
+    "Ablation changed supervised chat alignment, source exposure, adapter capacity, and learning rate together; individual causal contributions not isolated",
+    "Still no independent untouched confirmatory evaluation",
+    "No native 45-operation GPU execution or original-source human custody certificate",
+    "Only 25% exact answer accuracy despite 100% JSON syntax validity"
+  ]
+}
