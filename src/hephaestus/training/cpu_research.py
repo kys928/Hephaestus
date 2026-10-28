@@ -57,7 +57,8 @@ class CpuExactTokenTrainer:
         torch.manual_seed(profile.seed)
         model = AutoModelForCausalLM.from_pretrained(ctx.snapshot, local_files_only=True,
             trust_remote_code=False, dtype=torch.float32).to("cpu")
-        json_recipe = profile.training_recipe == "chat_json_r8_full_epoch_96_v1"
+        recipe = getattr(profile, "training_recipe", "legacy_raw_r2")
+        json_recipe = recipe == "chat_json_r8_full_epoch_96_v1"
         if json_recipe:
             from hephaestus.training.cpu_chat_json_recipe import exact_chat_records
             rows, sample_order, transformed_ref = exact_chat_records(ctx, rows)
@@ -78,7 +79,7 @@ class CpuExactTokenTrainer:
             receipt = read_verified_json(ctx.artifacts, previous["receipt_ref"])
             if (receipt["profile_ref"] != ctx.profile_ref or
                     receipt["materialization_ref"] != ctx.materialization_ref or
-                    receipt.get("training_recipe", "legacy_raw_r2") != profile.training_recipe or
+                    receipt.get("training_recipe", "legacy_raw_r2") != recipe or
                     receipt.get("chat_trainable_ref", ctx.materialization_ref) != transformed_ref):
                 raise PermissionError("optimizer resume profile/data mismatch")
             prior_path = checkpoint = Path(receipt["checkpoint_ref"])
@@ -138,7 +139,7 @@ class CpuExactTokenTrainer:
             partial.rename(checkpoint)
             receipt = {"schema": "cpu-actual-optimizer-step.v1", "profile_ref": ctx.profile_ref,
                 "materialization_ref": ctx.materialization_ref,
-                "training_recipe": profile.training_recipe, "chat_trainable_ref": transformed_ref,
+                "training_recipe": recipe, "chat_trainable_ref": transformed_ref,
                 "checkpoint_ref": str(checkpoint),
                 "checkpoint_manifest_sha256": hash_file(checkpoint / "checkpoint_manifest.json"),
                 "adapter_sha256": hash_file(checkpoint / "adapter_model.safetensors"),
@@ -158,7 +159,7 @@ class CpuExactTokenTrainer:
             "adapter_sha256": hash_file(checkpoint / "adapter_model.safetensors"),
             "completed_optimizer_steps": steps, "weights_changed": changed, "losses": losses,
             "source_rows_admitted": len(rows), "consumed_sample_indices": consumed,
-            "training_recipe": profile.training_recipe, "chat_trainable_ref": transformed_ref,
+            "training_recipe": recipe, "chat_trainable_ref": transformed_ref,
             "full_dataset_epoch_completed": json_recipe and len(consumed) == len(rows) and
                 set(consumed) == set(range(len(rows))), "profile_ref": ctx.profile_ref,
             "external_certification": False, "checkpoint_refs": [str(checkpoint)]}
