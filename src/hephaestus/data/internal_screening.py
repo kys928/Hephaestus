@@ -34,13 +34,11 @@ def _verified_backend(raw):
     if unk is None:
         unk = tokenizer.token_to_id("<unk>")
     if unk is None:
-        from tokenizers.pre_tokenizers import ByteLevel
         config = json.loads(raw)
         if (config["model"].get("type") != "BPE" or
-                not set(ByteLevel.alphabet()).issubset(tokenizer.get_vocab()) or
                 '"ByteLevel"' not in json.dumps(config.get("pre_tokenizer")) or
                 '"ByteLevel"' not in json.dumps(config.get("decoder"))):
-            raise ValueError("unknown-free tokenizer must have complete byte-level BPE representation")
+            raise ValueError("unknown-free tokenizer requires a byte-level BPE decoder")
     return tokenizer, unk
 
 
@@ -60,6 +58,8 @@ class InternalSourceScanner:
             raise ValueError("frozen tokenizer bytes changed")
         tokenizer, unk = _verified_backend(raw)
         ids = tokenizer.encode(text, add_special_tokens=False).ids
+        if unk is None and tokenizer.decode(ids, skip_special_tokens=False) != text:
+            raise ValueError("unknown-free tokenizer silently drops or rewrites source text")
         return ids, sum(t == unk for t in ids) if unk is not None else 0
 
     def load_rows(self, source_file_hashes):

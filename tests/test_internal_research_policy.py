@@ -72,5 +72,5 @@ def test_unknown_free_tokenizer_cannot_silently_drop_unrepresented_text(tmp_path
     path = tmp_path/'incomplete-bpe.json'
     tok.save(str(path))
     scanner = InternalSourceScanner(None,path,'sha256:'+sha256(path.read_bytes()).hexdigest(),None)
-    with pytest.raises(ValueError,match='complete byte-level'):
+    with pytest.raises(ValueError,match='byte-level BPE decoder'):
         scanner.token_ids('another symbol outside vocabulary')
