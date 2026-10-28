@@ -23,3 +23,52 @@ jobs:
       - run: python -m pip install -e '.[test]'
       - run: python -m pytest -q tests/test_tier_a_cuda_research.py tests/test_tier_a_cuda_role_stages.py
       - run: python -m py_compile scripts/verify_original_tier_a_cuda_handoff.py src/hephaestus/production/tier_a_cuda_research.py src/hephaestus/production/tier_a_cuda_role_stages.py
+  original-authentic-cpu45-source-rebind:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,peft-training]'
+      - name: Download exact previously completed real native CPU 45 archive
+        uses: actions/download-artifact@v4
+        with:
+          name: native-cpu-json-repair-45-original-evidence
+          run-id: 40753588466
+          github-token: ${{ github.token }}
+          path: /tmp/native-cpu-original
+      - name: Materialize exact pretrained 135M snapshot for read-only verification
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          from hephaestus.llm.cpu_causal_research import MODEL_ID, MODEL_REVISION
+          snapshot_download(MODEL_ID,revision=MODEL_REVISION,
+             cache_dir='/tmp/hephaestus-model-cache',
+             allow_patterns=['config.json','model.safetensors','tokenizer.json',
+                             'tokenizer_config.json','special_tokens_map.json',
+                             'generation_config.json','vocab.json','merges.txt'])
+          PY
+      - name: Independently recheck native original 45/45 and exact data into new immutable CUDA training receipt
+        run: |
+          ORIGINAL_REGISTRY=$(python -c 'from hephaestus.production.original_cuda_identity import registry_digest; print(registry_digest())')
+          python scripts/verify_original_tier_a_cuda_handoff.py \
+            --original-cpu-workspace /tmp/native-cpu-original \
+            --config configs/research/cpu_native_json_45_v2.json \
+            --trusted-registry-sha256 "$ORIGINAL_REGISTRY" \
+            --output /tmp/original-tier-a-cuda-handoff.json
+      - name: Record immutable output evidence bytes
+        if: success()
+        run: sha256sum /tmp/original-tier-a-cuda-handoff.json
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: original-tier-a-cuda-source-handoff-no-gpu
+          path: /tmp/original-tier-a-cuda-handoff.json
