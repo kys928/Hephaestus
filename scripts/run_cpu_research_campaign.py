@@ -47,7 +47,8 @@ def load_context(root, *, cache_dir, resume=False, campaign_config_path=None):
             MODEL_ID, MODEL_REVISION, {p.name: "sha256:" + sha256(p.read_bytes()).hexdigest()
                 for p in sorted(scorer.snapshot_dir.iterdir()) if p.is_file()},
             admission.policy().tokenizer_sha256, spec.maximum_training_steps,
-            spec.maximum_cpu_seconds, seed=spec.cpu_seed)
+            spec.maximum_cpu_seconds, seed=spec.cpu_seed,
+            training_recipe=spec.training_recipe)
         profile.validate()
         profile_ref = put_record(artifacts, profile.to_dict())
         discovery = read_verified_json(artifacts, report["decision"]["evidence_refs"][0])
@@ -68,7 +69,8 @@ def load_context(root, *, cache_dir, resume=False, campaign_config_path=None):
     if campaign_config_path is not None and CpuCampaignConfig.from_file(campaign_config_path) != spec:
         raise PermissionError("CPU campaign config differs from the immutable original specification")
     if (profile.maximum_training_steps != spec.maximum_training_steps or
-            profile.maximum_cpu_seconds != spec.maximum_cpu_seconds or profile.seed != spec.cpu_seed):
+            profile.maximum_cpu_seconds != spec.maximum_cpu_seconds or profile.seed != spec.cpu_seed or
+            profile.training_recipe != spec.training_recipe):
         raise PermissionError("CPU profile differs from the immutable campaign limits or seed")
     workspace = CampaignWorkspace(root, **spec.identity, bootstrap_artifact_ref=manifest["bootstrap_ref"])
     verify_campaign_workspace(workspace)
