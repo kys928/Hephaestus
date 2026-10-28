@@ -32,6 +32,7 @@ class CpuResearchContext:
     intelligence: object
     search_request: object
     started_at: str
+    campaign_config: object
 
     @property
     def profile_protocol(self):
