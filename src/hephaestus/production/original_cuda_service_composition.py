@@ -34,6 +34,7 @@ class OriginalCudaCompositionScope:
     stage_name: str
     trusted_cpu_archive_sha256: str
     trusted_role_registry_sha256: str
+    trusted_original_certificate_sha256: str
     diagnosis_request_ref: str
     baseline_run_artifact_ref: str
     approved_recipe_refs: tuple[str,...]
@@ -45,6 +46,7 @@ class OriginalCudaCompositionScope:
             if not isinstance(value,str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}",value):
                 raise PermissionError("original GPU campaign identity invalid")
         digests=(self.trusted_cpu_archive_sha256,self.trusted_role_registry_sha256,
+                 self.trusted_original_certificate_sha256,
                  self.diagnosis_request_ref,self.baseline_run_artifact_ref,
                  *self.approved_recipe_refs,*self.source_review_refs)
         if (not self.approved_recipe_refs or not self.approved_baseline_refs or not self.source_review_refs
@@ -58,7 +60,7 @@ def check_cpu_readiness(report, scope):
     """Only recognize a previously independently re-verified CPU archive."""
     expected={"schema":"original-five-cuda-replay-readiness.v1",
               "source_cpu_archive_sha256":scope.trusted_cpu_archive_sha256,
-              "original_cuda_role_registry_sha256":scope.trusted_role_registry_sha256,
+              "original_cuda_role_registry_sha256":scope.trusted_original_certificate_sha256,
               "original_native_completed_operations":45,
               "original_domain_operations":40,
               "actual_optimizer_receipts":96,
@@ -74,6 +76,12 @@ def check_cpu_readiness(report, scope):
     if not all(_is_digest(report.get(k)) for k in
                ("native_trace_ref","policy_ref","candidate_checkpoint_sha256")):
         raise PermissionError("original CPU trace/source/checkpoint is uncommitted")
+    from .original_cuda_identity import CERTIFICATE, registry_digest
+    from hashlib import sha256
+    if ("sha256:"+sha256(CERTIFICATE.read_bytes()).hexdigest() !=
+            scope.trusted_original_certificate_sha256 or
+            scope.trusted_role_registry_sha256 != registry_digest()):
+        raise PermissionError("original role registry or certificate trust roots changed")
     stack,_=verified_original_roles(scope.trusted_role_registry_sha256)
     roles=report.get("original_cuda_roles")
     if not isinstance(roles,dict) or set(roles)!=set(stack.roles):
