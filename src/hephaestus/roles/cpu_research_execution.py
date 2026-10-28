@@ -37,10 +37,15 @@ class CpuResearchTrainingRole:
             ctx.source(req, "training_input_binding", "training_input_binding")
             return result("training_configuration", {"model_profile_ref": ctx.profile_ref,
                 "materialization_ref": ctx.materialization_ref, "steps": ctx.profile.maximum_training_steps,
-                "learning_rate": 0.0002, "optimizer": "AdamW", "lora_rank": 2,
-                "lora_alpha": 4, "lora_dropout": 0.0, "target_modules": ["q_proj", "v_proj"],
-                "context_policy": "no_truncation", "label_policy": "exact_prompt_mask_minus100",
-                "sample_order": "source_order_modulo_rows", "seed": ctx.profile.seed}, config_identity=ctx.profile_ref, seed_identity=str(ctx.profile.seed))
+                "learning_rate": 0.0005 if ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else 0.0002,
+                "optimizer": "AdamW", "lora_rank": 8 if ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else 2,
+                "lora_alpha": 16 if ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else 4,
+                "lora_dropout": 0.0, "target_modules": ["q_proj", "v_proj"],
+                "context_policy": "no_truncation", "label_policy": ("chat_prefix_masked_with_eos" if
+                    ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else "exact_prompt_mask_minus100"),
+                "sample_order": ("interleaved_four_families_one_full_epoch" if
+                    ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else "source_order_modulo_rows"),
+                "training_recipe": ctx.profile.training_recipe, "seed": ctx.profile.seed}, config_identity=ctx.profile_ref, seed_identity=str(ctx.profile.seed))
         if req.substep == "lifecycle_launch":
             ctx.source(req, "launch_configuration", "training_configuration")
             trained = CpuExactTokenTrainer(ctx).run(req.operation_id)
