@@ -55,6 +55,7 @@ def create_governed_source(root, tokenizer_path):
 
 
 def test_actual_generated_token_artifact_rechecks_source_and_exact_masks(tmp_path):
+    pytest.importorskip("tokenizers")
     from tokenizers import Tokenizer, models, pre_tokenizers, trainers, decoders
     tok = Tokenizer(models.BPE(unk_token="<unk>"))
     tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
@@ -82,3 +83,26 @@ def test_canonical_commutative_leakage_and_invalid_outputs_are_detected():
     for target in ('{"result":19,"result":19}', '{"result":19.0}', '{"result":true}', '{"result":20}'):
         with pytest.raises(ValueError):
             validate_original_example({**a, "target": target})
+
+
+def test_allowed_generator_digest_cannot_be_laundered_onto_other_seed(tmp_path):
+    pytest.importorskip('tokenizers')
+    from tokenizers import Tokenizer, models, pre_tokenizers, trainers
+    from hephaestus.storage.verified import read_verified_json
+    tok = Tokenizer(models.BPE(unk_token='<unk>'))
+    tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tok.train_from_iterator(['grammar'], trainers.BpeTrainer(vocab_size=300, special_tokens=['<unk>'],
+        initial_alphabet=pre_tokenizers.ByteLevel.alphabet()))
+    path = tmp_path/'tokenizer.json'
+    tok.save(str(path))
+    admission, candidate, ref, scope = create_governed_source(tmp_path,path)
+    review = read_verified_json(admission.artifacts,ref)
+    provenance = read_verified_json(admission.artifacts,review['generator_ref'])
+    provenance['spec']['seed'] += 1
+    review['generator_ref'] = put_record(admission.artifacts,provenance)
+    rights = read_verified_json(admission.artifacts,review['rights_ref'])
+    rights['generator_ref'] = review['generator_ref']
+    review['rights_ref'] = put_record(admission.artifacts,rights)
+    forged = put_record(admission.artifacts,review)
+    with pytest.raises(PermissionError,match='committed original generator output'):
+        admission.authorize(candidate,forged,**scope)

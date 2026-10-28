@@ -66,7 +66,7 @@ class CpuCausalProposalScorer:
     snapshot_dir: Path
 
     @classmethod
-    def load(cls, artifact_store, *, cache_dir: Path):
+    def load(cls, artifact_store, *, cache_dir: Path, local_files_only: bool = False):
         import torch
         from transformers import AutoTokenizer, AutoModelForCausalLM
         from huggingface_hub import snapshot_download
@@ -78,7 +78,7 @@ class CpuCausalProposalScorer:
                 "config.json", "tokenizer.json", "tokenizer_config.json",
                 "special_tokens_map.json", "vocab.json", "merges.txt",
                 "generation_config.json", "model.safetensors",
-            ), local_files_only=False,
+            ), local_files_only=local_files_only,
         ))
         if snapshot.name != MODEL_REVISION or not snapshot.is_dir():
             raise ValueError("CPU research causal model does not match pinned revision")

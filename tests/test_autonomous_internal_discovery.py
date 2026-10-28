@@ -2,6 +2,7 @@ import json
 from dataclasses import replace
 from hashlib import sha256
 import pytest
+pytest.importorskip("tokenizers")
 from tokenizers import Tokenizer, models, pre_tokenizers
 from hephaestus.data.internal_screening import InternalSourceScanner
 from hephaestus.data.intelligence import AutonomousDatasetIntelligence, derive_data_requirements
@@ -45,7 +46,7 @@ def prepared(tmp_path):
     source = artifacts.put_bytes(raw, media_type="application/jsonl").artifact_ref
     files = {"source.jsonl": source}
     candidate = DatasetCandidate("source", "test_registry", "authored-source", revision="a" * 40,
-        license="cc0-1.0", task_types=["arithmetic"], domains=["math"], metadata={"acquisition_files": ["source.jsonl"]})
+        license="cc0-1.0", task_types=["arithmetic"], languages=["en"], domains=["math"], metadata={"acquisition_files": ["source.jsonl"]})
     rights = put_record(artifacts, {"schema": "data-rights-evidence.v1", "license": candidate.license,
         "source_file_hashes": files, "training_permitted": True, "test_only": True})
     policy = replace(policy, trusted_rights_refs=(rights,))

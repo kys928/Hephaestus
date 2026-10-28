@@ -62,6 +62,23 @@ class InternalDatasetAdmissionPolicy:
                     generator.get("external_examples_used") is not False or
                     rights.get("generator_ref") != review.generator_ref):
                 raise PermissionError("original generator provenance not authorized")
+            # A caller cannot paste an allowed code digest onto arbitrary data.
+            # Reproduce original generation from committed version/spec/seed.
+            from hephaestus.data.generated_factory import generate_original_splits, generator_code_sha256, validator_code_sha256
+            from hephaestus.schemas.generated_data import GeneratedDataSpec
+            import hashlib
+            if (generator["code_sha256"] != generator_code_sha256() or
+                    generator.get("validator_code_sha256") != validator_code_sha256()):
+                raise PermissionError("original generator/validator code changed")
+            reproduced, report = generate_original_splits(GeneratedDataSpec(**generator["spec"]))
+            raw = b"".join(canonical_bytes(row) + b"\n" for row in reproduced["train"])
+            if set(review.source_file_hashes.values()) != {"sha256:" + hashlib.sha256(raw).hexdigest()}:
+                raise PermissionError("source is not the committed original generator output")
+            protocol = self.evaluation_store.require_frozen(policy.experiment_id, policy.protocol_ref)
+            for split, field in (("development", "development_ref"), ("evaluation", "evaluation_ref")):
+                original = read_verified_json(self.artifacts, protocol[field])
+                if original.get("examples") != reproduced[split] or generator.get(field) != protocol[field]:
+                    raise PermissionError("original generated prospective split identity mismatch")
         elif review.rights_ref not in policy.trusted_rights_refs:
             raise PermissionError("original source rights evidence has not been accepted")
         scan = read_verified_json(self.artifacts, review.scan_ref)
