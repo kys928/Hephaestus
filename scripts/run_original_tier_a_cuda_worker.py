@@ -94,7 +94,8 @@ def main():
         artifacts=ctx.artifacts,path=a.signed_approval_file,
         trusted_public_key_hex=external_key,
         trusted_public_key_sha256=trusted_sha,
-        trusted_source_policy_ref=ctx.admission.policy_ref)
+        trusted_source_policy_ref=ctx.admission.policy_ref,
+        expected_workflow_id=spec.workflow_id,expected_run_id=spec.run_id)
     authorized=grants.authorized
     if (authorized["workflow_id"]!=spec.workflow_id
             or authorized["run_id"]!=spec.run_id
