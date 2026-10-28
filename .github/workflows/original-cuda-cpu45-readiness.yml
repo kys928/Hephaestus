@@ -23,3 +23,38 @@ jobs:
       - run: python -m pytest -q tests/test_cpu45_for_frozen_gpu.py
       - run: python scripts/verify_frozen_role_contract.py
       - run: python -m py_compile scripts/verify_cpu45_for_frozen_gpu.py
+
+  authenticate-real-original-cpu45:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - name: Download exact verified original full native CPU campaign
+        uses: actions/download-artifact@v4
+        with:
+          name: native-cpu-json-repair-45-original-evidence
+          run-id: 40753588466
+          github-token: ${{ github.token }}
+          path: /tmp/native-cpu-45-original
+      - name: Repackage extracted original file inventory without directory markers
+        run: |
+          cd /tmp/native-cpu-45-original
+          zip -q -D -r /tmp/native-cpu-45-original.zip .
+      - name: Inspect complete original SHA, SQLite native completions and frozen CUDA role identities
+        run: |
+          python scripts/verify_cpu45_for_frozen_gpu.py \
+            --cpu-archive /tmp/native-cpu-45-original.zip \
+            --output /tmp/frozen-cuda-replay-readiness.json
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: original-frozen-cuda-cpu45-readiness-no-allocation
+          path: /tmp/frozen-cuda-replay-readiness.json
