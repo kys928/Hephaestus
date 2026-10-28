@@ -1,0 +1,30 @@
+name: Internal data intelligence CPU
+on:
+  pull_request:
+    paths:
+      - 'src/hephaestus/data/internal_screening.py'
+      - 'src/hephaestus/data/intelligence.py'
+      - 'src/hephaestus/data/generated*.py'
+      - 'src/hephaestus/policy/internal_research.py'
+      - 'src/hephaestus/schemas/internal_research.py'
+      - 'src/hephaestus/production/cpu_research*.py'
+      - 'tests/test_internal*'
+      - 'tests/test_autonomous_internal*'
+      - 'tests/test_generated*'
+      - '.github/workflows/internal-data-intelligence-cpu.yml'
+  push:
+    branches: ['feature/autonomous-source-selection-20261028', 'feature/governed-original-data-20261028', 'feature/cpu-research-execution-20261028']
+permissions:
+  contents: read
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test,independent-certification]' tokenizers
+      - run: python -m pytest -q tests/test_internal_research_policy.py tests/test_autonomous_internal_discovery.py tests/test_staged_dataset_approval_custody.py tests/test_independent_evaluator_holdout_review.py

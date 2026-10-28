@@ -12,6 +12,16 @@ class ProspectiveEvaluationStore:
                limitations):
         if not experiment_id or not method or not limitations:
             raise ValueError("evaluation method and honest limitations are required")
+        if any(r.get("experiment_id") == experiment_id for r in self.repository.all(COLLECTION)):
+            raise PermissionError("experiment protocol/exposure already exists")
+        if evaluation_ref == development_ref:
+            raise ValueError("development and evaluation material must be distinct")
+        eval_rows = read_verified_json(self.artifacts, evaluation_ref).get("examples", [])
+        dev_rows = read_verified_json(self.artifacts, development_ref).get("examples", [])
+        def keys(rows):
+            return {" ".join(str(row.get("prompt", "")).casefold().split()) for row in rows}
+        if keys(eval_rows) & keys(dev_rows):
+            raise ValueError("development and evaluation prompts overlap")
         # One protocol per experiment; repeat calls cannot rewrite or recover absent history.
         with self.repository.transaction() as tx:
             if any(r.get("experiment_id") == experiment_id for r in self.repository.all(COLLECTION)):

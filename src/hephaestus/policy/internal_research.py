@@ -19,6 +19,7 @@ class InternalDatasetAdmissionPolicy:
     evaluation_store: object
     policy_ref: str
     trusted_policy_refs: frozenset[str]
+    scanner: object = None
 
     def policy(self):
         if self.policy_ref not in self.trusted_policy_refs:
@@ -90,6 +91,12 @@ class InternalDatasetAdmissionPolicy:
                 raw = stream.read(policy.maximum_bytes + 1)
             if len(raw) > policy.maximum_bytes or "sha256:" + hashlib.sha256(raw).hexdigest() != ref:
                 raise ValueError("source bytes differ from full-corpus review")
+        if self.scanner is None:
+            raise PermissionError("source scanner required; stored pass flags are not evidence")
+        measured = self.scanner.scan(review.source_file_hashes, protocol_ref=policy.protocol_ref,
+                                    processing_profile_sha256=policy.processing_profile_sha256)
+        if measured != scan:
+            raise PermissionError("source scan differs from independently recomputed measurements")
         return review
 
     def authorize(self, candidate, review_ref, **scope):

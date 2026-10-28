@@ -13,8 +13,9 @@ def setup_policy(tmp_path):
     state = SQLiteStateRepository(tmp_path / "state.sqlite")
     store = ProspectiveEvaluationStore(state, artifacts)
     material = put_record(artifacts, {"examples": [{"prompt": "new", "target": "prospective"}]})
+    development = put_record(artifacts, {"examples": [{"prompt": "development", "target": "distinct"}]})
     protocol = store.freeze(experiment_id="experiment", evaluation_ref=material,
-        development_ref=material, method="prospective comparison", limitations=["internal only"])
+        development_ref=development, method="prospective comparison", limitations=["internal only"])
     policy = InternalResearchPolicy("policy", "user-authorized-research", "experiment", "workflow", "run",
         protocol, "sha256:" + "a" * 64, "sha256:" + "b" * 64, 4096, 100, 2, 120,
         ("CC0-1.0",), allowed_capabilities=("arithmetic",))
