@@ -1,0 +1,25 @@
+name: Original frozen CUDA replay evidence admission (zero allocation)
+on:
+  push:
+    branches: ['feature/gpu-45-original-identity-admission-20261028']
+  pull_request:
+    paths:
+      - 'scripts/verify_cpu45_for_frozen_gpu.py'
+      - 'tests/test_cpu45_for_frozen_gpu.py'
+      - '.github/workflows/original-cuda-cpu45-readiness.yml'
+permissions:
+  contents: read
+jobs:
+  roles-and-science:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_cpu45_for_frozen_gpu.py
+      - run: python scripts/verify_frozen_role_contract.py
+      - run: python -m py_compile scripts/verify_cpu45_for_frozen_gpu.py
