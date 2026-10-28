@@ -50,8 +50,10 @@ def run_or_resume_original_tier_a_cuda_campaign(
             not callable(getattr(gpu_resource_approval_service,"decision_for",None))
             or not callable(getattr(original_s3_read_client,"get_object",None))):
         raise PermissionError("separate real GPU approval service and original S3 role artifacts required")
-    # Explicit runtime gate. No silently slow CPU fallback or fake GPU 45.
-    require_cuda_device(scope)
+    # Actual optimization and inference require CUDA. An independent read-only
+    # verifier may reopen original receipts on CPU without executing science.
+    if not verify_only:
+        require_cuda_device(scope)
     if not callable(context_loader):
         raise PermissionError("real native original Tier A context loader required")
     context,workspace=context_loader(
