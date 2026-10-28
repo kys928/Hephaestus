@@ -89,11 +89,14 @@ def run_or_resume_original_tier_a_cuda_campaign(
         result["actual_cuda_role_replays_claimed"]=True
     # Save a truthful state summary whether the original science completed
     # or was safely blocked. Never overwrite an earlier immutable final.
-    target=Path(workspace_root)/"cuda_native_campaign_report.json"
-    if target.exists() and not resume and not verify_only:
-        raise FileExistsError("original CUDA research report already exists")
+    from hashlib import sha256
+    payload=canonical_bytes(result)
+    target=Path(workspace_root)/("cuda-native-report-"+sha256(payload).hexdigest()+".json")
     if not verify_only:
-        target.write_bytes(canonical_bytes(result))
+        if target.exists() and target.read_bytes()!=payload:
+            raise PermissionError("immutable native GPU research report SHA collision")
+        if not target.exists():
+            target.write_bytes(payload)
     if not flow.completion_marker:
         raise PermissionError("GPU research remained blocked; incomplete stages are not 45/45")
     return result
