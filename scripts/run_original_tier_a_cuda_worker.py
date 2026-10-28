@@ -66,8 +66,8 @@ def main():
         raise ValueError("bounded GPU resource budget required")
     spec=CpuCampaignConfig.from_file(a.config)
     workspace=a.workspace.resolve()
-    if not str(workspace).startswith("/workspace/"):
-        raise PermissionError("original GPU research requires persistent mounted RunPod volume")
+    if not a.prepare_only and not str(workspace).startswith("/workspace/"):
+        raise PermissionError("GPU execution requires persistent mounted RunPod volume")
     if a.prepare_only:
         if workspace.exists():
             raise FileExistsError("original GPU campaign must prepare a FRESH workspace")
