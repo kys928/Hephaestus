@@ -37,7 +37,7 @@ def test_no_answer_improvement_is_not_misreported_as_correctness(tmp_path):
 
 def test_different_holdout_or_reused_seed_must_fail(tmp_path):
     rows = [sample(x) for x in (1,2,3)]
-    rows[2]["prospective"]["evaluation_item_commitment"] = "sha256:" + "b"*64
+    rows[2]["evidence"]["prospective"]["evaluation_item_commitment"] = "sha256:" + "b"*64
     with pytest.raises(ValueError, match="frozen"):
         analyze_reports(files(tmp_path, rows))
     rows = [sample(1), sample(1), sample(3)]
