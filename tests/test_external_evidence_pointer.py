@@ -45,3 +45,16 @@ def test_pointer_cannot_claim_review_by_omitting_or_forging_shape():
     d["review_sha256"]="unreviewed"
     with pytest.raises(ValueError):
         ExternalEvidencePointer.from_dict(d)
+
+
+def test_kaggle_models_require_exact_variation_version_and_nonpublic_internal_weights():
+    assert pointer("kaggle_model","private_checkpoint","pytorch/default/3",kaggle_version=3).validate()
+    assert pointer("kaggle_model","public_model","pytorch/default/12",visibility="public",kaggle_version=12).validate()
+    for revision, version in (("latest",3),("pytorch/default/4",3),("pytorch/default/0",0),
+                              ("pytorch/default/3",True)):
+        with pytest.raises(ValueError):
+            pointer("kaggle_model","private_checkpoint",revision,kaggle_version=version).validate()
+    with pytest.raises(PermissionError):
+        pointer("kaggle_model","private_checkpoint","pytorch/default/3",visibility="public",kaggle_version=3).validate()
+    with pytest.raises(ValueError):
+        pointer("kaggle_model","internal_training_data","pytorch/default/3",kaggle_version=3).validate()
