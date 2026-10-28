@@ -8,9 +8,14 @@ on:
       - 'tests/test_signed_cuda_compute_authorization.py'
       - 'tests/test_original_cuda_offline_operator_signing.py'
       - 'scripts/operator_sign_original_cuda_request.py'
+      - 'src/hephaestus/production/authorized_cuda_context.py'
+      - 'src/hephaestus/production/mounted_original_role_adapter.py'
+      - 'tests/test_original_cuda_mounted_volume_and_lease.py'
       - 'scripts/freeze_original_tier_a_cuda_archive.py'
       - 'scripts/cold_verify_original_tier_a_cuda_archive.py'
-      - 'scripts/retain_original_cuda_evidence_s3.py'
+      - 'scripts/retain_original_cuda_evidence_s3.py \
+            src/hephaestus/production/authorized_cuda_context.py \
+            src/hephaestus/production/mounted_original_role_adapter.py'
       - '.github/workflows/original-cuda45-independent-s3-readback.yml'
       - 'tests/test_original_cuda_cold_archive.py'
       - '.github/workflows/original-tier-a-gpu-worker-custody.yml'
@@ -21,6 +26,9 @@ on:
       - 'tests/test_signed_cuda_compute_authorization.py'
       - 'tests/test_original_cuda_offline_operator_signing.py'
       - 'scripts/operator_sign_original_cuda_request.py'
+      - 'src/hephaestus/production/authorized_cuda_context.py'
+      - 'src/hephaestus/production/mounted_original_role_adapter.py'
+      - 'tests/test_original_cuda_mounted_volume_and_lease.py'
       - 'scripts/freeze_original_tier_a_cuda_archive.py'
       - 'scripts/cold_verify_original_tier_a_cuda_archive.py'
       - 'scripts/retain_original_cuda_evidence_s3.py'
@@ -41,7 +49,7 @@ jobs:
       - run: python -m pip install -e '.[test,independent-certification]'
       - name: Validate externally signed nine original CUDA operations and no self-issued compute
         run: |
-          python -m pytest -q tests/test_original_cuda_offline_operator_signing.py tests/test_signed_cuda_compute_authorization.py \
+          python -m pytest -q tests/test_original_cuda_offline_operator_signing.py tests/test_original_cuda_mounted_volume_and_lease.py tests/test_signed_cuda_compute_authorization.py \
             tests/test_tier_a_cuda_target.py \
             tests/test_tier_a_cuda_role_stages.py \
             tests/test_original_cuda_service_composition.py \
