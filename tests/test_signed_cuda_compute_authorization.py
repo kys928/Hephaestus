@@ -47,7 +47,8 @@ def load(path,public,store,*,source=SOURCE):
         artifacts=store,path=path,
         trusted_public_key_hex=public.hex(),
         trusted_public_key_sha256="sha256:"+sha256(public).hexdigest(),
-        trusted_source_policy_ref=source)
+        trusted_source_policy_ref=source,
+        expected_workflow_id=WORKFLOW,expected_run_id=RUN)
 
 
 def test_exact_native_gpu_op_map_includes_five_frozen_and_four_target_calls():
