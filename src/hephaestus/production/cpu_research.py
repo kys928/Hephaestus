@@ -111,6 +111,26 @@ def verify_cpu_research_trace(workflow, context):
     req = type("TraceScope", (), {"workflow_id": workflow.workflow_id, "run_id": workflow.run_id,
         "lineage_id": workflow.lineage_id, "stage_name": workflow.stage_name})()
     training = context.source(req, "lifecycle_launch", "cpu_training_result")
+    baseline = context.source(req, "baseline_generation", "generation_report")
+    candidate = context.source(req, "candidate_generation", "generation_report")
+    if (baseline["count"] != candidate["count"] or
+            [x["sample_id"] for x in baseline["samples"]] != [x["sample_id"] for x in candidate["samples"]] or
+            baseline["protocol_ref"] != candidate["protocol_ref"]):
+        raise ValueError("CPU prospective evaluation sample or frozen protocol mismatch")
+    from hashlib import sha256
+    from hephaestus.storage.verified import canonical_bytes
+    eval_commitment = "sha256:" + sha256(canonical_bytes([
+        {"sample_id": r["sample_id"], "prompt_sha256": r["prompt_sha256"]}
+        for r in baseline["samples"]])).hexdigest()
+    prospective = {"evaluation_item_commitment": eval_commitment,
+        "evaluation_protocol_ref": baseline["protocol_ref"],
+        "count": baseline["count"], "correct_before": baseline["correct"],
+        "correct_after": candidate["correct"], "json_before": baseline["json_valid"],
+        "json_after": candidate["json_valid"],
+        "mean_target_nll_before": baseline["mean_teacher_forced_target_nll"],
+        "mean_target_nll_after": candidate["mean_teacher_forced_target_nll"],
+        "target_nll_delta": candidate["mean_teacher_forced_target_nll"] - baseline["mean_teacher_forced_target_nll"],
+        "target_nll_only_diagnostic": True}
     from pathlib import Path
     from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
     from hephaestus.training.cpu_research import verify_cpu_checkpoint
@@ -120,6 +140,9 @@ def verify_cpu_research_trace(workflow, context):
         "profile_ref": context.profile_ref, "policy_ref": context.admission.policy_ref,
         "verified_operations": 45, "verified_domain_operations": real_domain,
         "research_role_inferences": sorted(inference_roles), "actual_training": training,
+        "prospective": prospective, "cpu_seed": context.campaign_config.cpu_seed,
+        "dataset_seed": context.campaign_config.dataset_seed,
+        "experiment_id": context.campaign_config.experiment_id,
         "claim_scope": "internal_prospective_generated_task_research",
         "five_frozen_cuda_roles_executed": False, "independent_scientific_certification": False,
         "historical_issue_102_exit_gates_all_satisfied": False}
