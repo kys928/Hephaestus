@@ -186,6 +186,19 @@ class CudaExactTokenTrainer:
             raise PermissionError("duplicate CUDA optimizer receipt in original native state")
         if rows_receipts and set(r["completed_steps"] for r in rows_receipts)!=set(range(1,len(rows_receipts)+1)):
             raise PermissionError("CUDA optimizer history has gaps")
+        # On restart, every earlier GPU receipt must still match its
+        # immutable source/scope/adapter and exact original sample prefix;
+        # a valid final checkpoint alone cannot conceal a forged gap.
+        for expected_step, row in enumerate(rows_receipts, start=1):
+            receipt=read_verified_json(ctx.artifacts,row["receipt_ref"])
+            if (row.get("completed_steps")!=expected_step
+                    or receipt.get("completed_steps")!=expected_step
+                    or receipt.get("run_id")!=scope.run_id
+                    or receipt.get("training_recipe")!=TRAINING_RECIPE
+                    or receipt.get("consumed_sample_indices")!=order[:expected_step]):
+                raise PermissionError("CUDA optimizer restart has nonoriginal step lineage")
+            verify_cuda_target_checkpoint(
+                receipt,expected_source=ref,expected_scope=scope_ref)
         completed=len(rows_receipts);losses=[];consumed=[]
         if completed:
             receipt=read_verified_json(ctx.artifacts,rows_receipts[-1]["receipt_ref"])
