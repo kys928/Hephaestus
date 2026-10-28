@@ -1,0 +1,34 @@
+{
+  "schema": "hephaestus-original-generated-confirmatory-evidence.v1",
+  "date": "2026-10-28",
+  "source_run": "https://github.com/kys928/Hephaestus/actions/runs/40748933113",
+  "source_artifact": "https://github.com/kys928/Hephaestus/actions/runs/40748933113/artifacts/12843470967",
+  "original_archive_zip_sha256": "sha256:adb10b735dd9b3d556b183052a9b2dfe6931a5d1a9b01b436b7505ad49dac747",
+  "original_cpu_candidate_artifact_sha256": "sha256:41351555907d6804038e4a9a066df5832a7ac85983b86ec41658eb1067e3bf0e",
+  "selected_adapter_sha256": "sha256:a782d0ca344559659893a64d8bc1e8a90f597cf9cf0bbef06b433c555c1da195",
+  "selection_rule": "precommitted seed 1117 before inspecting evaluation outcomes",
+  "frozen_original_generated_evaluation_ref": "sha256:e0d00c0e766b462187d0b4e504cd9b0394363b162cb3b23ab0b64f0b0b8256c3",
+  "cases": 24,
+  "valid_json_before": 0,
+  "valid_json_after": 24,
+  "exact_correct_before": 0,
+  "exact_correct_after": 2,
+  "exact_correct_after_by_family": {
+    "arithmetic": 0,
+    "json": 0,
+    "reasoning": 2,
+    "symbolic": 0
+  },
+  "claim_scope": "internal_original_generated_evaluation_only",
+  "learning_or_training_on_evaluation": false,
+  "original_five_cuda_roles_executed": false,
+  "independent_historical_certification": false,
+  "gpu_campaign_completed": false,
+  "issue_102_closable": false,
+  "limitations": [
+    "One selected adapter and one isolated generated-task evaluation set; not original protected Granite reference comparisons",
+    "Only two exact correct answers, both on generated graph-path family",
+    "One-shot generated-task improvement does not establish robust mathematical or symbolic reasoning",
+    "No original frozen five CUDA role 45-stage GPU full-spine execution or signed external custody"
+  ]
+}
