@@ -24,6 +24,17 @@ def validator_code_sha256():
     return "sha256:" + sha256(Path(generated_validation.__file__).read_bytes()).hexdigest()
 
 
+def processing_code_profile_sha256():
+    from . import internal_screening, generated_validation
+    files = {"generator_materializer": Path(__file__),
+             "screening": Path(internal_screening.__file__),
+             "independent_validation": Path(generated_validation.__file__)}
+    profile = {"format": FORMAT, "boundary": "prompt-newline-Answer-space-target",
+        "eos_insertion": False, "truncation": False, "prefix_label": -100,
+        "code_hashes": {name: "sha256:" + sha256(path.read_bytes()).hexdigest() for name, path in files.items()}}
+    return "sha256:" + sha256(canonical_bytes(profile)).hexdigest()
+
+
 def _example(rng, family, difficulty):
     if family == "arithmetic":
         a, b = rng.randrange(difficulty), rng.randrange(difficulty)

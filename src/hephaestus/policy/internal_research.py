@@ -64,10 +64,11 @@ class InternalDatasetAdmissionPolicy:
                 raise PermissionError("original generator provenance not authorized")
             # A caller cannot paste an allowed code digest onto arbitrary data.
             # Reproduce original generation from committed version/spec/seed.
-            from hephaestus.data.generated_factory import generate_original_splits, generator_code_sha256, validator_code_sha256
+            from hephaestus.data.generated_factory import generate_original_splits, generator_code_sha256, validator_code_sha256, processing_code_profile_sha256
             from hephaestus.schemas.generated_data import GeneratedDataSpec
             import hashlib
-            if (generator["code_sha256"] != generator_code_sha256() or
+            if (review.processing_profile_sha256 != processing_code_profile_sha256() or
+                    generator["code_sha256"] != generator_code_sha256() or
                     generator.get("validator_code_sha256") != validator_code_sha256()):
                 raise PermissionError("original generator/validator code changed")
             reproduced, report = generate_original_splits(GeneratedDataSpec(**generator["spec"]))

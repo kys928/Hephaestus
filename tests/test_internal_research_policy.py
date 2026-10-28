@@ -60,3 +60,17 @@ def test_claim_selection_preserves_external_custody_default(tmp_path):
         external.for_claim("internal_prospective")
     with pytest.raises(PermissionError):
         external.for_claim("certified_without_custodian", internal_policy=admission)
+
+
+def test_unknown_free_tokenizer_cannot_silently_drop_unrepresented_text(tmp_path):
+    pytest.importorskip('tokenizers')
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from hashlib import sha256
+    from hephaestus.data.internal_screening import InternalSourceScanner
+    tok = Tokenizer(models.BPE({'a':0}, []))
+    tok.pre_tokenizer = pre_tokenizers.Whitespace()
+    path = tmp_path/'incomplete-bpe.json'
+    tok.save(str(path))
+    scanner = InternalSourceScanner(None,path,'sha256:'+sha256(path.read_bytes()).hexdigest(),None)
+    with pytest.raises(ValueError,match='complete byte-level'):
+        scanner.token_ids('another symbol outside vocabulary')

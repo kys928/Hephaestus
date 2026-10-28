@@ -7,7 +7,7 @@ from pathlib import Path
 import json
 from huggingface_hub import snapshot_download
 from hephaestus.data.generated_factory import (prepare_original_source, generator_code_sha256,
-    OriginalTaskRegistryProvider, materialize_authorized_tokens, load_authorized_tokens)
+    OriginalTaskRegistryProvider, materialize_authorized_tokens, load_authorized_tokens, processing_code_profile_sha256)
 from hephaestus.data.generated_validation import OriginalTaskSemanticChecker
 from hephaestus.data.internal_screening import InternalSourceScanner
 from hephaestus.data.intelligence import AutonomousDatasetIntelligence, derive_data_requirements
@@ -30,7 +30,7 @@ def prepare_inputs(root, *, tokenizer_path, include_public=True):
     evaluation = ProspectiveEvaluationStore(repository, artifacts)
     tokenizer_digest = "sha256:" + sha256(tokenizer_path.read_bytes()).hexdigest()
     scanner = InternalSourceScanner(artifacts, tokenizer_path, tokenizer_digest, OriginalTaskSemanticChecker())
-    profile = "sha256:" + sha256(b'original-prompt-Answer-boundary-no-eos-no-truncation-v1').hexdigest()
+    profile = processing_code_profile_sha256()
     spec = GeneratedDataSpec(20261028)
     candidate, review_ref, protocol_ref, generator_ref = prepare_original_source(
         artifacts, evaluation, scanner, spec, experiment_id="internal-original-repair",

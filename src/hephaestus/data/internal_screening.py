@@ -33,8 +33,14 @@ def _verified_backend(raw):
     unk = tokenizer.token_to_id("<|unk|>")
     if unk is None:
         unk = tokenizer.token_to_id("<unk>")
-    if unk is None and json.loads(raw)["model"].get("type") != "BPE":
-        raise ValueError("unknown-free tokenizer must have explicit BPE representation")
+    if unk is None:
+        from tokenizers.pre_tokenizers import ByteLevel
+        config = json.loads(raw)
+        if (config["model"].get("type") != "BPE" or
+                not set(ByteLevel.alphabet()).issubset(tokenizer.get_vocab()) or
+                '"ByteLevel"' not in json.dumps(config.get("pre_tokenizer")) or
+                '"ByteLevel"' not in json.dumps(config.get("decoder"))):
+            raise ValueError("unknown-free tokenizer must have complete byte-level BPE representation")
     return tokenizer, unk
 
 

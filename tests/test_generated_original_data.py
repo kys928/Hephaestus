@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import pytest
 from hephaestus.data.generated_factory import (generate_original_splits, prepare_original_source,
-    generator_code_sha256, materialize_authorized_tokens, load_authorized_tokens)
+    generator_code_sha256, materialize_authorized_tokens, load_authorized_tokens, processing_code_profile_sha256)
 from hephaestus.data.generated_validation import validate_original_example, OriginalTaskSemanticChecker
 from hephaestus.data.internal_screening import InternalSourceScanner
 from hephaestus.schemas.generated_data import GeneratedDataSpec
@@ -39,7 +39,7 @@ def create_governed_source(root, tokenizer_path):
     evaluation = ProspectiveEvaluationStore(repository, artifacts)
     digest = "sha256:" + sha256(tokenizer_path.read_bytes()).hexdigest()
     scanner = InternalSourceScanner(artifacts, tokenizer_path, digest, OriginalTaskSemanticChecker())
-    profile = "sha256:" + sha256(b'original-prompt-Answer-boundary-no-eos-no-truncation-v1').hexdigest()
+    profile = processing_code_profile_sha256()
     candidate, review, protocol, generator = prepare_original_source(artifacts, evaluation, scanner,
         GeneratedDataSpec(413, 12, 3, 3), experiment_id="original-repair", processing_profile_sha256=profile)
     policy = InternalResearchPolicy("original-data-cpu", "user-implementation-mandate", "original-repair",
