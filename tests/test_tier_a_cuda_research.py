@@ -48,3 +48,33 @@ def test_wrong_independent_original_five_role_registry_denied_first():
     with pytest.raises(PermissionError):
         authenticate_original_tier_a_training(object(),
             trusted_registry_sha256="sha256:"+"0"*64)
+
+
+def test_prepared_bridge_uses_only_frozen_five_cuda_roles_without_gpu_spend(monkeypatch,tmp_path):
+    """Mocked *admission only* to test wiring, not proof of dataset clearance."""
+    import hephaestus.production.tier_a_cuda_research as source
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator)
+    from hephaestus.providers.models.role_stack import REQUIRED_ROLES
+    from types import SimpleNamespace
+    monkeypatch.setattr(source, "authenticate_original_tier_a_training",
+                        lambda ctx, *, trusted_registry_sha256: valid())
+    class ReadOnlyAdapter:
+        def get_object(self, *, Bucket, Key):
+            raise AssertionError("composition must not read adapters")
+    store=object()
+    ctx=SimpleNamespace(artifacts=store,profile=SimpleNamespace(
+        model_id="HuggingFaceTB/SmolLM2-135M-Instruct",
+        model_revision="12fd25f77366fa6b3b4b768ec3050bf629380bac"))
+    bridge=source.prepare_tier_a_original_cuda_role_data_bridge(
+        ctx,trusted_registry_sha256=registry_digest(),s3_read_client=ReadOnlyAdapter(),
+        s3_bucket="original-scientific-artifacts",
+        model_cache_dir=tmp_path/"models",adapter_cache_dir=tmp_path/"adapters")
+    assert isinstance(bridge.reasoner,CertifiedRoleReasoner)
+    assert type(bridge.reasoner.generator) is PinnedTransformersRoleGenerator
+    assert bridge.reasoner.generator.device=="cuda:0"
+    assert set(bridge.reasoner.stack.roles)==set(REQUIRED_ROLES)
+    assert bridge.reasoner.artifact_store is store
+    assert bridge.gpu_execution_authorized is False
+    assert bridge.original_five_role_inferences_completed is False
+    assert bridge.handoff.external_certification is False
