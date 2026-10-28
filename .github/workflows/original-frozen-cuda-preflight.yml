@@ -24,3 +24,35 @@ jobs:
       - run: python -m py_compile scripts/preflight_original_cuda_replay.py
       - name: Re-verify original five certified CUDA identities
         run: python scripts/verify_frozen_role_contract.py
+
+  authenticate-real-cpu-candidate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve exact completed CPU scientific research artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: original-json-repair-cpu-evidence
+          run-id: 40746973738
+          github-token: ${{ github.token }}
+          path: /tmp/original-cpu-candidate
+      - name: Reconstitute original sha-inventoried evidence ZIP
+        run: |
+          cd /tmp/original-cpu-candidate
+          zip -q -r /tmp/cpu-candidate-original.zip .
+      - name: Verify 96 real steps, genuine answer gain and original five CUDA identities without launch
+        run: |
+          python scripts/preflight_original_cuda_replay.py \
+            --cpu-archive /tmp/cpu-candidate-original.zip \
+            --output /tmp/original-cuda-replay-preflight.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-cuda-replay-preflight-no-allocation
+          path: /tmp/original-cuda-replay-preflight.json
