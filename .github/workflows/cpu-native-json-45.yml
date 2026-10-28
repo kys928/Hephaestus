@@ -15,6 +15,7 @@ on:
       - 'scripts/run_cpu_research_campaign.py'
       - 'configs/research/cpu_native_json_45_v2.json'
       - 'tests/test_cpu_native_json_45.py'
+      - 'tests/test_cpu_internal_nonpromotion_action.py'
       - '.github/workflows/cpu-native-json-45.yml'
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - 'src/hephaestus/training/cpu_research.py'
       - 'src/hephaestus/evaluation/cpu_prospective.py'
       - 'tests/test_cpu_native_json_45.py'
+      - 'tests/test_cpu_internal_nonpromotion_action.py'
       - '.github/workflows/cpu-native-json-45.yml'
 permissions:
   contents: read
@@ -43,7 +45,7 @@ jobs:
       - run: python -m pip install -e '.[test,peft-training,independent-certification]'
       - name: Run real recipe, security and previous native policy regressions
         run: |
-          python -m pytest -q tests/test_cpu_native_json_45.py tests/test_cpu_campaign_config.py \
+          python -m pytest -q tests/test_cpu_native_json_45.py tests/test_cpu_internal_nonpromotion_action.py tests/test_cpu_campaign_config.py \
             tests/test_internal_cpu_execution.py tests/test_generated_original_data.py \
             tests/test_internal_research_policy.py tests/test_staged_dataset_approval_custody.py
       - name: Execute one uninterrupted genuinely governed native 45-operation CPU campaign
