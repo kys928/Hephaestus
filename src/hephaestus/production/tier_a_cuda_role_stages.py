@@ -152,12 +152,13 @@ class OriginalCudaResearchObservation:
                       "original_cuda_advisory_only":True})
 
 
-def prepare_native_tier_a_cuda_role_observations(context, bridge, *, gpu_resource_approval_service):
+def prepare_native_tier_a_cuda_role_observations(
+        context, bridge, *, gpu_resource_approval_service, cuda_target_scope=None):
     """Structurally bind all five original roles; no execution or GPU grant.
 
-    Training and target evaluation remain original CPU research services.
-    This helper cannot be used as a substitute for the separate full-CUDA
-    production composition required by issue #102.
+    Default preserves CPU-target research for backwards compatibility.
+    An explicit CudaTargetScope replaces training/generation/Evaluator/Judge
+    with true CUDA execution. Neither scope authorizes historical certification.
     """
     if (type(bridge) is not TierACudaRoleDataBridge
             or type(bridge.reasoner) is not CertifiedRoleReasoner
@@ -178,6 +179,38 @@ def prepare_native_tier_a_cuda_role_observations(context, bridge, *, gpu_resourc
     if type(gpu_resource_approval_service) is InternalResearchApprovalService:
         raise PermissionError("Tier A dataset autoapproval cannot authorize GPU spend")
     deps = compose_cpu_research_dependencies(context)
+    if cuda_target_scope is not None:
+        from hephaestus.training.tier_a_cuda_target import CudaTargetScope
+        from hephaestus.roles.tier_a_cuda_science import (
+            CudaResearchEvidenceCollector, CudaResearchTrainingRole,
+            CudaResearchMonitorRole, CudaResearchEvaluatorRole, CudaResearchJudgeRole,
+        )
+        from hephaestus.production.cpu_research import CpuProfiledStage
+        if (type(cuda_target_scope) is not CudaTargetScope
+                or cuda_target_scope.workflow_id != context.campaign_config.workflow_id
+                or cuda_target_scope.run_id != context.campaign_config.run_id
+                or cuda_target_scope.trusted_registry_sha256 != registry_digest()):
+            raise PermissionError("CUDA target scope differs from source and frozen role identities")
+        cuda_target_scope.validate()
+        # Distinct real GPU scientific services, never original CPU optimizer
+        # and never a renamed CPU generation receipt.
+        gpu_science = {
+            "evidence_collector": CudaResearchEvidenceCollector(
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+            "training_lifecycle": CudaResearchTrainingRole(
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service,
+                original=deps.services.training_lifecycle),
+            "runtime_monitor": CudaResearchMonitorRole(context),
+            "generation": CudaResearchEvaluatorRole(
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+            "evaluator": CudaResearchEvaluatorRole(
+                context,scope=cuda_target_scope,grants=gpu_resource_approval_service),
+            "judge_exit": CudaResearchJudgeRole(context),
+        }
+        deps.services = replace(deps.services,**{
+            field: CpuProfiledStage(service,context)
+            for field,service in gpu_science.items()
+        })
     roles = {}
     for role,(field,substep) in ANCHORS.items():
         roles[field] = OriginalCudaResearchObservation(
