@@ -104,3 +104,9 @@ def test_cannot_compose_gpu_without_real_production_runtime():
             approvals=None,independent_review=None,candidate_reviews={},
             s3_read_client=None,bucket="",model_cache=None,adapter_cache=None,
         )
+
+
+def test_native_gpu_spine_rejects_nonproduction_workflow(tmp_path):
+    from hephaestus.production.original_cuda_service_composition import build_original_cuda_native_spine
+    with pytest.raises(TypeError):
+        build_original_cuda_native_spine(object(), scope=scope(), dependencies=object())
