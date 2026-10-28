@@ -44,9 +44,15 @@ class CpuProspectiveEvaluator:
         for row in rows:
             ctx.check_deadline()
             validate_original_example(row)
-            prefix = row["prompt"] + "\nAnswer: "
+            json_recipe = ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1"
+            if json_recipe:
+                from hephaestus.training.cpu_chat_json_recipe import chat_prompt
+                prefix = chat_prompt(ctx.scorer.tokenizer, row["prompt"])
+            else:
+                prefix = row["prompt"] + "\nAnswer: "
+            max_new_tokens = 64 if json_recipe else 16
             tokens = ctx.scorer.tokenizer(prefix, return_tensors="pt", add_special_tokens=False)
-            if tokens.input_ids.shape[1] + 16 > int(model.config.max_position_embeddings):
+            if tokens.input_ids.shape[1] + max_new_tokens > int(model.config.max_position_embeddings):
                 raise ValueError("prospective generation cannot truncate frozen prompt")
             # Teacher-forced reference-token NLL is a diagnostic, not an answer-correctness pass.
             # Preserve the same exact prompt/target segmentation as the governed loader.
@@ -59,7 +65,7 @@ class CpuProspectiveEvaluator:
             if combined.shape[1] > int(model.config.max_position_embeddings):
                 raise ValueError("teacher-forced evaluation cannot truncate frozen target")
             with torch.inference_mode():
-                generated = model.generate(**tokens, max_new_tokens=16, do_sample=False,
+                generated = model.generate(**tokens, max_new_tokens=max_new_tokens, do_sample=False,
                     pad_token_id=ctx.scorer.tokenizer.eos_token_id,
                     eos_token_id=ctx.scorer.tokenizer.eos_token_id)
                 nll = float(model(input_ids=combined, attention_mask=torch.ones_like(combined), labels=masked).loss)
@@ -81,7 +87,9 @@ class CpuProspectiveEvaluator:
                 "json_valid": valid, "correct": correct, "target_nll": nll})
         result = {"schema": "cpu-prospective-real-generation.v1", "profile_ref": ctx.profile_ref,
             "protocol_ref": ctx.profile_protocol, "checkpoint_ref": str(checkpoint) if checkpoint else None,
-            "generation_settings_id": "greedy-max16-exact-prompt-no-truncation.v1",
+            "generation_settings_id": ("greedy-chat64-json-eos-no-truncation.v2" if
+                ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else
+                "greedy-max16-exact-prompt-no-truncation.v1"),
             "samples": outputs, "correct": sum(r["correct"] for r in outputs),
             "json_valid": sum(r["json_valid"] for r in outputs), "count": len(outputs),
             "family_counts": dict(Counter(r["family"] for r in outputs)),
