@@ -1,0 +1,26 @@
+name: CPU evidence custody and frozen boundary audit
+on:
+  push:
+    branches: ['feature/cpu-evidence-custody-merge-gates-20261028']
+  pull_request:
+    paths:
+      - 'scripts/retain_cpu_campaign_evidence.py'
+      - 'tests/test_cpu_evidence_custody.py'
+      - 'docs/integration_notes/cpu-research-custody-merge-gates-20261028.md'
+      - '.github/workflows/cpu-evidence-custody-audit.yml'
+permissions:
+  contents: read
+jobs:
+  custody:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_cpu_evidence_custody.py tests/test_cpu_prospective_replications.py tests/test_cpu_campaign_config.py
+      - name: Verify frozen five CUDA role identities are unchanged
+        run: python scripts/verify_frozen_role_contract.py
+      - name: Compile original immutable CPU campaign tools
+        run: python -m compileall -q scripts/retain_cpu_campaign_evidence.py scripts/analyze_cpu_prospective_replications.py src/hephaestus/production/cpu_research.py
