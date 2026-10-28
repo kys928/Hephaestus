@@ -9,6 +9,7 @@ from hashlib import sha256
 import json
 import re
 import unicodedata
+from functools import lru_cache
 from hephaestus.storage.verified import read_verified_json
 
 
@@ -25,6 +26,18 @@ def similarity(a, b):
     return len(x & y) / len(x | y) if x | y else 1.0
 
 
+@lru_cache(maxsize=2)
+def _verified_backend(raw):
+    from tokenizers import Tokenizer
+    tokenizer = Tokenizer.from_str(raw.decode())
+    unk = tokenizer.token_to_id("<|unk|>")
+    if unk is None:
+        unk = tokenizer.token_to_id("<unk>")
+    if unk is None and json.loads(raw)["model"].get("type") != "BPE":
+        raise ValueError("unknown-free tokenizer must have explicit BPE representation")
+    return tokenizer, unk
+
+
 @dataclass(frozen=True)
 class InternalSourceScanner:
     artifacts: object
@@ -36,18 +49,11 @@ class InternalSourceScanner:
     near_threshold: float = 0.90
 
     def token_ids(self, text):
-        from tokenizers import Tokenizer
         raw = self.tokenizer_path.read_bytes()
         if "sha256:" + sha256(raw).hexdigest() != self.tokenizer_sha256:
             raise ValueError("frozen tokenizer bytes changed")
-        tokenizer = Tokenizer.from_str(raw.decode())
+        tokenizer, unk = _verified_backend(raw)
         ids = tokenizer.encode(text, add_special_tokens=False).ids
-        unk = tokenizer.token_to_id("<|unk|>")
-        if unk is None:
-            unk = tokenizer.token_to_id("<unk>")
-        model = json.loads(raw)["model"]
-        if unk is None and model.get("type") != "BPE":
-            raise ValueError("unknown-free tokenizer must have explicit BPE representation")
         return ids, sum(t == unk for t in ids) if unk is not None else 0
 
     def load_rows(self, source_file_hashes):
@@ -76,7 +82,7 @@ class InternalSourceScanner:
         if not refs:
             raise ValueError("prospective reference texts missing")
         malformed, pii, total, unknown, duplicates = 0, 0, 0, 0, 0
-        exact, near, seen, prompts = 0, 0, set(), []
+        exact, near, resolved, seen, prompts = 0, 0, 0, set(), []
         ref_prompts = [r["prompt"] for r in refs]
         reference_keys = {normalize(p) for p in ref_prompts}
         for row in rows:
@@ -90,7 +96,14 @@ class InternalSourceScanner:
             duplicates += key in seen
             seen.add(key)
             exact += key in reference_keys
-            near += any(similarity(prompt, p) >= self.near_threshold for p in ref_prompts) and key not in reference_keys
+            for reference in refs:
+                if key not in reference_keys and similarity(prompt, reference["prompt"]) >= self.near_threshold:
+                    resolver = getattr(self.semantic_checker, "distinct_task", None)
+                    if callable(resolver) and resolver(row, reference):
+                        resolved += 1
+                    else:
+                        near += 1
+                        break
             pii += bool(re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|(?:\+?\d[ ()-]?){9,}", text))
             ids, unk = self.token_ids(text)
             total += len(ids)
@@ -104,8 +117,8 @@ class InternalSourceScanner:
             "source_file_hashes": source_file_hashes, "protocol_ref": protocol_ref,
             "processing_profile_sha256": processing_profile_sha256,
             "tokenizer_sha256": self.tokenizer_sha256, "rows": len(rows), "bytes": size,
-            "malformed": malformed, "pii_flags": pii, "duplicates": duplicates,
-            "exact_overlap": exact, "near_overlap": near, "semantic_overlap": semantic["overlap"],
+            "malformed": malformed, "pii_flags": pii, "duplicates": max(duplicates, semantic.get("within_source_semantic_duplicates", 0)),
+            "exact_overlap": exact, "near_overlap": near, "lexical_candidates_resolved_as_distinct_tasks": resolved, "semantic_overlap": semantic["overlap"],
             "semantic_method": semantic["method"], "semantic_evidence": semantic,
             "total_tokens": total, "unknown_tokens": unknown,
             "limitations": ["Internal prospective references only; historical/pretraining contamination unknown.",

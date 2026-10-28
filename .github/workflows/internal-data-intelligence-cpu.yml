@@ -28,3 +28,20 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -e '.[test,independent-certification]' tokenizers
       - run: python -m pytest -q tests/test_internal_research_policy.py tests/test_autonomous_internal_discovery.py tests/test_staged_dataset_approval_custody.py tests/test_independent_evaluator_holdout_review.py
+      - name: Validate original generated task families
+        run: if [ -f tests/test_generated_original_data.py ]; then python -m pytest -q tests/test_generated_original_data.py; fi
+  real-discovery:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref_name != 'feature/autonomous-source-selection-20261028'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e . tokenizers huggingface-hub
+      - run: python scripts/run_internal_data_intelligence.py --output /tmp/internal-data-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: internal-data-intelligence-evidence
+          path: /tmp/internal-data-evidence
