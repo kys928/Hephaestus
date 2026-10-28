@@ -2,7 +2,12 @@ import hashlib
 import json
 import sqlite3
 import pytest
-from scripts.retain_cpu_campaign_evidence import verify_original_evidence, retain
+import importlib.util
+from pathlib import Path
+_module_spec = importlib.util.spec_from_file_location("cpu_cold_custody", Path(__file__).resolve().parents[1] / "scripts" / "retain_cpu_campaign_evidence.py")
+_module = importlib.util.module_from_spec(_module_spec)
+_module_spec.loader.exec_module(_module)
+verify_original_evidence, retain = _module.verify_original_evidence, _module.retain
 
 
 def make_workspace(root):
