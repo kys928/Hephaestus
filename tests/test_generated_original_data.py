@@ -55,6 +55,7 @@ def create_governed_source(root, tokenizer_path):
 
 
 def test_actual_generated_token_artifact_rechecks_source_and_exact_masks(tmp_path):
+    pytest.importorskip("tokenizers")
     from tokenizers import Tokenizer, models, pre_tokenizers, trainers, decoders
     tok = Tokenizer(models.BPE(unk_token="<unk>"))
     tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)

@@ -2,6 +2,7 @@ import json
 from dataclasses import replace
 from hashlib import sha256
 import pytest
+pytest.importorskip("tokenizers")
 from tokenizers import Tokenizer, models, pre_tokenizers
 from hephaestus.data.internal_screening import InternalSourceScanner
 from hephaestus.data.intelligence import AutonomousDatasetIntelligence, derive_data_requirements
