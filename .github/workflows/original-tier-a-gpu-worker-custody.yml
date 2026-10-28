@@ -8,6 +8,8 @@ on:
       - 'tests/test_signed_cuda_compute_authorization.py'
       - 'scripts/freeze_original_tier_a_cuda_archive.py'
       - 'scripts/cold_verify_original_tier_a_cuda_archive.py'
+      - 'scripts/retain_original_cuda_evidence_s3.py'
+      - '.github/workflows/original-cuda45-independent-s3-readback.yml'
       - 'tests/test_original_cuda_cold_archive.py'
       - '.github/workflows/original-tier-a-gpu-worker-custody.yml'
   pull_request:
@@ -17,6 +19,8 @@ on:
       - 'tests/test_signed_cuda_compute_authorization.py'
       - 'scripts/freeze_original_tier_a_cuda_archive.py'
       - 'scripts/cold_verify_original_tier_a_cuda_archive.py'
+      - 'scripts/retain_original_cuda_evidence_s3.py'
+      - '.github/workflows/original-cuda45-independent-s3-readback.yml'
       - 'tests/test_original_cuda_cold_archive.py'
       - '.github/workflows/original-tier-a-gpu-worker-custody.yml'
 permissions:
@@ -43,6 +47,7 @@ jobs:
           python -m py_compile scripts/run_original_tier_a_cuda_worker.py \
             src/hephaestus/production/signed_cuda_grants.py \
             scripts/freeze_original_tier_a_cuda_archive.py \
-            scripts/cold_verify_original_tier_a_cuda_archive.py
+            scripts/cold_verify_original_tier_a_cuda_archive.py \
+            scripts/retain_original_cuda_evidence_s3.py
       - name: Confirm no GPU allocation, model training or external certificate occurred in CI
         run: echo "Structural tests only. GPU original 45-stage campaign remains unexecuted."
