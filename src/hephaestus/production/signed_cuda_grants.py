@@ -67,7 +67,8 @@ class SignedOriginalCudaGrantService:
 
     @classmethod
     def from_signed_file(cls, *, artifacts, path: Path, trusted_public_key_hex: str,
-                         trusted_public_key_sha256: str, trusted_source_policy_ref: str):
+                         trusted_public_key_sha256: str, trusted_source_policy_ref: str,
+                         expected_workflow_id: str, expected_run_id: str):
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         raw=bytes.fromhex(trusted_public_key_hex)
         if len(raw)!=32 or "sha256:"+sha256(raw).hexdigest()!=trusted_public_key_sha256:
@@ -81,7 +82,8 @@ class SignedOriginalCudaGrantService:
         until=datetime.fromisoformat(document["expires_at"].replace("Z","+00:00"))
         now=datetime.now(timezone.utc)
         if (document.get("schema")!="tier-a-original-cuda-compute-authorization.v1"
-                or document.get("run_id") is None
+                or document.get("workflow_id")!=expected_workflow_id
+                or document.get("run_id")!=expected_run_id
                 or document.get("source_policy_ref")!=trusted_source_policy_ref
                 or not _SHA.fullmatch(trusted_source_policy_ref)
                 or document.get("device")!="cuda:0"
