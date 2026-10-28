@@ -4,6 +4,7 @@ from hashlib import sha256
 import json
 
 import pytest
+pytest.importorskip("cryptography", reason="independent GPU signature verification extra is optional in base CI")
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
 
