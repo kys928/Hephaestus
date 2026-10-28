@@ -140,6 +140,8 @@ class CudaExactTokenTrainer:
         scope=self.scope
         grant_ref=verified_cuda_grant(ctx,operation_id,scope=scope,service=self.grants,
                                      purpose="target_training")
+        compute_ceiling=min(scope.maximum_gpu_seconds,
+            read_verified_json(ctx.artifacts,grant_ref)["maximum_gpu_seconds"])
         device=require_cuda_device(scope)
         if self.original_role_runtime is not None:
             # The certified role generator retains one large model on CUDA.
@@ -219,7 +221,7 @@ class CudaExactTokenTrainer:
         started=__import__("time").monotonic()
         initial=[v.detach().clone() for v in trainable] if not completed else None
         for step in range(completed,96):
-            if __import__("time").monotonic()-started>scope.maximum_gpu_seconds:
+            if __import__("time").monotonic()-started>compute_ceiling:
                 raise PermissionError("independently bounded CUDA training resource grant expired")
             index=order[step];row=records[index]
             inputs=torch.tensor([row["input_ids"]],dtype=torch.long,device=device)
