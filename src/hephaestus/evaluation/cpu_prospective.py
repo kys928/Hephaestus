@@ -48,10 +48,23 @@ class CpuProspectiveEvaluator:
             tokens = ctx.scorer.tokenizer(prefix, return_tensors="pt", add_special_tokens=False)
             if tokens.input_ids.shape[1] + 16 > int(model.config.max_position_embeddings):
                 raise ValueError("prospective generation cannot truncate frozen prompt")
+            # Teacher-forced reference-token NLL is a diagnostic, not an answer-correctness pass.
+            # Preserve the same exact prompt/target segmentation as the governed loader.
+            target_ids = ctx.scorer.tokenizer(row["target"], add_special_tokens=False).input_ids
+            if not target_ids:
+                raise ValueError("frozen evaluation target is empty")
+            prefix_ids = tokens.input_ids[0].tolist()
+            combined = torch.tensor([prefix_ids + target_ids], dtype=torch.long)
+            masked = torch.tensor([[-100] * len(prefix_ids) + target_ids], dtype=torch.long)
+            if combined.shape[1] > int(model.config.max_position_embeddings):
+                raise ValueError("teacher-forced evaluation cannot truncate frozen target")
             with torch.inference_mode():
                 generated = model.generate(**tokens, max_new_tokens=16, do_sample=False,
                     pad_token_id=ctx.scorer.tokenizer.eos_token_id,
                     eos_token_id=ctx.scorer.tokenizer.eos_token_id)
+                nll = float(model(input_ids=combined, attention_mask=torch.ones_like(combined), labels=masked).loss)
+            if not torch.isfinite(torch.tensor(nll)):
+                raise ValueError("nonfinite held-out target negative log-likelihood")
             text = ctx.scorer.tokenizer.decode(generated[0, tokens.input_ids.shape[1]:], skip_special_tokens=True).strip()
             valid, correct = False, False
             try:
@@ -65,13 +78,14 @@ class CpuProspectiveEvaluator:
             outputs.append({"sample_id": row["sample_id"], "family": row["family"],
                 "prompt_sha256": "sha256:" + sha256(prefix.encode()).hexdigest(),
                 "output": text, "output_sha256": "sha256:" + sha256(text.encode()).hexdigest(),
-                "json_valid": valid, "correct": correct})
+                "json_valid": valid, "correct": correct, "target_nll": nll})
         result = {"schema": "cpu-prospective-real-generation.v1", "profile_ref": ctx.profile_ref,
             "protocol_ref": ctx.profile_protocol, "checkpoint_ref": str(checkpoint) if checkpoint else None,
             "generation_settings_id": "greedy-max16-exact-prompt-no-truncation.v1",
             "samples": outputs, "correct": sum(r["correct"] for r in outputs),
             "json_valid": sum(r["json_valid"] for r in outputs), "count": len(outputs),
             "family_counts": dict(Counter(r["family"] for r in outputs)),
+            "mean_teacher_forced_target_nll": sum(r["target_nll"] for r in outputs) / len(outputs),
             "external_certification": False, "repeat_index": repeat}
         ctx.state.put(operation_id, input_ref, result)
         return result
@@ -92,6 +106,10 @@ class CpuProspectiveEvaluator:
             effect_summary={"correct_before": baseline["correct"], "correct_after": candidate["correct"],
                 "json_before": baseline["json_valid"], "json_after": candidate["json_valid"],
                 "cases": baseline["count"], "new_hard_regressions": regressions,
+                "mean_target_nll_before": baseline["mean_teacher_forced_target_nll"],
+                "mean_target_nll_after": candidate["mean_teacher_forced_target_nll"],
+                "mean_target_nll_change": candidate["mean_teacher_forced_target_nll"] - baseline["mean_teacher_forced_target_nll"],
+                "nll_is_diagnostic_not_promotion_authority": True,
                 "missing_evidence": ["independent training-seed replication", "external review"],
                 "repeatability": {"candidate_run_count": 1, "direction_consistency": 0.0}},
             deterministic_gate_status="failed" if regressions else "passed", variance_risk="unknown",
