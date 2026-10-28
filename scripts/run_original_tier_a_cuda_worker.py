@@ -35,7 +35,7 @@ def prepare_request(ctx, spec, *, maximum_gpu_seconds):
         ctx,trusted_registry_sha256=registry_digest())
     return {
         "schema":"tier-a-original-cuda-compute-authorization.v1",
-        "status":"approved", # Proposal ONLY; no effect without operator signature.
+        "status":"requested", # EXTERNAL operator must approve AND sign.
         "workflow_id":spec.workflow_id, "run_id":spec.run_id,
         "source_policy_ref":handoff.source_policy_ref,
         "reviewed_trainable_ref":handoff.transformed_training_ref,
