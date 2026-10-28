@@ -57,10 +57,17 @@ class CpuExactTokenTrainer:
         torch.manual_seed(profile.seed)
         model = AutoModelForCausalLM.from_pretrained(ctx.snapshot, local_files_only=True,
             trust_remote_code=False, dtype=torch.float32).to("cpu")
-        model = get_peft_model(model, LoraConfig(r=2, lora_alpha=4, lora_dropout=0.0,
+        json_recipe = profile.training_recipe == "chat_json_r8_full_epoch_96_v1"
+        if json_recipe:
+            from hephaestus.training.cpu_chat_json_recipe import exact_chat_records
+            rows, sample_order, transformed_ref = exact_chat_records(ctx, rows)
+        else:
+            sample_order, transformed_ref = list(range(len(rows))), ctx.materialization_ref
+        model = get_peft_model(model, LoraConfig(r=8 if json_recipe else 2,
+            lora_alpha=16 if json_recipe else 4, lora_dropout=0.0,
             target_modules=["q_proj", "v_proj"], task_type="CAUSAL_LM"))
         trainable = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.AdamW(trainable, lr=0.0002)
+        optimizer = torch.optim.AdamW(trainable, lr=0.0005 if json_recipe else 0.0002)
         initial = [p.detach().clone() for p in trainable]
         steps, losses, consumed = 0, [], []
         root = ctx.root / "checkpoints"
@@ -69,7 +76,10 @@ class CpuExactTokenTrainer:
         previous = ctx.repository.get_latest("cpu_research_optimizer_steps", "run_id", policy.run_id)
         if previous:
             receipt = read_verified_json(ctx.artifacts, previous["receipt_ref"])
-            if (receipt["profile_ref"] != ctx.profile_ref or receipt["materialization_ref"] != ctx.materialization_ref):
+            if (receipt["profile_ref"] != ctx.profile_ref or
+                    receipt["materialization_ref"] != ctx.materialization_ref or
+                    receipt.get("training_recipe", "legacy_raw_r2") != profile.training_recipe or
+                    receipt.get("chat_trainable_ref", ctx.materialization_ref) != transformed_ref):
                 raise PermissionError("optimizer resume profile/data mismatch")
             prior_path = checkpoint = Path(receipt["checkpoint_ref"])
             verify_cpu_checkpoint(receipt)
@@ -88,7 +98,7 @@ class CpuExactTokenTrainer:
         started = time.process_time()
         for step in range(steps, profile.maximum_training_steps):
             ctx.check_deadline()
-            index = step % len(rows)
+            index = sample_order[step % len(sample_order)]
             row = rows[index]
             inputs = torch.tensor([row["input_ids"]], dtype=torch.long)
             labels = torch.tensor([row["labels"]], dtype=torch.long)
@@ -127,7 +137,9 @@ class CpuExactTokenTrainer:
                 raise FileExistsError("uncommitted published checkpoint needs recovery inspection")
             partial.rename(checkpoint)
             receipt = {"schema": "cpu-actual-optimizer-step.v1", "profile_ref": ctx.profile_ref,
-                "materialization_ref": ctx.materialization_ref, "checkpoint_ref": str(checkpoint),
+                "materialization_ref": ctx.materialization_ref,
+                "training_recipe": profile.training_recipe, "chat_trainable_ref": transformed_ref,
+                "checkpoint_ref": str(checkpoint),
                 "checkpoint_manifest_sha256": hash_file(checkpoint / "checkpoint_manifest.json"),
                 "adapter_sha256": hash_file(checkpoint / "adapter_model.safetensors"),
                 "completed_steps": steps, "losses": list(losses), "gradient_norm": norm,
@@ -146,7 +158,9 @@ class CpuExactTokenTrainer:
             "adapter_sha256": hash_file(checkpoint / "adapter_model.safetensors"),
             "completed_optimizer_steps": steps, "weights_changed": changed, "losses": losses,
             "source_rows_admitted": len(rows), "consumed_sample_indices": consumed,
-            "full_dataset_epoch_completed": False, "profile_ref": ctx.profile_ref,
+            "training_recipe": profile.training_recipe, "chat_trainable_ref": transformed_ref,
+            "full_dataset_epoch_completed": json_recipe and len(consumed) == len(rows) and
+                set(consumed) == set(range(len(rows))), "profile_ref": ctx.profile_ref,
             "external_certification": False, "checkpoint_refs": [str(checkpoint)]}
         ctx.state.put(operation_id, ctx.materialization_ref, result)
         return result
