@@ -78,3 +78,17 @@ def test_prepared_bridge_uses_only_frozen_five_cuda_roles_without_gpu_spend(monk
     assert bridge.gpu_execution_authorized is False
     assert bridge.original_five_role_inferences_completed is False
     assert bridge.handoff.external_certification is False
+
+
+def test_gpu_supervised_jsonl_bytes_exactly_match_original_training_commitment():
+    from hashlib import sha256
+    from hephaestus.storage.verified import canonical_bytes
+    from hephaestus.production.tier_a_cuda_research import serialize_reviewed_supervised_records
+    samples=[{"sample_id":"one","labels":[-100,17,2]},
+             {"sample_id":"two","labels":[-100,18,2]}]
+    expected=b"".join(canonical_bytes(s)+b"\n" for s in samples)
+    actual=serialize_reviewed_supervised_records(samples)
+    assert actual==expected
+    assert sha256(actual).hexdigest()==sha256(expected).hexdigest()
+    assert actual.endswith(b"\n")
+    assert b"\\n" not in actual
