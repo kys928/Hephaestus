@@ -45,7 +45,12 @@ def main():
     actual={p.relative_to(root).as_posix():p for p in root.rglob("*")
             if p.is_file() and not p.is_symlink() and p.name!="archive_sha256.json"}
     if not isinstance(manifest,dict) or set(manifest)!=set(actual):
-        raise PermissionError("original CPU artifact inventory missing or extra files")
+        missing=sorted(set(manifest)-set(actual))[:6] if isinstance(manifest,dict) else []
+        unexpected=sorted(set(actual)-set(manifest))[:6] if isinstance(manifest,dict) else []
+        raise PermissionError("original CPU artifact inventory missing or extra files: "
+                              +str({"missing":missing,"unexpected":unexpected,
+                                   "manifest_count":len(manifest) if isinstance(manifest,dict) else -1,
+                                   "actual_count":len(actual)}))
     for name,expected in manifest.items():
         path=actual[name]
         digest=sha256()
