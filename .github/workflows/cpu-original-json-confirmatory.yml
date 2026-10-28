@@ -1,0 +1,65 @@
+name: One-shot original generated-task CPU confirmatory evaluation
+on:
+  push:
+    branches: ['feature/cpu-original-confirmatory-json-20261028']
+    paths:
+      - 'configs/research/cpu_original_json_confirmatory_v1.json'
+      - 'scripts/run_cpu_original_confirmatory_json.py'
+      - 'tests/test_cpu_original_confirmatory_json.py'
+      - '.github/workflows/cpu-original-json-confirmatory.yml'
+  pull_request:
+    paths:
+      - 'configs/research/cpu_original_json_confirmatory_v1.json'
+      - 'scripts/run_cpu_original_confirmatory_json.py'
+      - 'tests/test_cpu_original_confirmatory_json.py'
+      - '.github/workflows/cpu-original-json-confirmatory.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_cpu_original_confirmatory_json.py
+      - run: python -m py_compile scripts/run_cpu_original_confirmatory_json.py
+  real-untouched-evaluation:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,peft-training]'
+      - run: python -m pytest -q tests/test_cpu_original_confirmatory_json.py
+      - name: Retrieve the exact preselected original CPU candidate (seed 1117)
+        uses: actions/download-artifact@v4
+        with:
+          name: original-json-repair-cpu-evidence
+          run-id: 40746973738
+          github-token: ${{ github.token }}
+          path: /tmp/original-cpu-candidate
+      - name: One-time greedy evaluation on original frozen generated holdout
+        run: |
+          python scripts/run_cpu_original_confirmatory_json.py \
+            --cpu-artifact-dir /tmp/original-cpu-candidate \
+            --output /tmp/original-generated-confirmatory-report.json
+      - name: Confirm report SHA
+        if: success()
+        run: sha256sum /tmp/original-generated-confirmatory-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: original-generated-confirmatory-cpu-scientific-report
+          path: /tmp/original-generated-confirmatory-report.json
