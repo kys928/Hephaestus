@@ -280,6 +280,22 @@ class AutonomousDataPreprocessor:
         pipeline; it does not download, authorize, or relabel provider provenance.
         """
 
+        # WikiText-2's 7,232-row review is a position-and-content-bound
+        # frozen-tokenizer selection, NOT a generic whole-file text source.
+        # The generic path filters *normalized mapped* records without their
+        # original row indices and then chunks whitespace words. It cannot
+        # reproduce 128/32 original-token windows or prove that all 54 flagged
+        # PII rows and 2,060 duplicate rows were excluded. No amount of
+        # upstream operator approval should silently substitute this recipe.
+        # Only a future separately reviewed exact-subset materializer,
+        # invoked after native acquisition/clearance, may process these bytes.
+        if candidate.dataset_id.strip().casefold() == "salesforce/wikitext":
+            raise PermissionError(
+                "WikiText subset is screening-only: native generic preprocessing "
+                "cannot enforce reviewed source-row commitment or original "
+                "tokenizer 128+32 continuation windows"
+            )
+
         acquisition = validate_remote_acquisition_for_preprocessing(
             candidate=candidate,
             selection=selection,
