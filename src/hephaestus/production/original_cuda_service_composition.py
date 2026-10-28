@@ -147,3 +147,25 @@ def compose_original_cuda_science(runtime, *, scope, readiness_ref, approvals,
     if len(bindings)!=sum(len(PHASE_SUBSTEPS[x]) for x in SPINE_ORDER):
         raise ValueError("original 45-operation service map incomplete")
     return deps,reasoner
+
+
+def build_original_cuda_native_spine(runtime, *, scope, dependencies):
+    """Build the real original 45-stage controller; DO NOT call run() here.
+
+    Exact original state and artifact ownership are necessary to exclude
+    mixing independent CPU and GPU campaign receipts.
+    """
+    from hephaestus.control.staged_autonomous import build_staged_autonomous_orchestrator
+    scope.validate()
+    if type(runtime) is not ProductionRuntime:
+        raise TypeError("real production runtime is required")
+    if (dependencies.state_repository is not runtime.state_repository or
+            dependencies.artifact_store is not runtime.artifact_store):
+        raise PermissionError("original GPU workflow must use its own unified durable source custody")
+    if len(staged_binding_inventory(dependencies)) != 45:
+        raise ValueError("original 45-stage scientific composition is incomplete")
+    return build_staged_autonomous_orchestrator(
+        workflow_id=scope.workflow_id, run_id=scope.run_id,
+        lineage_id=scope.lineage_id, stage_name=scope.stage_name,
+        dependencies=dependencies,
+    )
