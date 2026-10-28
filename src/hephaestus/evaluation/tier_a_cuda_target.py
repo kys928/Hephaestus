@@ -20,10 +20,11 @@ from hephaestus.training.tier_a_cuda_target import (
 
 class CudaProspectiveEvaluator:
     """Real original generated-task CUDA evaluation with no answer postprocessing."""
-    def __init__(self,context, *, scope, grants):
+    def __init__(self,context, *, scope, grants, original_role_runtime=None):
         self.ctx=context
         self.scope=scope
         self.grants=grants
+        self.original_role_runtime=original_role_runtime
 
     def generate(self,operation_id,*,checkpoint=None,repeat=0):
         import torch
@@ -33,6 +34,8 @@ class CudaProspectiveEvaluator:
         grant_ref=verified_cuda_grant(ctx,operation_id,scope=self.scope,
             service=self.grants,purpose="target_evaluation")
         device=require_cuda_device(self.scope)
+        if self.original_role_runtime is not None:
+            self.original_role_runtime.close()
         ctx.check_authority(for_execution=False)
         policy=ctx.admission.evaluation_store.require_frozen(
             ctx.scope["experiment_id"],ctx.profile_protocol)
