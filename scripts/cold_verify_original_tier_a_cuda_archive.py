@@ -15,6 +15,7 @@ from zipfile import ZipFile
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_state import PHASE_SUBSTEPS,WORKFLOW_RECORD_COLLECTION,WORKFLOW_STATE_COLLECTION
 from hephaestus.production.signed_cuda_grants import expected_gpu_operation_map
+from hephaestus.storage.verified import canonical_bytes
 
 
 def _sha(raw):
@@ -153,8 +154,7 @@ def verify_original_cuda_archive(path, *, expected_sha256):
             manifest=json.loads(z.read(mf))
             components=manifest.get("components")
             if (not isinstance(components,dict) or manifest.get("partial_write") is not False
-                or manifest.get("manifest_hash")!="sha256:"+_sha(json.dumps(
-                    components,sort_keys=True,separators=(",",":"),allow_nan=False).encode())):
+                or manifest.get("manifest_hash")!="sha256:"+_sha(canonical_bytes(components))):
                 raise PermissionError("final original CUDA optimizer manifest invalid")
             for filename,expectedhash in components.items():
                 if "sha256:"+index.get(prefix+filename,"")!=expectedhash:
