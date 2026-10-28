@@ -14,7 +14,8 @@ _CATEGORIES = frozenset({"research_summary", "public_dataset", "public_model",
                           "internal_training_data", "internal_checkpoint", "original_cpu_evidence",
                           "protected_holdout", "private_reference", "private_checkpoint"})
 _PUBLIC = frozenset({"research_summary", "public_dataset", "public_model"})
-_TYPES = {"github_release", "huggingface_model", "huggingface_dataset", "kaggle_dataset"}
+_TYPES = {"github_release", "huggingface_model", "huggingface_dataset", "kaggle_dataset", "kaggle_model"}
+_KAGGLE_MODEL_REVISION = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[1-9][0-9]*\\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,14 @@ class ExternalEvidencePointer:
                 raise ValueError("Kaggle evidence requires exact positive dataset version")
             if self.artifact_kind not in ("public_dataset", "internal_training_data"):
                 raise ValueError("Kaggle dataset provider is for dataset artifacts only")
+        elif self.provider == "kaggle_model":
+            if (type(self.kaggle_version) is not int or self.kaggle_version < 1 or
+                    not isinstance(self.revision, str) or
+                    not _KAGGLE_MODEL_REVISION.fullmatch(self.revision) or
+                    not self.revision.endswith("/" + str(self.kaggle_version))):
+                raise ValueError("Kaggle Models require exact framework/variation/positive-version identity")
+            if self.artifact_kind not in ("public_model", "private_checkpoint", "internal_checkpoint"):
+                raise ValueError("Kaggle Model variations may hold model artifacts only")
         elif self.provider == "github_release":
             if (self.kaggle_version is not None or not isinstance(self.revision, str) or
                     not _TAG.fullmatch(self.revision) or self.revision.lower() in ("latest", "main", "master")):
