@@ -46,7 +46,7 @@ jobs:
       - name: Reconstitute original sha-inventoried evidence ZIP
         run: |
           cd /tmp/original-cpu-candidate
-          zip -q -r /tmp/cpu-candidate-original.zip .
+          zip -q -D -r /tmp/cpu-candidate-original.zip .
       - name: Verify 96 real steps, genuine answer gain and original five CUDA identities without launch
         run: |
           python scripts/preflight_original_cuda_replay.py \
