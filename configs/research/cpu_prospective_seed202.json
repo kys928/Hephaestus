@@ -1,0 +1,13 @@
+{
+  "schema": "cpu-campaign-config.v1",
+  "workflow_id": "cpu-prospective-202",
+  "run_id": "cpu-prospective-run-202",
+  "lineage_id": "cpu-original-repair-202",
+  "stage_name": "targeted_repair",
+  "experiment_id": "prospective-repair-202",
+  "cpu_seed": 202,
+  "dataset_seed": 20261028,
+  "maximum_training_steps": 8,
+  "maximum_cpu_seconds": 1200,
+  "include_public": false
+}
