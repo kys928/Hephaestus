@@ -86,6 +86,18 @@ class IndependentDatasetReviewPolicy:
     trusted_review_refs: frozenset[str] = frozenset()
     trusted_access_scope_refs: frozenset[str] = frozenset()
 
+    def for_claim(self, scope: str, *, internal_policy=None):
+        """Select an explicit admission contract; the historical default is unchanged."""
+        if scope == "historical_external":
+            return self
+        if scope == "internal_prospective":
+            from hephaestus.policy.internal_research import InternalDatasetAdmissionPolicy
+            if type(internal_policy) is not InternalDatasetAdmissionPolicy:
+                raise PermissionError("internal scope requires a separately preauthorized policy")
+            internal_policy.policy()
+            return internal_policy
+        raise PermissionError("unknown claim scope cannot downgrade independent custody")
+
     def review(self, ref: str) -> DatasetSourceReview:
         return DatasetSourceReview(**read_verified_json(self.artifacts, ref))
 
