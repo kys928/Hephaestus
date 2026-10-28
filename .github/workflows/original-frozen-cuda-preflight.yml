@@ -1,0 +1,26 @@
+name: Original frozen CUDA 45-stage replay admission preflight
+on:
+  push:
+    branches: ['feature/frozen-gpu-replay-preflight-20261028']
+  pull_request:
+    paths:
+      - 'scripts/preflight_original_cuda_replay.py'
+      - 'tests/test_original_cuda_replay_preflight.py'
+      - '.github/workflows/original-frozen-cuda-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  original-role-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest -q tests/test_original_cuda_replay_preflight.py
+      - run: python -m py_compile scripts/preflight_original_cuda_replay.py
+      - name: Re-verify original five certified CUDA identities
+        run: python scripts/verify_frozen_role_contract.py
