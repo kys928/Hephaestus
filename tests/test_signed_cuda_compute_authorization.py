@@ -123,4 +123,5 @@ def test_changed_payload_and_untrusted_key_are_rejected(tmp_path):
             artifacts=store,path=fresh,
             trusted_public_key_hex=public.hex(),
             trusted_public_key_sha256="sha256:"+"0"*64,
-            trusted_source_policy_ref=SOURCE)
+            trusted_source_policy_ref=SOURCE,
+            expected_workflow_id=WORKFLOW,expected_run_id=RUN)
