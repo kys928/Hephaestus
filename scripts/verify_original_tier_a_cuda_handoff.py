@@ -29,17 +29,8 @@ def main():
         raise FileExistsError("do not replace immutable GPU source handoff receipt")
     if args.trusted_registry_sha256 != registry_digest():
         raise PermissionError("original five-model registry changed from operator trust root")
-    ctx,workspace=load_context(args.original_cpu_workspace, cache_dir=args.model_cache,
-                                resume=True,campaign_config_path=args.config)
-    state=ctx.repository.get_latest(WORKFLOW_STATE_COLLECTION,"workflow_id",ctx.campaign_config.workflow_id)
-    if state is None:
-        raise PermissionError("original native research SQLite workflow is missing")
-    workflow=StagedWorkflowState.from_dict(state)
-    if not workflow.completion_marker:
-        raise PermissionError("only authentic full CPU 45/45 campaign may enter handoff")
-    # A portable archive must never pretend the runner's original absolute
-    # checkpoint paths are still live. Authenticate each original archived
-    # member byte and the original SQLite receipts without rebinding history.
+    # Verify original bytes BEFORE opening SQLite; read-only connections
+    # can create transient -wal/-shm files not present in source archive.
     root=args.original_cpu_workspace.resolve()
     manifest=json.loads((root/"archive_sha256.json").read_bytes())
     actual={p.relative_to(root).as_posix():p for p in root.rglob("*")
@@ -59,6 +50,17 @@ def main():
                 digest.update(piece)
         if digest.hexdigest()!=expected:
             raise PermissionError("original CPU source member SHA mismatch")
+    ctx,workspace=load_context(args.original_cpu_workspace, cache_dir=args.model_cache,
+                                resume=True,campaign_config_path=args.config)
+    state=ctx.repository.get_latest(WORKFLOW_STATE_COLLECTION,"workflow_id",ctx.campaign_config.workflow_id)
+    if state is None:
+        raise PermissionError("original native research SQLite workflow is missing")
+    workflow=StagedWorkflowState.from_dict(state)
+    if not workflow.completion_marker:
+        raise PermissionError("only authentic full CPU 45/45 campaign may enter handoff")
+    # A portable archive must never pretend the runner's original absolute
+    # checkpoint paths are still live. Authenticate each original archived
+    # member byte and the original SQLite receipts without rebinding history.
     state_check=verify_campaign_workspace(workspace)
     report=json.loads((root/"cpu_campaign_report.json").read_bytes())
     evidence=report.get("evidence") or {}
