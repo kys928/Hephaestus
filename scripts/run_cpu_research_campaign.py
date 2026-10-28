@@ -18,6 +18,7 @@ from hephaestus.providers.datasets.approved_registry import ApprovedHubRegistryP
 from hephaestus.schemas.discovery_contract import DatasetCandidate, DatasetSearchRequest
 from hephaestus.schemas.data_intelligence import DiscoveryBudget
 from hephaestus.schemas.cpu_research import CpuResearchExecutionProfile
+from hephaestus.schemas.cpu_campaign_config import CpuCampaignConfig
 from hephaestus.policy.internal_research import InternalDatasetAdmissionPolicy, put_record
 from hephaestus.state.prospective_evaluation import ProspectiveEvaluationStore
 from hephaestus.state.cpu_research import CpuResearchState
@@ -30,35 +31,46 @@ from hephaestus.production.cpu_research import compose_cpu_research_dependencies
 from hephaestus.llm.cpu_causal_research import CpuCausalProposalScorer, MODEL_ID, MODEL_REVISION
 
 
-def load_context(root, *, cache_dir, resume=False, include_public=True):
+def load_context(root, *, cache_dir, resume=False, campaign_config_path=None):
     if not resume:
-        workspace = create_fresh_campaign_workspace(root, workflow_id="cpu-research-workflow",
-            run_id="cpu-research-run", lineage_id="cpu-internal-lineage", stage_name="smoke_test")
+        if campaign_config_path is None:
+            raise ValueError("new CPU research campaign requires an explicit campaign configuration")
+        spec = CpuCampaignConfig.from_file(campaign_config_path)
+        workspace = create_fresh_campaign_workspace(root, **spec.identity)
         artifacts = FileSystemArtifactStore(workspace.artifacts_path)
         scorer = CpuCausalProposalScorer.load(artifacts, cache_dir=cache_dir)
         admission, candidate, review, material, scope, report = prepare_inputs(root,
-            tokenizer_path=scorer.snapshot_dir / "tokenizer.json", include_public=include_public)
+            tokenizer_path=scorer.snapshot_dir / "tokenizer.json",
+            include_public=spec.include_public, campaign_config=spec)
         # prepare_inputs uses exactly the native campaign's state.sqlite/artifacts directory.
         profile = CpuResearchExecutionProfile("bounded-original-cpu-research-v1", admission.policy_ref,
             MODEL_ID, MODEL_REVISION, {p.name: "sha256:" + sha256(p.read_bytes()).hexdigest()
                 for p in sorted(scorer.snapshot_dir.iterdir()) if p.is_file()},
-            admission.policy().tokenizer_sha256, 2, 600)
+            admission.policy().tokenizer_sha256, spec.maximum_training_steps,
+            spec.maximum_cpu_seconds, seed=spec.cpu_seed)
         profile.validate()
         profile_ref = put_record(artifacts, profile.to_dict())
         discovery = read_verified_json(artifacts, report["decision"]["evidence_refs"][0])
+        spec_ref = put_record(artifacts, spec.to_dict())
         manifest = {"schema": "cpu-research-campaign-context.v1", "profile_ref": profile_ref,
+            "campaign_spec_ref": spec_ref,
             "bootstrap_ref": workspace.bootstrap_artifact_ref, "candidate": candidate.to_dict(),
             "review_ref": review, "materialization_ref": material, "scope": scope,
             "data_report_ref": put_record(artifacts, report), "search_request": discovery["request"],
-            "include_public": include_public, "started_at": datetime.now(timezone.utc).isoformat()}
+            "include_public": spec.include_public, "started_at": datetime.now(timezone.utc).isoformat()}
         context_ref = put_record(artifacts, manifest)
         (root / "context_ref.txt").write_text(context_ref + "\n")
     artifacts = FileSystemArtifactStore(root / "artifacts")
     manifest = read_verified_json(artifacts, (root / "context_ref.txt").read_text().strip())
     profile = CpuResearchExecutionProfile(**read_verified_json(artifacts, manifest["profile_ref"]))
     profile.validate()
-    workspace = CampaignWorkspace(root, "cpu-research-workflow", "cpu-research-run", "cpu-internal-lineage",
-        "smoke_test", manifest["bootstrap_ref"])
+    spec = CpuCampaignConfig.from_dict(read_verified_json(artifacts, manifest["campaign_spec_ref"]))
+    if campaign_config_path is not None and CpuCampaignConfig.from_file(campaign_config_path) != spec:
+        raise PermissionError("CPU campaign config differs from the immutable original specification")
+    if (profile.maximum_training_steps != spec.maximum_training_steps or
+            profile.maximum_cpu_seconds != spec.maximum_cpu_seconds or profile.seed != spec.cpu_seed):
+        raise PermissionError("CPU profile differs from the immutable campaign limits or seed")
+    workspace = CampaignWorkspace(root, **spec.identity, bootstrap_artifact_ref=manifest["bootstrap_ref"])
     verify_campaign_workspace(workspace)
     if resume:
         scorer = CpuCausalProposalScorer.load(artifacts, cache_dir=cache_dir, local_files_only=True)
@@ -77,12 +89,12 @@ def load_context(root, *, cache_dir, resume=False, include_public=True):
     intelligence = AutonomousDatasetIntelligence(registry,
         EvidenceBoundSourceInspector(artifacts, {candidate.candidate_id: manifest["review_ref"]}),
         admission, artifacts, DiscoveryBudget())
-    state = CpuResearchState(repository, artifacts, workflow_id="cpu-research-workflow", profile_ref=manifest["profile_ref"])
+    state = CpuResearchState(repository, artifacts, workflow_id=spec.workflow_id, profile_ref=manifest["profile_ref"])
     return CpuResearchContext(root, artifacts, repository, admission, candidate,
         manifest["review_ref"], manifest["materialization_ref"], manifest["scope"], profile,
         manifest["profile_ref"], scorer.snapshot_dir, scorer, state,
         read_verified_json(artifacts, manifest["data_report_ref"]), intelligence,
-        DatasetSearchRequest(**manifest["search_request"]), manifest["started_at"]), workspace
+        DatasetSearchRequest(**manifest["search_request"]), manifest["started_at"], spec), workspace
 
 
 def main():
@@ -91,10 +103,10 @@ def main():
     parser.add_argument("--cache-dir", type=Path, default=Path("/tmp/hephaestus-model-cache"))
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--verify-only", action="store_true")
-    parser.add_argument("--no-public", action="store_true")
+    parser.add_argument("--config", type=Path, help="Immutable, policy-bounded campaign JSON; mandatory on new run")
     args = parser.parse_args()
     ctx, workspace = load_context(args.output.resolve(), cache_dir=args.cache_dir,
-        resume=args.resume or args.verify_only, include_public=not args.no_public)
+        resume=args.resume or args.verify_only, campaign_config_path=args.config)
     if args.verify_only:
         workflow = StagedWorkflowState.from_dict(ctx.repository.get_latest(WORKFLOW_STATE_COLLECTION, "workflow_id", ctx.scope["workflow_id"]))
     else:
