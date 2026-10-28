@@ -7,6 +7,7 @@ fail closed. Only the persisted orchestrator/driver can prove a real run.
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_autonomous import build_staged_autonomous_orchestrator
@@ -98,6 +99,7 @@ def compose_verified_staged_dependencies(
     dataset_review_policy=None,
     candidate_review_refs=None,
     dataset_record_mapping=None,
+    continuation_public_eval_pack_path: Path | None = None,
     enable_training_execution: bool = False,
     enable_generation_inference: bool = False,
     eval_pack_name: str = "semantic_behavior_v1",
@@ -147,7 +149,8 @@ def compose_verified_staged_dependencies(
     if dataset_review_policy is not None:
         services = runtime.with_huggingface_data_factory(services,
             review_policy=dataset_review_policy, acquisition_enabled=enable_huggingface_acquisition,
-            record_mapping=dataset_record_mapping)
+            record_mapping=dataset_record_mapping,
+            public_eval_pack_path=continuation_public_eval_pack_path)
     else:
         services = runtime.with_local_data_factory(
             services, acquisition_enabled=enable_local_acquisition)

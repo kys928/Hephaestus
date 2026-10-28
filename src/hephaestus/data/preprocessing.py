@@ -229,6 +229,7 @@ class AutonomousDataPreprocessor:
     contamination_checker: ContaminationChecker | None = None
     tokenizer_checker: TokenizerCompatibilityChecker | None = None
     record_mapper: object | None = None
+    continuation_contract: object | None = None
 
     def process(
         self,
@@ -324,6 +325,19 @@ class AutonomousDataPreprocessor:
                 "cache_status": receipt.cache_status,
             },
         )
+
+    def process_reviewed_continuation_acquisition(
+        self, *, run_id: str, lineage_id: str, stage_name: str,
+        candidate: DatasetCandidate, selection: DatasetSelectionDecision,
+        approval: DatasetAcquisitionApproval, receipt: AcquisitionReceipt,
+        review_policy, review_ref: str, public_eval_pack_path: Path,
+    ) -> DataFactoryResult:
+        """Opt-in exact-token path; requires independently accepted full clearance."""
+        from .continuation_materializer import materialize_approved_continuation
+        return materialize_approved_continuation(self, run_id=run_id, lineage_id=lineage_id,
+            stage_name=stage_name, candidate=candidate, selection=selection,
+            approval=approval, receipt=receipt, review_policy=review_policy,
+            review_ref=review_ref, public_eval_pack_path=public_eval_pack_path)
 
     def _process_acquisition(
         self,

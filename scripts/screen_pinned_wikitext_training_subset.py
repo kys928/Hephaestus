@@ -30,7 +30,7 @@ ACCEPTED_SCOPE_REF = "sha256:d7b3e42bad911f14095fb4b1bd9d0caa434a7eea7bec52472b7
 REPORT = Path("wikitext_continuation_subset_quarantine.json")
 
 
-def produce_report() -> dict[str, object]:
+def produce_report(*, verify_materializer: bool = False) -> dict[str, object]:
     from tokenizers import Tokenizer
     import pyarrow.parquet as pq
 
@@ -75,6 +75,29 @@ def produce_report() -> dict[str, object]:
             language_check=lambda t: bool(english_likelihood(t)[0]),
             public_prompts=prompts,
         )
+        if verify_materializer:
+            from hephaestus.data.continuation_materializer import reproduce_verified_bytes
+            from hephaestus.schemas.continuation_subset import PINNED_WIKITEXT_SUBSET
+            records, reproduced = reproduce_verified_bytes(raw, original, pack, PINNED_WIKITEXT_SUBSET)
+            # Reproduction is ephemeral in authorized quarantine. Only aggregate
+            # counts and commitments leave this process; never texts/token IDs.
+            if reproduced != measured:
+                raise ValueError("materializer and screening inventories differ")
+            from hephaestus.training.continuation_tokens import FORMAT, validate_token_records
+            loaded_tokens = validate_token_records(records, {
+                "data_format": FORMAT, "continuation_contract": PINNED_WIKITEXT_SUBSET.to_dict(),
+            }, vocabulary_size=tokenizer.get_vocab_size(with_added_tokens=True))
+            serialized_digest = sha256()
+            for record in records:
+                serialized_digest.update(canonical_bytes(record) + b"\n")
+            measured["exact_materializer_verification"] = {
+                "status": "pass", "windows": len(records),
+                "loader_validated_tokens": loaded_tokens,
+                "token_window_jsonl_sha256": "sha256:" + serialized_digest.hexdigest(),
+                "no_token_sequences_persisted": True,
+                "training_or_acquisition_clearance": False,
+            }
+            del records
     if file_path.read_bytes() != pack:
         raise ValueError("frozen public evaluation pack mutated")
     return {
@@ -104,7 +127,11 @@ def produce_report() -> dict[str, object]:
 
 
 def main() -> None:
-    result = produce_report()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verify-materializer", action="store_true")
+    args = parser.parse_args()
+    result = produce_report(verify_materializer=args.verify_materializer)
     if result["accepted_unique_rows"] < 1 or result["eligible_within_row_windows"] < 1:
         raise ValueError("candidate has no actual qualifying continuation training utility")
     REPORT.write_bytes(canonical_bytes(result))

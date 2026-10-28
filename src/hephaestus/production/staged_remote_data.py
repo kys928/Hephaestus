@@ -6,6 +6,7 @@ Screening access is separate from subsequent selected training acquisition.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import re
 
 from hephaestus.control.staged_state import StagedOperationResult, StagedOutputRecord
@@ -21,6 +22,7 @@ from .staged_records import verified_workflow_payload
 class StagedApprovedHuggingFaceDataFactory(StagedApprovedLocalDataFactory):
     remote_acquisition: object = None
     review_policy: object = None
+    public_eval_pack_path: Path | None = None
 
     def _validate_candidate(self, candidate):
         files = candidate.metadata.get("acquisition_files")
@@ -114,6 +116,15 @@ class StagedApprovedHuggingFaceDataFactory(StagedApprovedLocalDataFactory):
 
     def _process_candidate(self, req, decision, candidate, approval):
         self._source(req)  # repeat authorization, audit and cache verification
+        if self.preprocessor.continuation_contract is not None:
+            if self.public_eval_pack_path is None:
+                raise PermissionError("exact continuation requires an explicitly pinned public evaluation pack")
+            return self.preprocessor.process_reviewed_continuation_acquisition(
+                run_id=req.run_id, lineage_id=req.lineage_id, stage_name=req.stage_name,
+                candidate=candidate, selection=decision, approval=approval,
+                receipt=self._receipt(req), review_policy=self.review_policy,
+                review_ref=decision.metadata["dataset_review_ref"],
+                public_eval_pack_path=self.public_eval_pack_path)
         return self.preprocessor.process_remote_acquisition(
             run_id=req.run_id, lineage_id=req.lineage_id, stage_name=req.stage_name,
             candidate=candidate, selection=decision, approval=approval,

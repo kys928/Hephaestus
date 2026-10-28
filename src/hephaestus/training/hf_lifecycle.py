@@ -30,6 +30,10 @@ from hephaestus.schemas.experiment_contract import (
 )
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
 from hephaestus.training.peft_support import validate_recipe
+from hephaestus.training.continuation_tokens import (
+    FORMAT as TOKEN_ID_FORMAT, KIND as TOKEN_ID_KIND, continuation_contract,
+    verified_original_tokenizer, validate_token_records,
+)
 
 _ACTIVE_STATUSES = {"preparing", "queued", "running", "interrupting", "resuming"}
 _TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -551,9 +555,9 @@ class TransformersTrainingLifecycleService:
                 _issue("trainable_data_contract_invalid", "artifact_integrity", f"Invalid data contract: {exc}")
             )
             return summary
-        if contract.schema_version != "trainable-data.v1":
+        if contract.schema_version not in {"trainable-data.v1", TOKEN_ID_FORMAT}:
             issues.append(
-                _issue("unsupported_data_schema", "unsupported_capability", "Only trainable-data.v1 is supported.")
+                _issue("unsupported_data_schema", "unsupported_capability", "Unsupported trainable data schema.")
             )
         processed_ref = Path(contract.processed_dataset_ref)
         if str(processed_ref) != compatibility["processed_dataset_ref"]:
@@ -604,6 +608,11 @@ class TransformersTrainingLifecycleService:
         rows = 0
         declared_tokens = 0
         try:
+            evidence = json.loads(evidence_ref.read_text(encoding="utf-8"))
+            token_format = evidence.get("data_format") == TOKEN_ID_FORMAT
+            if token_format != (contract.schema_version == TOKEN_ID_FORMAT):
+                raise ValueError("trainable contract and processing data format disagree")
+            token_records = []
             with processed_ref.open("r", encoding="utf-8") as stream:
                 for line in stream:
                     if not line.strip():
@@ -615,10 +624,21 @@ class TransformersTrainingLifecycleService:
                         )
                         break
                     record = json.loads(line)
-                    if not isinstance(record, dict) or not str(record.get("text", "")):
+                    if token_format:
+                        token_records.append(record)
+                    elif (not isinstance(record, dict) or record.get("record_kind") == TOKEN_ID_KIND
+                          or not str(record.get("text", ""))):
                         raise ValueError(f"row {rows} lacks non-empty text")
-                    declared_tokens += max(0, int(record.get("token_count", 0)))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                    else:
+                        declared_tokens += max(0, int(record.get("token_count", 0)))
+            if token_format:
+                verified_original_tokenizer(evidence)
+                frozen = continuation_contract(evidence)
+                declared_tokens = validate_token_records(token_records, evidence,
+                    vocabulary_size=int(constraints.get("vocabulary_size", 0)))
+                summary.update({"data_format": TOKEN_ID_FORMAT,
+                                "continuation_width": frozen.prefix_tokens + frozen.target_tokens})
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError, ImportError) as exc:
             issues.append(
                 _issue("processed_dataset_invalid", "artifact_integrity", f"Processed JSONL is invalid: {exc}")
             )
@@ -675,6 +695,16 @@ class TransformersTrainingLifecycleService:
                     "Checked compatible tokenizer evidence is required.",
                 )
             )
+        elif evidence.get("data_format") == TOKEN_ID_FORMAT:
+            # A content-addressed tokenizer artifact is not its HF loader path.
+            # The loaded backend is bound to original bytes by the token worker.
+            try:
+                frozen = continuation_contract(evidence)
+                if (tokenizer.get("tokenizer_ref") != frozen.tokenizer_ref
+                        or tokenizer.get("tokenizer_file_sha256") != frozen.tokenizer_file_sha256):
+                    raise ValueError("tokenizer artifact identity differs")
+            except (TypeError, ValueError, KeyError) as exc:
+                issues.append(_issue("tokenizer_compatibility_mismatch", "incompatible_candidate", str(exc)))
         elif str(tokenizer.get("tokenizer_ref", "")) != compatibility["tokenizer_id"]:
             issues.append(
                 _issue("tokenizer_compatibility_mismatch", "incompatible_candidate", "Tokenizer evidence differs.")
@@ -818,6 +848,13 @@ class TransformersTrainingLifecycleService:
             "step_delay_seconds": number("step_delay_seconds", 0.0, 0.0),
             "simulate_oom": str(constraints.get("simulate_oom", "")),
         }
+        if data_summary.get("data_format") == TOKEN_ID_FORMAT:
+            config.update(data_format=TOKEN_ID_FORMAT, eos_handling="no_insertion",
+                          truncation="forbidden", prompt_masking="reviewed_token_labels")
+            if (int(config["context_length"]) < int(data_summary["continuation_width"])
+                    or int(config["max_total_tokens"]) < int(data_summary["declared_tokens"])):
+                issues.append(_issue("frozen_continuation_budget_mismatch", "budget_exceeded",
+                    "All reviewed token windows must fit context and token bounds without truncation."))
         if int(config["warmup_steps"]) > max_steps:
             issues.append(_issue("warmup_exceeds_steps", "invalid_request", "warmup_steps exceeds max_steps."))
         if float(config["step_delay_seconds"]) > 1.0:

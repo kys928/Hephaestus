@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 from hephaestus.training.peft_support import validate_recipe, validate_adapter
+from hephaestus.training.continuation_tokens import FORMAT, KIND, encode_frozen_records
 
 _STOP_REASON: str | None = None
 
@@ -78,21 +79,50 @@ def _event(root: Path, run_id: str, step: int, status: str, message: str, catego
     )
 
 
-def _load_jsonl(path: Path, maximum_rows: int) -> list[dict[str, object]]:
+def _load_jsonl(path: Path, maximum_rows: int, data_format: str = "trainable-data.v1") -> list[dict[str, object]]:
+    return _parse_jsonl(path.read_text(encoding="utf-8"), maximum_rows, data_format)
+
+
+def _parse_jsonl(raw: str, maximum_rows: int, data_format: str) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
-    with path.open("r", encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, start=1):
-            if not line.strip():
-                continue
-            if len(records) >= maximum_rows:
-                raise ValueError("processed dataset exceeds prepared row bound")
-            record = json.loads(line)
-            if not isinstance(record, dict) or not str(record.get("text", "")):
-                raise ValueError(f"processed dataset row {line_number} has no text")
-            records.append(record)
+    for line_number, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip():
+            continue
+        if len(records) >= maximum_rows:
+            raise ValueError("processed dataset exceeds prepared row bound")
+        record = json.loads(line)
+        if data_format == FORMAT:
+            if not isinstance(record, dict) or record.get("record_kind") != KIND:
+                raise ValueError(f"processed dataset row {line_number} lacks explicit frozen tokens")
+        elif (data_format != "trainable-data.v1" or not isinstance(record, dict)
+              or record.get("record_kind") == KIND or not str(record.get("text", ""))):
+            raise ValueError(f"processed dataset row {line_number} has no admissible text")
+        records.append(record)
     if not records:
         raise ValueError("processed dataset is empty")
     return records
+
+
+def _read_prepared_data(config: dict, compatibility: dict):
+    """Authenticate exact prepared inputs immediately before worker use."""
+    evidence_ref = Path(str(config["processing_evidence_ref"]))
+    buffers = {}
+    for path, expected, label in (
+        (evidence_ref, config["processing_evidence_hash"], "processing evidence"),
+        (Path(compatibility["processed_dataset_ref"]), compatibility["processed_dataset_hash"], "processed dataset"),
+        (Path(compatibility["trainable_data_contract_ref"]), compatibility["trainable_data_contract_hash"], "trainable contract"),
+    ):
+        raw = path.read_bytes()
+        if "sha256:" + hashlib.sha256(raw).hexdigest() != expected:
+            raise ValueError(f"{label} SHA changed after job preparation")
+        buffers[label] = raw
+    evidence = json.loads(buffers["processing evidence"])
+    if (evidence.get("processed_dataset_ref") != compatibility["processed_dataset_ref"]
+            or evidence.get("processed_content_hash") != compatibility["processed_dataset_hash"]):
+        raise ValueError("processing evidence does not bind the consumed dataset")
+    records = _parse_jsonl(buffers["processed dataset"].decode("utf-8"), int(config["maximum_rows"]),
+                          str(config.get("data_format", "trainable-data.v1")))
+    return evidence, records
 
 
 def _tokenize_records(
@@ -101,6 +131,12 @@ def _tokenize_records(
     config: dict[str, object],
     evidence: dict[str, object],
 ) -> tuple[list[dict[str, list[int]]], dict[str, int]]:
+    if evidence.get("data_format") == FORMAT:
+        if config.get("data_format") != FORMAT:
+            raise ValueError("frozen token schema differs from prepared training recipe")
+        return encode_frozen_records(tokenizer, records, config, evidence)
+    if config.get("data_format") == FORMAT or any(row.get("record_kind") == KIND for row in records):
+        raise ValueError("frozen token records cannot fall back to text tokenization")
     context_length = int(config["context_length"])
     maximum_tokens = int(config["max_total_tokens"])
     ignored = int(config["ignored_label_token"])
@@ -385,6 +421,8 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     job = json.loads(job_path.read_text(encoding="utf-8"))
     config = dict(job["training_config"])
     compatibility = dict(job["compatibility"])
+    # Recheck immutable inputs at consumption, including resumed workers.
+    evidence, records = _read_prepared_data(config, compatibility)
     if config.get("peft_config") is not None and Path(compatibility["model_id"]).is_dir():
         from hephaestus.backends.hf_causal_lm import directory_content_identity
         if directory_content_identity(compatibility["model_id"]) != compatibility["model_revision"]:
@@ -453,9 +491,6 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     model.to(device=device, dtype=getattr(torch, str(config["dtype"])))
     model.train()
 
-    evidence_ref = Path(str(config["processing_evidence_ref"]))
-    evidence = json.loads(evidence_ref.read_text(encoding="utf-8"))
-    records = _load_jsonl(Path(compatibility["processed_dataset_ref"]), int(config["maximum_rows"]))
     samples, tokenization_summary = _tokenize_records(tokenizer, records, config, evidence)
     batches = _batches(
         torch,

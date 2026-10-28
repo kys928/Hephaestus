@@ -22,6 +22,9 @@ from hephaestus.schemas.experiment_contract import ExperimentProposal
 from hephaestus.storage.base import ArtifactStore, StateRepository
 from hephaestus.storage.verified import read_verified_json
 from hephaestus.training.peft_support import validate_recipe
+from hephaestus.training.continuation_tokens import (
+    FORMAT as TOKEN_ID_FORMAT, continuation_contract, validate_tokenizer_location,
+)
 
 from .staged_records import verified_workflow_payload
 
@@ -184,7 +187,20 @@ class StagedExperimentFinalizer:
         if type(constraints["max_steps"]) is not int or constraints["max_steps"] <= 0:
             raise ValueError("training steps must be explicitly bounded")
         tokenizer_id = model.tokenizer_ref
-        if tokenizer.get("tokenizer_ref") != tokenizer_id:
+        if evidence.get("data_format") == TOKEN_ID_FORMAT:
+            frozen = continuation_contract(evidence)
+            contract_payload = json.loads(contract.read_text(encoding="utf-8"))
+            if (contract_payload.get("schema_version") != TOKEN_ID_FORMAT
+                    or tokenizer.get("tokenizer_ref") != frozen.tokenizer_ref):
+                raise ValueError("frozen token contract or tokenizer artifact identity differs")
+            validate_tokenizer_location(tokenizer_id, evidence)
+            if (type(constraints.get("context_length")) is not int
+                    or constraints["context_length"] < frozen.prefix_tokens + frozen.target_tokens
+                    or type(constraints.get("max_total_tokens", 1_000_000)) is not int
+                    or constraints.get("max_total_tokens", 1_000_000) < frozen.windows * (
+                        frozen.prefix_tokens + frozen.target_tokens)):
+                raise ValueError("recipe cannot fit all reviewed continuation windows without truncation")
+        elif tokenizer.get("tokenizer_ref") != tokenizer_id:
             raise ValueError("processing checked another tokenizer")
         if self.local_models_only and directory_content_identity(tokenizer_id) != constraints["tokenizer_revision"]:
             raise ValueError("pinned tokenizer bytes mismatch")

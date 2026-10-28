@@ -118,7 +118,8 @@ class ProductionRuntime:
                        data_preprocessor=service)
 
     def with_huggingface_data_factory(self, services, *, review_policy,
-                                     acquisition_enabled: bool = False, record_mapping=None):
+                                     acquisition_enabled: bool = False, record_mapping=None,
+                                     public_eval_pack_path: Path | None = None):
         """Opt-in remote acquisition after independent full-corpus clearance."""
         from dataclasses import replace
         from .staged_remote_data import StagedApprovedHuggingFaceDataFactory
@@ -131,7 +132,8 @@ class ProductionRuntime:
             preprocessor=preprocessor,
             maximum_source_bytes=self.settings.maximum_dataset_bytes,
             acquisition_enabled=acquisition_enabled,
-            remote_acquisition=self.dataset_acquisition, review_policy=review_policy)
+            remote_acquisition=self.dataset_acquisition, review_policy=review_policy,
+            public_eval_pack_path=public_eval_pack_path)
         return replace(services, dataset_acquisition=service, data_preprocessor=service)
 
     def with_evaluation_services(self, services, *,

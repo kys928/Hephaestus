@@ -30,7 +30,7 @@ def candidate_sha256(candidate: DatasetCandidate) -> str:
 
 def processing_profile_sha256(preprocessor) -> str:
     cfg = preprocessor.config
-    return "sha256:" + hash_json({
+    profile = {
         "max_rows": cfg.max_rows, "chunk_size_tokens": cfg.chunk_size_tokens,
         "min_tokens": cfg.min_tokens, "near_duplicate_threshold": cfg.near_duplicate_threshold,
         "prompt_target_template": cfg.prompt_target_template,
@@ -40,7 +40,15 @@ def processing_profile_sha256(preprocessor) -> str:
         "tokenizer_checker_id": getattr(preprocessor.tokenizer_checker, "checker_id", None),
         "tokenizer_file_sha256": getattr(preprocessor.tokenizer_checker, "tokenizer_file_sha256", None),
         "record_mapper_id": getattr(preprocessor.record_mapper, "mapper_id", None),
-    })
+    }
+    continuation = getattr(preprocessor, "continuation_contract", None)
+    if continuation is not None:
+        from hephaestus.schemas.continuation_subset import ContinuationSubsetContract
+        if not isinstance(continuation, ContinuationSubsetContract):
+            raise ValueError("invalid exact continuation profile")
+        continuation.validate()
+        profile["exact_continuation_contract"] = continuation.to_dict()
+    return "sha256:" + hash_json(profile)
 
 
 def preview_issues(review: DatasetSourceReview, candidate: DatasetCandidate, *,

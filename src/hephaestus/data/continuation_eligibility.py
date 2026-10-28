@@ -38,6 +38,7 @@ def screen_continuation_rows(
     prefix_tokens: int = 128,
     target_tokens: int = 32,
     stride_tokens: int = 64,
+    accepted_row_observer: Callable[[int, str, list[int]], None] | None = None,
 ) -> dict[str, object]:
     if (prefix_tokens <= 0 or target_tokens <= 0 or stride_tokens <= 0
             or type(unknown_id) is not int or unknown_id < 0):
@@ -78,6 +79,8 @@ def screen_continuation_rows(
         if unknown * 100 > len(ids):
             rejected["frozen_unknown_fraction_exceeds_1pct"] += 1
             continue
+        if accepted_row_observer is not None:
+            accepted_row_observer(position, content, list(ids))
         selected += 1
         total_tokens += len(ids)
         unknown_tokens += unknown

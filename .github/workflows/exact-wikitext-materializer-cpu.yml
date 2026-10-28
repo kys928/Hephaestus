@@ -1,0 +1,81 @@
+name: Exact WikiText token materializer and training loader (CPU)
+on:
+  push:
+    branches: [integration/exact-wikitext-token-materializer-20261028]
+  pull_request:
+    paths:
+      - 'src/hephaestus/data/continuation*'
+      - 'src/hephaestus/schemas/continuation_subset.py'
+      - 'src/hephaestus/training/continuation_tokens.py'
+      - 'tests/test_exact_continuation_materializer.py'
+      - 'tests/test_frozen_continuation_training.py'
+      - 'tests/test_staged_frozen_continuation.py'
+      - '.github/workflows/exact-wikitext-materializer-cpu.yml'
+permissions: {contents: read}
+jobs:
+  exact-transform-and-native-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU fixture training and source decoding
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,dataset-preparation,peft-training]'
+      - name: Exact subset, unchanged guard, native review, loader and CPU optimizer checks
+        run: >-
+          python -m pytest -q
+          tests/test_exact_continuation_materializer.py
+          tests/test_frozen_continuation_training.py
+          tests/test_staged_frozen_continuation.py
+          tests/test_continuation_eligibility.py
+          tests/test_remote_data_preprocessing_bridge.py
+          tests/test_staged_governed_huggingface.py
+          tests/test_real_hf_training.py
+          tests/test_peft_training_lifecycle.py
+  authorized-quarantine-reproduction:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[dataset-preparation]'
+      - name: Existing authorized source scope, exact real source and original tokenizer
+        run: python scripts/screen_pinned_wikitext_training_subset.py --verify-materializer
+      - name: Verify exact inventory and preserve aggregate evidence only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from hashlib import sha256
+          p=Path('wikitext_continuation_subset_quarantine.json')
+          r=json.loads(p.read_bytes())
+          assert r['accepted_unique_rows'] == 7232
+          assert r['eligible_within_row_windows'] == 13380
+          assert r['exact_materializer_verification']['status'] == 'pass'
+          assert r['exact_materializer_verification']['no_token_sequences_persisted'] is True
+          assert r['training_allowed'] is False and r['acquisition_allowed'] is False
+          Path('wikitext-materializer-evidence-sha256.txt').write_text(sha256(p.read_bytes()).hexdigest()+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exact-wikitext-materializer-aggregate-verification
+          path: |
+            wikitext_continuation_subset_quarantine.json
+            wikitext-materializer-evidence-sha256.txt
+          if-no-files-found: warn
+          retention-days: 30
