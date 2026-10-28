@@ -70,7 +70,7 @@ class CpuResearchPlannerRole:
             if not diagnosis["metadata"]["measured_task_deficit"]:
                 return StagedOperationResult(status="blocked", blocking_issues=("no_measured_task_deficit",), resumable=False)
             plan = InterventionProposal("bounded-original-task-repair", diagnosis["report_id"], "replace_or_mix_dataset",
-                "Test whether two genuine low-rank optimizer updates on isolated original tasks improve prospective correctness.",
+                f"Test whether {policy.maximum_training_steps} genuine low-rank optimizer updates on isolated original tasks improve prospective correctness.",
                 "training_data", controlled_variables={"model_profile_ref": ctx.profile_ref,
                     "evaluation_protocol_ref": policy.protocol_ref, "optimizer": "AdamW-lr0.0002-lora-r2"},
                 expected_cost={"maximum_training_steps": policy.maximum_training_steps},
