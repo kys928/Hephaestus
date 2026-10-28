@@ -117,3 +117,76 @@ def test_target_evaluator_and_optimizer_are_distinct_cuda_services():
     assert CudaExactTokenTrainer is not CudaProspectiveEvaluator
     assert CudaResearchTrainingRole is not CudaResearchEvaluatorRole
     assert CudaResearchMonitorRole is not CudaResearchEvidenceCollector
+
+
+def test_native_45_router_uses_true_cuda_target_training_generation_and_judge(
+        monkeypatch,tmp_path):
+    """Assembly-only test: no actual model, CUDA training or resource allocation."""
+    from hephaestus.production import tier_a_cuda_research as handoffmod
+    from hephaestus.production import tier_a_cuda_role_stages as stages
+    from hephaestus.production.original_cuda_identity import registry_digest
+    from hephaestus.production.cpu_research import CpuProfiledStage
+    from hephaestus.training.tier_a_cuda_target import CudaTargetScope
+    from hephaestus.roles.tier_a_cuda_science import (
+        CudaResearchTrainingRole, CudaResearchEvaluatorRole,
+        CudaResearchJudgeRole, CudaResearchEvidenceCollector,
+    )
+    from hephaestus.control.staged_state import (
+        StagedAutonomousDependencies,StagedAutonomousServices)
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    # Only construction is mocked; the real runtime must satisfy every source
+    # and resource gate when actually executed.
+    verified_handoff=SimpleNamespace(source_policy_ref=SHA)
+    monkeypatch.setattr(handoffmod,"authenticate_original_tier_a_training",
+                        lambda *a,**kw: verified_handoff)
+    monkeypatch.setattr(stages,"authenticate_original_tier_a_training",
+                        lambda *a,**kw: verified_handoff)
+    context=SimpleNamespace(
+        artifacts=FileSystemArtifactStore(tmp_path/"artifacts"),
+        profile=SimpleNamespace(
+            model_id="HuggingFaceTB/SmolLM2-135M-Instruct",
+            model_revision="12fd25f77366fa6b3b4b768ec3050bf629380bac"),
+        campaign_config=SimpleNamespace(
+            workflow_id="gpu-scope-native-1",run_id="gpu-scope-run-1"),
+    )
+    class StubS3:
+        def get_object(self, **kwargs):
+            raise AssertionError("no S3 fetch during composition")
+    bridge=handoffmod.prepare_tier_a_original_cuda_role_data_bridge(
+        context,trusted_registry_sha256=registry_digest(),
+        s3_read_client=StubS3(),s3_bucket="original-roles",
+        model_cache_dir=tmp_path/"model",adapter_cache_dir=tmp_path/"adapters")
+    class NullRole:
+        def execute(self,req):
+            raise AssertionError("no execution during composition")
+    names=StagedAutonomousServices.__dataclass_fields__
+    delegates=StagedAutonomousServices(**{name:NullRole() for name in names})
+    dependencies=StagedAutonomousDependencies(
+        services=delegates,state_repository=object(),artifact_store=context.artifacts)
+    monkeypatch.setattr(stages,"compose_cpu_research_dependencies",
+                        lambda ctx:dependencies)
+    monkeypatch.setattr(stages,"staged_binding_inventory",
+                        lambda deps:{str(i):"actual-stage" for i in range(45)})
+    class ScopedProvider:
+        def decision_for(self,request):
+            return None
+    gpu_scope=CudaTargetScope(
+        workflow_id="gpu-scope-native-1",run_id="gpu-scope-run-1",
+        trusted_registry_sha256=registry_digest(),
+        trusted_approval_authority="operator",maximum_gpu_seconds=900)
+    out=stages.prepare_native_tier_a_cuda_role_observations(
+        context,bridge,gpu_resource_approval_service=ScopedProvider(),
+        cuda_target_scope=gpu_scope)
+    assert isinstance(out.services.training_lifecycle.delegate,CudaResearchTrainingRole)
+    assert isinstance(out.services.model_selection.delegate,CudaResearchTrainingRole)
+    assert isinstance(out.services.evidence_collector.delegate,CudaResearchEvidenceCollector)
+    assert isinstance(out.services.runtime_monitor.delegate,
+                      __import__("hephaestus.roles.tier_a_cuda_science",fromlist=["CudaResearchMonitorRole"]).CudaResearchMonitorRole)
+    assert isinstance(out.services.generation.delegate,CudaResearchEvaluatorRole)
+    assert isinstance(out.services.evaluator.delegate,CudaResearchEvaluatorRole)
+    assert isinstance(out.services.judge_exit.delegate.delegate,CudaResearchJudgeRole)
+    assert out.services.judge_exit.role=="judge"
+    assert out.services.evaluator.role=="evaluator"
+    assert out.services.planner.role=="planner"
+    assert out.services.diagnosis.role=="diagnosis"
+    assert out.services.judge_entry.role=="controller"
