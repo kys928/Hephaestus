@@ -61,7 +61,8 @@ def prepare_inputs(root, *, tokenizer_path, include_public=True):
     decision, decision_ref = intelligence.discover_select(request, **scope)
     if decision.selected_candidate_ids != [candidate.candidate_id]:
         raise RuntimeError("no eligible original source selected: " + str(decision.rejected_candidates))
-    if include_public and len(decision.rejected_candidates) < 2:
+    if include_public and (len(decision.rejected_candidates) < 2 or
+            any(not reason.startswith("SourceReviewRequired:") for reason in decision.rejected_candidates.values())):
         raise RuntimeError("real public candidates were not individually examined/rejected")
     materialized = materialize_authorized_tokens(admission, candidate, review_ref, **scope)
     tokens = load_authorized_tokens(admission, candidate, review_ref, materialized, **scope)

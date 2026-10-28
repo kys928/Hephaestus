@@ -49,10 +49,6 @@ class AutonomousDatasetIntelligence:
             evidence = {"schema": "autonomous-candidate-decision.v1", "candidate": candidate.to_dict(),
                 "candidate_sha256": candidate_sha256(candidate), "discovery_ref": discovery_ref}
             try:
-                if not set(candidate.task_types) & set(request.capability_targets):
-                    raise PermissionError("candidate does not address diagnosed capability targets")
-                if request.required_languages and not set(request.required_languages).issubset(candidate.languages):
-                    raise PermissionError("candidate language evidence does not satisfy requirements")
                 if request.metadata.get("natural_language_required") and candidate.metadata.get("synthetic"):
                     raise PermissionError("synthetic data cannot substitute for required natural-language corpus")
                 review_ref, consumed = self.inspector.inspect(candidate, request,
@@ -61,6 +57,10 @@ class AutonomousDatasetIntelligence:
                 if type(consumed) is not int or consumed < 0 or consumed > self.budget.maximum_bytes - spent:
                     raise ValueError("inspector exceeded source byte budget")
                 spent += consumed
+                if not set(candidate.task_types) & set(request.capability_targets):
+                    raise PermissionError("candidate does not address diagnosed capability targets")
+                if request.required_languages and not set(request.required_languages).issubset(candidate.languages):
+                    raise PermissionError("candidate language evidence does not satisfy requirements")
                 self.admission.require_clearance(candidate, review_ref, **scope)
                 review = read_verified_json(self.artifacts, review_ref)
                 scan = read_verified_json(self.artifacts, review["scan_ref"])
