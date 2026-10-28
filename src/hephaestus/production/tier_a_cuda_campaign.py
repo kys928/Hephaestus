@@ -27,6 +27,7 @@ def run_or_resume_original_tier_a_cuda_campaign(
         cache_dir:Path, scope:CudaTargetScope, gpu_resource_approval_service,
         original_s3_read_client, original_s3_bucket:str,
         original_role_model_cache:Path, original_adapter_cache:Path,
+        context_loader,
         resume:bool=False, verify_only:bool=False):
     """Run authentic native 45 *only if* all source and GPU gates are granted.
 
@@ -51,8 +52,9 @@ def run_or_resume_original_tier_a_cuda_campaign(
         raise PermissionError("separate real GPU approval service and original S3 role artifacts required")
     # Explicit runtime gate. No silently slow CPU fallback or fake GPU 45.
     require_cuda_device(scope)
-    from run_cpu_research_campaign import load_context
-    context,workspace=load_context(
+    if not callable(context_loader):
+        raise PermissionError("real native original Tier A context loader required")
+    context,workspace=context_loader(
         Path(workspace_root).resolve(),cache_dir=Path(cache_dir),
         resume=resume or verify_only,campaign_config_path=campaign_config_file)
     if (context.profile.model_id!=MODEL_ID
