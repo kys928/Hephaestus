@@ -17,8 +17,9 @@ from hephaestus.data.generated_factory import load_authorized_tokens
 
 
 class CudaResearchEvidenceCollector:
-    def __init__(self,context, *, scope, grants):
-        self.ctx=context;self.eval=CudaProspectiveEvaluator(context,scope=scope,grants=grants)
+    def __init__(self,context, *, scope, grants, original_role_runtime=None):
+        self.ctx=context;self.eval=CudaProspectiveEvaluator(context,scope=scope,grants=grants,
+            original_role_runtime=original_role_runtime)
 
     def execute(self,request):
         if request.substep!="evidence_collection":
@@ -29,8 +30,9 @@ class CudaResearchEvidenceCollector:
 
 
 class CudaResearchTrainingRole:
-    def __init__(self,context, *, scope, grants, original):
+    def __init__(self,context, *, scope, grants, original, original_role_runtime=None):
         self.ctx=context;self.scope=scope;self.grants=grants;self.original=original
+        self.original_role_runtime=original_role_runtime
 
     def execute(self,req):
         ctx=self.ctx
@@ -83,7 +85,8 @@ class CudaResearchTrainingRole:
             conf=ctx.source(req,"launch_configuration","training_configuration")
             if conf["steps"]!=96 or conf["device"]!="cuda:0":
                 raise PermissionError("original CUDA launch config changed")
-            trained=CudaExactTokenTrainer(ctx,scope=self.scope,grants=self.grants).run(req.operation_id)
+            trained=CudaExactTokenTrainer(ctx,scope=self.scope,grants=self.grants,
+                original_role_runtime=self.original_role_runtime).run(req.operation_id)
         elif req.substep=="training_status_poll":
             trained=ctx.source(req,"lifecycle_launch","cuda_training_result")
         else:
@@ -139,9 +142,10 @@ class CudaResearchMonitorRole:
 
 
 class CudaResearchEvaluatorRole:
-    def __init__(self,context, *, scope, grants):
+    def __init__(self,context, *, scope, grants, original_role_runtime=None):
         self.ctx=context
-        self.eval=CudaProspectiveEvaluator(context,scope=scope,grants=grants)
+        self.eval=CudaProspectiveEvaluator(context,scope=scope,grants=grants,
+            original_role_runtime=original_role_runtime)
 
     def execute(self,req):
         ctx=self.ctx
