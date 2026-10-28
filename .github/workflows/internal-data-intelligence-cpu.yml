@@ -18,7 +18,7 @@ on:
       - 'tests/test_generated*'
       - '.github/workflows/internal-data-intelligence-cpu.yml'
   push:
-    branches: ['feature/autonomous-source-selection-20261028', 'feature/governed-original-data-20261028', 'feature/cpu-research-execution-20261028']
+    branches: ['feature/autonomous-source-selection-20261028', 'feature/governed-original-data-20261028', 'feature/cpu-research-execution-20261028', 'feature/cpu-governed-campaign-config-20261028']
 permissions:
   contents: read
 jobs:
@@ -53,7 +53,7 @@ jobs:
   real-cpu-campaign:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'push' && github.ref_name == 'feature/cpu-research-execution-20261028'
+    if: github.event_name == 'push' && (github.ref_name == 'feature/cpu-research-execution-20261028' || github.ref_name == 'feature/cpu-governed-campaign-config-20261028')
     env:
       OMP_NUM_THREADS: '2'
       MKL_NUM_THREADS: '2'
