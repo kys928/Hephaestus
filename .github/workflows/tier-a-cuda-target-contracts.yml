@@ -1,0 +1,39 @@
+name: Governed Tier A CUDA target-training and generation contracts (no GPU)
+on:
+  push:
+    branches: [feature/tier-a-cuda-target-training-evaluation-20261028]
+  pull_request:
+    paths:
+      - 'src/hephaestus/training/tier_a_cuda_target.py'
+      - 'src/hephaestus/evaluation/tier_a_cuda_target.py'
+      - 'src/hephaestus/roles/tier_a_cuda_science.py'
+      - 'src/hephaestus/production/tier_a_cuda_role_stages.py'
+      - 'src/hephaestus/production/tier_a_cuda_trace.py'
+      - 'tests/test_tier_a_cuda_target.py'
+      - '.github/workflows/tier-a-cuda-target-contracts.yml'
+permissions:
+  contents: read
+jobs:
+  fail-closed-cuda-target-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - name: Verify source rights, original five frozen roles, CUDA target admission and no CPU fallback
+        run: |
+          python -m pytest -q \
+            tests/test_tier_a_cuda_target.py \
+            tests/test_tier_a_cuda_research.py \
+            tests/test_tier_a_cuda_role_stages.py \
+            tests/test_original_cuda_service_composition.py \
+            tests/test_cpu_native_json_45.py
+      - run: |
+          python -m py_compile \
+            src/hephaestus/training/tier_a_cuda_target.py \
+            src/hephaestus/evaluation/tier_a_cuda_target.py \
+            src/hephaestus/roles/tier_a_cuda_science.py \
+            src/hephaestus/production/tier_a_cuda_trace.py
