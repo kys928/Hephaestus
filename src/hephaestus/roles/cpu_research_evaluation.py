@@ -95,11 +95,18 @@ class CpuResearchActionRole:
             raise ValueError("unsupported CPU action operation")
         verdict = ctx.source(req, "governed_verdict", "judge_exit")
         action = req.prior_outputs["judge_exit.action_boundary"]["proposed_action"]
-        if action not in {"reject_checkpoint", "reject_candidate", "request_recheck", "continue_lineage_best"} or not evaluate_action_boundary(action)["allowed"]:
+        # A policy-admissible Judge may recommend continuation after measured
+        # improvement. Internal research records the recommendation only;
+        # it MUST NOT activate that checkpoint or perform further training.
+        allowed = {"reject_checkpoint", "reject_candidate", "request_recheck",
+                   "continue_lineage_best", "continue_from_checkpoint"}
+        if action not in allowed or not evaluate_action_boundary(action)["allowed"]:
             raise PermissionError("CPU policy permits only nonpromotion research dispositions")
         payload = {"schema": "cpu-internal-nonpromotion-disposition.v1", "workflow_id": req.workflow_id,
             "run_id": req.run_id, "operation_id": req.operation_id, "action": action,
             "external_certification": False, "model_promoted": False,
-            "baseline_retained": True, "effect": "recorded_research_disposition_only"}
+            "baseline_retained": True, "effect": "recorded_research_disposition_only",
+            "checkpoint_activated": False, "continuation_executed": False,
+            "human_review_still_required": action == "continue_from_checkpoint"}
         ref = ctx.state.put(req.operation_id, put_record(ctx.artifacts, verdict), payload)
         return result("action_decision", payload, action_applied=True, action_receipt_ref=ref)
