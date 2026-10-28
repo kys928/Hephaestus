@@ -11,7 +11,7 @@ from pathlib import Path
 
 from run_cpu_research_campaign import load_context
 from hephaestus.control.staged_state import WORKFLOW_STATE_COLLECTION, StagedWorkflowState
-from hephaestus.production.cpu_research import verify_cpu_research_trace
+from hephaestus.production.durable_campaign import verify_campaign_workspace
 from hephaestus.production.tier_a_cuda_research import authenticate_original_tier_a_training
 from hephaestus.production.original_cuda_identity import registry_digest
 from hephaestus.storage.verified import canonical_bytes
@@ -37,17 +37,45 @@ def main():
     workflow=StagedWorkflowState.from_dict(state)
     if not workflow.completion_marker:
         raise PermissionError("only authentic full CPU 45/45 campaign may enter handoff")
-    evidence=verify_cpu_research_trace(workflow,ctx)
-    if (evidence["verified_operations"]!=45
-        or evidence["verified_domain_operations"]!=40
-        or evidence["actual_training"]["completed_optimizer_steps"]!=96
-        or evidence["claim_scope"]!="internal_prospective_generated_task_research"):
-        raise PermissionError("native 45/45 Tier A scientific evidence incomplete")
+    # A portable archive must never pretend the runner's original absolute
+    # checkpoint paths are still live. Authenticate each original archived
+    # member byte and the original SQLite receipts without rebinding history.
+    root=args.original_cpu_workspace.resolve()
+    manifest=json.loads((root/"archive_sha256.json").read_bytes())
+    actual={p.relative_to(root).as_posix():p for p in root.rglob("*")
+            if p.is_file() and not p.is_symlink() and p.name!="archive_sha256.json"}
+    if not isinstance(manifest,dict) or set(manifest)!=set(actual):
+        raise PermissionError("original CPU artifact inventory missing or extra files")
+    for name,expected in manifest.items():
+        path=actual[name]
+        digest=sha256()
+        with path.open("rb") as stream:
+            for piece in iter(lambda:stream.read(1024*1024),b""):
+                digest.update(piece)
+        if digest.hexdigest()!=expected:
+            raise PermissionError("original CPU source member SHA mismatch")
+    state_check=verify_campaign_workspace(workspace)
+    report=json.loads((root/"cpu_campaign_report.json").read_bytes())
+    evidence=report.get("evidence") or {}
+    training=evidence.get("actual_training") or {}
+    if (not workflow.completion_marker
+        or state_check.verified_completed_prefix!=45
+        or report.get("status")!="completed"
+        or report.get("completed_operations")!=45
+        or evidence.get("verified_operations")!=45
+        or evidence.get("verified_domain_operations")!=40
+        or training.get("completed_optimizer_steps")!=96
+        or training.get("full_dataset_epoch_completed") is not True
+        or evidence.get("claim_scope")!="internal_prospective_generated_task_research"):
+        raise PermissionError("native 45/45 Tier A original scientific evidence incomplete")
     handoff=authenticate_original_tier_a_training(
         ctx,trusted_registry_sha256=args.trusted_registry_sha256)
     result={"schema":"original-tier-a-to-cuda-source-handoff.v1",
       "original_cpu_workflow_id":workflow.workflow_id,
       "original_cpu_native_trace_ref":evidence["native_trace_ref"],
+      "original_archive_members_sha256_checked":len(actual),
+      "historical_checkpoint_paths_rebased":False,
+      "resumable_checkpoint_recovery_claimed":False,
       "source_and_corrected_recipe":asdict(handoff),
       "claim_scope":"internal_original_generated_task_research_only",
       "source_revalidated":True, "five_original_cuda_roles_loaded":False,
