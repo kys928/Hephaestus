@@ -17,6 +17,7 @@ from hephaestus.policy.internal_research import InternalDatasetAdmissionPolicy, 
 from hephaestus.providers.datasets.approved_registry import ApprovedHubRegistryProvider, EvidenceBoundSourceInspector
 from hephaestus.schemas.data_intelligence import DiscoveryBudget
 from hephaestus.schemas.generated_data import GeneratedDataSpec
+from hephaestus.schemas.cpu_campaign_config import CpuCampaignConfig
 from hephaestus.schemas.internal_research import InternalResearchPolicy
 from hephaestus.state.prospective_evaluation import ProspectiveEvaluationStore
 from hephaestus.storage.filesystem import FileSystemArtifactStore
@@ -24,20 +25,24 @@ from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.storage.verified import read_verified_json
 
 
-def prepare_inputs(root, *, tokenizer_path, include_public=True):
+def prepare_inputs(root, *, tokenizer_path, include_public=True, campaign_config=None):
+    if campaign_config is None:
+        campaign_config = CpuCampaignConfig.from_file(Path(__file__).resolve().parents[1] / "configs/research/cpu_original_demo_v1.json")
+    campaign_config.validate()
     artifacts = FileSystemArtifactStore(root / "artifacts")
     repository = SQLiteStateRepository(root / "state.sqlite")
     evaluation = ProspectiveEvaluationStore(repository, artifacts)
     tokenizer_digest = "sha256:" + sha256(tokenizer_path.read_bytes()).hexdigest()
     scanner = InternalSourceScanner(artifacts, tokenizer_path, tokenizer_digest, OriginalTaskSemanticChecker())
     profile = processing_code_profile_sha256()
-    spec = GeneratedDataSpec(20261028)
+    spec = GeneratedDataSpec(campaign_config.dataset_seed)
     candidate, review_ref, protocol_ref, generator_ref = prepare_original_source(
-        artifacts, evaluation, scanner, spec, experiment_id="internal-original-repair",
+        artifacts, evaluation, scanner, spec, experiment_id=campaign_config.experiment_id,
         processing_profile_sha256=profile)
-    policy = InternalResearchPolicy("bounded-original-research-v1", "user-implementation-mandate",
-        "internal-original-repair", "cpu-research-workflow", "cpu-research-run",
-        protocol_ref, profile, tokenizer_digest, 8*1024*1024, 2000, 2, 600,
+    policy = InternalResearchPolicy("bounded-original-research-v1:" + campaign_config.workflow_id, "user-implementation-mandate",
+        campaign_config.experiment_id, campaign_config.workflow_id, campaign_config.run_id,
+        protocol_ref, profile, tokenizer_digest, 8*1024*1024, 2000,
+        campaign_config.maximum_training_steps, campaign_config.maximum_cpu_seconds,
         ("cc0-1.0", "mit"), allowed_generator_code_sha256=(generator_code_sha256(),),
         allowed_capabilities=spec.families)
     policy_ref = put_record(artifacts, policy.to_dict())
