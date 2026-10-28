@@ -1,0 +1,28 @@
+name: CPU generation evidence forensic tests
+on:
+  push:
+    branches: ['feature/evidence-release-and-generation-diagnosis-20261028']
+    paths:
+      - 'scripts/audit_cpu_generation_format.py'
+      - 'tests/test_cpu_generation_format_audit.py'
+      - '.github/workflows/cpu-generation-evidence-audit.yml'
+  pull_request:
+    paths:
+      - 'scripts/audit_cpu_generation_format.py'
+      - 'tests/test_cpu_generation_format_audit.py'
+      - '.github/workflows/cpu-generation-evidence-audit.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'pytest>=8,<9'
+      - name: Test original-evidence SHA and safe generation-error classification
+        run: python -m pytest -q tests/test_cpu_generation_format_audit.py
+      - name: Compile read-only forensic script
+        run: python -m py_compile scripts/audit_cpu_generation_format.py
