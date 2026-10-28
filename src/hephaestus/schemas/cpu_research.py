@@ -19,6 +19,7 @@ class CpuResearchExecutionProfile(JsonSchema):
     external_certification: bool = False
     frozen_cuda_identity: bool = False
     schema: str = "cpu-research-execution-profile.v1"
+    training_recipe: str = "legacy_raw_r2"
 
     def validate(self):
         from hephaestus.llm.cpu_causal_research import MODEL_ID, MODEL_REVISION
@@ -28,6 +29,7 @@ class CpuResearchExecutionProfile(JsonSchema):
                 self.frozen_cuda_identity is not False or self.cpu_threads != 2 or
                 not {"config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json"}.issubset(self.snapshot_hashes)):
             raise PermissionError("CPU research profile cannot impersonate certified CUDA roles")
-        if (type(self.maximum_training_steps) is not int or not 1 <= self.maximum_training_steps <= 8 or
+        maximum_steps = 8 if self.training_recipe == "legacy_raw_r2" else 96 if self.training_recipe == "chat_json_r8_full_epoch_96_v1" else 0
+        if (type(self.maximum_training_steps) is not int or not 1 <= self.maximum_training_steps <= maximum_steps or
                 type(self.maximum_cpu_seconds) is not int or not 0 < self.maximum_cpu_seconds <= 3600):
             raise PermissionError("bounded CPU profile required")
