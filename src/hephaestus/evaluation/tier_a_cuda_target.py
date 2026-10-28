@@ -33,6 +33,10 @@ class CudaProspectiveEvaluator:
         ctx=self.ctx
         grant_ref=verified_cuda_grant(ctx,operation_id,scope=self.scope,
             service=self.grants,purpose="target_evaluation")
+        import time
+        started=time.monotonic()
+        ceiling=min(self.scope.maximum_gpu_seconds,
+            read_verified_json(ctx.artifacts,grant_ref)["maximum_gpu_seconds"])
         device=require_cuda_device(self.scope)
         if self.original_role_runtime is not None:
             self.original_role_runtime.close()
@@ -77,6 +81,8 @@ class CudaProspectiveEvaluator:
         tokenizer=ctx.scorer.tokenizer
         outputs=[]
         for row in rows:
+            if time.monotonic()-started>ceiling:
+                raise PermissionError("actual CUDA evaluation exceeded approved GPU resource budget")
             validate_original_example(row)
             prefix=chat_prompt(tokenizer,row["prompt"])
             tokens=tokenizer(prefix,return_tensors="pt",add_special_tokens=False)
