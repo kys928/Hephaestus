@@ -93,7 +93,8 @@ class InternalResearchApprovalService:
                 set(request.requirements) != {"dataset_acquisition", "dataset_selection_approval"}):
             return None
         from hephaestus.control.staged_state import StagedOperationRequest
-        req = StagedOperationRequest(request.workflow_id, request.run_id, "cpu-internal-lineage", "smoke_test",
+        req = StagedOperationRequest(request.workflow_id, request.run_id,
+            ctx.campaign_config.lineage_id, ctx.campaign_config.stage_name,
             request.phase, request.substep, request.operation_id, 1, (), {})
         # Resolve selection from immutable same-workflow native records, never caller metadata.
         decision = ctx.source(req, "dataset_selection", "dataset_selection_decision")
