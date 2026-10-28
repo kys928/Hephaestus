@@ -117,12 +117,12 @@ def main():
         # receipts but never starts a CUDA worker.
         client=object()
     else:
-        from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
-        from hephaestus.providers.runpod.config import RunPodConfig
-        from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
-        config=RunPodConfig.from_env()
-        client=RunPodNetworkVolumeStorage.from_boto3(
-            config,EnvironmentSecretsProvider()).client
+        from hephaestus.production.mounted_original_role_adapter import MountedReadOnlyOriginalS3Client
+        bucket=os.environ.get("RUNPOD_NETWORK_VOLUME_ID","").strip()
+        if not bucket:
+            raise PermissionError("original RunPod mounted network volume ID required")
+        client=MountedReadOnlyOriginalS3Client(
+            Path("/workspace"),expected_bucket=bucket)
     # The original certified role adapter resolver expects boto3 get_object.
     if a.verify_only:
         class NoNetworkRead:
