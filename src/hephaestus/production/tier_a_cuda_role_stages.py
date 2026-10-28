@@ -13,7 +13,9 @@ from dataclasses import dataclass, replace
 from hephaestus.control.deterministic_role_boundary import (
     EvidenceRecord, EvidenceRegistry, DeterministicRoleContext,
 )
-from hephaestus.control.staged_state import StagedOutputRecord
+from hephaestus.control.staged_state import (
+    StagedOutputRecord, StagedApprovalRequest, StagedApprovalDecision,
+)
 from hephaestus.llm.certified_runtime import (
     CertifiedRoleReasoner, PinnedTransformersRoleGenerator,
 )
@@ -44,8 +46,47 @@ class OriginalCudaResearchObservation:
     delegate: object
     context: object
     reasoner: CertifiedRoleReasoner
+    resource_approval_service: object = None
+
+    def _require_resource_grant(self, request):
+        # A Tier A right-to-train is NOT an approval to spend GPU resources.
+        provider = self.resource_approval_service
+        if provider is None or not callable(getattr(provider, "decision_for", None)):
+            raise PermissionError("independent GPU resource approval provider missing")
+        gate = StagedApprovalRequest(
+            request_id="cuda-original:" + request.operation_id,
+            workflow_id=request.workflow_id, run_id=request.run_id,
+            operation_id=request.operation_id,
+            phase="resource_admission", substep="original_cuda_role_inference",
+            subject_ref=self.context.admission.policy_ref,
+            requirements=("gpu_compute", "original_frozen_cuda_roles"),
+        )
+        decision = provider.decision_for(gate)
+        if (type(decision) is not StagedApprovalDecision
+                or decision.request_id != gate.request_id
+                or decision.operation_id != gate.operation_id
+                or decision.subject_ref != gate.subject_ref
+                or decision.status != "approved"
+                or set(decision.requirements) != set(gate.requirements)):
+            raise PermissionError("no valid independently scoped original CUDA resource grant")
+        approved = read_verified_json(self.context.artifacts, decision.approval_ref)
+        if (approved.get("schema") != "original-cuda-resource-grant.v1"
+                or approved.get("workflow_id") != gate.workflow_id
+                or approved.get("run_id") != gate.run_id
+                or approved.get("operation_id") != gate.operation_id
+                or approved.get("source_policy_ref") != gate.subject_ref
+                or approved.get("role") != self.role
+                or approved.get("device") != "cuda:0"
+                or approved.get("status") != "approved"
+                or not approved.get("authorized_by")
+                or approved.get("external_scientific_certification") is not False):
+            raise PermissionError("verified original CUDA resource approval mismatched operation")
+        return decision.approval_ref
 
     def execute(self, request):
+        grant_ref = None
+        if request.substep == self.substep:
+            grant_ref = self._require_resource_grant(request)
         base = self.delegate.execute(request)
         if base.status != "completed" or request.substep != self.substep:
             return base
@@ -97,6 +138,7 @@ class OriginalCudaResearchObservation:
             "adapter_sha256":observed.adapter_sha256,
             "inference_receipt_ref":observed.inference_receipt_ref,
             "domain_observation_ref":source,
+            "gpu_resource_approval_ref":grant_ref,
             "generator":"PinnedTransformersRoleGenerator",
             "device":"cuda:0", "advisory_only":True,
             "cuda_training_executed":False, "promotion_authorized":False,
@@ -110,7 +152,7 @@ class OriginalCudaResearchObservation:
                       "original_cuda_advisory_only":True})
 
 
-def prepare_native_tier_a_cuda_role_observations(context, bridge):
+def prepare_native_tier_a_cuda_role_observations(context, bridge, *, gpu_resource_approval_service):
     """Structurally bind all five original roles; no execution or GPU grant.
 
     Training and target evaluation remain original CPU research services.
@@ -129,11 +171,18 @@ def prepare_native_tier_a_cuda_role_observations(context, bridge):
         context, trusted_registry_sha256=registry_digest())
     if fresh != bridge.handoff:
         raise PermissionError("original approved source/recipe changed since CUDA role preparation")
+    if (gpu_resource_approval_service is None or
+            not callable(getattr(gpu_resource_approval_service,"decision_for",None))):
+        raise PermissionError("CUDA research needs a separate scoped resource decision service")
+    from hephaestus.roles.cpu_research_data import InternalResearchApprovalService
+    if type(gpu_resource_approval_service) is InternalResearchApprovalService:
+        raise PermissionError("Tier A dataset autoapproval cannot authorize GPU spend")
     deps = compose_cpu_research_dependencies(context)
     roles = {}
     for role,(field,substep) in ANCHORS.items():
         roles[field] = OriginalCudaResearchObservation(
-            role,substep,getattr(deps.services,field),context,bridge.reasoner)
+            role,substep,getattr(deps.services,field),context,bridge.reasoner,
+            resource_approval_service=gpu_resource_approval_service)
     deps.services = replace(deps.services,**roles)
     if len(staged_binding_inventory(deps)) != 45:
         raise ValueError("native research stage bindings incomplete")
