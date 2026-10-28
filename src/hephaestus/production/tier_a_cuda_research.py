@@ -109,3 +109,54 @@ def authenticate_original_tier_a_training(context, *, trusted_registry_sha256):
         original_evaluation_protocol_ref=policy.protocol_ref,
         original_cuda_registry_sha256=trusted_registry_sha256,
     ).validate()
+
+
+@dataclass(slots=True)
+class TierACudaRoleDataBridge:
+    """Authentic five-role inference dependencies bound to real Tier A data.
+
+    This is a *prepared* nonexecuting bridge, NOT a 45-stage production
+    dependency set. Complete GPU stage composition and resource permission
+    must be established separately.
+    """
+    handoff: TierACudaDataHandoff
+    reasoner: object
+    target_model_id: str
+    target_model_revision: str
+    gpu_runtime_device: str = "cuda:0"
+    gpu_execution_authorized: bool = False
+    original_five_role_inferences_completed: bool = False
+
+
+def prepare_tier_a_original_cuda_role_data_bridge(
+        context, *, trusted_registry_sha256, s3_read_client, s3_bucket,
+        model_cache_dir, adapter_cache_dir):
+    """Connect exact original data/96-step recipe to five original CUDA roles.
+
+    No model weights are loaded; no adapter is downloaded; no GPU is allocated.
+    Native Stage owners may consume the returned *reasoner* only after a
+    separately scoped GPU execution decision.
+    """
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
+    )
+    if not callable(getattr(s3_read_client, "get_object", None)):
+        raise PermissionError("original adapter objects require a real read-only S3 client")
+    if not isinstance(s3_bucket, str) or not s3_bucket.strip():
+        raise PermissionError("original immutable adapter bucket must be explicitly selected")
+    handoff = authenticate_original_tier_a_training(
+        context, trusted_registry_sha256=trusted_registry_sha256)
+    stack, contract = verified_original_roles(trusted_registry_sha256)
+    reasoner = CertifiedRoleReasoner(
+        stack=stack, contract=contract,
+        adapters=VerifiedRoleAdapters(s3_read_client, s3_bucket, Path(adapter_cache_dir)),
+        generator=PinnedTransformersRoleGenerator(Path(model_cache_dir), device="cuda:0"),
+        artifact_store=context.artifacts)
+    if (context.profile.model_id != "HuggingFaceTB/SmolLM2-135M-Instruct"
+            or context.profile.model_revision != "12fd25f77366fa6b3b4b768ec3050bf629380bac"):
+        raise PermissionError("corrected target model identity differs from original research")
+    return TierACudaRoleDataBridge(
+        handoff=handoff, reasoner=reasoner,
+        target_model_id=context.profile.model_id,
+        target_model_revision=context.profile.model_revision,
+    )
