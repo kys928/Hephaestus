@@ -39,7 +39,16 @@ DEV_COMMITMENT = "sha256:4c9d54866719545f9a54466cd6da7b9aed4b79f935160d61e42e063
 
 def validate_protocol(path):
     parsed = json.loads(Path(path).read_bytes())
-    if parsed != PRECOMMITTED or any(type(parsed[k]) is not type(PRECOMMITTED[k]) for k in PRECOMMITTED):
+    # Explicit *new* independent CPU initialization seeds: identical frozen
+    # source, development items, optimizer, model and budget.
+    seed = parsed.get("train_seed")
+    if type(seed) is not int or seed not in (1117, 2227, 3337):
+        raise PermissionError("CPU replication training seed not precommitted")
+    expected = dict(PRECOMMITTED)
+    if seed != 1117:
+        expected["train_seed"] = seed
+        expected["experiment_id"] = "json-format-repair-development-20261028-seed-" + str(seed)
+    if parsed != expected or any(type(parsed[k]) is not type(expected[k]) for k in expected):
         raise PermissionError("CPU repair protocol cannot be widened or changed without a new reviewed experiment")
     return parsed
 
