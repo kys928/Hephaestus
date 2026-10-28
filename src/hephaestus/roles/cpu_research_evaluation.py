@@ -28,7 +28,10 @@ class CpuResearchEvaluatorRole:
         if req.substep == "generation_prompt_materialization":
             protocol = ctx.admission.evaluation_store.require_frozen(ctx.scope["experiment_id"], ctx.profile_protocol)
             return result("generation_prompt_manifest", {"protocol_ref": ctx.profile_protocol,
-                "evaluation_ref": protocol["evaluation_ref"], "settings": "greedy-max16-exact-prompt-no-truncation.v1"}, eval_pack_id=ctx.profile_protocol)
+                "evaluation_ref": protocol["evaluation_ref"], "settings": (
+                    "greedy-chat64-json-eos-no-truncation.v2" if
+                    ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else
+                    "greedy-max16-exact-prompt-no-truncation.v1")}, eval_pack_id=ctx.profile_protocol)
         if req.substep in {"baseline_generation", "candidate_generation"}:
             generation = (ctx.source(req, "evidence_collection", "baseline_reference") if req.substep == "baseline_generation"
                           else service.generate(req.operation_id, checkpoint=checkpoint))
