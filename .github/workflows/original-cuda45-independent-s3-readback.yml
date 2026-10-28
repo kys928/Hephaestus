@@ -1,0 +1,65 @@
+name: Independent cold readback of original CUDA 45 evidence (no GPU)
+on:
+  workflow_dispatch:
+    inputs:
+      object_key:
+        description: Private original CUDA45 content-addressed S3 object key
+        required: true
+        type: string
+      archive_sha256:
+        description: Exact original archive sha256 colon digest independently pinned by operator
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  independent-original-cuda-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    environment: original-cuda-evidence-review
+    env:
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      EXPECTED_KEY: ${{ inputs.object_key }}
+      EXPECTED_SHA: ${{ inputs.archive_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[s3]'
+      - name: Download private original SHA-addressed CUDA archive without exposing source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
+          key=os.environ["EXPECTED_KEY"]
+          digest=os.environ["EXPECTED_SHA"]
+          if (not re.fullmatch(r"sha256:[0-9a-f]{64}",digest)
+              or key!=f"hephaestus/scientific/original_cuda_45/{digest[7:]}/original_cuda_45.zip"):
+              raise SystemExit("original signed operator SHA and private object key must match")
+          cfg=RunPodConfig.from_env()
+          client=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
+          client.download_file(cfg.network_volume_id,key,"/tmp/archived-original-cuda45.zip")
+          PY
+      - name: Independently verify 45 original SQLite completions, original five GPU inferences and 96 checkpoint hashes
+        run: |
+          python scripts/cold_verify_original_tier_a_cuda_archive.py \
+            --archive /tmp/archived-original-cuda45.zip \
+            --expected-archive-sha256 "$EXPECTED_SHA" \
+            --output /tmp/public-safe-original-cuda45-readback.json
+      - name: Retain ONLY public-safe independently verified metadata
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: original-cuda45-independent-cold-verify-public-safe
+          path: /tmp/public-safe-original-cuda45-readback.json
+          retention-days: 30
