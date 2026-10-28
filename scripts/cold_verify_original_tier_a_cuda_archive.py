@@ -15,6 +15,7 @@ from zipfile import ZipFile
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_state import PHASE_SUBSTEPS,WORKFLOW_RECORD_COLLECTION,WORKFLOW_STATE_COLLECTION
 from hephaestus.production.signed_cuda_grants import expected_gpu_operation_map
+from hephaestus.production.original_cuda_identity import verified_original_roles,registry_digest
 from hephaestus.storage.verified import canonical_bytes
 
 
@@ -119,14 +120,19 @@ def verify_original_cuda_archive(path, *, expected_sha256):
             if artifact(row["artifact_ref"])!=expected_row:
                 raise PermissionError("original native CUDA completion diverges from immutable artifact")
         role_rows=[r["payload"] for r in evidence if r.get("kind")=="original_cuda_advisory_role"]
+        frozen_stack,_=verified_original_roles(registry_digest())
         approved=expected_gpu_operation_map(report["workflow_id"])
         actual_roles={role for role in approved.values() if role not in {
             "target_evaluation","target_training"}}
         if len(role_rows)!=5 or {r.get("role") for r in role_rows}!=actual_roles:
             raise PermissionError("actual original five CUDA role receipt set differs")
         for row in role_rows:
+            frozen=frozen_stack.resolve(row["role"])
             evidence_role=artifact(row["inference_receipt_ref"])
-            if (row.get("device")!="cuda:0"
+            if (row.get("model_id")!=frozen.model_id
+                    or row.get("base_revision")!=frozen.revision
+                    or row.get("adapter_sha256")!=frozen.adapter.sha256
+                    or row.get("device")!="cuda:0"
                     or row.get("advisory_only") is not True
                     or evidence_role.get("status")!="accepted"
                     or evidence_role.get("execution",{}).get("device")!="cuda:0"
