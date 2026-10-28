@@ -7,8 +7,17 @@ import json
 import pytest
 from hephaestus.storage.verified import canonical_bytes
 
-from scripts.freeze_original_tier_a_cuda_archive import freeze
-from scripts.cold_verify_original_tier_a_cuda_archive import verify_original_cuda_archive
+import importlib.util
+ROOT=Path(__file__).resolve().parents[1]
+
+def _load_script(name):
+    spec=importlib.util.spec_from_file_location(name,ROOT/"scripts"/(name+".py"))
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+freeze=_load_script("freeze_original_tier_a_cuda_archive").freeze
+verify_original_cuda_archive=_load_script("cold_verify_original_tier_a_cuda_archive").verify_original_cuda_archive
 
 
 def test_cold_checker_refuses_empty_or_fabricated_45(tmp_path):
