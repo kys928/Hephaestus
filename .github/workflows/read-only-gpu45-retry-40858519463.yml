@@ -70,6 +70,17 @@ jobs:
                   for nearby in lines[max(0,i-9):min(len(lines),i+6)]:
                       if not any(secret in nearby.lower() for secret in ("token","secret","api_key","authorization","password")):
                           print("SAFE_PIP_FAILURE_CONTEXT="+nearby[-260:])
+          # Startup only: the worker exited before its first CUDA checkpoint.
+          # Emit only package/deployment lines, never model prompts or records.
+          for line in data.splitlines()[-35:]:
+              lower=line.lower().strip()
+              if any(secret in lower for secret in ("token","secret","api_key","authorization","password","dataset","prompt","input_ids")):
+                  continue
+              if any(word in lower for word in (
+                    "sha256sum","tar:","gzip:","warning:","requirement","collecting ","install",
+                    "download","wheel","cryptography","huggingface","accelerate","peft","torch",
+                    "command not found","cannot ","no such","error","pip","exit status")):
+                  print("SAFE_STARTUP_LOG="+line[:220])
           for line in data.splitlines()[-45:]:
               # This Pod has no API/S3 secrets. Still do not leak future
               # protected scientific text or authentication fields.
