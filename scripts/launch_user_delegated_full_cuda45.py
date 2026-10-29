@@ -30,7 +30,7 @@ TRAINABLE="sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b
 WORKFLOW="cuda-json-45-original-five-20261028"
 RUN="cuda-json-45-new-1117"
 PREFIX="hephaestus/scientific/original_cuda_45/"+WORKFLOW
-GPU="NVIDIA GeForce RTX 3090"
+GPU="NVIDIA GeForce RTX 4090"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 RESERVE_USD=Decimal("0.30")
 MAX_SECONDS=4*3600
@@ -203,8 +203,8 @@ def main():
     provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
     account=provider.account()
     quoted=provider.quote_gpu(gpu_id=GPU,datacenter_id=config.datacenter_id)
-    if quoted.gpu_memory_gb<24 or quoted.price_usd_per_hour>Decimal("0.50"):
-        raise PermissionError("original full-campaign GPU price increased above $0.50/h quote")
+    if quoted.gpu_memory_gb<24 or quoted.price_usd_per_hour>Decimal("0.89"):
+        raise PermissionError("original full-campaign GPU price increased above live RTX 4090 $0.89/h quote")
     seconds=decide_budget(account,quoted)
     s3=client_s3(config)
     original=require_source(s3,config.network_volume_id)
