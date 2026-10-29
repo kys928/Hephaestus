@@ -1,0 +1,88 @@
+name: Read-only monitor pinned real original CUDA45 retry Pod and worker errors
+on:
+  push:
+    branches: ['feature/verify-live-runpod-credentials-20261029']
+    paths: ['.github/workflows/read-only-gpu45-retry-40856181646.yml']
+permissions: {contents: read}
+jobs:
+  inspect-genuine-pod-and-persistent-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q boto3
+      - name: Provider actual Pod and mounted original science state
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request,boto3
+          key=os.environ["RUNPOD_API_KEY"]
+          url="https://api.runpod.io/v2/pods?limit=1000"
+          request=urllib.request.Request(url,headers={"Authorization":"Bearer "+key})
+          with urllib.request.urlopen(request,timeout=25) as response:
+              doc=json.load(response)
+          run="40856181646"
+          pods=[p for p in doc.get("pods",[]) if str(p.get("name","")).startswith(
+              "hephaestus-original-five-fullcuda45-"+run+"-")]
+          print("ACTUAL_CURRENT_FULL_CUDA45_GPU_POD_COUNT="+str(len(pods)))
+          for p in pods:
+              print("CONFIRMED_POD_ID="+str(p.get("id")))
+              print("CONFIRMED_POD_STATUS="+str(p.get("status")))
+              print("CONFIRMED_POD_GPU="+str((p.get("gpu") or {}).get("id")))
+          s3=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"],
+              aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+              region_name="eu-cz-1")
+          bucket=os.environ["RUNPOD_NETWORK_VOLUME_ID"]
+          prefix="hephaestus/scientific/original_cuda_45/"
+          statuskey=prefix+"worker_exit_status-"+run+".txt"
+          try:
+              status=s3.get_object(Bucket=bucket,Key=statuskey)["Body"].read(100).decode().strip()
+              print("WORKER_EXIT_STATUS="+status)
+          except Exception as e:
+              code=str(getattr(e,"response",{}).get("Error",{}).get("Code",""))
+              if code not in ("404","NoSuchKey","NotFound"):
+                  raise
+              print("WORKER_EXIT_STATUS=none_yet")
+          logkey=prefix+"worker_stdout-"+run+".log"
+          try:
+              data=s3.get_object(Bucket=bucket,Key=logkey)["Body"].read(1024*512).decode(errors="replace")
+          except Exception as e:
+              code=str(getattr(e,"response",{}).get("Error",{}).get("Code",""))
+              if code not in ("404","NoSuchKey","NotFound"):raise
+              data=""
+          print("PRIVATE_WORKER_LOG_PERSISTED="+str(bool(data)))
+          low=data.lower()
+          categories=["no module named","traceback","error","failed","cuda out of memory",
+                "permissionerror","modulenotfounderror","filenotfounderror","nameerror",
+                "training completed","full_native_cuda_45_finished","pip"]
+          print("WORKER_LOG_CATEGORIES="+",".join(x for x in categories if x in low))
+          lines=data.splitlines()
+          for i,line in enumerate(lines):
+              if "uninstall-no-record-file" in line.lower():
+                  for nearby in lines[max(0,i-9):min(len(lines),i+6)]:
+                      if not any(secret in nearby.lower() for secret in ("token","secret","api_key","authorization","password")):
+                          print("SAFE_PIP_FAILURE_CONTEXT="+nearby[-260:])
+          for line in data.splitlines()[-45:]:
+              # This Pod has no API/S3 secrets. Still do not leak future
+              # protected scientific text or authentication fields.
+              if any(secret in line.lower() for secret in ("token","secret","api_key","authorization","password")):
+                  continue
+              if any(marker in line.lower() for marker in ("error","traceback","failed","exception","not found","no such file")):
+                  print("SAFE_WORKER_ERROR_LINE="+line[-260:])
+          prefix_source=prefix+"cuda-json-45-original-five-20261028/cuda-target-checkpoints/"
+          try:
+              page=s3.list_objects_v2(Bucket=bucket,Prefix=prefix_source,MaxKeys=1000)
+              count=len({v["Key"].split("/step-")[1].split("/")[0] for v in page.get("Contents",[])
+                    if "/step-" in v.get("Key","")})
+          except Exception:
+              count=-1
+          print("ACTUAL_PERSISTED_CUDA_STEP_CHECKPOINT_COUNT="+str(count))
+          PY
