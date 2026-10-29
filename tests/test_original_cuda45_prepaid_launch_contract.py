@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from importlib.util import module_from_spec,spec_from_file_location
 import pytest
+pytest.importorskip("boto3", reason="RunPod budget controller requires optional s3 package")
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=spec_from_file_location("original_budget_controller",
