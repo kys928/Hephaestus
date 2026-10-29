@@ -29,7 +29,7 @@ jobs:
               spec=json.load(response)
           paths=spec.get("paths",{})
           matches=[(path,body["post"]) for path,body in paths.items()
-                   if path.rstrip("/") in ("/pods","/pod") and "post" in body]
+                   if path.rstrip("/").endswith("/pods") and "post" in body and "clusters" not in path]
           if len(matches)!=1:
               print("PROVIDER_V2_CREATE_PATH_CANDIDATES="+json.dumps(sorted([
                 path for path in paths if "pod" in path.lower()])[:20]))
