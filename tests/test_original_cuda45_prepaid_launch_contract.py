@@ -48,14 +48,18 @@ def test_not_enough_prepaid_or_autopay_enabled_refuses_original_paid_gpu(
 
 
 def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
-    cmd,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600)
+    cmd,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600,
+        "external-original-cuda-grant-1234.json",run_tag="1234",code_bundle_sha256="d"*64)
     assert cmd[:2]==["bash","-lc"]
     script=cmd[2]
     assert "run_original_tier_a_cuda_worker.py --resume" in script
     assert "configs/research/tier_a_original_cuda_45_v1.json" in script
     assert "freeze_original_tier_a_cuda_archive.py" in script
-    assert "worker_exit_status.txt" in script
-    assert "git rev-parse HEAD" in script
+    assert "worker_exit_status-1234.txt" in script
+    assert "worker_stdout-1234.log" in script
+    assert "git-"+"a"*40+".tar.gz" in script
+    assert "sha256sum" in script and "tar -xzf" in script
+    assert "git clone" not in script
     assert "cuda-original-role-cache" in script
     assert "RUNPOD_API_KEY" not in script+str(env)
     assert "RUNPOD_S3_SECRET_ACCESS_KEY" not in script+str(env)
@@ -65,10 +69,12 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
 def test_never_allow_untagged_or_unpinned_gpu_science_commit():
     for sha in ("main","a"*39,"g"*40):
         with pytest.raises(PermissionError):
-            controller.pod_command(sha,"b"*64,"sha256:"+"c"*64,3600)
+            controller.pod_command(sha,"b"*64,"sha256:"+"c"*64,3600,
+                "external-original-cuda-grant-1234.json",run_tag="1234",code_bundle_sha256="d"*64)
 
 
 def test_generated_pod_full_science_command_is_real_bash_syntax():
     import subprocess
-    command,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600)
+    command,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600,
+        "external-original-cuda-grant-1234.json",run_tag="1234",code_bundle_sha256="d"*64)
     subprocess.run(["bash","-n","-c",command[2]],check=True,timeout=5)
