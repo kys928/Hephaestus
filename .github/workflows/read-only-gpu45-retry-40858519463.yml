@@ -53,7 +53,7 @@ jobs:
               print("WORKER_EXIT_STATUS=none_yet")
           logkey=prefix+"worker_stdout-"+run+".log"
           try:
-              data=s3.get_object(Bucket=bucket,Key=logkey)["Body"].read(1024*512).decode(errors="replace")
+              data=s3.get_object(Bucket=bucket,Key=logkey,Range="bytes=-131072")["Body"].read().decode(errors="replace")
           except Exception as e:
               code=str(getattr(e,"response",{}).get("Error",{}).get("Code",""))
               if code not in ("404","NoSuchKey","NotFound"):raise
