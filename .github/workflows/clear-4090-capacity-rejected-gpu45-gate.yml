@@ -1,0 +1,43 @@
+name: Clear 4090 capacity-rejected no-Pod GPU45 gate only after live reconciliation
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths: ['.github/workflows/clear-4090-capacity-rejected-gpu45-gate.yml']
+permissions: {actions: write, contents: read}
+jobs:
+  reconcile-and-cancel-failed-no-pod-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Confirm earlier exact GPU failed at nonallocating capacity gate and no Pod exists
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'}
+          base='https://api.github.com/repos/kys928/Hephaestus/actions/runs/40853706424'
+          def github(url):
+            return json.load(urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=20))
+          run=github(base)
+          jobs=github(base+'/jobs?per_page=100')['jobs']
+          core=[job for job in jobs if job.get('name')=='full-45-genuine-science']
+          if len(core)!=1 or core[0].get('conclusion')!='failure':
+            raise SystemExit('OLD_CUDA_4090_WORKER_NOT_DEFINITELY_FAILED')
+          pods=json.load(urllib.request.urlopen(urllib.request.Request(
+              'https://api.runpod.io/v2/pods?limit=1000',
+              headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY']}),timeout=20))
+          mine=[p for p in pods.get('pods',[]) if str(p.get('name','')).startswith('hephaestus-original-five-fullcuda45-40853706424-')]
+          if mine:
+            raise SystemExit('CANNOT_CANCEL_WATCHDOG_ORIGINAL_GPU_POD_MAY_EXIST')
+          if run.get('status')!='in_progress':
+            print('PRIOR_GPU_WORKFLOW_ALREADY_SETTLED_NO_POD');raise SystemExit(0)
+          request=urllib.request.Request(base+'/cancel',method='POST',headers=headers)
+          with urllib.request.urlopen(request,timeout=20) as response:
+            if response.status!=202:
+              raise SystemExit('GITHUB_CANCEL_NOT_ACKNOWLEDGED')
+          print('ORIGINAL_4090_CAPACITY_REJECTED_OLD_WATCHDOG_STOP_REQUESTED=true')
+          print('VERIFIED_ORIGINAL_GPU_PODS_FOR_OLD_RUN=0')
+          PY
