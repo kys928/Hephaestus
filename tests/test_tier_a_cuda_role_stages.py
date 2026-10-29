@@ -23,8 +23,8 @@ class DomainDelegate:
 
 class TestOnlyReasoner:
     """Test doubles cannot pass real composition; only exercise receipt guards."""
-    def __init__(self,store,*,cuda=True,role="diagnosis"):
-        self.store=store;self.cuda=cuda;self.role=role
+    def __init__(self,store,*,cuda=True,role="diagnosis",gate=None):
+        self.store=store;self.cuda=cuda;self.role=role;self.gate=gate
         self.calls=[]
     def propose(self,task,registry,*,context):
         self.calls.append((task,registry,context))
@@ -38,7 +38,7 @@ class TestOnlyReasoner:
         return SimpleNamespace(
             role=self.role,model_id="original-certified-model",
             revision="a"*40,adapter_sha256="b"*64,
-            inference_receipt_ref=ref,action_gate=None)
+            inference_receipt_ref=ref,action_gate=self.gate)
 
 
 def req(substep="evidence_based_diagnosis"):
@@ -128,4 +128,61 @@ def test_old_tier_a_autoapproval_cannot_be_used_as_gpu_spending_permission(tmp_p
     service.resource_approval_service=Denied()
     with pytest.raises(PermissionError,match="resource grant"):
         service.execute(req())
+    assert not reasoner.calls
+
+
+def test_control_role_veto_does_not_execute_action_or_discard_verified_advice(tmp_path):
+    """Mocked inference proves policy separation, NOT any real CUDA success."""
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    veto=SimpleNamespace(allowed=False,
+        failures=("required_verified_fact_not_true:approval_valid",))
+    reasoner=TestOnlyReasoner(store,role="controller",gate=veto)
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,resource_approval_service=TestOnlyGpuGrant(store,"controller"))
+    request=StagedOperationRequest("workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    result=service.execute(request)
+    assert result.status=="completed"
+    proposal=result.records[-1].payload
+    assert proposal["role"]=="controller"
+    assert proposal["deterministic_action_allowed"] is False
+    assert proposal["effective_action"] is None
+    assert proposal["deterministic_action_gate_failures"]==list(veto.failures)
+    assert proposal["promotion_authorized"] is False
+    assert proposal["advisory_only"] is True
+    assert proposal["inference_receipt_ref"] in result.output_refs
+    assert result.metadata["original_cuda_effective_action"] is None
+    assert len(reasoner.calls)==1
+
+
+def test_control_role_missing_deterministic_gate_fails_closed(tmp_path):
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    reasoner=TestOnlyReasoner(store,role="controller")
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,resource_approval_service=TestOnlyGpuGrant(store,"controller"))
+    request=StagedOperationRequest("workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    with pytest.raises(PermissionError,match="lacks deterministic action gate"):
+        service.execute(request)
+
+
+def test_control_role_denied_resource_grant_is_still_fatal(tmp_path):
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    veto=SimpleNamespace(allowed=False,failures=("approval_missing",))
+    reasoner=TestOnlyReasoner(store,role="controller",gate=veto)
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,resource_approval_service=None)
+    request=StagedOperationRequest("workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    with pytest.raises(PermissionError,match="resource approval"):
+        service.execute(request)
     assert not reasoner.calls
