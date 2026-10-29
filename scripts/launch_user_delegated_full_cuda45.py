@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """User-delegated full original 45/45 GPU science, governed OFF the Pod.
 
-The user explicitly authorized the presently available prepaid RunPod balance
-for this exact original research run (2026-10-29). This GitHub Actions operator
+The r3 recovery is ONLY PREPARED. A new user approval of this r3 paid
+run is REQUIRED before invoking main(). This GitHub Actions operator
 is separate from the target/role models; its ephemeral Ed25519 compute-grant
 signature is **not** an independent human scientific attestation. No auto-pay,
 new debt, role substitution, or historical certification is authorized.
@@ -25,10 +25,10 @@ from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.storage.verified import canonical_bytes
 
-SOURCE_POLICY="sha256:7cfb289cb768337ff3d18cfb579b4d9bcd2bd7ebee08271c11c8ff6f164da157"
+SOURCE_POLICY="sha256:1573ff0ba8873696570488b87159d2c907b12639db57a71f16b695adbbd30a9e"
 TRAINABLE="sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b73"
-WORKFLOW="cuda-json-45-original-five-20261029-r2"
-RUN="cuda-json-45-new-1117-r2"
+WORKFLOW="cuda-json-45-original-five-20261029-r3"
+RUN="cuda-json-45-new-1117-r3"
 PREFIX="hephaestus/scientific/original_cuda_45/"+WORKFLOW
 GPU="NVIDIA GeForce RTX 4090"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
@@ -248,7 +248,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         "snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=\"/tmp/cuda-target-cache\")'; "
         "python -u scripts/run_original_tier_a_cuda_worker.py --resume "
         f"--workspace '{root}' "
-        "--config configs/research/tier_a_original_cuda_45_fresh_20261029.json "
+        "--config configs/research/tier_a_original_cuda_45_fresh_20261029_r3.json "
         "--target-model-cache /tmp/cuda-target-cache "
         "--original-role-model-cache /tmp/cuda-original-role-cache "
         "--original-adapter-cache /tmp/cuda-verified-adapters "
@@ -322,6 +322,11 @@ def main():
     args=p.parse_args()
     if not args.run_tag.isdecimal():
         raise PermissionError("native GPU launch must come from a real GitHub Actions run ID")
+    # r2 and its prior predecessor were terminal; their paid permissions are
+    # not transferable to this newly admitted r3 scope. Read-only preflight
+    # never invokes main(), so it cannot generate an approval or spend.
+    if os.environ.get("ORIGINAL_CUDA45_R3_OPERATOR_APPROVAL")!="approved_after_review":
+        raise PermissionError("fresh r3 paid CUDA campaign requires explicit new operator approval")
     config=RunPodConfig.from_env()
     if config.datacenter_id!="EU-CZ-1" or config.network_volume_id!="cviwpryzao":
         raise PermissionError("original certified EU-CZ-1 Hephaestus volume changed")
