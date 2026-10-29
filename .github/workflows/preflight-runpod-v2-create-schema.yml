@@ -54,11 +54,10 @@ jobs:
              "disk":90,"mounts":{"network":[{"volumeId":"cviwpryzao","path":"/workspace"}]},
              "entrypoint":[],"cmd":["bash","-lc","echo original"],
              "env":{"RUNPOD_NETWORK_VOLUME_ID":"cviwpryzao"}}
-          validator=Draft202012Validator(schema,resolver=RefResolver.from_schema(spec))
-          errors=list(validator.iter_errors(sample))
-          for err in errors[:16]:
-              print("ORIGINAL_NESTED_POD_FIELD_MISMATCH_PATH="+str(list(err.path)))
-              print("ORIGINAL_NESTED_POD_VALIDATION_REASON="+err.validator)
-          print("ORIGINAL_NESTED_POD_OPENAPI_VALID="+str(not errors).lower())
+          print("RUNPOD_LIVE_CREATE_SCHEMA_ROOT="+json.dumps(schema,sort_keys=True)[:3500])
+          print("RUNPOD_LIVE_CREATE_SCHEMA_RESOLVED_ROOT="+json.dumps(resolved,sort_keys=True)[:8000])
+          for part in resolved.get("allOf",[]):
+              print("RUNPOD_CREATE_SUBSCHEMA="+json.dumps(part,sort_keys=True)[:4000])
+          print("RUNPOD_SAMPLE_PAYLOAD_FIELD_NAMES="+json.dumps(sorted(sample)))
           print("PAID_GPU_PODS_CREATED=0")
           PY
