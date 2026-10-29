@@ -72,7 +72,7 @@ def require_source(s3, bucket):
     return doc
 
 
-def grant(s3,bucket,source_doc,max_seconds):
+def grant(s3,bucket,source_doc,max_seconds,run_tag):
     private=Ed25519PrivateKey.generate()
     public=private.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw)
     auth={**source_doc,
@@ -83,7 +83,10 @@ def grant(s3,bucket,source_doc,max_seconds):
           "maximum_gpu_seconds":max_seconds}
     body=canonical_bytes({
         "authorization":auth,"signature_hex":private.sign(canonical_bytes(auth)).hex()})
-    key=PREFIX+"/external-original-cuda-grant.json"
+    if not run_tag.isdecimal():
+        raise PermissionError("external grant requires exact GitHub run ID")
+    grant_name="external-original-cuda-grant-"+run_tag+".json"
+    key=PREFIX+"/"+grant_name
     try:
         s3.head_object(Bucket=bucket,Key=key)
     except Exception as exc:
@@ -96,10 +99,10 @@ def grant(s3,bucket,source_doc,max_seconds):
         raise PermissionError("a previous GPU spending grant exists: reconcile run first")
     if s3.get_object(Bucket=bucket,Key=key)["Body"].read()!=body:
         raise PermissionError("original offpod grant was not persisted byte-identically")
-    return public.hex(),"sha256:"+sha256(public).hexdigest()
+    return public.hex(),"sha256:"+sha256(public).hexdigest(),grant_name
 
 
-def pod_command(commit_sha,grant_public,grant_sha,max_seconds):
+def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename="external-original-cuda-grant.json"):
     if (not isinstance(commit_sha,str) or len(commit_sha)!=40
         or any(ch not in "0123456789abcdef" for ch in commit_sha)):
         raise PermissionError("GitHub original scientific code must be pinned by immutable SHA")
@@ -126,7 +129,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds):
         "--target-model-cache /tmp/cuda-target-cache "
         "--original-role-model-cache /tmp/cuda-original-role-cache "
         "--original-adapter-cache /tmp/cuda-verified-adapters "
-        "--signed-approval-file "+root+"/external-original-cuda-grant.json "
+        "--signed-approval-file "+root+"/"+grant_filename+" "
         "--maximum-gpu-seconds "+str(max_seconds)+"; "
         "python scripts/freeze_original_tier_a_cuda_archive.py "
         "--workspace "+root+" "
@@ -209,10 +212,42 @@ def main():
     print("ORIGINAL_FULL_CUDA45_GPU_RENTAL_CEILING_SECONDS="+str(seconds))
     print("RUNPOD_ACCOUNT_FINANCIAL_AMOUNTS_REDACTED=true")
     print("ORIGINAL_GPU_ROLE_SOURCE_HASH_VERIFIED=true")
-    grant_public,grant_sha=grant(s3,config.network_volume_id,original,seconds)
-    command,env=pod_command(args.commit_sha,grant_public,grant_sha,seconds)
+    grant_public,grant_sha,grant_name=grant(s3,config.network_volume_id,original,seconds,args.run_tag)
+    command,env=pod_command(args.commit_sha,grant_public,grant_sha,seconds,grant_name)
+    from hephaestus.providers.runpod.execution import UrllibRunPodTransport,RunPodApiError
+    class DiagnosticTransport(UrllibRunPodTransport):
+        def request(self,method,url,*,headers,json_body=None):
+            try:
+                return super().request(method,url,headers=headers,json_body=json_body)
+            except RunPodApiError as error:
+                if method=="POST" and error.status_code in (400,422):
+                    # Provider response may include account identifiers; classify
+                    # error category only. Never print raw response or headers.
+                    import json
+                    try:
+                        data=json.loads(error.__cause__.read())
+                        detail=data.get("detail",data.get("error",""))
+                        if isinstance(detail,list):
+                            fields=[str(part) for e in detail[:6]
+                                    for part in e.get("loc",[]) if isinstance(part,(str,int))]
+                            category="validation_fields_"+",".join(fields)[:100]
+                        else:
+                            msg=str(detail).lower()
+                            category=next((name for name,tokens in {
+                                "insufficient_credit":("balance","credit","fund"),
+                                "unavailable_capacity":("unavailable","no longer any instances","capacity"),
+                                "container_disk":("disk","storage"),
+                                "network_mount":("volume","mount"),
+                                "gpu_type":("gpu type","gpu id"),
+                                "container_image":("image","container"),
+                            }.items() if any(k in msg for k in tokens)), "provider_validation_unknown")
+                        print("RUNPOD_POD_REJECTED_VALIDATION_CATEGORY="+category,flush=True)
+                    except Exception:
+                        print("RUNPOD_POD_REJECTED_VALIDATION_CATEGORY=unparseable",flush=True)
+                raise
     adapter=RunPodExecutionAdapter(
         config=config,secrets=EnvironmentSecretsProvider(),
+        transport=DiagnosticTransport(),
         state_root=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"hephaestus-original-gpu-controller")
     pod=None
     try:
