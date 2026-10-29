@@ -260,6 +260,7 @@ class PinnedTransformersRoleGenerator:
 
     hf_cache_dir: Path
     device: str = "cuda:0"
+    allow_remote_pinned_download: bool = False
     _loaded_identity: tuple[str, str, str, str, str] | None = field(default=None, init=False)
     _model: Any = field(default=None, init=False, repr=False)
     _tokenizer: Any = field(default=None, init=False, repr=False)
@@ -293,8 +294,17 @@ class PinnedTransformersRoleGenerator:
             raise RuntimeError("certified role worker must run with exactly one visible CUDA GPU")
         snapshot = snapshot_download(
             repo_id=spec.model_id, revision=spec.revision,
-            cache_dir=str(self.hf_cache_dir), local_files_only=True,
+            cache_dir=str(self.hf_cache_dir),
+            local_files_only=not self.allow_remote_pinned_download,
+            # A pinned revision preserves the exact certified base-model
+            # identity; skip redundant alternate weight packaging, not weights
+            # needed by Transformers/PEFT.
+            ignore_patterns=["consolidated.safetensors", "*.gguf", "*.pth"],
         )
+        if not (isinstance(spec.revision, str) and len(spec.revision) == 40
+                and all(ch in "0123456789abcdef" for ch in spec.revision)):
+            raise PermissionError("original CUDA base snapshot revision must be a full immutable commit")
+
         try:
             if profile["load_kind"] == "mistral3":
                 from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
