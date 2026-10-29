@@ -115,6 +115,50 @@ jobs:
           print("R2_NATIVE_GPU_OPTIMIZER_RECEIPTS="+str(sum(k=="cuda_target_optimizer_steps" for k,_ in rows)))
           print("R2_WORKFLOW_FAILURE_TYPES="+",".join(sorted(set(re.findall(
               r"(?:subsystem_exception|exception):([A-Za-z]+Error)",str(state.get("blocking_issues",[]))))))[:180])
+          # Search the original content-addressed S3 role receipts, without
+          # exposing a prompt, model generation, or sensitive source data.
+          from hashlib import sha256
+          found=0
+          for page in s3.get_paginator("list_objects_v2").paginate(
+              Bucket=bucket,Prefix=prefix+"artifacts/objects/sha256/"):
+              for item in page.get("Contents",[]):
+                  key=item["Key"]
+                  if not re.fullmatch(r"[0-9a-f]{64}",key.rsplit("/",1)[-1]):
+                      continue
+                  if item["Size"]>2000000:continue
+                  raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+                  if sha256(raw).hexdigest()!=key.rsplit("/",1)[-1]:
+                      raise PermissionError("content-addressed r2 receipt drift")
+                  try:rec=json.loads(raw)
+                  except (TypeError,ValueError):continue
+                  if not isinstance(rec,dict) or rec.get("schema")!="role-inference.v1":
+                      continue
+                  if rec.get("role") not in {"controller","diagnosis","planner","evaluator","judge"}:
+                      continue
+                  found+=1
+                  print("R2_ROLE_INFERENCE_RECEIPT="+str(rec["role"]))
+                  print("R2_ROLE_INFERENCE_STATUS="+str(rec.get("status","unclassified"))[:30])
+                  print("R2_ROLE_INFERENCE_FINISH_REASON="+str(rec.get("finish_reason","unknown"))[:25])
+                  allowed_errors={
+                    "model did not return one complete JSON object",
+                    "role response must have exactly the frozen seven keys",
+                    "role response has invalid decision",
+                    "role response has invalid action",
+                    "role response has invalid primary_variable",
+                    "role response confidence is invalid",
+                    "role response cites missing, duplicate or empty evidence",
+                    "role response uncertainties are malformed",
+                    "role response rationale is malformed",
+                  }
+                  message=str(rec.get("error",""))
+                  print("R2_ROLE_INFERENCE_REJECTION_REASON="+(
+                      message if message in allowed_errors else "unknown_or_not_rejected"))
+                  execution=rec.get("execution",{})
+                  print("R2_ROLE_INFERENCE_DEVICE="+str(execution.get("device","unknown"))[:25])
+                  generated=execution.get("generated_token_ids",[])
+                  if isinstance(generated,list):
+                      print("R2_ROLE_INFERENCE_OUTPUT_TOKENS="+str(len(generated)))
+          print("R2_ROLE_INFERENCE_RECEIPT_COUNT="+str(found))
           print("SOURCE_MODEL_TEXT_EXPOSED=false")
           print("GPU_PODS_CREATED_BY_INSPECTOR=0")
           PY
