@@ -53,7 +53,11 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert cmd[:2]==["bash","-lc"]
     script=cmd[2]
     assert "run_original_tier_a_cuda_worker.py --resume" in script
-    assert "configs/research/tier_a_original_cuda_45_v1.json" in script
+    assert "configs/research/tier_a_original_cuda_45_fresh_20261029.json" in script
+    assert "cuda-json-45-original-five-20261029-r2" in script
+    assert "cuda-json-45-original-five-20261028" not in script
+    assert "original_frozen_45_archive.zip" in script
+    assert controller.WORKFLOW=="cuda-json-45-original-five-20261029-r2"
     assert "freeze_original_tier_a_cuda_archive.py" in script
     assert "worker_exit_status-1234.txt" in script
     assert "worker_stdout-1234.log" in script
@@ -133,3 +137,50 @@ def test_paid_gpu_preflight_fails_closed_on_edited_identity(tmp_path):
         "status":"interrupted","resumable":True,"completion_marker":False})
     with pytest.raises(PermissionError,match="identity"):
         controller.refuse_terminal_native_state(s3,"original-volume")
+
+
+def test_fresh_prepaid_controller_rejects_reused_historical_state(tmp_path):
+    """Old terminal SQLite can never be treated as new r2 science."""
+    original=_fake_native_state_bucket(tmp_path,{
+        "workflow_id":"cuda-json-45-original-five-20261028",
+        "run_id":"cuda-json-45-new-1117",
+        "status":"terminal_failure","resumable":False,"completion_marker":False})
+    with pytest.raises(PermissionError,match="identity mismatched"):
+        controller.refuse_terminal_native_state(original,"cviwpryzao")
+
+
+def test_fresh_source_admission_must_match_exact_new_signed_scope():
+    import io,json
+    from hephaestus.production.signed_cuda_grants import expected_gpu_operation_map
+    req={"schema":"tier-a-original-cuda-compute-authorization.v1",
+         "status":"requested",
+         "workflow_id":controller.WORKFLOW,"run_id":controller.RUN,
+         "source_policy_ref":controller.SOURCE_POLICY,
+         "reviewed_trainable_ref":controller.TRAINABLE,
+         "operations":expected_gpu_operation_map(controller.WORKFLOW)}
+    seal={"schema":"fresh-original-cuda45-prepared.v1",
+          "workflow_id":controller.WORKFLOW,"run_id":controller.RUN,
+          "source_policy_ref":controller.SOURCE_POLICY,
+          "reviewed_trainable_ref":controller.TRAINABLE,
+          "native_operations_completed":0,"gpu_optimizer_steps_completed":0,
+          "operator_signature_present":False,
+          "original_terminal_state_retained":True,
+          "source_files_sha256":{"artifacts/objects/sha256/"+
+              str(k).zfill(64):"a"*64 for k in range(21)}}
+    class FakeS3:
+        def get_object(self,*,Bucket,Key):
+            if Key.endswith("cuda-grant-unsigned-request.json"):
+                return {"Body":io.BytesIO(json.dumps(req).encode())}
+            if Key.endswith("_fresh_admission_manifest.json"):
+                return {"Body":io.BytesIO(json.dumps(seal).encode())}
+            raise AssertionError("unexpected read")
+        def head_object(self,**kwargs):
+            raise AssertionError("invalid admission reached state checks")
+    s3=FakeS3()
+    req["workflow_id"]="cuda-json-45-original-five-20261028"
+    with pytest.raises(PermissionError,match="source scope"):
+        controller.require_source(s3,"cviwpryzao")
+    req["workflow_id"]=controller.WORKFLOW
+    seal["operator_signature_present"]=True
+    with pytest.raises(PermissionError,match="admission seal"):
+        controller.require_source(s3,"cviwpryzao")
