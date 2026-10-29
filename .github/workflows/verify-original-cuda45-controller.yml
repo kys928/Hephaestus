@@ -8,6 +8,12 @@ on:
       - 'src/hephaestus/llm/certified_runtime.py'
       - 'src/hephaestus/production/tier_a_cuda_research.py'
       - '.github/workflows/verify-original-cuda45-controller.yml'
+  pull_request:
+    paths:
+      - 'scripts/launch_user_delegated_full_cuda45.py'
+      - 'tests/test_original_cuda45_prepaid_launch_contract.py'
+      - 'src/hephaestus/production/tier_a_cuda_role_stages.py'
+      - '.github/workflows/verify-original-cuda45-controller.yml'
 permissions:
   contents: read
 jobs:
