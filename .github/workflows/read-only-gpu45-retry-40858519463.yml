@@ -59,6 +59,21 @@ jobs:
               if code not in ("404","NoSuchKey","NotFound"):raise
               data=""
           print("PRIVATE_WORKER_LOG_PERSISTED="+str(bool(data)))
+          if data:
+              from collections import Counter
+              import re
+              print("WORKER_LOG_BYTES_READ="+str(len(data.encode())))
+              print("WORKER_LOG_LINE_COUNT="+str(len(data.splitlines())))
+              print("WORKER_LOG_RECENT_LINE_LENGTHS="+str([len(x) for x in data.splitlines()[-8:]]))
+              for item in data.splitlines()[-18:]:
+                  # Startup had 0 scientific receipts; limit logs to package
+                  # transport and installation issues, no underlying private text.
+                  lower=item.lower()
+                  if any(bad in lower for bad in ("token","secret","api_key","password","prompt","dataset","authorization","bearer","input_ids","http")):
+                      continue
+                  item=re.sub(r"[A-Fa-f0-9]{40,}", "[redacted-digest]", item)
+                  if item.strip():
+                      print("SAFE_WORKER_LOG_TAIL="+item[-180:])
           low=data.lower()
           categories=["no module named","traceback","error","failed","cuda out of memory",
                 "permissionerror","modulenotfounderror","filenotfounderror","nameerror",
