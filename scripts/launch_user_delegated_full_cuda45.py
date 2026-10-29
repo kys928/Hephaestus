@@ -160,6 +160,9 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         f"test \"$(sha256sum '{bundle}' | cut -d' ' -f1)\" = '{code_bundle_sha256}'; "
         f"tar -xzf '{bundle}' -C '{base}'; "
         f"cd '{base}'; test -f pyproject.toml; "
+        # RunPod image ships Debian cryptography 41 without pip RECORD. Stage a
+        # compatible wheel without attempting to uninstall the OS package.
+        "python -m pip install -q --ignore-installed 'cryptography>=44,<47'; "
         "python -m pip install -q -e '.[peft-training,role-inference,independent-certification]'; "
         "python -c 'from huggingface_hub import snapshot_download; "
         "from hephaestus.llm.cpu_causal_research import MODEL_ID, MODEL_REVISION; "
