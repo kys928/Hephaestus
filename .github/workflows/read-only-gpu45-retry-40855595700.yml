@@ -64,6 +64,13 @@ jobs:
                 "permissionerror","modulenotfounderror","filenotfounderror","nameerror",
                 "training completed","full_native_cuda_45_finished","pip"]
           print("WORKER_LOG_CATEGORIES="+",".join(x for x in categories if x in low))
+          for line in data.splitlines()[-45:]:
+              # This Pod has no API/S3 secrets. Still do not leak future
+              # protected scientific text or authentication fields.
+              if any(secret in line.lower() for secret in ("token","secret","api_key","authorization","password")):
+                  continue
+              if any(marker in line.lower() for marker in ("error","traceback","failed","exception","not found","no such file")):
+                  print("SAFE_WORKER_ERROR_LINE="+line[-260:])
           prefix_source=prefix+"cuda-json-45-original-five-20261028/cuda-target-checkpoints/"
           try:
               page=s3.list_objects_v2(Bucket=bucket,Prefix=prefix_source,MaxKeys=1000)
