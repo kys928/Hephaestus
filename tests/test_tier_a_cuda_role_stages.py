@@ -129,3 +129,86 @@ def test_old_tier_a_autoapproval_cannot_be_used_as_gpu_spending_permission(tmp_p
     with pytest.raises(PermissionError,match="resource grant"):
         service.execute(req())
     assert not reasoner.calls
+
+
+def test_historical_controller_checkpoint_action_veto_remains_nonexecuting_advice(tmp_path):
+    """Reproduce the exact three failed facts from original preserved inference.
+
+    The genuine CUDA grant, inference and stage outcome are NOT simulated here:
+    test doubles exercise boundary routing only; GPU science remains unproven.
+    """
+    from hephaestus.control.deterministic_role_boundary import guard_role_output
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    gate_holder=[]
+
+    class HistoricalActionReasoner(TestOnlyReasoner):
+        def propose(self,task,registry,*,context):
+            observed=super().propose(task,registry,context=context)
+            gate=guard_role_output(role="controller",
+                output={"action":"continue_from_checkpoint",
+                    "evidence_refs":[x.ref for x in task.evidence]},
+                context=context,evidence_registry=registry)
+            gate_holder.append(gate)
+            observed.action_gate=gate
+            return observed
+
+    reasoner=HistoricalActionReasoner(store,role="controller")
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,
+        resource_approval_service=TestOnlyGpuGrant(store,"controller"))
+    request=StagedOperationRequest(
+        "workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    result=service.execute(request)
+    gate=gate_holder[0]
+    assert gate.allowed is False
+    assert set(gate.failures)=={
+        "required_verified_fact_not_true:candidate_checkpoint_integrity_valid",
+        "required_verified_fact_not_true:candidate_checkpoint_lineage_match",
+        "required_verified_fact_not_true:provenance_valid",
+    }
+    assert result.status=="completed"
+    proposal=result.records[-1].payload
+    assert proposal["advisory_only"] is True
+    assert proposal["deterministic_action_allowed"] is False
+    assert set(proposal["deterministic_action_gate_failures"])==set(gate.failures)
+    assert proposal["effective_action"] is None
+    assert proposal["promotion_authorized"] is False
+    assert result.metadata["original_cuda_effective_action"] is None
+    assert len(reasoner.calls)==1
+
+
+def test_controller_missing_deterministic_gate_still_denied(tmp_path):
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    reasoner=TestOnlyReasoner(store,role="controller")
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,
+        resource_approval_service=TestOnlyGpuGrant(store,"controller"))
+    request=StagedOperationRequest(
+        "workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    with pytest.raises(PermissionError,match="requires deterministic action gate"):
+        service.execute(request)
+
+
+def test_controller_action_veto_never_overrides_denied_resource_authority(tmp_path):
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    reasoner=TestOnlyReasoner(store,role="controller")
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,
+        resource_approval_service=None)
+    request=StagedOperationRequest(
+        "workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    with pytest.raises(PermissionError,match="resource approval provider missing"):
+        service.execute(request)
+    assert not reasoner.calls

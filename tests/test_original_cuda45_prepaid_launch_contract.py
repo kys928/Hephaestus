@@ -82,3 +82,54 @@ def test_generated_pod_full_science_command_is_real_bash_syntax():
     command,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600,
         "external-original-cuda-grant-1234.json",run_tag="1234",code_bundle_sha256="d"*64)
     subprocess.run(["bash","-n","-c",command[2]],check=True,timeout=5)
+
+
+def _fake_native_state_bucket(tmp_path, state):
+    """Test-only S3 readback of actual SQLite bytes, never provider IO."""
+    import io,json,sqlite3
+    db=tmp_path/"state.sqlite"
+    db.unlink(missing_ok=True)
+    with sqlite3.connect(db) as con:
+        con.execute("CREATE TABLE state_records (sequence INTEGER PRIMARY KEY,"
+                    "collection TEXT NOT NULL,payload_json TEXT NOT NULL)")
+        if state is not None:
+            con.execute("INSERT INTO state_records (collection,payload_json)"
+                        " VALUES (?,?)",("staged_workflow_states",json.dumps(state)))
+    class Missing(Exception):
+        response={"Error":{"Code":"404"}}
+    class S3:
+        def __init__(self):
+            self.reads=[]
+        def get_object(self,*,Bucket,Key):
+            self.reads.append((Bucket,Key))
+            if Key==controller.PREFIX+"/state.sqlite":
+                return {"Body":io.BytesIO(db.read_bytes())}
+            raise Missing()
+    return S3()
+
+
+def test_paid_gpu_preflight_blocks_existing_terminal_first_stage(tmp_path):
+    s3=_fake_native_state_bucket(tmp_path,{
+        "workflow_id":controller.WORKFLOW,"run_id":controller.RUN,
+        "status":"terminal_failure","resumable":False,"completion_marker":False,
+        "current_phase":"judge_entry","current_substep":"judge_entry_decision"})
+    with pytest.raises(PermissionError,match="paid GPU retry forbidden"):
+        controller.refuse_terminal_native_state(s3,"original-volume")
+    assert s3.reads
+
+
+def test_paid_gpu_preflight_accepts_clean_or_resumable_native_state_only(tmp_path):
+    s3=_fake_native_state_bucket(tmp_path,None)
+    controller.refuse_terminal_native_state(s3,"original-volume")
+    s3=_fake_native_state_bucket(tmp_path,{
+        "workflow_id":controller.WORKFLOW,"run_id":controller.RUN,
+        "status":"interrupted","resumable":True,"completion_marker":False})
+    controller.refuse_terminal_native_state(s3,"original-volume")
+
+
+def test_paid_gpu_preflight_fails_closed_on_edited_identity(tmp_path):
+    s3=_fake_native_state_bucket(tmp_path,{
+        "workflow_id":"other","run_id":controller.RUN,
+        "status":"interrupted","resumable":True,"completion_marker":False})
+    with pytest.raises(PermissionError,match="identity"):
+        controller.refuse_terminal_native_state(s3,"original-volume")

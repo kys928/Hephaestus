@@ -87,11 +87,19 @@ class OriginalCudaResearchObservation:
         grant_ref = None
         if request.substep == self.substep:
             print("ORIGINAL_CUDA_ROLE_BOUNDARY=resource_grant_start role="+self.role,flush=True)
-            grant_ref = self._require_resource_grant(request)
+            try:
+                grant_ref = self._require_resource_grant(request)
+            except PermissionError:
+                print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=resource_grant role="+self.role,flush=True)
+                raise
             print("ORIGINAL_CUDA_ROLE_BOUNDARY=resource_grant_approved role="+self.role,flush=True)
         if request.substep == self.substep:
             print("ORIGINAL_CUDA_ROLE_BOUNDARY=domain_delegate_start role="+self.role,flush=True)
-        base = self.delegate.execute(request)
+        try:
+            base = self.delegate.execute(request)
+        except PermissionError:
+            print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=domain_delegate role="+self.role,flush=True)
+            raise
         if request.substep == self.substep:
             print("ORIGINAL_CUDA_ROLE_BOUNDARY=domain_delegate_returned role="+self.role+" status="+base.status,flush=True)
         if base.status != "completed" or request.substep != self.substep:
@@ -117,19 +125,30 @@ class OriginalCudaResearchObservation:
             sha256=source[7:], observed_sha256=source[7:],
         )})
         print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_start role="+self.role,flush=True)
-        observed = self.reasoner.propose(RoleTask(
-            role=self.role, situation=(
-                "Review the actual bounded original generated-task research "
-                "observation. You may advise but cannot approve resources, "
-                "promote a checkpoint, or certify historical experiments."),
-            evidence=(RoleEvidence(source, "original domain operation evidence"),),
-            run_id=request.run_id, lineage_id=request.lineage_id,
-            stage_name=request.stage_name,
-        ), registry, context=DeterministicRoleContext(
-            request.run_id, request.lineage_id, request.stage_name))
+        try:
+            observed = self.reasoner.propose(RoleTask(
+                role=self.role, situation=(
+                    "Review the actual bounded original generated-task research "
+                    "observation. You may advise but cannot approve resources, "
+                    "promote a checkpoint, or certify historical experiments."),
+                evidence=(RoleEvidence(source, "original domain operation evidence"),),
+                run_id=request.run_id, lineage_id=request.lineage_id,
+                stage_name=request.stage_name,
+            ), registry, context=DeterministicRoleContext(
+                request.run_id, request.lineage_id, request.stage_name))
+        except PermissionError:
+            print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=certified_inference role="+self.role,flush=True)
+            raise
         print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_returned role="+self.role,flush=True)
-        if observed.action_gate is not None and not observed.action_gate.allowed:
-            raise PermissionError("original CUDA controller/Judge deterministic action gate rejected output")
+        # Controller/Judge outputs are advice, never authority. A veto blocks
+        # the proposed action; it does not invalidate the real inference
+        # evidence or the independently completed domain observation.
+        gate = observed.action_gate
+        if self.role in {"controller","judge"} and gate is None:
+            raise PermissionError("original CUDA control role requires deterministic action gate")
+        action_allowed = gate is None or gate.allowed
+        if not action_allowed:
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=advisory_action_vetoed role="+self.role,flush=True)
         print("ORIGINAL_CUDA_ROLE_BOUNDARY=receipt_verification_start role="+self.role,flush=True)
         receipt = read_verified_json(self.context.artifacts, observed.inference_receipt_ref)
         if (receipt.get("status") != "accepted"
@@ -150,6 +169,9 @@ class OriginalCudaResearchObservation:
             "gpu_resource_approval_ref":grant_ref,
             "generator":"PinnedTransformersRoleGenerator",
             "device":"cuda:0", "advisory_only":True,
+            "deterministic_action_allowed":action_allowed,
+            "deterministic_action_gate_failures":list(gate.failures) if gate else [],
+            "effective_action":None,  # No model action is dispatched by this role.
             "cuda_training_executed":False, "promotion_authorized":False,
             "independent_certification":False,
         }
@@ -158,7 +180,9 @@ class OriginalCudaResearchObservation:
             output_refs=(*base.output_refs,observed.inference_receipt_ref),
             metadata={**base.metadata,"original_cuda_role":self.role,
                       "original_cuda_inference_ref":observed.inference_receipt_ref,
-                      "original_cuda_advisory_only":True})
+                      "original_cuda_advisory_only":True,
+                      "original_cuda_action_allowed":action_allowed,
+                      "original_cuda_effective_action":None})
 
 
 def prepare_native_tier_a_cuda_role_observations(

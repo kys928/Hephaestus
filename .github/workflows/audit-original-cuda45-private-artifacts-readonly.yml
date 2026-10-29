@@ -1,0 +1,160 @@
+name: Audit original CUDA45 first-stage artifact provenance (no GPU)
+on:
+  push:
+    branches: [fix/cuda45-first-role-advisory-veto-20261029]
+    paths:
+      - '.github/workflows/audit-original-cuda45-private-artifacts-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  classify-original-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[s3]'
+      - name: Classify original immutable artifact schemas and recorded first-stage evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import collections,hashlib,io,json,os,sqlite3,re,tempfile,pathlib
+          import boto3
+          assert os.environ["RUNPOD_NETWORK_VOLUME_ID"]=="cviwpryzao"
+          assert os.environ["RUNPOD_S3_ENDPOINT_URL"].startswith("https://s3api-eu-cz-1.runpod.io")
+          s3=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"],
+              aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+              region_name="eu-cz-1")
+          bucket="cviwpryzao"
+          p="hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261028/"
+          keys=[]
+          for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket,Prefix=p+"artifacts/objects/sha256/"):
+              keys.extend((o["Key"],o["Size"]) for o in page.get("Contents",[]))
+          print("ORIGINAL_ARTIFACT_COUNT="+str(len(keys)))
+          counts=collections.Counter()
+          role_counts=collections.Counter()
+          key_by_digest={}
+          role_inference=[]
+          for key,size in keys:
+              digest=key.rsplit("/",1)[-1]
+              if re.fullmatch("[0-9a-f]{64}",digest) and size<=2000000:
+                  key_by_digest[digest]=key
+                  raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+                  if hashlib.sha256(raw).hexdigest()!=digest:
+                      raise PermissionError("immutable original artifact SHA mismatch")
+                  try:
+                      doc=json.loads(raw)
+                  except (ValueError,UnicodeDecodeError):
+                      continue
+                  if isinstance(doc,dict):
+                      schema=doc.get("schema")
+                      if schema=="role-inference.v1" and doc.get("role")=="controller":
+                          role_inference.append(doc)
+                      if isinstance(schema,str):
+                          counts[schema]+=1
+                          if schema in {
+                              "role-inference.v1","original-cuda-resource-grant.v1",
+                              "cpu-causal-lm-proposal-smoke-no-certification.v1",
+                              "tier-a-gpu-role-domain-observation.v1"}:
+                              r=doc.get("role")
+                              if r in {"controller","diagnosis","planner","evaluator","judge"}:
+                                  role_counts[schema+":"+r]+=1
+          allow={"original-cuda-resource-grant.v1","role-inference.v1",
+            "tier-a-gpu-role-domain-observation.v1",
+            "cpu-causal-lm-proposal-smoke-no-certification.v1",
+            "cpu-role-observed-domain-source.v1",
+            "cpu-profiled-domain-operation.v1"}
+          for schema in sorted(allow):
+              print("ARTIFACT_SCHEMA_"+re.sub("[^A-Z0-9]","_",schema.upper())+"="+str(counts[schema]))
+          for k,v in sorted(role_counts.items()):
+              print("ROLE_SCHEMA_"+re.sub("[^A-Z0-9]","_",k.upper())+"="+str(v))
+          with tempfile.TemporaryDirectory() as td:
+              path=pathlib.Path(td)/"state.sqlite"
+              path.write_bytes(s3.get_object(Bucket=bucket,Key=p+"state.sqlite")["Body"].read())
+              for ext in ("-wal","-shm"):
+                  try: raw=s3.get_object(Bucket=bucket,Key=p+"state.sqlite"+ext)["Body"].read()
+                  except Exception as exc:
+                      if str(getattr(exc,"response",{}).get("Error",{}).get("Code")) not in ("404","NoSuchKey","NotFound"):
+                          raise
+                  else: (pathlib.Path(td)/("state.sqlite"+ext)).write_bytes(raw)
+              db=sqlite3.connect(path)
+              try:
+                  rows=db.execute("SELECT collection,payload_json FROM state_records ORDER BY sequence").fetchall()
+              finally:db.close()
+          for kind,raw in rows:
+              if kind=="cpu_research_domain_receipts":
+                  row=json.loads(raw)
+                  ref=row.get("result_ref","")
+                  digest=ref[7:] if re.fullmatch("sha256:[0-9a-f]{64}",ref) else None
+                  print("FIRST_STAGE_CPU_ROLE_RECEIPT_REF_PRESENT="+str(bool(digest)).lower())
+                  print("FIRST_STAGE_CPU_ROLE_RECEIPT_OBJECT_VERIFIED="+str(digest in key_by_digest).lower())
+                  print("FIRST_STAGE_CPU_ROLE_OPERATION_KEY_PREFIX="+str(str(row.get("operation_id","")).startswith("role-op-")).lower())
+          if len(role_inference)!=1:
+              print("FIRST_STAGE_ORIGINAL_CONTROLLER_RECEIPT_COUNT="+str(len(role_inference)))
+              raise PermissionError("expected exactly one original Controller inference receipt")
+          receipt=role_inference[0]
+          status=receipt.get("status")
+          print("FIRST_STAGE_CERTIFIED_CONTROLLER_INFERENCE_STATUS="+
+                (status if status in {"accepted","rejected"} else "unknown"))
+          if status=="accepted":
+              answer=receipt.get("answer",{})
+              refs=receipt.get("evidence_refs",[])
+              if not isinstance(answer,dict) or not isinstance(refs,list) or len(refs)!=1:
+                  raise PermissionError("original Controller inference contract malformed")
+              from hephaestus.control.deterministic_role_boundary import (
+                  EvidenceRecord,EvidenceRegistry,DeterministicRoleContext,guard_role_output)
+              from hephaestus.policy.action_registry import canonical_action_name
+              # Every evidence SHA must match its immutable source artifact bytes.
+              for ref in refs:
+                  if (not isinstance(ref,str) or
+                        not re.fullmatch("sha256:[0-9a-f]{64}",ref) or
+                        ref[7:] not in key_by_digest):
+                      raise PermissionError("original Controller cited unverifiable evidence")
+              if receipt.get("run_id")!="cuda-json-45-new-1117" or (
+                  receipt.get("lineage_id")!="cuda-original-five-tier-a-v1" or
+                  receipt.get("stage_name")!="targeted_repair"):
+                  raise PermissionError("original Controller receipt identity drift")
+              registry=EvidenceRegistry({ref:EvidenceRecord(ref,
+                  "original_tier_a_verified_domain_observation",
+                  receipt["run_id"],receipt["lineage_id"],
+                  sha256=ref[7:],observed_sha256=ref[7:]) for ref in refs})
+              gate=guard_role_output(role="controller",output=answer,
+                  context=DeterministicRoleContext(receipt["run_id"],
+                      receipt["lineage_id"],receipt["stage_name"]),
+                  evidence_registry=registry)
+              expected_actions={"noop","request_recheck","continue_from_checkpoint",
+                  "rollback_to_checkpoint","branch_new_experiment","restart_lineage",
+                  "abort_run","promote_checkpoint","reject_checkpoint"}
+              requested=canonical_action_name(str(answer.get("action","")))
+              print("FIRST_STAGE_CONTROLLER_ACTION="+
+                  (requested if requested in expected_actions else "unexpected"))
+              print("FIRST_STAGE_CONTROLLER_DETERMINISTIC_GATE_ALLOWED="+str(gate.allowed).lower())
+              known={
+                "missing_action","action_boundary:unknown_action",
+                "required_verified_fact_not_true:approval_valid",
+                "required_verified_fact_not_true:candidate_checkpoint_integrity_valid",
+                "required_verified_fact_not_true:candidate_checkpoint_lineage_match",
+                "required_verified_fact_not_true:provenance_valid",
+                "required_verified_fact_not_true:recheck_satisfied",
+                "required_verified_fact_not_true:stage_action_allowed",
+                "required_verified_fact_not_true:deterministic_gate_passed",
+                "required_verified_fact_not_true:evidence_complete",
+              }
+              for reason in gate.failures:
+                  label=reason if reason in known else (
+                      "action_boundary" if reason.startswith("action_boundary:") else
+                      "other")
+                  print("FIRST_STAGE_CONTROLLER_DENIAL_CLASS="+label)
+              if not gate.allowed:
+                  print("FIRST_STAGE_PERMISSION_CAUSE_RECONSTRUCTED=controller_deterministic_veto")
+          print("EXPOSED_SOURCE_OR_MODEL_TEXT=false")
+          print("GPU_ALLOCATED=false")
+          PY
