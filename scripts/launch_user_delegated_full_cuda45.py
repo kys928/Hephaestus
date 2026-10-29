@@ -242,6 +242,7 @@ def main():
                                 "container_image":("image","container"),
                             }.items() if any(k in msg for k in tokens)), "provider_validation_unknown")
                         print("RUNPOD_POD_REJECTED_VALIDATION_CATEGORY="+category,flush=True)
+                        error.capacity_unavailable = (error.status_code==400 and category=="unavailable_capacity")
                     except Exception:
                         print("RUNPOD_POD_REJECTED_VALIDATION_CATEGORY=unparseable",flush=True)
                 raise
@@ -251,11 +252,39 @@ def main():
         state_root=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"hephaestus-original-gpu-controller")
     pod=None
     try:
-        pod=adapter.create_bounded_gpu_pod(
-            name="hephaestus-original-five-fullcuda45-"+args.run_tag,
-            image_name=IMAGE,gpu_type_ids=[GPU],
-            docker_start_cmd=command,env=env,container_disk_in_gb=90,
-            operation_id="original-full-cuda45-"+args.run_tag)
+        from hephaestus.providers.runpod.execution import AmbiguousRunPodOperation
+        # The live GPU catalog can report LOW while a concrete single-Pod
+        # allocation is temporarily unavailable. Retry ONLY after a definite
+        # HTTP400 provider-capacity refusal and a complete no-Pod listing.
+        # Each retry has a unique durable operation ID; uncertain acceptance
+        # NEVER triggers another POST. The separate watchdog matches all
+        # these request names by the unchanged run-tag prefix.
+        for attempt in range(1,22):
+            latest=provider.account()
+            if latest.autopay_enabled or latest.credit_balance_usd<=RESERVE_USD:
+                raise PermissionError("live prepaid account cannot fund further GPU allocation attempts")
+            try:
+                pod=adapter.create_bounded_gpu_pod(
+                    name="hephaestus-original-five-fullcuda45-"+args.run_tag,
+                    image_name=IMAGE,gpu_type_ids=[GPU],
+                    docker_start_cmd=command,env=env,container_disk_in_gb=40,
+                    operation_id="original-full-cuda45-"+args.run_tag+"-retry-"+str(attempt))
+                break
+            except AmbiguousRunPodOperation as ambiguous:
+                cause=ambiguous.__cause__
+                if not getattr(cause,"capacity_unavailable",False):
+                    raise
+                owned=[x for x in adapter.list_pods()
+                       if str(x.get("name","")).startswith(
+                           "hephaestus-original-five-fullcuda45-"+args.run_tag+"-")]
+                if owned:
+                    raise PermissionError("possibly accepted original GPU Pod exists; retry forbidden")
+                print("ORIGINAL_CUDA45_NO_POD_CAPACITY_RETRY="+str(attempt),flush=True)
+                if attempt>=21:
+                    raise RuntimeError("original RTX4090 unavailable after bounded capacity retries") from ambiguous
+                time.sleep(90)
+        if pod is None:
+            raise RuntimeError("no original CUDA Pod allocation was confirmed")
         print("ORIGINAL_FULL_CUDA45_POD_CREATED=true",flush=True)
         print("ORIGINAL_GPU_POD_ID="+str(pod["id"]),flush=True)
         done=monitor(s3,config.network_volume_id,adapter,pod,
