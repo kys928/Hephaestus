@@ -1,0 +1,35 @@
+name: Provider-aware RunPod budget and detached-worker governance (CPU only)
+on:
+  push:
+    branches:
+      - feature/provider-aware-budget-lease-supervisor-20261029
+  pull_request:
+    paths:
+      - 'src/hephaestus/providers/runpod/cost_intelligence.py'
+      - 'src/hephaestus/production/cloud_budget.py'
+      - 'scripts/quote_original_cuda_runpod_cost.py'
+      - 'scripts/launch_original_cuda_detached.sh'
+      - 'tests/test_provider_aware_cloud_budget.py'
+      - '.github/workflows/provider-aware-budget-contracts.yml'
+permissions:
+  contents: read
+jobs:
+  deterministic-pricing-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test]'
+      - name: Test authenticated RunPod quote, immutable prepaid envelope, 15minute pause and no auto-top-up
+        run: |
+          python -m pytest -q tests/test_provider_aware_cloud_budget.py
+      - name: Validate shell job detach syntax and scripts without any real GPU allocation
+        run: |
+          bash -n scripts/launch_original_cuda_detached.sh
+          python -m py_compile scripts/quote_original_cuda_runpod_cost.py \
+            src/hephaestus/providers/runpod/cost_intelligence.py \
+            src/hephaestus/production/cloud_budget.py
+      - run: echo "No RunPod account queried, no actual GPU allocated; contract tests only."
