@@ -65,6 +65,7 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert "RUNPOD_API_KEY" not in script+str(env)
     assert "RUNPOD_S3_SECRET_ACCESS_KEY" not in script+str(env)
     assert env["HEPHAESTUS_ENABLE_PINNED_MODEL_DOWNLOAD"]=="1"
+    assert env["HF_HUB_ENABLE_HF_TRANSFER"]=="0"  # RunPod base image lacks this optional package
 
 
 def test_never_allow_untagged_or_unpinned_gpu_science_commit():
