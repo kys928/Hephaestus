@@ -64,6 +64,12 @@ jobs:
                 "permissionerror","modulenotfounderror","filenotfounderror","nameerror",
                 "training completed","full_native_cuda_45_finished","pip"]
           print("WORKER_LOG_CATEGORIES="+",".join(x for x in categories if x in low))
+          lines=data.splitlines()
+          for i,line in enumerate(lines):
+              if "uninstall-no-record-file" in line.lower():
+                  for nearby in lines[max(0,i-9):min(len(lines),i+6)]:
+                      if not any(secret in nearby.lower() for secret in ("token","secret","api_key","authorization","password")):
+                          print("SAFE_PIP_FAILURE_CONTEXT="+nearby[-260:])
           for line in data.splitlines()[-45:]:
               # This Pod has no API/S3 secrets. Still do not leak future
               # protected scientific text or authentication fields.
