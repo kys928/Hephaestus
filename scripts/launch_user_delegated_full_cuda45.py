@@ -25,10 +25,10 @@ from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.storage.verified import canonical_bytes
 
-SOURCE_POLICY="sha256:79b949c946b9c979eb4ab9830aad53280c4ded25cee5d3bb978d3eddbcc22dbb"
+SOURCE_POLICY="sha256:7cfb289cb768337ff3d18cfb579b4d9bcd2bd7ebee08271c11c8ff6f164da157"
 TRAINABLE="sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b73"
-WORKFLOW="cuda-json-45-original-five-20261028"
-RUN="cuda-json-45-new-1117"
+WORKFLOW="cuda-json-45-original-five-20261029-r2"
+RUN="cuda-json-45-new-1117-r2"
 PREFIX="hephaestus/scientific/original_cuda_45/"+WORKFLOW
 GPU="NVIDIA GeForce RTX 4090"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
@@ -67,6 +67,31 @@ def require_source(s3, bucket):
         or doc.get("reviewed_trainable_ref")!=TRAINABLE
         or len(doc.get("operations",{}))!=9):
         raise PermissionError("private source scope or exact nine native GPU operations changed")
+    from hephaestus.production.signed_cuda_grants import expected_gpu_operation_map
+    if doc["operations"]!=expected_gpu_operation_map(WORKFLOW):
+        raise PermissionError("fresh original GPU operation identities differ")
+    prepared=json.loads(s3.get_object(
+        Bucket=bucket,Key=PREFIX+"/_fresh_admission_manifest.json")["Body"].read())
+    if (prepared.get("schema")!="fresh-original-cuda45-prepared.v1"
+        or prepared.get("workflow_id")!=WORKFLOW or prepared.get("run_id")!=RUN
+        or prepared.get("source_policy_ref")!=SOURCE_POLICY
+        or prepared.get("reviewed_trainable_ref")!=TRAINABLE
+        or prepared.get("native_operations_completed")!=0
+        or prepared.get("gpu_optimizer_steps_completed")!=0
+        or prepared.get("operator_signature_present") is not False
+        or prepared.get("original_terminal_state_retained") is not True
+        or not isinstance(prepared.get("source_files_sha256"),dict)
+        or len(prepared["source_files_sha256"])<20):
+        raise PermissionError("fresh independent source admission seal is invalid")
+    for name,digest in prepared["source_files_sha256"].items():
+        if (not isinstance(name,str) or name.startswith("/") or ".." in name.split("/")
+            or not isinstance(digest,str) or len(digest)!=64
+            or any(c not in "0123456789abcdef" for c in digest)):
+            raise PermissionError("fresh source manifest contains unsafe or invalid digest")
+        if name in {"state.sqlite","context_ref.txt","cuda-grant-unsigned-request.json"}:
+            remote=sha256(s3.get_object(Bucket=bucket,Key=PREFIX+"/"+name)["Body"].read()).hexdigest()
+            if remote!=digest:
+                raise PermissionError("fresh original source bytes differ from admission seal")
     s3.head_object(Bucket=bucket,Key=PREFIX+"/state.sqlite")
     s3.head_object(Bucket=bucket,Key=PREFIX+"/context_ref.txt")
     refuse_terminal_native_state(s3,bucket)
@@ -201,8 +226,8 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
     root="/workspace/"+PREFIX
     base="/tmp/hephaestus-original-cuda-code"
     bundle=root+"/code/git-"+commit_sha+".tar.gz"
-    status="/workspace/hephaestus/scientific/original_cuda_45/worker_exit_status-"+run_tag+".txt"
-    logs="/workspace/hephaestus/scientific/original_cuda_45/worker_stdout-"+run_tag+".log"
+    status=root+"/worker_exit_status-"+run_tag+".txt"
+    logs=root+"/worker_stdout-"+run_tag+".log"
     # Capture failures on persistent storage, including import/pip errors. Never
     # emit credentials: the Pod has only the independent public key and volume ID.
     command=(
@@ -223,7 +248,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         "snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=\"/tmp/cuda-target-cache\")'; "
         "python -u scripts/run_original_tier_a_cuda_worker.py --resume "
         f"--workspace '{root}' "
-        "--config configs/research/tier_a_original_cuda_45_v1.json "
+        "--config configs/research/tier_a_original_cuda_45_fresh_20261029.json "
         "--target-model-cache /tmp/cuda-target-cache "
         "--original-role-model-cache /tmp/cuda-original-role-cache "
         "--original-adapter-cache /tmp/cuda-verified-adapters "
@@ -231,12 +256,9 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         f"--maximum-gpu-seconds {max_seconds}; "
         "python scripts/freeze_original_tier_a_cuda_archive.py "
         f"--workspace '{root}' "
-        "--archive /workspace/hephaestus/scientific/original_cuda_45/"
-        "original_frozen_45_archive.zip; "
-        "sha256sum /workspace/hephaestus/scientific/original_cuda_45/"
-        "original_frozen_45_archive.zip | awk '{print $1}' > "
-        "/workspace/hephaestus/scientific/original_cuda_45/"
-        "original_frozen_archive_sha256.txt; "
+        f"--archive '{root}/original_frozen_45_archive.zip'; "
+        f"sha256sum '{root}/original_frozen_45_archive.zip' | awk '{{print $1}}' > "
+        f"'{root}/original_frozen_archive_sha256.txt'; "
         "echo FULL_NATIVE_CUDA_45_FINISHED"
     )
     env={
@@ -252,8 +274,8 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
 
 
 def monitor(s3, bucket, adapter, pod, *, deadline, provider, run_tag):
-    key="hephaestus/scientific/original_cuda_45/original_frozen_archive_sha256.txt"
-    exit_key="hephaestus/scientific/original_cuda_45/worker_exit_status-"+run_tag+".txt"
+    key=PREFIX+"/original_frozen_archive_sha256.txt"
+    exit_key=PREFIX+"/worker_exit_status-"+run_tag+".txt"
     last_balance_check=0
     while time.monotonic()<deadline:
         time.sleep(40)
@@ -406,8 +428,8 @@ def main():
                 raise
     # Cold verification is conducted by the *off-Pod* controller after
     # stopping billing. Report success only after actual SHA member readback.
-    archive_key="hephaestus/scientific/original_cuda_45/original_frozen_45_archive.zip"
-    digest_key="hephaestus/scientific/original_cuda_45/original_frozen_archive_sha256.txt"
+    archive_key=PREFIX+"/original_frozen_45_archive.zip"
+    digest_key=PREFIX+"/original_frozen_archive_sha256.txt"
     expected=s3.get_object(Bucket=config.network_volume_id,Key=digest_key)["Body"].read().decode().strip()
     if len(expected)!=64 or any(c not in "0123456789abcdef" for c in expected):
         raise PermissionError("GPU archive digest missing or malformed")
