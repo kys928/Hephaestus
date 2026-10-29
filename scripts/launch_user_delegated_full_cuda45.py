@@ -154,8 +154,9 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
     # emit credentials: the Pod has only the independent public key and volume ID.
     command=(
         "set -Eeuo pipefail; umask 077; "
-        f"trap 'code=$?; echo \"$code\" > \"{status}\"' EXIT; "
-        f"exec > \"{logs}\" 2>&1; "
+        f"trap 'code=$?; printf \"%s %s\\\\n\" \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"$code\" >> \"{status}\"' EXIT; "
+        f"exec >> \"{logs}\" 2>&1; "
+        f"printf 'ORIGINAL_CUDA_BOOTSTRAP_ATTEMPT=%s PID=%s\\\\n' \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"$\"; "
         f"mkdir -p '{base}'; "
         f"test \"$(sha256sum '{bundle}' | cut -d' ' -f1)\" = '{code_bundle_sha256}'; "
         f"tar -xzf '{bundle}' -C '{base}'; "
