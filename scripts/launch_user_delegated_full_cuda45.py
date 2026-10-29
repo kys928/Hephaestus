@@ -192,6 +192,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         "RUNPOD_NETWORK_VOLUME_ID":"cviwpryzao",
         "HF_HOME":"/tmp/hephaestus-hf",
         "HF_HUB_DISABLE_TELEMETRY":"1",
+        "HF_HUB_ENABLE_HF_TRANSFER":"0", # image enables missing hf_transfer; fail-safe standard HF download
     }
     return ["bash","-lc",command],env
 
