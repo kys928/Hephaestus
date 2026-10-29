@@ -1,0 +1,57 @@
+name: Read-only live EU-CZ-1 original GPU45 placement, cost, and Pod reconciliation
+on:
+  push:
+    branches: ['feature/original-cuda-45-full-budget-launch-20261029']
+    paths: ['.github/workflows/preflight-original-cuda45-live-stock.yml']
+permissions: {contents: read}
+jobs:
+  read-real-stock-before-any-paid-pod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check exact live EU-CZ-1 secure GPUs, prepaid runway and existing original GPU Pods
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request,urllib.error
+          from decimal import Decimal
+          key=os.environ.get('RUNPOD_API_KEY','')
+          if not key:raise SystemExit('RUNPOD_KEY_MISSING')
+          def get(url,method='GET',payload=None):
+            request=urllib.request.Request(url,method=method,data=json.dumps(payload).encode() if payload else None,headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+            try:
+              with urllib.request.urlopen(request,timeout=25) as response:
+                return json.load(response)
+            except urllib.error.HTTPError as error:
+              print('READ_ONLY_PROVIDER_HTTP='+str(error.code));raise
+          datacenter=get('https://api.runpod.io/v2/catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY')
+          print('PINNED_DATACENTER_MATCH='+str(datacenter.get('id')=='EU-CZ-1'))
+          for item in datacenter.get('gpuAvailability',[]):
+            if not isinstance(item,dict):continue
+            if any(t in str(item.get('id','')).upper() for t in ('3090','4090','5090','6000','A5000','A6000','A40','L40')):
+              print('EU_CZ_GPU='+str(item.get('id'))+' STOCK='+str(item.get('availability'))+' DETAIL='+str(item.get('stockStatus','')))
+          offers=get('https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD')
+          for item in offers.get('gpus',[]):
+            if str(item.get('id')) in {x.get('id') for x in datacenter.get('gpuAvailability',[]) if x.get('availability') in ('LOW','MEDIUM','HIGH')}:
+              if item.get('memory',0)>=24 and item.get('secure'):
+                print('AVAILABLE_SECURE_GPU='+str(item['id'])+' VRAM_GB='+str(item['memory'])+' USD_PER_HOUR='+str((item.get('price') or {}).get('secure')))
+          account=get('https://api.runpod.io/graphql','POST',{'query':'query OriginalGPUReadOnly { myself { clientBalance currentSpendPerHr isAutoPayEnabled } }'})
+          user=(account.get('data') or {}).get('myself',{})
+          available=Decimal(str(user['clientBalance']))-Decimal('0.30')
+          print('BALANCE_POSITIVE_AFTER_STORAGE_RESERVE='+str(available>0))
+          print('AUTOPAY_DISABLED='+str(user.get('isAutoPayEnabled') is False))
+          print('CURRENT_ACCOUNT_SPEND_NONZERO='+str(Decimal(str(user['currentSpendPerHr']))>0))
+          pods=get('https://api.runpod.io/v2/pods?limit=1000')
+          target=[{'id':p.get('id'),'name':p.get('name'),'status':p.get('status')}
+             for p in pods.get('pods',[]) if 'hephaestus-original-five-fullcuda45' in str(p.get('name',''))]
+          print('EXISTING_ORIGINAL_GPU45_POD_COUNT='+str(len(target)))
+          for p in target:print('EXISTING_ORIGINAL_GPU45_POD='+json.dumps(p))
+          print('THIS_PREFLIGHT_CREATED_PODS=0')
+          PY
