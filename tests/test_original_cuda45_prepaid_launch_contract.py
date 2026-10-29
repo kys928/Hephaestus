@@ -53,11 +53,11 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert cmd[:2]==["bash","-lc"]
     script=cmd[2]
     assert "run_original_tier_a_cuda_worker.py --resume" in script
-    assert "configs/research/tier_a_original_cuda_45_fresh_20261029.json" in script
-    assert "cuda-json-45-original-five-20261029-r2" in script
+    assert "configs/research/tier_a_original_cuda_45_fresh_20261029_r3.json" in script
+    assert "cuda-json-45-original-five-20261029-r3" in script
     assert "cuda-json-45-original-five-20261028" not in script
     assert "original_frozen_45_archive.zip" in script
-    assert controller.WORKFLOW=="cuda-json-45-original-five-20261029-r2"
+    assert controller.WORKFLOW=="cuda-json-45-original-five-20261029-r3"
     assert "freeze_original_tier_a_cuda_archive.py" in script
     assert "worker_exit_status-1234.txt" in script
     assert "worker_stdout-1234.log" in script
@@ -140,7 +140,7 @@ def test_paid_gpu_preflight_fails_closed_on_edited_identity(tmp_path):
 
 
 def test_fresh_prepaid_controller_rejects_reused_historical_state(tmp_path):
-    """Old terminal SQLite can never be treated as new r2 science."""
+    """Old terminal SQLite can never be treated as new r3 science."""
     original=_fake_native_state_bucket(tmp_path,{
         "workflow_id":"cuda-json-45-original-five-20261028",
         "run_id":"cuda-json-45-new-1117",
@@ -184,3 +184,14 @@ def test_fresh_source_admission_must_match_exact_new_signed_scope():
     seal["operator_signature_present"]=True
     with pytest.raises(PermissionError,match="admission seal"):
         controller.require_source(s3,"cviwpryzao")
+
+
+def test_new_r3_operator_authorization_is_required_before_paid_provider_call(monkeypatch):
+    """No implicit extension of the prior r2 authorization to a new identity."""
+    import sys
+    monkeypatch.delenv("ORIGINAL_CUDA45_R3_OPERATOR_APPROVAL",raising=False)
+    monkeypatch.setattr(sys,"argv",[
+        "launch_user_delegated_full_cuda45.py",
+        "--commit-sha","a"*40,"--run-tag","1234"])
+    with pytest.raises(PermissionError,match="explicit new operator approval"):
+        controller.main()
