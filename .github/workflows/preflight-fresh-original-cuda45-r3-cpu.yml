@@ -1,0 +1,62 @@
+name: Verify newly admitted original CUDA45 r3 source and live prepaid conditions (NO GPU)
+on:
+  push:
+    branches: [feature/cuda45-r3-post-schema-repair-20261029]
+    paths: ['.github/workflows/preflight-fresh-original-cuda45-r3-cpu.yml']
+permissions:
+  contents: read
+jobs:
+  cold-admission-and-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test,s3,independent-certification]'
+      - name: Run entirely CPU-only signed-scope and spent-credit contract tests
+        run: |
+          python -m pytest -q tests/test_original_cuda45_prepaid_launch_contract.py tests/test_signed_cuda_compute_authorization.py tests/test_original_cuda_mounted_volume_and_lease.py tests/test_tier_a_cuda_role_stages.py
+      - name: Verify new S3 state and source SHA plus real prepaid budget without any Pod creation
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,sys
+          sys.path.insert(0,"scripts")
+          from launch_user_delegated_full_cuda45 import (
+              SOURCE_POLICY,TRAINABLE,WORKFLOW,RUN,RESERVE_USD,GPU,
+              client_s3,require_source,decide_budget)
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+          from decimal import Decimal
+          cfg=RunPodConfig.from_env()
+          if cfg.network_volume_id!="cviwpryzao" or cfg.datacenter_id!="EU-CZ-1":
+              raise PermissionError("unexpected certified original volume")
+          s3=client_s3(cfg)
+          source=require_source(s3,cfg.network_volume_id)
+          if source["source_policy_ref"]!=SOURCE_POLICY or source["reviewed_trainable_ref"]!=TRAINABLE:
+              raise PermissionError("new source policy not approved for this operator scope")
+          pricing=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          account=pricing.account()
+          quoted=pricing.quote_gpu(gpu_id=GPU,datacenter_id=cfg.datacenter_id)
+          if quoted.gpu_memory_gb<24 or quoted.price_usd_per_hour>Decimal("0.89"):
+              raise PermissionError("original RTX4090 quote not within prior authorized price")
+          seconds=decide_budget(account,quoted)
+          if seconds<3600:
+              raise PermissionError("not enough live prepaid credit to authorize campaign")
+          print("FRESH_ORIGINAL_CUDA45_READONLY_SOURCE_ATTESTATION=PASS")
+          print("FRESH_ORIGINAL_CUDA45_GPU_RUNTIME_MINUTES_AUTHORIZABLE="+str(seconds//60))
+          print("FRESH_ORIGINAL_CUDA45_WORKFLOW_ID="+WORKFLOW)
+          print("FRESH_ORIGINAL_CUDA45_RUN_ID="+RUN)
+          print("PREPAID_AUTOPAY_ENABLED=false")
+          print("GPU_PODS_CREATED=0")
+          PY
