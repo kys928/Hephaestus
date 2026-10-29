@@ -25,7 +25,7 @@ def exact_pods(adapter, run_tag):
     name=PREFIX+run_tag
     return [x for x in adapter.list_pods()
             if str(x.get("name","")).startswith(name+"-")
-            and str(x.get("networkVolumeId",x.get("network_volume_id","")))==VOLUME]
+            and str(x.get("id","")).strip()]
 
 
 def main():
