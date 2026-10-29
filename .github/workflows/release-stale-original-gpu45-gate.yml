@@ -22,17 +22,17 @@ jobs:
           headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
                    'Accept':'application/vnd.github+json'}
           prior=json.load(urllib.request.urlopen(
-              urllib.request.Request(base+'/40848334497',headers=headers)))
-          if prior.get('id')!=40848334497:
+              urllib.request.Request(base+'/40849489552',headers=headers)))
+          if prior.get('id')!=40849489552:
               raise SystemExit('UNEXPECTED_PRIOR_WORKFLOW_ID')
           jobs=json.load(urllib.request.urlopen(urllib.request.Request(
-              base+'/40848334497/jobs?per_page=100',headers=headers)))['jobs']
+              base+'/40849489552/jobs?per_page=100',headers=headers)))['jobs']
           old=[j for j in jobs if j.get('name')=='full-45-genuine-science']
           if (len(old)!=1 or old[0].get('conclusion')!='failure'):
               raise SystemExit('OLD_GPU_LAUNCH_NOT_PROVEN_FAILED')
           if prior.get('status')!='in_progress':
               print('NO_STALE_RUN_TO_CANCEL');raise SystemExit(0)
-          url=base+'/40848334497/cancel'
+          url=base+'/40849489552/cancel'
           req=urllib.request.Request(url,method='POST',headers=headers)
           with urllib.request.urlopen(req,timeout=20) as resp:
               if resp.status!=202:
