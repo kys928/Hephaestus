@@ -68,6 +68,14 @@ jobs:
               print('LAST_STEP_ATTEMPT='+str(step.get('attempt')))
               print('LAST_STEP_APPROVAL_REQUEST='+str(bool(step.get('approval_request'))))
               print('LAST_STEP_ISSUES_COUNT='+str(len(step.get('blocking_issues',[]))))
+              for msg in step.get('blocking_issues',[])[:3]:
+                  if isinstance(msg,str) and msg.startswith('subsystem_exception:'):
+                      print('LAST_STEP_SUBSYSTEM_EXCEPTION_TYPE='+msg.split(':',1)[1][:80])
+              details=[json.loads(raw) for collection,raw in rows if collection=='staged_workflow_records']
+              for rec in details:
+                  if rec.get('kind')=='subsystem_failure':
+                      safe=rec.get('payload',{})
+                      print('SCIENTIFIC_STAGE_ERROR_TYPE='+str(safe.get('error_type',''))[:80])
               # Issue codes may include model output; print only allowlisted
               # stable systemic permission, service, resource classifications.
               safe=('missing','approval','inconclusive','blocked','unavailable',
