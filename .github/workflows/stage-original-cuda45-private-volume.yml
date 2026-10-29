@@ -1,0 +1,93 @@
+name: Stage exact original Tier A CUDA-45 science on Hephaestus private volume (no GPU)
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths: ['.github/workflows/stage-original-cuda45-private-volume.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  immutable-original-source-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q boto3
+      - uses: actions/download-artifact@v4
+        with:
+          name: original-tier-a-cuda-unsigned-request-and-prepared-native-source
+          run-id: 40770612111
+          github-token: ${{ github.token }}
+          path: /tmp/original-tier-a-cuda45-source
+      - name: Verify actual 96-example reviewed source bytes and rehome original native SQLite without changing its contents
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib,sqlite3,boto3
+          root=pathlib.Path('/tmp/original-tier-a-cuda45-source')
+          req=json.loads((root/'cuda-grant-unsigned-request.json').read_bytes())
+          if (req.get('status')!='requested' or len(req.get('operations',{}))!=9
+              or req.get('source_policy_ref')!='sha256:79b949c946b9c979eb4ab9830aad53280c4ded25cee5d3bb978d3eddbcc22dbb'
+              or req.get('reviewed_trainable_ref')!='sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b73'
+              or req.get('run_id')!='cuda-json-45-new-1117'):
+              raise SystemExit('ORIGINAL_APPROVED_CUDA45_SOURCE_REQUEST_DRIFT')
+          connection=sqlite3.connect('file:'+str(root/'state.sqlite')+'?mode=ro&immutable=1',uri=True)
+          if connection.execute('PRAGMA quick_check').fetchone()[0]!='ok':
+              raise SystemExit('ORIGINAL_SCIENCE_SQLITE_CORRUPT')
+          connection.close()
+          files=[p for p in root.rglob('*') if p.is_file()]
+          if not files or len(files)!=len({p.relative_to(root).as_posix() for p in files}):
+              raise SystemExit('ORIGINAL_SOURCE_INVENTORY_INVALID')
+          for p in files:
+              rel=p.relative_to(root).as_posix()
+              if p.is_symlink() or any(x=='..' for x in pathlib.PurePosixPath(rel).parts):
+                  raise SystemExit('ORIGINAL_SOURCE_UNSAFE_FILE_PATH')
+              if rel.startswith('artifacts/objects/sha256/'):
+                  expected=rel.rsplit('/',1)[-1]
+                  if len(expected)!=64 or hashlib.sha256(p.read_bytes()).hexdigest()!=expected:
+                      raise SystemExit('ORIGINAL_SOURCE_SHA_MISMATCH')
+          if (os.environ.get('RUNPOD_DATACENTER_ID')!='EU-CZ-1'
+             or os.environ.get('RUNPOD_NETWORK_VOLUME_ID')!='cviwpryzao'):
+              raise SystemExit('ORIGINAL_HEPHAESTUS_VOLUME_MISMATCH')
+          client=boto3.client('s3',endpoint_url=os.environ['RUNPOD_S3_ENDPOINT_URL'],
+              aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'],
+              region_name='eu-cz-1')
+          bucket=os.environ['RUNPOD_NETWORK_VOLUME_ID']
+          prefix='hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261028'
+          manifest={}
+          for p in sorted(files):
+              rel=p.relative_to(root).as_posix()
+              raw=p.read_bytes()
+              digest=hashlib.sha256(raw).hexdigest()
+              key=prefix+'/'+rel
+              try:
+                  existing=client.get_object(Bucket=bucket,Key=key)
+              except Exception as exc:
+                  code=str(getattr(exc,'response',{}).get('Error',{}).get('Code',''))
+                  if code not in ('404','NoSuchKey','NotFound'):
+                      raise
+                  client.put_object(Bucket=bucket,Key=key,Body=raw)
+              else:
+                  with existing['Body'] as stream:
+                      if hashlib.sha256(stream.read()).hexdigest()!=digest:
+                          raise SystemExit('PRIVATE_ORIGINAL_SOURCE_REPLACEMENT_REFUSED')
+              with client.get_object(Bucket=bucket,Key=key)['Body'] as reader:
+                  if hashlib.sha256(reader.read()).hexdigest()!=digest:
+                      raise SystemExit('REMOTE_ORIGINAL_SOURCE_COLD_READBACK_SHA_MISMATCH')
+              manifest[rel]=digest
+          if len(manifest)!=len(files):
+              raise SystemExit('STAGED_PRIVATE_FILE_INVENTORY_INCOMPLETE')
+          print('ORIGINAL_TIER_A_CUDA45_NATIVE_SOURCE_FILES_COLD_VERIFIED='+str(len(files)))
+          print('ORIGINAL_TIER_A_CUDA45_PRIVATE_VOLUME_STAGE=SUCCESS')
+          print('ORIGINAL_CUDA_GPU_OPERATIONS_EXECUTED=0')
+          print('PAID_PODS_CREATED=0')
+          PY
