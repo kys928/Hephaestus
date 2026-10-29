@@ -1,0 +1,102 @@
+name: Verify existing RunPod API credentials and live prepaid budget (READ ONLY)
+on:
+  push:
+    branches: ['feature/verify-live-runpod-credentials-20261029']
+    paths:
+      - '.github/workflows/read-only-live-runpod-intake.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runpod-live-budget-readonly
+  cancel-in-progress: false
+jobs:
+  authenticate-and-measure-without-spending:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Query authenticated live RunPod prepaid credit, existing spend and priced GPUs without leaking balance or key
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request,urllib.error
+          from decimal import Decimal,InvalidOperation
+          key=os.environ.get('RUNPOD_API_KEY','')
+          datacenter=os.environ.get('RUNPOD_DATACENTER_ID','')
+          volume=os.environ.get('RUNPOD_NETWORK_VOLUME_ID','')
+          if not key:
+              raise SystemExit('RUNPOD_API_KEY_REPOSITORY_SECRET_ABSENT')
+          if datacenter != 'EU-CZ-1' or volume != 'cviwpryzao':
+              raise SystemExit('HEPHAESTUS_ORIGINAL_VOLUME_DATACENTER_MISMATCH')
+          def get(url,method='GET',payload=None):
+              req=urllib.request.Request(url,method=method,
+                  data=json.dumps(payload).encode() if payload is not None else None,
+                  headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      if response.status != 200:
+                          raise RuntimeError('HTTP_UNEXPECTED_CODE')
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  # Never include response bodies, key, account data, provider IDs.
+                  raise SystemExit('RUNPOD_HTTP_'+str(error.code))
+              except Exception:
+                  raise SystemExit('RUNPOD_READONLY_NETWORK_OR_SCHEMA_ERROR')
+          account=get('https://api.runpod.io/graphql',method='POST',
+              payload={'query':'query HephaestusBudgetReadOnly { myself { clientBalance currentSpendPerHr isAutoPayEnabled } }'})
+          user=(account.get('data') or {}).get('myself') if isinstance(account,dict) else None
+          if not isinstance(user,dict) or account.get('errors'):
+              raise SystemExit('RUNPOD_ACCOUNT_QUERY_UNAVAILABLE_OR_UNAUTHORIZED')
+          try:
+              balance=Decimal(str(user['clientBalance']))
+              hourly=Decimal(str(user['currentSpendPerHr']))
+          except (KeyError,TypeError,InvalidOperation):
+              raise SystemExit('RUNPOD_BALANCE_SCHEMA_UNEXPECTED')
+          if not balance.is_finite() or not hourly.is_finite() or hourly<0:
+              raise SystemExit('RUNPOD_BALANCE_OR_ACTIVE_SPEND_UNUSABLE')
+          if type(user.get('isAutoPayEnabled')) is not bool:
+              raise SystemExit('RUNPOD_AUTOPAY_STATUS_UNAVAILABLE')
+          # Protect account financial privacy on this PUBLIC GitHub repository:
+          # never print exact prepaid balance or current account spend.
+          print('RUNPOD_AUTHENTICATED_BALANCE_READ_SUCCESS')
+          print('RUNPOD_AUTOPAY_ENABLED='+str(user['isAutoPayEnabled']).lower())
+          print('RUNPOD_HAS_POSITIVE_PREPAID_BALANCE='+str(balance>0).lower())
+          print('RUNPOD_EXISTING_ACCOUNT_SPEND_NONZERO='+str(hourly>0).lower())
+          catalog=get('https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD')
+          gpus=catalog.get('gpus') if isinstance(catalog,dict) else None
+          if not isinstance(gpus,list):
+              raise SystemExit('RUNPOD_GPU_PRICE_CATALOG_UNAVAILABLE')
+          offers=[]
+          for item in gpus:
+              if not isinstance(item,dict):
+                  continue
+              if item.get('id') not in ('NVIDIA GeForce RTX 3090','NVIDIA RTX 3090',
+                                        'NVIDIA GeForce RTX 5090','NVIDIA RTX 5090'):
+                  continue
+              price=(item.get('price') or {}).get('secure')
+              if item.get('secure') is not True or price is None:
+                  continue
+              try:
+                  p=Decimal(str(price))
+                  if p.is_finite() and p>0:
+                      offers.append((item['id'],p))
+              except (InvalidOperation,TypeError):
+                  pass
+          if not offers:
+              raise SystemExit('RUNPOD_NO_QUOTABLE_24GB_OR_32GB_GPU')
+          print('RUNPOD_LIVE_GPU_PRICE_CATALOG_SUCCESS')
+          for name,rate in offers:
+              # Hourly list rates are public; do not disclose private account.
+              print('OFFER='+name+' USD_PER_HOUR='+str(rate))
+          # A quote is not a Pod; never launch or mutate accounts here.
+          print('PAID_PODS_CREATED=0')
+          PY
