@@ -33,6 +33,8 @@ jobs:
       # CUDA12.8/Torch2.8 image (not the earlier rejected tag), on the live-listed\n      # EU-CZ-1 RTX 4090 ($0.89/h, LOW capacity). The provider's transient\n      # HTTP400 no-capacity response is reconciled before any capped, budget\n      # refreshed retry, with NO alternative unapproved GPU and no second Pod. An off-Pod
       # user-delegated grant and separate hard-stop supervisor remain required.
       # Early image/capacity failures and the later Git clone exit 128 are\n      # recorded without fake science. This retry stages exact source code\n      # SHA bytes on the certified network volume before creating a Pod.\n      # The previous startup errors were diagnosed from persistent per-run logs.\n      # Each short-lived failed Pod was deleted automatically. The runner now\n      # bootstraps Debian cryptography without pip uninstall metadata failure.
+      # Now also disables inherited HF_HUB_ENABLE_HF_TRANSFER=1 after genuine
+      # CUDA Pod logs confirmed the optional hf_transfer package was missing.
       - name: Spend only user-authorized current prepaid balance on ONE actual original 45-op CUDA campaign
         env:
           GITHUB_BRANCH_COMMIT: ${{ github.sha }}
