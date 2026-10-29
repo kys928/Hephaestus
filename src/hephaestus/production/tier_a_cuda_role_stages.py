@@ -125,20 +125,71 @@ class OriginalCudaResearchObservation:
             sha256=source[7:], observed_sha256=source[7:],
         )})
         print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_start role="+self.role,flush=True)
+        task = RoleTask(
+            role=self.role, situation=(
+                "Review the actual bounded original generated-task research "
+                "observation. You may advise but cannot approve resources, "
+                "promote a checkpoint, or certify historical experiments."),
+            evidence=(RoleEvidence(source, "original domain operation evidence"),),
+            run_id=request.run_id, lineage_id=request.lineage_id,
+            stage_name=request.stage_name,
+        )
+        role_context = DeterministicRoleContext(
+            request.run_id, request.lineage_id, request.stage_name)
+        rejected_format_refs = []
         try:
-            observed = self.reasoner.propose(RoleTask(
-                role=self.role, situation=(
-                    "Review the actual bounded original generated-task research "
-                    "observation. You may advise but cannot approve resources, "
-                    "promote a checkpoint, or certify historical experiments."),
-                evidence=(RoleEvidence(source, "original domain operation evidence"),),
-                run_id=request.run_id, lineage_id=request.lineage_id,
-                stage_name=request.stage_name,
-            ), registry, context=DeterministicRoleContext(
-                request.run_id, request.lineage_id, request.stage_name))
+            observed = self.reasoner.propose(task, registry, context=role_context)
         except PermissionError:
             print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=certified_inference role="+self.role,flush=True)
             raise
+        except ValueError as exc:
+            # This is a single narrow repair for the observed genuine r2
+            # Controller failure. The frozen original model uses greedy
+            # decoding: repeating the identical prompt would reproduce its
+            # invalid primary_variable. Never parse or patch model text here.
+            if (self.role != "controller"
+                    or request.substep != "judge_entry_decision"
+                    or str(exc) != "role response has invalid primary_variable"):
+                raise
+            prior_ref = getattr(exc, "rejected_inference_receipt_ref", None)
+            if not isinstance(prior_ref, str):
+                raise PermissionError("original Controller format rejection lacks immutable receipt") from exc
+            prior = read_verified_json(self.context.artifacts, prior_ref)
+            if (prior.get("schema") != "role-inference.v1"
+                    or prior.get("status") != "rejected"
+                    or prior.get("error") != str(exc)
+                    or prior.get("role") != "controller"
+                    or prior.get("run_id") != request.run_id
+                    or prior.get("lineage_id") != request.lineage_id
+                    or prior.get("stage_name") != request.stage_name
+                    or prior.get("evidence_refs") != [source]
+                    or prior.get("generator") != "PinnedTransformersRoleGenerator"
+                    or prior.get("execution", {}).get("device") != "cuda:0"):
+                raise PermissionError("original Controller rejected CUDA inference evidence invalid") from exc
+            vocab = self.reasoner.contract.profile("controller")["vocabulary"]["primary_variable"]
+            if (not isinstance(vocab, list) or not vocab
+                    or any(not isinstance(value, str) or not value.isidentifier()
+                           for value in vocab)
+                    or len(set(vocab)) != len(vocab)):
+                raise PermissionError("frozen Controller primary_variable vocabulary invalid") from exc
+            rejected_format_refs.append(prior_ref)
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=bounded_format_repair_start role=controller", flush=True)
+            # The original frozen contract renders the prompt for both real
+            # attempts. Only this format feedback changes; evidence, role,
+            # policy, decoding and semantic task remain fixed. No action runs.
+            repair_task = replace(task, situation=task.situation + (
+                "\\nFORMAT-ONLY RETRY: The prior response had an out-of-vocabulary "
+                "primary_variable. Do not invent checkpoint integrity, approvals "
+                "or scientific facts. Produce ONE new JSON response with the same "
+                "seven frozen keys and evidence IDs. The primary_variable MUST "
+                "be exactly one of: " + ", ".join(vocab) + "."))
+            try:
+                observed = self.reasoner.propose(
+                    repair_task, registry, context=role_context)
+            except ValueError:
+                print("ORIGINAL_CUDA_ROLE_FORMAT_REPAIR=failed_closed role=controller", flush=True)
+                raise
+            print("ORIGINAL_CUDA_ROLE_FORMAT_REPAIR=accepted role=controller", flush=True)
         print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_returned role="+self.role,flush=True)
         # Controller/Judge outputs are advice, never authority. A veto blocks
         # the proposed action; it does not invalidate the real inference
@@ -172,6 +223,8 @@ class OriginalCudaResearchObservation:
             "deterministic_action_allowed":action_allowed,
             "deterministic_action_gate_failures":list(gate.failures) if gate else [],
             "effective_action":None,  # No model action is dispatched by this role.
+            "bounded_format_repair_attempts":len(rejected_format_refs),
+            "rejected_inference_receipt_refs":list(rejected_format_refs),
             "cuda_training_executed":False, "promotion_authorized":False,
             "independent_certification":False,
         }
@@ -182,7 +235,8 @@ class OriginalCudaResearchObservation:
                       "original_cuda_inference_ref":observed.inference_receipt_ref,
                       "original_cuda_advisory_only":True,
                       "original_cuda_action_allowed":action_allowed,
-                      "original_cuda_effective_action":None})
+                      "original_cuda_effective_action":None,
+                      "original_cuda_bounded_format_repair_attempts":len(rejected_format_refs)})
 
 
 def prepare_native_tier_a_cuda_role_observations(
