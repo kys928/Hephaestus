@@ -69,7 +69,60 @@ def require_source(s3, bucket):
         raise PermissionError("private source scope or exact nine native GPU operations changed")
     s3.head_object(Bucket=bucket,Key=PREFIX+"/state.sqlite")
     s3.head_object(Bucket=bucket,Key=PREFIX+"/context_ref.txt")
+    refuse_terminal_native_state(s3,bucket)
     return doc
+
+
+def refuse_terminal_native_state(s3,bucket):
+    """Read original persistent state BEFORE an approval or paid Pod exists.
+
+    This is only a negative preflight: never rewrite or resurrect a failed
+    scientific operation, and never mistake an old receipt for a new run.
+    """
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory(prefix="cuda45-readonly-admission-") as tmp:
+        dbpath=Path(tmp)/"state.sqlite"
+        dbpath.write_bytes(s3.get_object(
+            Bucket=bucket,Key=PREFIX+"/state.sqlite")["Body"].read())
+        for suffix in ("-wal","-shm"):
+            try:
+                blob=s3.get_object(
+                    Bucket=bucket,Key=PREFIX+"/state.sqlite"+suffix)["Body"].read()
+            except Exception as exc:
+                code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+                if code not in {"404","NoSuchKey","NotFound"}:
+                    raise
+            else:
+                (Path(tmp)/("state.sqlite"+suffix)).write_bytes(blob)
+        db=sqlite3.connect(str(dbpath))
+        try:
+            if db.execute("PRAGMA quick_check").fetchone()[0]!="ok":
+                raise PermissionError("original GPU scientific state integrity check failed")
+            row=db.execute(
+                "SELECT payload_json FROM state_records "
+                "WHERE collection='staged_workflow_states' "
+                "ORDER BY sequence DESC LIMIT 1").fetchone()
+        finally:
+            db.close()
+    if row is None:
+        print("ORIGINAL_CUDA45_EXISTING_NATIVE_OPS=0",flush=True)
+        return
+    state=json.loads(row[0])
+    if (state.get("workflow_id")!=WORKFLOW or state.get("run_id")!=RUN):
+        raise PermissionError("original CUDA state identity mismatched immutable campaign")
+    if (state.get("completion_marker") is True or
+        state.get("resumable") is False or
+        state.get("status")=="terminal_failure"):
+        raise PermissionError(
+            "existing original CUDA45 native state is terminal; "
+            "paid GPU retry forbidden until separately reviewed re-admission")
+    if state.get("status") not in {
+            "pending","running","blocked","inconclusive",
+            "retryable_failure","interrupted","approval_pending"}:
+        raise PermissionError("unrecognized native GPU state; paid retry forbidden")
+    print("ORIGINAL_CUDA45_EXISTING_NATIVE_STATE_RESUMABLE=true",flush=True)
 
 
 def grant(s3,bucket,source_doc,max_seconds,run_tag):
