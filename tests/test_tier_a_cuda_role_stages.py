@@ -212,3 +212,120 @@ def test_controller_action_veto_never_overrides_denied_resource_authority(tmp_pa
     with pytest.raises(PermissionError,match="resource approval provider missing"):
         service.execute(request)
     assert not reasoner.calls
+
+
+def _controller_rejected_format_fixture(tmp_path, *, second_attempt="accepted"):
+    """No GPU: use REAL frozen parser + mock reasoner to exercise failure contract."""
+    import json
+    from pathlib import Path
+    from hephaestus.llm.role_contract import RoleMasteryContract
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(artifacts=store,
+        admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    contract=RoleMasteryContract.load(Path(__file__).resolve().parents[1]
+        /"configs/models/hephaestus_role_mastery_runtime_v1.json")
+    attempted=[]
+
+    class FormatRejectedThenRetried(TestOnlyReasoner):
+        def __init__(self):
+            super().__init__(store,role="controller")
+            self.contract=contract
+        def propose(self,task,registry,*,context):
+            attempted.append(task)
+            if len(attempted)==1 or second_attempt=="rejected":
+                row={
+                    "decision":"blocked","action":"request_recheck",
+                    "primary_variable":"not_in_frozen_controller_vocabulary",
+                    "confidence":0.5,
+                    "evidence_refs":[task.evidence[0].ref],
+                    "uncertainties":[],
+                    "rationale":"Scientific evidence requires another bounded review."}
+                try:
+                    self.contract.parse("controller",json.dumps(row),
+                                        {e.ref for e in task.evidence})
+                except ValueError as err:
+                    assert str(err)=="role response has invalid primary_variable"
+                    rejected={
+                        "schema":"role-inference.v1","status":"rejected",
+                        "error":str(err),"role":"controller",
+                        "run_id":task.run_id,"lineage_id":task.lineage_id,
+                        "stage_name":task.stage_name,
+                        "evidence_refs":[e.ref for e in task.evidence],
+                        "generator":"PinnedTransformersRoleGenerator",
+                        "execution":{"device":"cuda:0","synthetic_test_double":True},
+                        "raw_output":"fixture-only-invalid-primary-variable"}
+                    ref=store.put_bytes(canonical_bytes(rejected),
+                        media_type="application/json").artifact_ref
+                    err.rejected_inference_receipt_ref=ref
+                    raise
+            result=super().propose(task,registry,context=context)
+            result.action_gate=SimpleNamespace(
+                allowed=False,
+                failures=("required_verified_fact_not_true:provenance_valid",))
+            return result
+
+    reasoner=FormatRejectedThenRetried()
+    service=OriginalCudaResearchObservation(
+        "controller","judge_entry_decision",DomainDelegate(),
+        context,reasoner,
+        resource_approval_service=TestOnlyGpuGrant(store,"controller"))
+    request=StagedOperationRequest("workflow","run","lineage","targeted_repair",
+        "judge_entry","judge_entry_decision","native-op",1,(),{})
+    return service,request,attempted,store
+
+
+def test_exact_original_cuda_r2_format_rejection_is_bounded_and_retains_both_receipts(tmp_path):
+    from hephaestus.storage.verified import read_verified_json
+    service,request,attempted,store=_controller_rejected_format_fixture(tmp_path)
+    result=service.execute(request)
+    assert len(attempted)==2
+    assert attempted[0].evidence==attempted[1].evidence
+    assert attempted[0].run_id==attempted[1].run_id
+    assert "FORMAT-ONLY RETRY:" in attempted[1].situation
+    assert "primary_variable MUST" in attempted[1].situation
+    assert "approval_status" in attempted[1].situation
+    assert result.status=="completed"
+    advisory=result.records[-1].payload
+    assert advisory["bounded_format_repair_attempts"]==1
+    assert len(advisory["rejected_inference_receipt_refs"])==1
+    assert advisory["deterministic_action_allowed"] is False
+    assert advisory["effective_action"] is None
+    assert advisory["promotion_authorized"] is False
+    rejected=read_verified_json(store,advisory["rejected_inference_receipt_refs"][0])
+    assert rejected["error"]=="role response has invalid primary_variable"
+    assert rejected["status"]=="rejected"
+    accepted=read_verified_json(store,advisory["inference_receipt_ref"])
+    assert accepted["status"]=="accepted"
+    assert advisory["inference_receipt_ref"] != advisory["rejected_inference_receipt_refs"][0]
+
+
+def test_repeated_invalid_primary_variable_fails_closed_after_exactly_one_format_repair(tmp_path):
+    service,request,attempted,_=_controller_rejected_format_fixture(
+        tmp_path,second_attempt="rejected")
+    with pytest.raises(ValueError,match="invalid primary_variable"):
+        service.execute(request)
+    assert len(attempted)==2
+
+
+def test_unrelated_value_error_does_not_retry_original_controller(tmp_path):
+    service,request,attempted,_=_controller_rejected_format_fixture(tmp_path)
+    class BadReasoner:
+        def propose(self,*args,**kwargs):
+            attempted.append(args[0])
+            raise ValueError("role evidence is not independently verified")
+    service.reasoner=BadReasoner()
+    with pytest.raises(ValueError,match="independently verified"):
+        service.execute(request)
+    assert len(attempted)==1
+
+
+def test_format_repair_without_verified_rejected_receipt_stays_denied(tmp_path):
+    service,request,attempted,_=_controller_rejected_format_fixture(tmp_path)
+    class ForgedFailure:
+        def propose(self,*args,**kwargs):
+            attempted.append(args[0])
+            raise ValueError("role response has invalid primary_variable")
+    service.reasoner=ForgedFailure()
+    with pytest.raises(PermissionError,match="lacks immutable receipt"):
+        service.execute(request)
+    assert len(attempted)==1
