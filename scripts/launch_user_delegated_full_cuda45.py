@@ -102,37 +102,78 @@ def grant(s3,bucket,source_doc,max_seconds,run_tag):
     return public.hex(),"sha256:"+sha256(public).hexdigest(),grant_name
 
 
-def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename="external-original-cuda-grant.json"):
-    if (not isinstance(commit_sha,str) or len(commit_sha)!=40
-        or any(ch not in "0123456789abcdef" for ch in commit_sha)):
-        raise PermissionError("GitHub original scientific code must be pinned by immutable SHA")
+def stage_verified_code_bundle(s3, bucket, commit_sha):
+    """Ship the pinned scientific commit through already verified S3 bytes.
+
+    The GPU Pod does not need GitHub network connectivity or Git credentials.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    if (len(commit_sha)!=40 or any(c not in "0123456789abcdef" for c in commit_sha)):
+        raise PermissionError("invalid immutable original science commit")
+    actual=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
+    if actual!=commit_sha:
+        raise PermissionError("GitHub Actions checkout does not match authorized science SHA")
+    local=Path(os.environ.get("RUNNER_TEMP","/tmp")) / ("original-cuda-science-"+commit_sha+".tar.gz")
+    if local.exists():
+        raise FileExistsError("refuse existing unverified science bundle")
+    subprocess.run(["git","archive","--format=tar.gz","--output",str(local),"HEAD"],check=True)
+    digest=sha256(local.read_bytes()).hexdigest()
+    key=PREFIX+"/code/git-"+commit_sha+".tar.gz"
+    try:
+        s3.head_object(Bucket=bucket,Key=key)
+    except Exception as exc:
+        code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+        if code not in {"404","NoSuchKey","NotFound"}:
+            raise
+        s3.upload_file(str(local),bucket,key)
+    remote=sha256()
+    with s3.get_object(Bucket=bucket,Key=key)["Body"] as stream:
+        for chunk in iter(lambda:stream.read(1024*1024),b""):
+            remote.update(chunk)
+    if remote.hexdigest()!=digest:
+        raise PermissionError("original CUDA science bundle not verified on mounted S3 volume")
+    print("ORIGINAL_CUDA_PINNED_CODE_BUNDLE_SHA256="+digest,flush=True)
+    return digest
+
+
+def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
+                *,run_tag,code_bundle_sha256):
+    if (len(commit_sha)!=40 or any(c not in "0123456789abcdef" for c in commit_sha)
+        or not run_tag.isdecimal()
+        or len(code_bundle_sha256)!=64
+        or any(c not in "0123456789abcdef" for c in code_bundle_sha256)):
+        raise PermissionError("GPU Pod requires exact SHA of GitHub source and run identity")
     root="/workspace/"+PREFIX
     base="/tmp/hephaestus-original-cuda-code"
-    # Never inject RunPod API or S3 credentials into the GPU Pod.
+    bundle=root+"/code/git-"+commit_sha+".tar.gz"
+    status="/workspace/hephaestus/scientific/original_cuda_45/worker_exit_status-"+run_tag+".txt"
+    logs="/workspace/hephaestus/scientific/original_cuda_45/worker_stdout-"+run_tag+".log"
+    # Capture failures on persistent storage, including import/pip errors. Never
+    # emit credentials: the Pod has only the independent public key and volume ID.
     command=(
         "set -Eeuo pipefail; umask 077; "
-        "trap 'code=$?; printf \"%s\\\\n\" \"$code\" > "
-        "/workspace/hephaestus/scientific/original_cuda_45/worker_exit_status.txt' EXIT; "
-        "git clone -q --depth 1 --branch feature/original-cuda-45-full-budget-launch-20261029 "
-        "https://github.com/kys928/Hephaestus "+base+"; "
-        "cd "+base+"; "
-        'test "$(git rev-parse HEAD)" = "'+commit_sha+'"; '
+        f"trap 'code=$?; echo \"$code\" > \"{status}\"' EXIT; "
+        f"exec > \"{logs}\" 2>&1; "
+        f"mkdir -p '{base}'; "
+        f"test \"$(sha256sum '{bundle}' | cut -d' ' -f1)\" = '{code_bundle_sha256}'; "
+        f"tar -xzf '{bundle}' -C '{base}'; "
+        f"cd '{base}'; test -f pyproject.toml; "
         "python -m pip install -q -e '.[peft-training,role-inference,independent-certification]'; "
-        "python - <<'PY'\n"
-        "from huggingface_hub import snapshot_download\n"
-        "from hephaestus.llm.cpu_causal_research import MODEL_ID,MODEL_REVISION\n"
-        "snapshot_download(MODEL_ID,revision=MODEL_REVISION,cache_dir='/tmp/cuda-target-cache')\n"
-        "PY\n"
+        "python -c 'from huggingface_hub import snapshot_download; "
+        "from hephaestus.llm.cpu_causal_research import MODEL_ID, MODEL_REVISION; "
+        "snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=\"/tmp/cuda-target-cache\")'; "
         "python -u scripts/run_original_tier_a_cuda_worker.py --resume "
-        "--workspace "+root+" "
+        f"--workspace '{root}' "
         "--config configs/research/tier_a_original_cuda_45_v1.json "
         "--target-model-cache /tmp/cuda-target-cache "
         "--original-role-model-cache /tmp/cuda-original-role-cache "
         "--original-adapter-cache /tmp/cuda-verified-adapters "
-        "--signed-approval-file "+root+"/"+grant_filename+" "
-        "--maximum-gpu-seconds "+str(max_seconds)+"; "
+        f"--signed-approval-file '{root}/{grant_filename}' "
+        f"--maximum-gpu-seconds {max_seconds}; "
         "python scripts/freeze_original_tier_a_cuda_archive.py "
-        "--workspace "+root+" "
+        f"--workspace '{root}' "
         "--archive /workspace/hephaestus/scientific/original_cuda_45/"
         "original_frozen_45_archive.zip; "
         "sha256sum /workspace/hephaestus/scientific/original_cuda_45/"
@@ -152,9 +193,9 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename="ex
     return ["bash","-lc",command],env
 
 
-def monitor(s3, bucket, adapter, pod, *, deadline, provider):
+def monitor(s3, bucket, adapter, pod, *, deadline, provider, run_tag):
     key="hephaestus/scientific/original_cuda_45/original_frozen_archive_sha256.txt"
-    exit_key="hephaestus/scientific/original_cuda_45/worker_exit_status.txt"
+    exit_key="hephaestus/scientific/original_cuda_45/worker_exit_status-"+run_tag+".txt"
     last_balance_check=0
     while time.monotonic()<deadline:
         time.sleep(40)
@@ -212,8 +253,10 @@ def main():
     print("ORIGINAL_FULL_CUDA45_GPU_RENTAL_CEILING_SECONDS="+str(seconds))
     print("RUNPOD_ACCOUNT_FINANCIAL_AMOUNTS_REDACTED=true")
     print("ORIGINAL_GPU_ROLE_SOURCE_HASH_VERIFIED=true")
+    code_bundle_sha256=stage_verified_code_bundle(s3,config.network_volume_id,args.commit_sha)
     grant_public,grant_sha,grant_name=grant(s3,config.network_volume_id,original,seconds,args.run_tag)
-    command,env=pod_command(args.commit_sha,grant_public,grant_sha,seconds,grant_name)
+    command,env=pod_command(args.commit_sha,grant_public,grant_sha,seconds,grant_name,
+        run_tag=args.run_tag,code_bundle_sha256=code_bundle_sha256)
     from hephaestus.providers.runpod.execution import UrllibRunPodTransport,RunPodApiError
     class DiagnosticTransport(UrllibRunPodTransport):
         def request(self,method,url,*,headers,json_body=None):
@@ -288,7 +331,7 @@ def main():
         print("ORIGINAL_FULL_CUDA45_POD_CREATED=true",flush=True)
         print("ORIGINAL_GPU_POD_ID="+str(pod["id"]),flush=True)
         done=monitor(s3,config.network_volume_id,adapter,pod,
-                     deadline=time.monotonic()+seconds,provider=provider)
+                     deadline=time.monotonic()+seconds,provider=provider,run_tag=args.run_tag)
         if not done:raise RuntimeError("no original 45 evidence verified")
     finally:
         if pod is not None:
