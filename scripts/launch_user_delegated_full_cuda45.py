@@ -215,9 +215,13 @@ def monitor(s3, bucket, adapter, pod, *, deadline, provider, run_tag):
                 raise
         try:
             exit_status=s3.get_object(Bucket=bucket,Key=exit_key)["Body"].read().decode().strip()
-            if exit_status and exit_status!="0":
+            events=[line.split() for line in exit_status.splitlines() if line.strip()]
+            if any(len(parts)!=2 or not parts[1].isdigit()
+                   or not 0<=int(parts[1])<=255 for parts in events):
+                raise PermissionError("malformed original GPU worker restart/exit receipt")
+            if any(int(parts[1])!=0 for parts in events):
                 raise RuntimeError("real GPU science process failed; preserve all receipts and terminate Pod")
-            if exit_status=="0":
+            if events:
                 raise RuntimeError("GPU worker returned success without an authenticated frozen archive")
         except RuntimeError:
             raise
