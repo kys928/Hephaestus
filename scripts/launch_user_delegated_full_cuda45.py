@@ -108,6 +108,8 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds):
     # Never inject RunPod API or S3 credentials into the GPU Pod.
     command=(
         "set -Eeuo pipefail; umask 077; "
+        "trap 'code=$?; printf \"%s\\\\n\" \"$code\" > "
+        "/workspace/hephaestus/scientific/original_cuda_45/worker_exit_status.txt' EXIT; "
         "git clone -q --depth 1 --branch feature/original-cuda-45-full-budget-launch-20261029 "
         "https://github.com/kys928/Hephaestus "+base+"; "
         "cd "+base+"; "
@@ -149,6 +151,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds):
 
 def monitor(s3, bucket, adapter, pod, *, deadline, provider):
     key="hephaestus/scientific/original_cuda_45/original_frozen_archive_sha256.txt"
+    exit_key="hephaestus/scientific/original_cuda_45/worker_exit_status.txt"
     last_balance_check=0
     while time.monotonic()<deadline:
         time.sleep(40)
@@ -157,6 +160,18 @@ def monitor(s3, bucket, adapter, pod, *, deadline, provider):
             if len(output)==64 and all(c in "0123456789abcdef" for c in output):
                 print("ORIGINAL_CUDA45_ARCHIVE_CREATED=true",flush=True)
                 return True
+        except Exception as exc:
+            code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+            if code not in {"404","NoSuchKey","NotFound"}:
+                raise
+        try:
+            exit_status=s3.get_object(Bucket=bucket,Key=exit_key)["Body"].read().decode().strip()
+            if exit_status and exit_status!="0":
+                raise RuntimeError("real GPU science process failed; preserve all receipts and terminate Pod")
+            if exit_status=="0":
+                raise RuntimeError("GPU worker returned success without an authenticated frozen archive")
+        except RuntimeError:
+            raise
         except Exception as exc:
             code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
             if code not in {"404","NoSuchKey","NotFound"}:
@@ -220,6 +235,26 @@ def main():
                 print("CRITICAL_ORIGINAL_GPU_POD_DELETE_FAILED_REQUIRES_EXTERNAL_WATCHDOG",
                       flush=True)
                 raise
+    # Cold verification is conducted by the *off-Pod* controller after
+    # stopping billing. Report success only after actual SHA member readback.
+    archive_key="hephaestus/scientific/original_cuda_45/original_frozen_45_archive.zip"
+    digest_key="hephaestus/scientific/original_cuda_45/original_frozen_archive_sha256.txt"
+    expected=s3.get_object(Bucket=config.network_volume_id,Key=digest_key)["Body"].read().decode().strip()
+    if len(expected)!=64 or any(c not in "0123456789abcdef" for c in expected):
+        raise PermissionError("GPU archive digest missing or malformed")
+    archive=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"full_original_cuda_45_cold.zip"
+    s3.download_file(config.network_volume_id,archive_key,str(archive))
+    from cold_verify_original_tier_a_cuda_archive import verify_original_cuda_archive
+    verified=verify_original_cuda_archive(archive,expected_sha256="sha256:"+expected)
+    if (verified["verified_native_operations"]!=45
+        or verified["verified_original_cuda_role_inferences"]!=5
+        or verified["verified_real_cuda_optimizer_steps"]!=96):
+        raise PermissionError("independent original five-CUDA-role cold replay incomplete")
+    print("ORIGINAL_CUDA45_INDEPENDENT_COLD_REPLAY=SUCCESS",flush=True)
+    print("ORIGINAL_CUDA45_REAL_NATIVE_OPERATIONS=45",flush=True)
+    print("ORIGINAL_CUDA45_REAL_GPU_OPTIMIZER_STEPS=96",flush=True)
+    print("ORIGINAL_CUDA45_ORIGINAL_CERTIFIED_ROLE_GPU_INFERENCES=5",flush=True)
+    print("ISSUE102_INDEPENDENT_HISTORICAL_CERTIFICATION=false",flush=True)
 
 
 if __name__=="__main__":
