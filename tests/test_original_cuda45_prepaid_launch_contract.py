@@ -57,6 +57,8 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert "freeze_original_tier_a_cuda_archive.py" in script
     assert "worker_exit_status-1234.txt" in script
     assert "worker_stdout-1234.log" in script
+    assert "exec >> " in script and " >> " in script
+    assert "ORIGINAL_CUDA_BOOTSTRAP_ATTEMPT" in script
     assert "git-"+"a"*40+".tar.gz" in script
     assert "sha256sum" in script and "tar -xzf" in script
     assert "git clone" not in script
