@@ -1,0 +1,38 @@
+name: Verify actual GPU45 Pod allocation for run 40854116697 without any mutation
+on:
+  push:
+    branches: ['feature/verify-live-runpod-credentials-20261029']
+    paths: ['.github/workflows/read-only-gpu45-current-pod.yml']
+permissions: {contents: read}
+jobs:
+  provider-observed-original-gpu45:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Authenticate actual provider Pod not GH workflow metadata
+        run: |
+          python - <<'PY'
+          import json,urllib.request,os
+          key=os.environ.get("RUNPOD_API_KEY")
+          if not key:raise SystemExit("NO_PROVIDER_AUTH")
+          q=urllib.request.Request("https://api.runpod.io/v2/pods?limit=1000",
+              headers={"Authorization":"Bearer "+key})
+          with urllib.request.urlopen(q,timeout=25) as response:
+              data=json.load(response)
+          target=[p for p in data.get("pods",[]) if str(p.get("name","")).startswith(
+                  "hephaestus-original-five-fullcuda45-40854116697-")]
+          print("CONFIRMED_ACTUAL_ORIGINAL_GPU45_PODS="+str(len(target)))
+          for pod in target:
+              print("POD_ID="+str(pod.get("id")))
+              print("POD_STATUS="+str(pod.get("status")))
+              print("POD_GPU="+str((pod.get("gpu") or {}).get("id")))
+              print("POD_DATACENTER="+str(pod.get("dataCenterId")))
+              print("POD_BILLING_ACTIVE="+str(pod.get("status")=="RUNNING"))
+          print("THIS_READONLY_CHECK_CREATED_PODS=0")
+          PY
