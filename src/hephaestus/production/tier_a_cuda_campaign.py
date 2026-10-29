@@ -19,7 +19,174 @@ from hephaestus.production.tier_a_cuda_role_stages import (
 from hephaestus.production.tier_a_cuda_trace import verify_native_tier_a_cuda_trace
 from hephaestus.schemas.cpu_campaign_config import CpuCampaignConfig
 from hephaestus.training.tier_a_cuda_target import CudaTargetScope, require_cuda_device
-from hephaestus.storage.verified import canonical_bytes
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
+
+
+def reopen_original_first_cuda_permission_failure(context, *, scope, grants):
+    """Audited retry of ONE unchanged original first-stage permission failure.
+
+    Does not convert an unsuccessful operation into a success or erase its
+    previous completion receipt. The first-stage grant is verified again
+    before an append-only state transition lets the original engine rerun it.
+    All subsequent or repeated failures remain terminal and require review.
+    """
+    from hashlib import sha256
+    from hephaestus.control.staged_state import StagedApprovalRequest
+    from hephaestus.production.signed_cuda_grants import SignedOriginalCudaGrantService
+
+    raw=context.repository.get_latest(
+        WORKFLOW_STATE_COLLECTION,"workflow_id",scope.workflow_id)
+    if raw is None:
+        return False
+    state=StagedWorkflowState.from_dict(raw)
+    if (state.status!="terminal_failure" or state.resumable
+            or state.workflow_id!=scope.workflow_id
+            or state.run_id!=scope.run_id
+            or state.completion_marker):
+        return False
+    key="judge_entry.judge_entry_decision"
+    step=state.steps.get(key)
+    if (len(state.steps)!=1 or step is None
+            or step.status!="terminal_failure"
+            or step.completion_marker
+            or step.attempt!=1
+            or step.blocking_issues!=["subsystem_exception:PermissionError"]
+            or any(v.completion_marker for v in state.steps.values())):
+        raise PermissionError("CUDA retry would cross an unreconciled original scientific failure")
+    if (type(grants) is not SignedOriginalCudaGrantService
+            or grants.authorized.get("workflow_id")!=scope.workflow_id
+            or grants.authorized.get("run_id")!=scope.run_id):
+        raise PermissionError("fresh original GPU resource authority is required for retried stage")
+    request=StagedApprovalRequest(
+        request_id="cuda-original:"+step.operation_id,
+        workflow_id=scope.workflow_id,run_id=scope.run_id,
+        operation_id=step.operation_id,
+        phase="resource_admission",substep="original_cuda_role_inference",
+        subject_ref=context.admission.policy_ref,
+        requirements=("gpu_compute","original_frozen_cuda_roles"))
+    decision=grants.decision_for(request)
+    if (decision is None or decision.status!="approved"
+            or decision.operation_id!=step.operation_id
+            or decision.subject_ref!=context.admission.policy_ref):
+        raise PermissionError("first original CUDA Controller retry lacks a renewed valid resource grant")
+    receipt=read_verified_json(context.artifacts,decision.approval_ref)
+    if (receipt.get("role")!="controller"
+            or receipt.get("device")!="cuda:0"
+            or receipt.get("operation_id")!=step.operation_id
+            or receipt.get("source_policy_ref")!=context.admission.policy_ref):
+        raise PermissionError("Controller retry grant fails original identity/rights verification")
+    # Preserve the terminal failed operation and every old persisted state.
+    # Only resume the controller's first operation (attempt 2) with a genuine
+    # fresh signed grant: no approval or failed stage is marked completed.
+    state.status="interrupted"
+    state.resumable=True
+    state.blocking_issues=["audited_original_first_cuda_controller_retry"]
+    revision=__import__("os").environ.get("HEPHAESTUS_PINNED_EXECUTION_COMMIT","")
+    if len(revision)!=40 or any(ch not in "0123456789abcdef" for ch in revision):
+        raise PermissionError("CUDA retry must pin its independently inspected Git commit")
+    record={"schema":"original-cuda-first-stage-retry-audit.v1",
+        "workflow_id":scope.workflow_id,"run_id":scope.run_id,
+        "operation_id":step.operation_id,
+        "original_terminal_status":"terminal_failure",
+        "original_failure_type":"subsystem_exception:PermissionError",
+        "prior_attempt":1,"new_attempt":2,
+        "retry_code_commit":revision,
+        "signed_grant_ref":decision.approval_ref,
+        "underlying_source_policy_ref":context.admission.policy_ref,
+        "prior_scientific_operations_completed":0,
+        "permission_checks_still_enforced":True,
+        "independent_historical_certification":False}
+    context.repository.append("cuda_first_stage_retry_audit",record,
+        operation_id="cuda-audit-"+sha256(canonical_bytes(record)).hexdigest()[:24])
+    context.repository.append(WORKFLOW_STATE_COLLECTION,state.to_dict(),
+        operation_id="cuda-unblock-"+sha256(canonical_bytes(record)).hexdigest()[:24])
+    print("ORIGINAL_CUDA_FIRST_STAGE_RETRY_AUDITED=true",flush=True)
+    print("ORIGINAL_CUDA_RETRY_PRIOR_SCIENTIFIC_COMPLETIONS=0",flush=True)
+    return True
+
+
+
+def reopen_original_first_cuda_permission_failure(context, *, scope, grants):
+    """Audited retry of ONE unchanged original first-stage permission failure.
+
+    Does not convert an unsuccessful operation into a success or erase its
+    previous completion receipt. The first-stage grant is verified again
+    before an append-only state transition lets the original engine rerun it.
+    All subsequent or repeated failures remain terminal and require review.
+    """
+    from hashlib import sha256
+    from hephaestus.control.staged_state import StagedApprovalRequest
+    from hephaestus.production.signed_cuda_grants import SignedOriginalCudaGrantService
+
+    raw=context.repository.get_latest(
+        WORKFLOW_STATE_COLLECTION,"workflow_id",scope.workflow_id)
+    if raw is None:
+        return False
+    state=StagedWorkflowState.from_dict(raw)
+    if (state.status!="terminal_failure" or state.resumable
+            or state.workflow_id!=scope.workflow_id
+            or state.run_id!=scope.run_id
+            or state.completion_marker):
+        return False
+    key="judge_entry.judge_entry_decision"
+    step=state.steps.get(key)
+    if (len(state.steps)!=1 or step is None
+            or step.status!="terminal_failure"
+            or step.completion_marker
+            or step.attempt!=1
+            or step.blocking_issues!=["subsystem_exception:PermissionError"]
+            or any(v.completion_marker for v in state.steps.values())):
+        raise PermissionError("CUDA retry would cross an unreconciled original scientific failure")
+    if (type(grants) is not SignedOriginalCudaGrantService
+            or grants.authorized.get("workflow_id")!=scope.workflow_id
+            or grants.authorized.get("run_id")!=scope.run_id):
+        raise PermissionError("fresh original GPU resource authority is required for retried stage")
+    request=StagedApprovalRequest(
+        request_id="cuda-original:"+step.operation_id,
+        workflow_id=scope.workflow_id,run_id=scope.run_id,
+        operation_id=step.operation_id,
+        phase="resource_admission",substep="original_cuda_role_inference",
+        subject_ref=context.admission.policy_ref,
+        requirements=("gpu_compute","original_frozen_cuda_roles"))
+    decision=grants.decision_for(request)
+    if (decision is None or decision.status!="approved"
+            or decision.operation_id!=step.operation_id
+            or decision.subject_ref!=context.admission.policy_ref):
+        raise PermissionError("first original CUDA Controller retry lacks a renewed valid resource grant")
+    receipt=read_verified_json(context.artifacts,decision.approval_ref)
+    if (receipt.get("role")!="controller"
+            or receipt.get("device")!="cuda:0"
+            or receipt.get("operation_id")!=step.operation_id
+            or receipt.get("source_policy_ref")!=context.admission.policy_ref):
+        raise PermissionError("Controller retry grant fails original identity/rights verification")
+    # Preserve the terminal failed operation and every old persisted state.
+    # Only resume the controller's first operation (attempt 2) with a genuine
+    # fresh signed grant: no approval or failed stage is marked completed.
+    state.status="interrupted"
+    state.resumable=True
+    state.blocking_issues=["audited_original_first_cuda_controller_retry"]
+    revision=__import__("os").environ.get("HEPHAESTUS_PINNED_EXECUTION_COMMIT","")
+    if len(revision)!=40 or any(ch not in "0123456789abcdef" for ch in revision):
+        raise PermissionError("CUDA retry must pin its independently inspected Git commit")
+    record={"schema":"original-cuda-first-stage-retry-audit.v1",
+        "workflow_id":scope.workflow_id,"run_id":scope.run_id,
+        "operation_id":step.operation_id,
+        "original_terminal_status":"terminal_failure",
+        "original_failure_type":"subsystem_exception:PermissionError",
+        "prior_attempt":1,"new_attempt":2,
+        "retry_code_commit":revision,
+        "signed_grant_ref":decision.approval_ref,
+        "underlying_source_policy_ref":context.admission.policy_ref,
+        "prior_scientific_operations_completed":0,
+        "permission_checks_still_enforced":True,
+        "independent_historical_certification":False}
+    context.repository.append("cuda_first_stage_retry_audit",record,
+        operation_id="cuda-audit-"+sha256(canonical_bytes(record)).hexdigest()[:24])
+    context.repository.append(WORKFLOW_STATE_COLLECTION,state.to_dict(),
+        operation_id="cuda-unblock-"+sha256(canonical_bytes(record)).hexdigest()[:24])
+    print("ORIGINAL_CUDA_FIRST_STAGE_RETRY_AUDITED=true",flush=True)
+    print("ORIGINAL_CUDA_RETRY_PRIOR_SCIENTIFIC_COMPLETIONS=0",flush=True)
+    return True
 
 
 def run_or_resume_original_tier_a_cuda_campaign(
@@ -74,6 +241,9 @@ def run_or_resume_original_tier_a_cuda_campaign(
             raise PermissionError("no original GPU science state exists")
         flow=StagedWorkflowState.from_dict(state)
     else:
+        if resume:
+            reopen_original_first_cuda_permission_failure(
+                context,scope=scope,grants=gpu_resource_approval_service)
         bridge=prepare_tier_a_original_cuda_role_data_bridge(
             context,trusted_registry_sha256=scope.trusted_registry_sha256,
             s3_read_client=original_s3_read_client,s3_bucket=original_s3_bucket,
