@@ -1,0 +1,66 @@
+name: Execute original genuine five-role CUDA 45-operation campaign using user-approved prepaid RunPod balance
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths: ['.github/workflows/execute-full-original-cuda45-prepaid.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: original-full-five-cuda45-user-prepaid-once
+  cancel-in-progress: false
+jobs:
+  full-45-genuine-science:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 275
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install off-Pod authenticated provider/cryptographic controls only
+        run: python -m pip install -e '.[s3,independent-certification]'
+      - name: Spend only user-authorized current prepaid balance on ONE actual original 45-op CUDA campaign
+        env:
+          GITHUB_BRANCH_COMMIT: ${{ github.sha }}
+          GITHUB_WORKFLOW_RUN_TAG: ${{ github.run_id }}
+        run: |
+          python -u scripts/launch_user_delegated_full_cuda45.py \
+            --commit-sha "$GITHUB_BRANCH_COMMIT" \
+            --run-tag "$GITHUB_WORKFLOW_RUN_TAG"
+      - name: State honest outcome
+        if: always()
+        run: |
+          echo 'All genuine original 45 stage and 96 optimizer CUDA claims require separate successful cold readback.'
+          echo 'The protected historical-reference independent scientific certification has NOT been performed.'
+  independent-hard-budget-pod-watchdog:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 285
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[s3]'
+      - name: Independently monitor real RunPod prepaid balance and delete only exact tagged original 45 GPU Pod on hard stop
+        env:
+          GITHUB_WORKFLOW_RUN_TAG: ${{ github.run_id }}
+        run: |
+          python -u scripts/watchdog_user_delegated_full_cuda45.py \
+            --run-tag "$GITHUB_WORKFLOW_RUN_TAG"
