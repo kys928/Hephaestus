@@ -60,6 +60,7 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert "git-"+"a"*40+".tar.gz" in script
     assert "sha256sum" in script and "tar -xzf" in script
     assert "git clone" not in script
+    assert "--ignore-installed" in script and "cryptography>=44,<47" in script
     assert "cuda-original-role-cache" in script
     assert "RUNPOD_API_KEY" not in script+str(env)
     assert "RUNPOD_S3_SECRET_ACCESS_KEY" not in script+str(env)
