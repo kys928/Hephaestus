@@ -58,6 +58,10 @@ jobs:
           print("RUNPOD_LIVE_CREATE_SCHEMA_RESOLVED_ROOT="+json.dumps(resolved,sort_keys=True)[:8000])
           for part in resolved.get("allOf",[]):
               print("RUNPOD_CREATE_SUBSCHEMA="+json.dumps(part,sort_keys=True)[:4000])
+          for cname in ("ContainerConfig","CreateGpuConfig","Mounts","CreateNetworkMount","NetworkMount"):
+              component=(spec.get("components",{}).get("schemas",{}).get(cname))
+              if component:
+                  print("RUNPOD_VALIDATION_COMPONENT_"+cname+"="+json.dumps(component,sort_keys=True)[:7000])
           print("RUNPOD_SAMPLE_PAYLOAD_FIELD_NAMES="+json.dumps(sorted(sample)))
           print("PAID_GPU_PODS_CREATED=0")
           PY
