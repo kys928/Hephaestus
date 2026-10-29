@@ -480,8 +480,13 @@ class CertifiedRoleReasoner:
         try:
             answer = self.contract.parse(task.role, raw, set(refs))
         except ValueError as exc:
+            # Keep original real generator text and execution metadata in a
+            # content-addressed rejected receipt. A caller may perform one
+            # independent, policy-bounded FORMAT repair, never override parse.
             receipt.update(status="rejected", error=str(exc))
-            self.artifact_store.put_bytes(canonical_bytes(receipt), media_type="application/json")
+            rejected = self.artifact_store.put_bytes(
+                canonical_bytes(receipt), media_type="application/json")
+            exc.rejected_inference_receipt_ref = rejected.artifact_ref
             raise
         receipt.update(status="accepted", answer=answer.to_dict())
         artifact = self.artifact_store.put_bytes(canonical_bytes(receipt), media_type="application/json")
