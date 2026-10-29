@@ -88,6 +88,7 @@ def _fake_native_state_bucket(tmp_path, state):
     """Test-only S3 readback of actual SQLite bytes, never provider IO."""
     import io,json,sqlite3
     db=tmp_path/"state.sqlite"
+    db.unlink(missing_ok=True)
     with sqlite3.connect(db) as con:
         con.execute("CREATE TABLE state_records (sequence INTEGER PRIMARY KEY,"
                     "collection TEXT NOT NULL,payload_json TEXT NOT NULL)")
