@@ -155,7 +155,11 @@ def prepare_tier_a_original_cuda_role_data_bridge(
     reasoner = CertifiedRoleReasoner(
         stack=stack, contract=contract,
         adapters=VerifiedRoleAdapters(s3_read_client, s3_bucket, Path(adapter_cache_dir)),
-        generator=PinnedTransformersRoleGenerator(Path(model_cache_dir), device="cuda:0"),
+        generator=PinnedTransformersRoleGenerator(
+            Path(model_cache_dir),device="cuda:0",
+            allow_remote_pinned_download=(
+                __import__("os").environ.get("HEPHAESTUS_ENABLE_PINNED_MODEL_DOWNLOAD")=="1"),
+        ),
         artifact_store=context.artifacts)
     if (context.profile.model_id != "HuggingFaceTB/SmolLM2-135M-Instruct"
             or context.profile.model_revision != "12fd25f77366fa6b3b4b768ec3050bf629380bac"):
