@@ -1,0 +1,33 @@
+name: Validate full user-delegated GPU45 RunPod controller BEFORE allocating credit (CPU only)
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths:
+      - 'scripts/launch_user_delegated_full_cuda45.py'
+      - 'tests/test_original_cuda45_prepaid_launch_contract.py'
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'src/hephaestus/production/tier_a_cuda_research.py'
+      - '.github/workflows/verify-original-cuda45-controller.yml'
+permissions:
+  contents: read
+jobs:
+  contract-without-spending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[test,s3,independent-certification]'
+      - name: Compile original full GPU controller and immutable role dependency graph
+        run: |
+          python -m py_compile scripts/launch_user_delegated_full_cuda45.py \
+            src/hephaestus/llm/certified_runtime.py \
+            src/hephaestus/production/tier_a_cuda_research.py
+      - name: Check user budget and original full 45 startup refusal logic
+        run: |
+          python -m pytest -q tests/test_original_cuda45_prepaid_launch_contract.py \
+            tests/test_original_cuda_mounted_volume_and_lease.py \
+            tests/test_signed_cuda_compute_authorization.py
+      - run: echo 'No GPU allocated by this test workflow. Actual launch is separate and guarded.'
