@@ -86,8 +86,14 @@ class OriginalCudaResearchObservation:
     def execute(self, request):
         grant_ref = None
         if request.substep == self.substep:
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=resource_grant_start role="+self.role,flush=True)
             grant_ref = self._require_resource_grant(request)
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=resource_grant_approved role="+self.role,flush=True)
+        if request.substep == self.substep:
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=domain_delegate_start role="+self.role,flush=True)
         base = self.delegate.execute(request)
+        if request.substep == self.substep:
+            print("ORIGINAL_CUDA_ROLE_BOUNDARY=domain_delegate_returned role="+self.role+" status="+base.status,flush=True)
         if base.status != "completed" or request.substep != self.substep:
             return base
         if not base.records:
@@ -110,6 +116,7 @@ class OriginalCudaResearchObservation:
             request.run_id, request.lineage_id,
             sha256=source[7:], observed_sha256=source[7:],
         )})
+        print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_start role="+self.role,flush=True)
         observed = self.reasoner.propose(RoleTask(
             role=self.role, situation=(
                 "Review the actual bounded original generated-task research "
@@ -120,8 +127,10 @@ class OriginalCudaResearchObservation:
             stage_name=request.stage_name,
         ), registry, context=DeterministicRoleContext(
             request.run_id, request.lineage_id, request.stage_name))
+        print("ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_returned role="+self.role,flush=True)
         if observed.action_gate is not None and not observed.action_gate.allowed:
             raise PermissionError("original CUDA controller/Judge deterministic action gate rejected output")
+        print("ORIGINAL_CUDA_ROLE_BOUNDARY=receipt_verification_start role="+self.role,flush=True)
         receipt = read_verified_json(self.context.artifacts, observed.inference_receipt_ref)
         if (receipt.get("status") != "accepted"
                 or receipt.get("role") != self.role
