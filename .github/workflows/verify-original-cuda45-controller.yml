@@ -1,7 +1,7 @@
 name: Validate full user-delegated GPU45 RunPod controller BEFORE allocating credit (CPU only)
 on:
   push:
-    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    branches: [feature/original-cuda-45-full-budget-launch-20261029, feature/cuda45-fresh-admission-20261029]
     paths:
       - 'scripts/launch_user_delegated_full_cuda45.py'
       - 'tests/test_original_cuda45_prepaid_launch_contract.py'
