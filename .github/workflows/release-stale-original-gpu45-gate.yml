@@ -1,0 +1,42 @@
+name: Release stale no-Pod GPU45 concurrency gate after definite REST 422
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths: ['.github/workflows/release-stale-original-gpu45-gate.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cancel-422-watchdog-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Reconcile definite 422 failed prior Pod create before freeing workflow concurrency
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          base='https://api.github.com/repos/kys928/Hephaestus/actions/runs'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+                   'Accept':'application/vnd.github+json'}
+          prior=json.load(urllib.request.urlopen(
+              urllib.request.Request(base+'/40848334497',headers=headers)))
+          if prior.get('id')!=40848334497:
+              raise SystemExit('UNEXPECTED_PRIOR_WORKFLOW_ID')
+          jobs=json.load(urllib.request.urlopen(urllib.request.Request(
+              base+'/40848334497/jobs?per_page=100',headers=headers)))['jobs']
+          old=[j for j in jobs if j.get('name')=='full-45-genuine-science']
+          if (len(old)!=1 or old[0].get('conclusion')!='failure'):
+              raise SystemExit('OLD_GPU_LAUNCH_NOT_PROVEN_FAILED')
+          if prior.get('status')!='in_progress':
+              print('NO_STALE_RUN_TO_CANCEL');raise SystemExit(0)
+          url=base+'/40848334497/cancel'
+          req=urllib.request.Request(url,method='POST',headers=headers)
+          with urllib.request.urlopen(req,timeout=20) as resp:
+              if resp.status!=202:
+                  raise SystemExit('GITHUB_CANCEL_FAILED')
+          print('DEFINITE_NO_POD_422_WATCHDOG_CANCEL_REQUESTED=true')
+          print('NEW_AUTHORIZED_FULL_CUDA45_CAMPAIGN_NOT_CANCELLED=true')
+          PY
