@@ -1,0 +1,64 @@
+name: Inspect live RunPod v2 Pod creation schema before retrying full original CUDA45 (no allocation)
+on:
+  push:
+    branches: [feature/original-cuda-45-full-budget-launch-20261029]
+    paths: ['.github/workflows/preflight-runpod-v2-create-schema.yml']
+permissions:
+  contents: read
+jobs:
+  validate-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q jsonschema
+      - name: Read provider OpenAPI and validate the exact failed original 45 GPU Pod body without a POST
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request
+          from jsonschema import Draft202012Validator,RefResolver
+          key=os.environ.get("RUNPOD_API_KEY","")
+          if not key: raise SystemExit("RUNPOD_API_KEY_NOT_CONNECTED")
+          request=urllib.request.Request("https://api.runpod.io/v2/openapi.json",
+              headers={"Authorization":"Bearer "+key})
+          with urllib.request.urlopen(request,timeout=30) as response:
+              spec=json.load(response)
+          paths=spec.get("paths",{})
+          matches=[(path,body["post"]) for path,body in paths.items()
+                   if path.rstrip("/") in ("/pods","/pod") and "post" in body]
+          if len(matches)!=1:
+              print("PROVIDER_V2_CREATE_PATH_CANDIDATES="+json.dumps(sorted([
+                path for path in paths if "pod" in path.lower()])[:20]))
+              raise SystemExit("RUNPOD_V2_POD_CREATE_OPERATION_UNAVAILABLE")
+          path,op=matches[0]
+          content=op["requestBody"]["content"]
+          schema=content.get("application/json",{}).get("schema")
+          if not schema:raise SystemExit("RUNPOD_POD_CREATE_SCHEMA_MISSING")
+          if "$ref" in schema:
+              prefix="#/components/schemas/"
+              if not schema["$ref"].startswith(prefix):
+                  raise SystemExit("UNEXPECTED_RUNPOD_SCHEMA_REFERENCE")
+              resolved=spec["components"]["schemas"][schema["$ref"][len(prefix):]]
+          else:resolved=schema
+          print("RUNPOD_V2_CREATE_OPERATION_PATH="+path)
+          print("PROVIDER_POD_REQUIRED_FIELDS="+json.dumps(resolved.get("required",[]),sort_keys=True))
+          print("PROVIDER_POD_ACCEPTED_FIELDS="+json.dumps(sorted(resolved.get("properties",{}))))
+          sample={"name":"hephaestus-original-cuda45-schema-only",
+             "gpu":{"id":"NVIDIA GeForce RTX 3090","count":1},
+             "cloud":"SECURE","dataCenterIds":["EU-CZ-1"],
+             "image":"runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu",
+             "disk":90,"mounts":{"network":[{"volumeId":"cviwpryzao","path":"/workspace"}]},
+             "entrypoint":[],"cmd":["bash","-lc","echo original"],
+             "env":{"RUNPOD_NETWORK_VOLUME_ID":"cviwpryzao"}}
+          validator=Draft202012Validator(schema,resolver=RefResolver.from_schema(spec))
+          errors=list(validator.iter_errors(sample))
+          for err in errors[:16]:
+              print("ORIGINAL_NESTED_POD_FIELD_MISMATCH_PATH="+str(list(err.path)))
+              print("ORIGINAL_NESTED_POD_VALIDATION_REASON="+err.validator)
+          print("ORIGINAL_NESTED_POD_OPENAPI_VALID="+str(not errors).lower())
+          print("PAID_GPU_PODS_CREATED=0")
+          PY
