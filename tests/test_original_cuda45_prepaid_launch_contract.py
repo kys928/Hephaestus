@@ -65,3 +65,9 @@ def test_never_allow_untagged_or_unpinned_gpu_science_commit():
     for sha in ("main","a"*39,"g"*40):
         with pytest.raises(PermissionError):
             controller.pod_command(sha,"b"*64,"sha256:"+"c"*64,3600)
+
+
+def test_generated_pod_full_science_command_is_real_bash_syntax():
+    import subprocess
+    command,env=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600)
+    subprocess.run(["bash","-n","-c",command[2]],check=True,timeout=5)
