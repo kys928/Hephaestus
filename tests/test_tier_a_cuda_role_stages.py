@@ -567,6 +567,6 @@ def test_r8_evaluator_foreign_lineage_rejected_receipt_fails_closed(tmp_path):
                 canonical_bytes(foreign),media_type="application/json").artifact_ref
             raise
     stage.reasoner=SimpleNamespace(propose=pretend_other_lineage)
-    with pytest.raises(PermissionError,match="rejected GPU citation inference evidence invalid"):
+    with pytest.raises(PermissionError,match="rejected GPU inference evidence invalid"):
         stage.execute(request)
     assert len(tasks)==1
