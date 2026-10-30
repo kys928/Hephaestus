@@ -315,8 +315,15 @@ class PinnedTransformersRoleGenerator:
         existing = cache_root
         while not existing.exists():
             existing = existing.parent
-        if self.allow_remote_pinned_download and shutil.disk_usage(existing).free < 22 * 1024**3:
-            raise RuntimeError("original CUDA temporary role cache has insufficient free disk")
+        if self.allow_remote_pinned_download:
+            free=shutil.disk_usage(existing).free
+            # Numeric local capacity only: no model text, account data, paths
+            # or secret-bearing exception body is printed.
+            print("ORIGINAL_CUDA_ROLE_CACHE_FREE_GIB_BEFORE_DOWNLOAD="+
+                  str(free//(1024**3)),flush=True)
+            if free < 22 * 1024**3:
+                print("ORIGINAL_CUDA_ROLE_CACHE_PRE_DOWNLOAD_REFUSAL=insufficient_disk",flush=True)
+                raise RuntimeError("original CUDA temporary role cache has insufficient free disk")
 
     def _load(self, spec: CertifiedRoleModel, profile: Mapping[str, object], adapter_path: Path) -> None:
         identity = (spec.role, spec.model_id, spec.revision, spec.adapter.sha256, str(adapter_path.resolve()))
@@ -325,6 +332,7 @@ class PinnedTransformersRoleGenerator:
         retired_identity = self._loaded_identity
         self.close()
         if retired_identity is not None:
+            print("ORIGINAL_CUDA_ROLE_RETIREMENT_ATTEMPT="+retired_identity[0],flush=True)
             self._evict_retired_role_cache(retired_identity)
         self._ensure_role_cache_capacity()
         try:
