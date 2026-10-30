@@ -1,0 +1,70 @@
+name: Inspect viable CUDA GPUs for original 45-stage campaign (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r6-planner-citation-recovery-20261030]
+    paths: ['.github/workflows/inspect-alternative-gpus-original-cuda45-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  find-original-cuda-compatible-secure-gpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e .
+      - name: Read exact datacenter stock and secure per-GPU price; do not rent
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from decimal import Decimal
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing, REST_URL
+          cfg=RunPodConfig.from_env()
+          if cfg.datacenter_id!="EU-CZ-1" or cfg.network_volume_id!="cviwpryzao":
+              raise PermissionError("original volume/datacenter invariant violated")
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider())
+          prefix="hephaestus-original-five-fullcuda45-41039550620-"
+          owned=[x for x in adapter.list_pods() if str(x.get('name','')).startswith(prefix)]
+          print("ORIGINAL_R6_RECONCILIATION_MATCHES="+str(len(owned)))
+          if owned:
+              raise PermissionError("previous campaign has an extant Pod; no next launch permitted")
+          _,dc=adapter._request("GET","catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY")
+          if not isinstance(dc,dict) or dc.get("id")!="EU-CZ-1":raise PermissionError("wrong GPU availability region")
+          from urllib.request import Request,urlopen
+          import json
+          req=Request(REST_URL,headers={"Authorization":"Bearer "+os.environ['RUNPOD_API_KEY']})
+          with urlopen(req,timeout=20) as response:
+              catalog=json.load(response)
+          if not isinstance(catalog,dict) or not isinstance(catalog.get('gpus'),list):
+              raise RuntimeError("GPU catalog absent")
+          pricing={x.get('id'):x for x in catalog['gpus'] if isinstance(x,dict)}
+          for entry in dc.get('gpuAvailability',[]):
+              if not isinstance(entry,dict):continue
+              gpu_id=entry.get('id')
+              item=pricing.get(gpu_id)
+              if not isinstance(gpu_id,str) or not isinstance(item,dict):continue
+              mem=item.get('memory')
+              if type(mem) is not int or mem<24 or item.get('secure') is not True:continue
+              price=item.get('price',{}).get('secure')
+              try:price=Decimal(str(price))
+              except Exception:continue
+              if not price.is_finite() or price<=0:continue
+              avail=str(entry.get('availability','UNKNOWN')).upper()
+              if avail not in {"NONE","LOW","MEDIUM","HIGH"}:avail="UNKNOWN"
+              print("COMPATIBLE_GPU_CANDIDATE="+gpu_id+"|VRAM_GB="+str(mem)+"|SECURE_USD_PER_HOUR="+str(price)+"|EU_CZ_1_STOCK="+avail)
+          print("STOCK_LABEL_IS_NOT_ALLOCATION_CONFIRMATION=true")
+          print("PODS_CREATED_BY_DISCOVERY=0")
+          PY
