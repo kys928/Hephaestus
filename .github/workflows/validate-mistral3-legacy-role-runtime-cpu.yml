@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install -q torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
       - name: Resolve exact shared original target and frozen five-role extras, no model weights
-        run: python -m pip install -q -e '.[peft-training,role-inference,test]'
+        run: python -m pip install -q -e '.[peft-training,role-inference,independent-certification,test]'
       - name: Verify both original Mistral3 models can import with installed frozen role dependencies
         run: |
           python - <<'PY'
