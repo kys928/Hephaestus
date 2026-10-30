@@ -1,0 +1,24 @@
+name: Validate 120GB original CUDA pod cache disk and prepaid storage accounting (CPU only)
+on:
+  push:
+    branches: [fix/cuda45-r7-pre-evaluator-disk-headroom-20261030]
+    paths:
+      - '.github/workflows/validate-original-cuda45-expanded-ephemeral-disk-cpu.yml'
+      - 'scripts/launch_user_delegated_full_cuda45.py'
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'tests/test_original_cuda45_prepaid_launch_contract.py'
+permissions: {contents: read}
+jobs:
+  disk-budget-and-role-guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e '.[test,s3,independent-certification]'
+      - name: Test ephemeral model cache and original operator cost guards without GPU
+        run: |
+          python -m pytest -q tests/test_original_cuda45_prepaid_launch_contract.py tests/test_cuda_role_ephemeral_cache_lifecycle.py tests/test_tier_a_cuda_role_stages.py tests/test_certified_role_inference.py
+          python -m compileall -q scripts/launch_user_delegated_full_cuda45.py src/hephaestus/llm
+          echo 'PODS_RENTED=0'
