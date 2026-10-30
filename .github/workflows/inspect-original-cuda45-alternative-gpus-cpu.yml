@@ -1,0 +1,67 @@
+name: Identify actually eligible CUDA GPU alternatives at original volume data center (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r6-planner-citation-recovery-20261030]
+    paths: ['.github/workflows/inspect-original-cuda45-alternative-gpus-cpu.yml']
+permissions: {contents: read}
+jobs:
+  inspect-hardware-pricing-and-orphans:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e .
+      - name: Match live Secure EU-CZ-1 catalog supply to authenticated GPU price and VRAM
+        run: |
+          python - <<'PY'
+          import json
+          from decimal import Decimal
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+          from os import environ
+          cfg=RunPodConfig.from_env()
+          assert cfg.datacenter_id=='EU-CZ-1' and cfg.network_volume_id=='cviwpryzao'
+          a=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider())
+          code,dc=a._request('GET','catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY')
+          if code!=200 or dc.get('id')!='EU-CZ-1':raise RuntimeError('no verified pinned DC inventory')
+          available={v.get('id'):v.get('availability') for v in dc.get('gpuAvailability',[])
+                     if isinstance(v,dict) and isinstance(v.get('id'),str)}
+          pricing=ReadOnlyRunPodPricing(bearer_token=environ['RUNPOD_API_KEY'])
+          account=pricing.account()
+          if account.autopay_enabled:raise PermissionError('autopay enabled')
+          raw=pricing._transport('https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD','GET',None)
+          if not isinstance(raw,dict) or not isinstance(raw.get('gpus'),list):
+              raise RuntimeError('provider price catalog invalid')
+          selections=[]
+          for g in raw['gpus']:
+              if not isinstance(g,dict):continue
+              ident=g.get('id'); vram=g.get('memory'); prices=g.get('price')
+              if not isinstance(ident,str) or type(vram)!=int or not isinstance(prices,dict):continue
+              if vram<24 or g.get('secure') is not True:continue
+              try:rate=Decimal(str(prices.get('secure')))
+              except Exception:continue
+              if not rate.is_finite() or rate<=0:continue
+              stock=available.get(ident,'NOT_LISTED')
+              candidate=(stock in ('LOW','MEDIUM','HIGH') and rate<=Decimal('0.89'))
+              print('GPU_CANDIDATE='+json.dumps({'id':ident,'vram_gb':vram,'secure_hourly_usd':str(rate),
+                 'dc_stock_label':stock,'within_original_rate_ceiling':rate<=Decimal('0.89'),
+                 'eligible_for_consideration':candidate},sort_keys=True))
+              if candidate:selections.append((stock,rate,ident))
+          print('ELIGIBLE_ALTERNATIVE_CANDIDATES='+str(len(selections)))
+          print('NO_PODS_ALLOCATED_BY_INSPECTOR=true')
+          print('AUTOPAY_DISABLED_VERIFIED=true')
+          print('STOCK_LABEL_IS_NOT_ALLOCATION_CONFIRMATION=true')
+          print('R6_OWNED_POD_COUNT='+str(sum(str(p.get('name','')).startswith('hephaestus-original-five-fullcuda45-41039550620-') for p in a.list_pods())))
+          PY
