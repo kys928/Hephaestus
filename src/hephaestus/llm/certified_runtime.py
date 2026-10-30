@@ -307,8 +307,12 @@ class PinnedTransformersRoleGenerator:
 
         try:
             if profile["load_kind"] == "mistral3":
-                from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
-                tokenizer = MistralCommonBackend.from_pretrained(snapshot)
+                # The worker's peft-training extra pins Transformers <5. In 4.57.x
+                # the official mistral-common wrapper is named
+                # MistralCommonTokenizer (renamed to MistralCommonBackend in v5).
+                # No fallback to generic tokenizers, another model, or CPU.
+                from transformers import Mistral3ForConditionalGeneration, MistralCommonTokenizer
+                tokenizer = MistralCommonTokenizer.from_pretrained(snapshot)
                 model = Mistral3ForConditionalGeneration.from_pretrained(
                     snapshot, local_files_only=True, torch_dtype=torch.bfloat16,
                     device_map={"": 0}, trust_remote_code=False,
