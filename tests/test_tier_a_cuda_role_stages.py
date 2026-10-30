@@ -329,3 +329,164 @@ def test_format_repair_without_verified_rejected_receipt_stays_denied(tmp_path):
     with pytest.raises(PermissionError,match="lacks immutable receipt"):
         service.execute(request)
     assert len(attempted)==1
+
+
+def _planner_r5_rejected_citation_fixture(tmp_path, *, retry_behavior="valid",
+                                         first_error="role response cites missing, duplicate or empty evidence",
+                                         forged=False):
+    """Faithfully run the frozen parser on r5-style invalid evidence_refs.
+
+    No GPU, S3 authority, or scientific receipt is simulated as actual science.
+    The deterministic test-double exercises the *production* gate and parser.
+    """
+    import json
+    from pathlib import Path
+    from hephaestus.llm.role_contract import RoleMasteryContract
+    store=FileSystemArtifactStore(tmp_path/"artifacts")
+    context=SimpleNamespace(
+        artifacts=store,admission=SimpleNamespace(policy_ref="sha256:"+"d"*64))
+    contract=RoleMasteryContract.load(
+        Path(__file__).resolve().parents[1]/
+        "configs/models/hephaestus_role_mastery_runtime_v1.json")
+    tasks=[]
+
+    class RejectedCitationThenRetried(TestOnlyReasoner):
+        def __init__(self):
+            super().__init__(store,role="planner")
+        def propose(self,task,registry,*,context):
+            tasks.append(task)
+            if len(tasks)==1 or retry_behavior=="invalid":
+                vocabulary=contract.profile("planner")["vocabulary"]
+                row={
+                    "decision":vocabulary["decision"][0],
+                    "action":vocabulary["action"][0],
+                    "primary_variable":vocabulary["primary_variable"][0],
+                    "confidence":0.6,
+                    "evidence_refs":["sha256:"+"0"*64,"sha256:"+"0"*64],
+                    "uncertainties":[],
+                    "rationale":"Conservative advice based only on measured evidence."}
+                if first_error=="role response has invalid action":
+                    row["action"]="not_a_frozen_action"
+                raw=json.dumps(row)
+                try:
+                    contract.parse("planner",raw,{x.ref for x in task.evidence})
+                except ValueError as e:
+                    assert str(e)==(
+                        first_error if len(tasks)==1 else
+                        "role response cites missing, duplicate or empty evidence")
+                    if not forged:
+                        rejected={
+                            "schema":"role-inference.v1",
+                            "role":"planner","status":"rejected",
+                            "error":str(e),
+                            "run_id":task.run_id,
+                            "lineage_id":task.lineage_id,
+                            "stage_name":task.stage_name,
+                            "evidence_refs":[x.ref for x in task.evidence],
+                            "execution":{"device":"cuda:0","test_double":True},
+                            "generator":"PinnedTransformersRoleGenerator",
+                            "raw_output":raw,
+                        }
+                        e.rejected_inference_receipt_ref=store.put_bytes(
+                            canonical_bytes(rejected),
+                            media_type="application/json").artifact_ref
+                    raise
+            # Strict test must use original *validated* evidence and same model.
+            vocab=contract.profile("planner")["vocabulary"]
+            good={
+                "decision":vocab["decision"][0],
+                "action":vocab["action"][0],
+                "primary_variable":vocab["primary_variable"][0],
+                "confidence":0.4,
+                "evidence_refs":[task.evidence[0].ref],
+                "uncertainties":[],
+                "rationale":"Only the verified domain observation is relied upon."}
+            answer=contract.parse("planner",json.dumps(good),
+                                  {e.ref for e in task.evidence})
+            assert answer.evidence_refs==(task.evidence[0].ref,)
+            return super().propose(task,registry,context=context)
+
+    reasoner=RejectedCitationThenRetried()
+    stage=OriginalCudaResearchObservation(
+        "planner","intervention_ranking",DomainDelegate(),
+        context,reasoner,
+        resource_approval_service=TestOnlyGpuGrant(store,"planner"))
+    request=StagedOperationRequest(
+        "workflow","run","lineage","targeted_repair",
+        "planner","intervention_ranking","native-planner-r5",1,(),{})
+    return stage,request,tasks,store
+
+
+def test_real_r5_planner_exact_citation_error_can_retry_once_only_with_original_verified_ref(tmp_path):
+    from hephaestus.storage.verified import read_verified_json
+    stage,request,tasks,store=_planner_r5_rejected_citation_fixture(tmp_path)
+    result=stage.execute(request)
+    assert result.status=="completed"
+    assert len(tasks)==2
+    assert tasks[0].evidence==tasks[1].evidence
+    assert tasks[0].run_id==tasks[1].run_id
+    assert tasks[0].stage_name==tasks[1].stage_name
+    assert "FORMAT-ONLY RETRY" in tasks[1].situation
+    assert tasks[0].evidence[0].ref in tasks[1].situation
+    assert "Do not invent any source" in tasks[1].situation
+    proposal=result.records[-1].payload
+    assert proposal["role"]=="planner"
+    assert proposal["advisory_only"] is True
+    assert proposal["bounded_format_repair_attempts"]==1
+    assert len(proposal["rejected_inference_receipt_refs"])==1
+    rejected=read_verified_json(store,proposal["rejected_inference_receipt_refs"][0])
+    assert rejected["status"]=="rejected"
+    assert rejected["role"]=="planner"
+    assert rejected["error"]=="role response cites missing, duplicate or empty evidence"
+    assert rejected["evidence_refs"]==[tasks[0].evidence[0].ref]
+    assert proposal["effective_action"] is None
+    assert proposal["promotion_authorized"] is False
+    assert proposal["independent_certification"] is False
+    assert proposal["device"]=="cuda:0"
+
+
+def test_r5_planner_second_invalid_citation_fails_closed(tmp_path):
+    stage,request,tasks,store=_planner_r5_rejected_citation_fixture(
+        tmp_path,retry_behavior="invalid")
+    with pytest.raises(ValueError,match="cites missing, duplicate or empty evidence"):
+        stage.execute(request)
+    assert len(tasks)==2
+
+
+def test_r5_planner_unrelated_parser_error_is_not_retried(tmp_path):
+    stage,request,tasks,_=_planner_r5_rejected_citation_fixture(
+        tmp_path,first_error="role response has invalid action")
+    with pytest.raises(ValueError,match="invalid action"):
+        stage.execute(request)
+    assert len(tasks)==1
+
+
+def test_r5_planner_missing_original_sha_receipt_is_not_retried(tmp_path):
+    stage,request,tasks,_=_planner_r5_rejected_citation_fixture(
+        tmp_path,forged=True)
+    with pytest.raises(PermissionError,match="lacks immutable receipt"):
+        stage.execute(request)
+    assert len(tasks)==1
+
+
+def test_r5_planner_foreign_or_corrupt_rejection_receipt_fails_closed(tmp_path):
+    stage,request,tasks,store=_planner_r5_rejected_citation_fixture(tmp_path)
+    original=stage.reasoner
+    def fake_propose(task,registry,*,context):
+        try:
+            original.propose(task,registry,context=context)
+        except ValueError as e:
+            rejected={
+                "schema":"role-inference.v1","status":"rejected",
+                "error":str(e),"role":"planner",
+                "run_id":task.run_id,"lineage_id":"FOREIGN",
+                "stage_name":task.stage_name,"evidence_refs":[x.ref for x in task.evidence],
+                "generator":"PinnedTransformersRoleGenerator",
+                "execution":{"device":"cuda:0"}}
+            e.rejected_inference_receipt_ref=store.put_bytes(
+                canonical_bytes(rejected),media_type="application/json").artifact_ref
+            raise
+    stage.reasoner=SimpleNamespace(propose=fake_propose)
+    with pytest.raises(PermissionError,match="rejected GPU inference evidence invalid"):
+        stage.execute(request)
+    assert len(tasks)==1
