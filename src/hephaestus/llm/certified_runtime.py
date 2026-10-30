@@ -307,6 +307,10 @@ class PinnedTransformersRoleGenerator:
 
         try:
             if profile["load_kind"] == "mistral3":
+                # Original Ministral-3-2512 configs contain a nested
+                # model_type='ministral3' unsupported by Transformers 4.57.x.
+                # Import the official backend from the explicitly pinned v5
+                # runtime; do not alias the old 4.x tokenizer or use a fallback.
                 from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
                 tokenizer = MistralCommonBackend.from_pretrained(snapshot)
                 model = Mistral3ForConditionalGeneration.from_pretrained(
