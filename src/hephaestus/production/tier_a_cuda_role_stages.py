@@ -170,7 +170,7 @@ class OriginalCudaResearchObservation:
                         or rejected.get("evidence_refs") != [source]
                         or rejected.get("generator") != "PinnedTransformersRoleGenerator"
                         or rejected.get("execution",{}).get("device") != "cuda:0"):
-                    raise PermissionError("original rejected GPU citation inference evidence invalid") from exc
+                    raise PermissionError("original rejected GPU inference evidence invalid") from exc
                 if (len(task.evidence) != 1
                         or task.evidence[0].ref != source
                         or not source.startswith("sha256:")):
