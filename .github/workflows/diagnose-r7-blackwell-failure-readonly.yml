@@ -108,6 +108,16 @@ jobs:
               }.items():
                   print("R7_PRIVATE_WORKER_SYMPTOM_"+label+"="+str(needle in text).lower())
               print("R7_PRIVATE_WORKER_SYMPTOM_PROBE_SOURCE=worker_stdout_only")
+              evaluator_start=[i for i,l in enumerate(lines)
+                  if l.strip()=="ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_start role=evaluator"]
+              if evaluator_start:
+                  tail=lines[evaluator_start[-1]+1:]
+                  print("R7_EVALUATOR_LOG_LINES_AFTER_INFERENCE_START="+str(len(tail)))
+                  print("R7_EVALUATOR_FETCH_AFTER_START="+str(any("Fetching " in l and "files:" in l for l in tail)).lower())
+                  print("R7_EVALUATOR_WEIGHT_LOAD_AFTER_START="+str(any("Loading weights:" in l for l in tail)).lower())
+                  print("R7_EVALUATOR_ANY_ROLE_BOUNDARY_AFTER_START="+str(any(l.startswith("ORIGINAL_CUDA_ROLE_BOUNDARY=") for l in tail)).lower())
+                  print("R7_EVALUATOR_CACHE_MARKER_AFTER_START="+str(any("ORIGINAL_CUDA_RETIRED_ROLE_CACHE_CLEARED" in l for l in tail)).lower())
+              print("R7_EVALUATOR_PRIVATE_LOG_TEXT_EXPOSED=false")
           exitbytes=optional(prefix+"worker_exit_status-"+run+".txt")
           if exitbytes:
               rows=[x.split() for x in exitbytes.decode(errors="replace").splitlines() if x.strip()]
