@@ -1,0 +1,147 @@
+name: Prepare fresh r9 original CUDA45 after strict Evaluator recovery (CPU only)
+on:
+  push:
+    branches: [feature/cuda45-r9-post-evaluator-citation-20261030]
+    paths:
+      - '.github/workflows/prepare-fresh-original-cuda45-r9-cpu.yml'
+permissions:
+  contents: read
+concurrency:
+  group: original-cuda45-fresh-r9-source-admission-once
+  cancel-in-progress: false
+jobs:
+  prepare-and-stage-new-original-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare real CPU pinned original data model, not frozen CUDA roles
+        run: |
+          python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,peft-training,s3,independent-certification]'
+      - name: Recreate distinct original reviewed Tier A science context with zero stage completions
+        run: |
+          python scripts/run_original_tier_a_cuda_worker.py \
+            --prepare-only \
+            --workspace "$RUNNER_TEMP/cuda-original-r9-fresh" \
+            --config configs/research/tier_a_original_cuda_45_fresh_20261030_r9.json \
+            --target-model-cache /tmp/hephaestus-original-r9-cache \
+            --original-role-model-cache /tmp/hephaestus-original-five-not-loaded \
+            --original-adapter-cache /tmp/hephaestus-verified-adapters-not-loaded \
+            --maximum-gpu-seconds 3600
+      - name: Verify genuine newly admitted unsigned scope; stage privately with remote cold SHA checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import boto3,hashlib,json,os,sqlite3,re
+          from botocore.exceptions import ClientError
+          root=Path(os.environ["RUNNER_TEMP"])/"cuda-original-r9-fresh"
+          req=json.loads((root/"cuda-grant-unsigned-request.json").read_bytes())
+          wf="cuda-json-45-original-five-20261030-r9"
+          run="cuda-json-45-new-1117-r9"
+          if (req.get("workflow_id")!=wf or req.get("run_id")!=run
+              or req.get("status")!="requested" or req.get("device")!="cuda:0"
+              or req.get("external_certification") is not False
+              or req.get("operator_id")!="REQUIRES_EXTERNAL_OPERATOR_ID"
+              or not re.fullmatch("sha256:[0-9a-f]{64}",req.get("source_policy_ref",""))
+              or not re.fullmatch("sha256:[0-9a-f]{64}",req.get("reviewed_trainable_ref",""))
+              or len(req.get("operations",{}))!=9):
+              raise PermissionError("fresh original source signature scope invalid")
+          con=sqlite3.connect("file:"+str(root/"state.sqlite")+"?mode=ro",uri=True)
+          try:
+              if con.execute("PRAGMA quick_check").fetchone()[0]!="ok":
+                  raise PermissionError("new scientific SQLite corrupt")
+              rows=con.execute("SELECT collection,payload_json FROM state_records ORDER BY sequence").fetchall()
+          finally:con.close()
+          states=[json.loads(raw) for coll,raw in rows if coll=="staged_workflow_states"]
+          boot=[json.loads(raw) for coll,raw in rows if coll=="governed_campaign_bootstraps"]
+          if (len(states)!=1 or len(boot)!=1
+              or states[0].get("workflow_id")!=wf
+              or states[0].get("run_id")!=run
+              or states[0].get("status")!="pending"
+              or states[0].get("completion_marker") is not False
+              or states[0].get("steps")!={}
+              or any(coll in {"staged_workflow_records","cuda_target_optimizer_steps"}
+                     for coll,_ in rows)):
+              raise PermissionError("fresh original native state has unexpected science receipts")
+          if (os.environ["RUNPOD_NETWORK_VOLUME_ID"]!="cviwpryzao"
+              or os.environ["RUNPOD_DATACENTER_ID"]!="EU-CZ-1"
+              or "s3api-eu-cz-1.runpod.io" not in os.environ["RUNPOD_S3_ENDPOINT_URL"]):
+              raise PermissionError("fresh campaign cannot be staged to foreign volume")
+          s3=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"],
+              region_name="eu-cz-1",
+              aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+          bucket="cviwpryzao"
+          new="hephaestus/scientific/original_cuda_45/"+wf+"/"
+          old_keys=[
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261028/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261029-r2/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261029-r3/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r4/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r5/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r6/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r7/state.sqlite",
+              "hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r8/state.sqlite",
+          ]
+          old_before={key:hashlib.sha256(
+              s3.get_object(Bucket=bucket,Key=key)["Body"].read()).hexdigest()
+              for key in old_keys}
+          if s3.list_objects_v2(Bucket=bucket,Prefix=new,MaxKeys=1).get("Contents"):
+              raise PermissionError("fresh S3 namespace already exists; refuse overwrite or reuse")
+          files=[x for x in root.rglob("*") if x.is_file()]
+          assert files
+          manifest={}
+          for file in sorted(files):
+              if file.is_symlink():
+                  raise PermissionError("fresh source contains forbidden symlink")
+              rel=file.relative_to(root).as_posix()
+              raw=file.read_bytes()
+              digest=hashlib.sha256(raw).hexdigest()
+              if rel.startswith("artifacts/objects/sha256/") and digest!=file.name:
+                  raise PermissionError("fresh source artifact digest mismatch")
+              manifest[rel]=digest
+          # This seal is only an unsigned preparation receipt, not GPU authority.
+          seal=json.dumps({"schema":"fresh-original-cuda45-prepared.v1",
+              "workflow_id":wf,"run_id":run,
+              "source_policy_ref":req["source_policy_ref"],
+              "reviewed_trainable_ref":req["reviewed_trainable_ref"],
+              "source_files_sha256":manifest,"native_operations_completed":0,
+              "gpu_optimizer_steps_completed":0,"operator_signature_present":False,
+              "original_terminal_state_retained":True},sort_keys=True,separators=(",",":")).encode()
+          all_objects=[("_fresh_admission_manifest.json",seal)]
+          all_objects += [(rel,(root/rel).read_bytes()) for rel in sorted(manifest)]
+          for rel,raw in all_objects:
+              key=new+rel
+              # Abort instead of overwriting any independently existing bytes.
+              s3.put_object(Bucket=bucket,Key=key,Body=raw,IfNoneMatch="*")
+              with s3.get_object(Bucket=bucket,Key=key)["Body"] as body:
+                  if hashlib.sha256(body.read()).digest()!=hashlib.sha256(raw).digest():
+                      raise PermissionError("fresh original S3 source cold readback mismatch")
+          old_after={key:hashlib.sha256(
+              s3.get_object(Bucket=bucket,Key=key)["Body"].read()).hexdigest()
+              for key in old_keys}
+          if old_before!=old_after:
+              raise PermissionError("historical terminal original state unexpectedly changed")
+          print("FRESH_ORIGINAL_CUDA45_NATIVE_STATUS=pending")
+          print("FRESH_ORIGINAL_CUDA45_NATIVE_COMPLETIONS=0")
+          print("FRESH_ORIGINAL_CUDA45_SOURCE_POLICY_REF="+req["source_policy_ref"])
+          print("FRESH_ORIGINAL_CUDA45_TRAINABLE_REF="+req["reviewed_trainable_ref"])
+          print("FRESH_ORIGINAL_CUDA45_STAGED_FILES="+str(len(files)))
+          print("ALL_EIGHT_PRIOR_CAMPAIGN_NATIVE_STATES_SHA_UNCHANGED=true")
+          print("FRESH_ORIGINAL_CUDA45_GPU_AUTHORIZATION_STATUS=unsigned_pending")
+          print("GPU_PODS_ALLOCATED=0")
+          PY
