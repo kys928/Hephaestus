@@ -1,0 +1,76 @@
+name: Validate r9 Judge recovery, archive publication and live prepaid capacity (no GPU)
+on:
+  push:
+    branches: [fix/cuda45-r9-forensics-completion-20261030]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/validate-r9-judge-recovery-cpu.yml'
+  pull_request:
+    paths: ['src/hephaestus/production/tier_a_cuda_role_stages.py', 'scripts/cold_verify_original_tier_a_cuda_archive.py']
+permissions: {contents: read}
+jobs:
+  cpu-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,peft-training,role-inference,s3,independent-certification]'
+      - run: python -m pytest -q tests/
+  live-funding-and-reconciliation:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3,independent-certification]'
+      - name: Read authenticated funding, quote, Pod inventory and unused campaign namespace
+        run: |
+          python - <<'PY'
+          import os,sys
+          from pathlib import Path
+          sys.path.insert(0,"scripts")
+          from launch_user_delegated_full_cuda45 import client_s3,decide_budget,GPU
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+          cfg=RunPodConfig.from_env()
+          assert cfg.network_volume_id=="cviwpryzao" and cfg.datacenter_id=="EU-CZ-1"
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"read-only-provider")
+          pods=adapter.list_pods()
+          own=[p for p in pods if str(p.get("name","")).startswith("hephaestus-original-five-fullcuda45-")]
+          print("CURRENT_PROVIDER_POD_COUNT="+str(len(pods)))
+          print("CURRENT_ORIGINAL_CUDA45_POD_COUNT="+str(len(own)))
+          if own: raise PermissionError("another original CUDA campaign Pod exists; reconcile before launch")
+          provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          account=provider.account()
+          rate=provider.quote_gpu(gpu_id=GPU,datacenter_id=cfg.datacenter_id)
+          seconds=decide_budget(account,rate)
+          print("LIVE_PREPAID_FUNDED_SECONDS="+str(seconds))
+          print("LIVE_AUTOPAY_DISABLED="+str(not account.autopay_enabled).lower())
+          print("LIVE_SELECTED_GPU="+GPU)
+          print("LIVE_SELECTED_GPU_VRAM_GB="+str(rate.gpu_memory_gb))
+          print("LIVE_SELECTED_GPU_QUOTE_USD_PER_HOUR="+str(rate.price_usd_per_hour))
+          s3=client_s3(cfg)
+          new="hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r10/"
+          if s3.list_objects_v2(Bucket=cfg.network_volume_id,Prefix=new,MaxKeys=1).get("Contents"):
+              raise PermissionError("r10 identity already exists; choose another globally unused identity")
+          print("FRESH_R10_NAMESPACE_EMPTY=true")
+          print("GPU_PODS_CREATED_BY_AUDIT=0")
+          print("ACCOUNT_FINANCIAL_AMOUNTS_EXPOSED=false")
+          PY

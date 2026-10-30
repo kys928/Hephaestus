@@ -88,6 +88,43 @@ def test_generated_pod_full_science_command_is_real_bash_syntax():
     subprocess.run(["bash","-n","-c",command[2]],check=True,timeout=5)
 
 
+def test_actual_paid_worker_archive_tail_freezes_outside_workspace_then_publishes(tmp_path):
+    """Exercise the real archive tail, with explicitly non-scientific fixture data.
+
+    The freezer checks packaging; independent scientific verification remains
+    mandatory and is not replaced by this small archive integration test.
+    """
+    import json,os,sqlite3,subprocess
+    from hashlib import sha256
+    from zipfile import ZipFile
+    root=tmp_path/"native-workspace"
+    root.mkdir()
+    report={"status":"completed","completed_operations":45,"verified":{
+        "native_operations":45,"actual_cuda_optimizer_steps":96,
+        "original_five_cuda_role_inferences":list(range(5)),
+        "independent_certification":False},"test_fixture_only":True}
+    raw=json.dumps(report).encode()
+    (root/("cuda-native-report-"+sha256(raw).hexdigest()+".json")).write_bytes(raw)
+    with sqlite3.connect(root/"state.sqlite") as db:
+        db.execute("CREATE TABLE fixture_only (id INTEGER)")
+    script=controller.pod_command("a"*40,"b"*64,"sha256:"+"c"*64,3600,
+        "external-original-cuda-grant-1234.json",run_tag="1234",
+        code_bundle_sha256="d"*64)[0][2]
+    tail=script[script.index("python scripts/freeze_original_tier_a_cuda_archive.py"):]
+    tail=tail.replace("/workspace/"+controller.PREFIX,str(root))
+    outside=tmp_path/"outside.zip"
+    tail=tail.replace("/tmp/original-cuda45-1234.zip",str(outside))
+    env={**os.environ,"PATH":str(Path(__import__('sys').executable).parent)+":"+os.environ["PATH"]}
+    subprocess.run(["bash","-e","-c",tail],cwd=ROOT,env=env,check=True,capture_output=True)
+    published=root/"original_frozen_45_archive.zip"
+    assert published.read_bytes()==outside.read_bytes()
+    assert (root/"original_frozen_archive_sha256.txt").read_text().strip()==sha256(published.read_bytes()).hexdigest()
+    with ZipFile(published) as archive:
+        assert "state.sqlite" in archive.namelist()
+        assert "original_frozen_45_archive.zip" not in archive.namelist()
+        assert not any(name.endswith(".partial") for name in archive.namelist())
+
+
 def _fake_native_state_bucket(tmp_path, state):
     """Test-only S3 readback of actual SQLite bytes, never provider IO."""
     import io,json,sqlite3

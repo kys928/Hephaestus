@@ -234,6 +234,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
     bundle=root+"/code/git-"+commit_sha+".tar.gz"
     status=root+"/worker_exit_status-"+run_tag+".txt"
     logs=root+"/worker_stdout-"+run_tag+".log"
+    temporary_archive="/tmp/original-cuda45-"+run_tag+".zip"
     # Capture failures on persistent storage, including import/pip errors. Never
     # emit credentials: the Pod has only the independent public key and volume ID.
     command=(
@@ -262,7 +263,12 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         f"--maximum-gpu-seconds {max_seconds}; "
         "python scripts/freeze_original_tier_a_cuda_archive.py "
         f"--workspace '{root}' "
-        f"--archive '{root}/original_frozen_45_archive.zip'; "
+        f"--archive '{temporary_archive}'; "
+        # Freeze outside the source tree to avoid including the ZIP in itself.
+        # Publish the complete ZIP before the digest makes it visible to the
+        # off-Pod verifier. Never replace existing campaign evidence.
+        f"test ! -e '{root}/original_frozen_45_archive.zip'; "
+        f"cp '{temporary_archive}' '{root}/original_frozen_45_archive.zip'; "
         f"sha256sum '{root}/original_frozen_45_archive.zip' | awk '{{print $1}}' > "
         f"'{root}/original_frozen_archive_sha256.txt'; "
         "echo FULL_NATIVE_CUDA_45_FINISHED"

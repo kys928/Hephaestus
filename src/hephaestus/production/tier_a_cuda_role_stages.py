@@ -143,7 +143,7 @@ class OriginalCudaResearchObservation:
             print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=certified_inference role="+self.role,flush=True)
             raise
         except ValueError as exc:
-            # The genuine r5 Planner and r8 Evaluator both produced a
+            # The genuine r5 Planner, r8 Evaluator and r9 Judge produced a
             # frozen-schema evidence citation rejection. Restrict one new
             # GPU inference to exactly those source-bound original boundaries.
             # One new GPU inference may be requested with exact VERIFIED
@@ -152,6 +152,7 @@ class OriginalCudaResearchObservation:
             citation_role_substeps = {
                 "planner": "intervention_ranking",
                 "evaluator": "semantic_comparison",
+                "judge": "governed_verdict",
             }
             if (self.role in citation_role_substeps
                     and request.substep == citation_role_substeps[self.role]

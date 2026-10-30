@@ -275,6 +275,29 @@ class GovernedStagedOrchestrator:
                     "error_type":type(exc).__name__, "resumable":exc.resumable}),),
             )
         except Exception as exc:  # subsystem exceptions are evidence, never success
+            # Full details belong in private content-addressed custody, not
+            # console logs or control memory. Preserve the original exception
+            # before converting it into the terminal staged result.
+            import traceback
+            diagnostic = {
+                "schema": "staged-subsystem-failure.v1",
+                "workflow_id": self.workflow_id, "run_id": self.run_id,
+                "lineage_id": self.lineage_id, "stage_name": self.stage_name,
+                "operation_id": operation_id, "phase": phase.value,
+                "substep": substep, "error_type": type(exc).__name__,
+                "message": str(exc), "traceback": traceback.format_exc(),
+            }
+            diagnostic_ref = None
+            diagnostic_capture_error = None
+            if self.dependencies.artifact_store is not None:
+                try:
+                    diagnostic_ref = self.dependencies.artifact_store.put_bytes(
+                        _canonical_json(diagnostic).encode("utf-8"),
+                        media_type="application/json").artifact_ref
+                except Exception as capture_error:
+                    # Storage failure must not replace the original subsystem
+                    # failure or accidentally turn it into a resumable result.
+                    diagnostic_capture_error = type(capture_error).__name__
             return StagedOperationResult(
                 status="terminal_failure",
                 blocking_issues=(f"subsystem_exception:{type(exc).__name__}",),
@@ -285,6 +308,8 @@ class GovernedStagedOrchestrator:
                             "phase": phase.value,
                             "substep": substep,
                             "error_type": type(exc).__name__,
+                            "diagnostic_ref": diagnostic_ref,
+                            "diagnostic_capture_error": diagnostic_capture_error,
                             "retryable": False,
                         },
                     ),
