@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 10
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
       RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
       RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
       RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
