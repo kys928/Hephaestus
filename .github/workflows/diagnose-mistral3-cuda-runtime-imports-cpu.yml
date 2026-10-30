@@ -42,6 +42,9 @@ jobs:
               assert transformers.__version__==EXPECTED
           if EXPECTED.startswith('4.'):
               assert not imported, 'unexpected old transformers API behavior'
+              from transformers import MistralCommonTokenizer
+              assert MistralCommonTokenizer.__name__=='MistralCommonTokenizer'
+              print('MISTRAL_4X_COMPATIBLE_TOKENIZER_IMPORT=true')
           else:
               assert imported, 'Mistral3 tokenizer backend missing from selected v5'
           print('NO_CUDA_OR_MODEL_DOWNLOAD_PERFORMED=true')
