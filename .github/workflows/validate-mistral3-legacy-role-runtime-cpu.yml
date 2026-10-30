@@ -52,6 +52,38 @@ jobs:
           print("ACTUAL_WORKER_MISTRAL3_IMPORTS=PASS")
           print("GPU_PODS_CREATED=0")
           PY
+      - name: Smoke-test both exact immutable original Mistral3 tokenizers and configurations on CPU without weights
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: |
+          python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          import torch
+          from huggingface_hub import snapshot_download
+          from transformers import MistralCommonTokenizer, Mistral3Config
+          from hephaestus.llm.role_contract import BASE_IDENTITIES
+          with tempfile.TemporaryDirectory(prefix="cuda45-original-mistral3-cpu-") as td:
+              for role in ("diagnosis", "planner"):
+                  model_id,revision=BASE_IDENTITIES[role]
+                  snapshot=snapshot_download(
+                      repo_id=model_id,revision=revision,cache_dir=td,
+                      allow_patterns=["config.json","tokenizer*","tekken.json",
+                                      "special_tokens_map.json","chat_template.jinja"],
+                  )
+                  tokenizer=MistralCommonTokenizer.from_pretrained(snapshot)
+                  config=Mistral3Config.from_pretrained(snapshot)
+                  assert config is not None
+                  encoded=tokenizer.apply_chat_template(
+                      [{"role":"user","content":"JSON only: {}"}],
+                      return_tensors="pt",return_dict=True)
+                  assert isinstance(encoded,dict) and "input_ids" in encoded
+                  assert isinstance(encoded["input_ids"],torch.Tensor)
+                  assert encoded["input_ids"].shape[1]>0
+                  print("ORIGINAL_"+role.upper()+"_PINNED_MISTRAL3_CPU_TOKENIZER_CONFIG=PASS")
+          print("FROZEN_MODEL_WEIGHTS_DOWNLOADED=false")
+          print("PAID_GPU_PODS_CREATED=0")
+          PY
       - name: Run certified role and original CUDA safety regression without a GPU
         run: |
           python -m pytest -q tests/test_certified_role_inference.py tests/test_tier_a_cuda_role_stages.py
