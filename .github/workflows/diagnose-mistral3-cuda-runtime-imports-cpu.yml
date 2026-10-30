@@ -1,0 +1,48 @@
+name: Diagnose exact frozen Mistral3 runtime import compatibility (CPU only)
+on:
+  push:
+    branches: [fix/cuda45-r3-diagnosis-mistral-import-20261030]
+    paths: ['.github/workflows/diagnose-mistral3-cuda-runtime-imports-cpu.yml']
+permissions:
+  contents: read
+jobs:
+  classify-mistral-backend-exports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        transformers-version: ['4.57.3', '5.6.1']
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install only the Mistral tokenizer and exact Transformers API version; no GPU
+        env:
+          TRANSFORMERS_VERSION: ${{ matrix.transformers-version }}
+        run: |
+          python -m pip install -q "transformers==$TRANSFORMERS_VERSION" 'mistral-common>=1.8.6,<2'
+      - name: Verify frozen Diagnosis MistralCommonBackend symbol compatibility
+        env:
+          EXPECTED_TRANSFORMERS_VERSION: ${{ matrix.transformers-version }}
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          import transformers
+          print('PROBED_TRANSFORMERS_VERSION='+version('transformers'))
+          print('PROBED_MISTRAL_COMMON_VERSION='+version('mistral-common'))
+          try:
+              from transformers import MistralCommonBackend
+          except ImportError:
+              imported=False
+          else:
+              imported=True
+          print('MISTRAL_COMMON_BACKEND_DIRECT_IMPORT_AVAILABLE='+str(imported).lower())
+          if EXPECTED:=__import__('os').environ['EXPECTED_TRANSFORMERS_VERSION']:
+              assert transformers.__version__==EXPECTED
+          if EXPECTED.startswith('4.'):
+              assert not imported, 'unexpected old transformers API behavior'
+          else:
+              assert imported, 'Mistral3 tokenizer backend missing from selected v5'
+          print('NO_CUDA_OR_MODEL_DOWNLOAD_PERFORMED=true')
+          PY
