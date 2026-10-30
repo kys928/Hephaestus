@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """User-delegated full original 45/45 GPU science, governed OFF the Pod.
 
-The r7 recovery is ONLY PREPARED. User approval of new r7 paid
+The r8 recovery is ONLY PREPARED. User approval of new r8 paid
 run is REQUIRED before invoking main(). This GitHub Actions operator
 is separate from the target/role models; its ephemeral Ed25519 compute-grant
 signature is **not** an independent human scientific attestation. No auto-pay,
@@ -25,10 +25,10 @@ from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.storage.verified import canonical_bytes
 
-SOURCE_POLICY="sha256:b51bcf7952af78a25f34ef36ba97ef438c128969c943f24150fbdfbe25021475"
+SOURCE_POLICY="sha256:ba491dce2088a184712f078d38a88d891864c8c0699bd641beabd35cf9e9f2c3"
 TRAINABLE="sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b73"
-WORKFLOW="cuda-json-45-original-five-20261030-r7"
-RUN="cuda-json-45-new-1117-r7"
+WORKFLOW="cuda-json-45-original-five-20261030-r8"
+RUN="cuda-json-45-new-1117-r8"
 PREFIX="hephaestus/scientific/original_cuda_45/"+WORKFLOW
 GPU="NVIDIA RTX PRO 6000 Blackwell Server Edition"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
@@ -254,7 +254,7 @@ def pod_command(commit_sha,grant_public,grant_sha,max_seconds,grant_filename,
         "snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=\"/tmp/cuda-target-cache\")'; "
         "python -u scripts/run_original_tier_a_cuda_worker.py --resume "
         f"--workspace '{root}' "
-        "--config configs/research/tier_a_original_cuda_45_fresh_20261030_r7.json "
+        "--config configs/research/tier_a_original_cuda_45_fresh_20261030_r8.json "
         "--target-model-cache /tmp/cuda-target-cache "
         "--original-role-model-cache /tmp/cuda-original-role-cache "
         "--original-adapter-cache /tmp/cuda-verified-adapters "
@@ -328,11 +328,11 @@ def main():
     args=p.parse_args()
     if not args.run_tag.isdecimal():
         raise PermissionError("native GPU launch must come from a real GitHub Actions run ID")
-    # r1/r2/r3/r4/r5 were terminal; r6 received no Pod. Prior grants are
-    # not transferable to this newly admitted r7 scope. Read-only preflight
+    # r1-r5 and r7 terminal; r6 received no Pod. Prior grants are
+    # not transferable to this newly admitted r8 scope. Read-only preflight
     # never invokes main(), so it cannot generate an approval or spend.
-    if os.environ.get("ORIGINAL_CUDA45_R7_OPERATOR_APPROVAL")!="approved_after_review":
-        raise PermissionError("fresh r7 paid CUDA campaign requires explicit new operator approval")
+    if os.environ.get("ORIGINAL_CUDA45_R8_OPERATOR_APPROVAL")!="approved_after_review":
+        raise PermissionError("fresh r8 paid CUDA campaign requires explicit new operator approval")
     config=RunPodConfig.from_env()
     if config.datacenter_id!="EU-CZ-1" or config.network_volume_id!="cviwpryzao":
         raise PermissionError("original certified EU-CZ-1 Hephaestus volume changed")
