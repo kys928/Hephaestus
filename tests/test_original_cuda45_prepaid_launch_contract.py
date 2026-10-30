@@ -53,11 +53,11 @@ def test_frozen_full_45_startup_uses_no_sensitive_runpod_s3_credentials():
     assert cmd[:2]==["bash","-lc"]
     script=cmd[2]
     assert "run_original_tier_a_cuda_worker.py --resume" in script
-    assert "configs/research/tier_a_original_cuda_45_fresh_20261030_r6.json" in script
-    assert "cuda-json-45-original-five-20261030-r6" in script
+    assert "configs/research/tier_a_original_cuda_45_fresh_20261030_r7.json" in script
+    assert "cuda-json-45-original-five-20261030-r7" in script
     assert "cuda-json-45-original-five-20261028" not in script
     assert "original_frozen_45_archive.zip" in script
-    assert controller.WORKFLOW=="cuda-json-45-original-five-20261030-r6"
+    assert controller.WORKFLOW=="cuda-json-45-original-five-20261030-r7"
     assert "freeze_original_tier_a_cuda_archive.py" in script
     assert "worker_exit_status-1234.txt" in script
     assert "worker_stdout-1234.log" in script
@@ -140,7 +140,7 @@ def test_paid_gpu_preflight_fails_closed_on_edited_identity(tmp_path):
 
 
 def test_fresh_prepaid_controller_rejects_reused_historical_state(tmp_path):
-    """Old terminal SQLite can never be treated as new r6 science."""
+    """Old terminal SQLite can never be treated as new r7 science."""
     original=_fake_native_state_bucket(tmp_path,{
         "workflow_id":"cuda-json-45-original-five-20261028",
         "run_id":"cuda-json-45-new-1117",
@@ -189,9 +189,27 @@ def test_fresh_source_admission_must_match_exact_new_signed_scope():
 def test_new_r3_operator_authorization_is_required_before_paid_provider_call(monkeypatch):
     """No implicit extension of the prior r2 authorization to a new identity."""
     import sys
-    monkeypatch.delenv("ORIGINAL_CUDA45_R6_OPERATOR_APPROVAL",raising=False)
+    monkeypatch.delenv("ORIGINAL_CUDA45_R7_OPERATOR_APPROVAL",raising=False)
     monkeypatch.setattr(sys,"argv",[
         "launch_user_delegated_full_cuda45.py",
         "--commit-sha","a"*40,"--run-tag","1234"])
     with pytest.raises(PermissionError,match="explicit new operator approval"):
         controller.main()
+
+
+def test_alternative_gpu_identity_and_price_limits_are_explicit_per_campaign():
+    assert controller.GPU=="NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    assert controller.MIN_GPU_VRAM_GB==48
+    assert controller.MAX_GPU_HOURLY_USD==Decimal("2.49")
+    assert controller.MAX_ALLOCATION_ATTEMPTS==6
+    assert controller.MAX_SECONDS==4*3600
+
+
+def test_blackwell_fallback_obeys_total_live_prepaid_ceiling_not_hardcoded_four_hours():
+    maximum=controller.decide_budget(
+        Account(Decimal("9.50"),Decimal("0.10")), Quote(Decimal("2.49")))
+    assert 3600<=maximum<14400
+    assert Decimal(maximum)*Decimal("2.59")/Decimal(3600)<=Decimal("9.50")-controller.RESERVE_USD
+    with pytest.raises(PermissionError):
+        controller.decide_budget(
+            Account(Decimal("1.50"),Decimal("0.20")),Quote(Decimal("2.49")))
