@@ -1,0 +1,102 @@
+name: Read r8 expanded-disk Blackwell genuine CUDA45 live science and Pod (no GPU)
+on:
+  push:
+    branches: [feature/cuda45-r8-expanded-role-scratch-20261030]
+    paths: ['.github/workflows/read-fresh-cuda45-r8-progress-cpu.yml']
+permissions:
+  contents: read
+jobs:
+  read-native-preserved-progress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'boto3>=1.34,<2'
+      - name: Read only original native S3 receipts, never dump protected sources or model text
+        run: |
+          python - <<'PY'
+          import boto3,os,sqlite3,json,pathlib,tempfile,collections
+          from botocore.exceptions import ClientError
+          if os.environ.get("RUNPOD_NETWORK_VOLUME_ID")!="cviwpryzao":
+              raise PermissionError("new r8 progress probe refuses foreign volume")
+          s3=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"],
+              aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+              region_name="eu-cz-1")
+          bucket="cviwpryzao"
+          root="hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r8/"
+          run="41050225787"
+          def optional(key):
+              try:
+                  return s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+              except ClientError as exc:
+                  if str(exc.response.get("Error",{}).get("Code")) in {"404","NoSuchKey","NotFound"}:
+                      return None
+                  raise
+          print("FRESH_CUDA45_WORKER_LOG_PRESENT="+str(optional(root+"worker_stdout-"+run+".log") is not None).lower())
+          exit_bytes=optional(root+"worker_exit_status-"+run+".txt")
+          if exit_bytes:
+              last=exit_bytes.decode(errors="replace").splitlines()[-1].split()
+              print("FRESH_CUDA45_WORKER_EXIT_CLASS="+("nonzero" if len(last)==2 and last[-1]!="0" else "success" if len(last)==2 else "unknown"))
+          else:
+              print("FRESH_CUDA45_WORKER_EXIT_CLASS=not_yet_reported")
+          with tempfile.TemporaryDirectory() as td:
+              dest=pathlib.Path(td)/"state.sqlite"
+              dest.write_bytes(s3.get_object(Bucket=bucket,Key=root+"state.sqlite")["Body"].read())
+              for ext in ("-wal","-shm"):
+                  blob=optional(root+"state.sqlite"+ext)
+                  if blob is not None:
+                      (pathlib.Path(td)/("state.sqlite"+ext)).write_bytes(blob)
+              db=sqlite3.connect(str(dest))
+              try:
+                  if db.execute("PRAGMA quick_check").fetchone()[0]!="ok":
+                      raise PermissionError("fresh original SQLite quick check failed")
+                  rows=db.execute("SELECT collection,payload_json FROM state_records ORDER BY sequence").fetchall()
+              finally:db.close()
+          states=[json.loads(v) for k,v in rows if k=="staged_workflow_states"]
+          if not states:
+              raise PermissionError("fresh original workflow state missing")
+          latest=states[-1]
+          if latest.get("workflow_id")!="cuda-json-45-original-five-20261030-r8":
+              raise PermissionError("foreign state identity in r8 source")
+          print("FRESH_CUDA45_NATIVE_STATUS="+str(latest.get("status","unknown"))[:40])
+          print("FRESH_CUDA45_COMPLETED_STEP_MARKERS="+str(sum(
+              step.get("completion_marker") is True for step in latest.get("steps",{}).values())))
+          optimizer=[json.loads(v) for k,v in rows if k=="cuda_target_optimizer_steps"]
+          print("FRESH_CUDA45_CUDA_OPTIMIZER_RECEIPT_COUNT="+str(len(optimizer)))
+          print("FRESH_CUDA45_NATIVE_LAST_PHASE="+str(latest.get("current_phase","unknown"))[:50])
+          print("FRESH_CUDA45_NATIVE_LAST_SUBSTEP="+str(latest.get("current_substep","unknown"))[:60])
+          print("FRESH_CUDA45_FULL_COMPLETION_MARKER="+str(latest.get("completion_marker") is True).lower())
+          print("FRESH_CUDA45_ARCHIVE_SHA_PRESENT="+str(
+              optional(root+"original_frozen_archive_sha256.txt") is not None).lower())
+          # Independent actual provider discovery never POSTs or deletes Pods.
+          from urllib.request import Request,urlopen
+          import json as _json
+          address="https://api.runpod.io/v2/pods?limit=1000"
+          req=Request(address,headers={"Authorization":"Bearer "+os.environ["RUNPOD_API_KEY"]})
+          with urlopen(req,timeout=25) as response:
+              pods=_json.load(response)
+          if not isinstance(pods,dict) or not isinstance(pods.get("pods"),list):
+              raise PermissionError("RunPod discovery response invalid")
+          matches=[p for p in pods["pods"] if isinstance(p,dict) and
+                  str(p.get("name","")).startswith("hephaestus-original-five-fullcuda45-41050225787-")]
+          print("R8_LIVE_PROVIDER_OWNED_POD_COUNT="+str(len(matches)))
+          for p in matches[:2]:
+              gpu=p.get("gpu")
+              gid=gpu.get("id") if isinstance(gpu,dict) else "unknown"
+              if gid not in ("NVIDIA RTX PRO 6000 Blackwell Server Edition","unknown"):
+                  raise PermissionError("unexpected paid GPU substituted")
+              print("R8_LIVE_PROVIDER_GPU_NAME="+str(gid))
+              print("R8_LIVE_PROVIDER_POD_STATUS="+str(p.get("status","unknown"))[:32])
+          if len(matches)>1:raise PermissionError("duplicate original CUDA r7 provider Pods")
+          print("GPU_PODS_ALLOCATED_BY_PROBE=0")
+          PY
