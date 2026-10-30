@@ -312,7 +312,10 @@ class PinnedTransformersRoleGenerator:
         # 16.61 GiB is the largest exact pinned role snapshot. Allow extra
         # space for tokenizer, temporary HF/Xet blobs, and worker state.
         # This guard fails before any scientific state can be fabricated.
-        if self.allow_remote_pinned_download and shutil.disk_usage(cache_root).free < 22 * 1024**3:
+        existing = cache_root
+        while not existing.exists():
+            existing = existing.parent
+        if self.allow_remote_pinned_download and shutil.disk_usage(existing).free < 22 * 1024**3:
             raise RuntimeError("original CUDA temporary role cache has insufficient free disk")
 
     def _load(self, spec: CertifiedRoleModel, profile: Mapping[str, object], adapter_path: Path) -> None:
