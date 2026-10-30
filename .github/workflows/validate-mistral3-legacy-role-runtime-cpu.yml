@@ -1,4 +1,4 @@
-name: Validate installed original Diagnosis Mistral3 runtime imports (CPU only)
+name: Validate pinned original Ministral3 v5 and target contract on CPU (no GPU)
 on:
   push:
     branches: [fix/cuda45-r3-diagnosis-mistral-import-20261030]
@@ -32,7 +32,7 @@ jobs:
           from importlib.metadata import version
           import torch
           import transformers
-          from transformers import Mistral3ForConditionalGeneration, MistralCommonTokenizer
+          from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
           from peft import PeftModel
           from hephaestus.llm.certified_runtime import PinnedTransformersRoleGenerator
           from hephaestus.llm.role_contract import RoleMasteryContract
@@ -41,11 +41,11 @@ jobs:
           print("ROLE_RUNTIME_TRANSFORMERS_VERSION="+transformers.__version__)
           print("ROLE_RUNTIME_PEFT_VERSION="+version("peft"))
           print("ROLE_RUNTIME_MISTRAL_COMMON_VERSION="+version("mistral-common"))
-          assert transformers.__version__.split(".")[0]=="4"
-          assert MistralCommonTokenizer.__name__=="MistralCommonTokenizer"
+          assert transformers.__version__.split(".")[:2]==["5","6"]
+          assert MistralCommonBackend.__name__=="MistralCommonBackend"
           assert Mistral3ForConditionalGeneration.__name__=="Mistral3ForConditionalGeneration"
           assert PeftModel.__name__=="PeftModel"
-          assert "MistralCommonTokenizer.from_pretrained(snapshot)" in getsource(PinnedTransformersRoleGenerator._load)
+          assert "MistralCommonBackend.from_pretrained(snapshot)" in getsource(PinnedTransformersRoleGenerator._load)
           contract=RoleMasteryContract.load(Path("configs/models/hephaestus_role_mastery_runtime_v1.json"))
           assert contract.profile("diagnosis")["load_kind"]=="mistral3"
           assert contract.profile("planner")["load_kind"]=="mistral3"
@@ -61,7 +61,7 @@ jobs:
           from pathlib import Path
           import torch
           from huggingface_hub import snapshot_download
-          from transformers import MistralCommonTokenizer, Mistral3Config
+          from transformers import MistralCommonBackend, Mistral3Config
           from hephaestus.llm.role_contract import BASE_IDENTITIES
           with tempfile.TemporaryDirectory(prefix="cuda45-original-mistral3-cpu-") as td:
               for role in ("diagnosis", "planner"):
@@ -71,7 +71,7 @@ jobs:
                       allow_patterns=["config.json","tokenizer*","tekken.json",
                                       "special_tokens_map.json","chat_template.jinja"],
                   )
-                  tokenizer=MistralCommonTokenizer.from_pretrained(snapshot)
+                  tokenizer=MistralCommonBackend.from_pretrained(snapshot)
                   config=Mistral3Config.from_pretrained(snapshot)
                   assert config is not None
                   encoded=tokenizer.apply_chat_template(
@@ -86,4 +86,4 @@ jobs:
           PY
       - name: Run certified role and original CUDA safety regression without a GPU
         run: |
-          python -m pytest -q tests/test_certified_role_inference.py tests/test_tier_a_cuda_role_stages.py
+          python -m pytest -q tests/
