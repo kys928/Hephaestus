@@ -1,0 +1,28 @@
+name: Validate original five-role ephemeral HF cache safety and disk floor (CPU, no GPU)
+on:
+  push:
+    branches: [fix/cuda45-r4-hf-cache-budget-20261030]
+    paths:
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'tests/test_cuda_role_ephemeral_cache_lifecycle.py'
+      - '.github/workflows/verify-original-role-ephemeral-cache-cpu.yml'
+  pull_request:
+    paths:
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'tests/test_cuda_role_ephemeral_cache_lifecycle.py'
+permissions: {contents: read}
+jobs:
+  bounded-cache-and-role-receipts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e '.[test]'
+      - name: Verify safe ephemeral retired role cache eviction + original role contracts on CPU
+        run: |
+          python -m pytest -q tests/test_cuda_role_ephemeral_cache_lifecycle.py tests/test_certified_role_inference.py tests/test_tier_a_cuda_role_stages.py tests/test_original_cuda45_prepaid_launch_contract.py
+          python -m compileall -q src/hephaestus/llm
+          echo 'MODEL_WEIGHTS_DOWNLOADED=false'
+          echo 'PAID_GPU_PODS_CREATED=0'
