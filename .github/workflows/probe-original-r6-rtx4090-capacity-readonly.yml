@@ -1,0 +1,54 @@
+name: Inspect r6 RunPod RTX4090 inventory and orphaned Pods (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r6-planner-citation-recovery-20261030]
+    paths: ['.github/workflows/probe-original-r6-rtx4090-capacity-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  inventory-and-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: ${{ vars.RUNPOD_API_BASE_URL }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install only local RunPod read adapter
+        run: python -m pip install -q -e .
+      - name: Enumerate exact owned r6 Pods and nonbinding 4090 catalog status; zero POST/DELETE
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          cfg=RunPodConfig.from_env()
+          assert cfg.datacenter_id=="EU-CZ-1"
+          assert cfg.network_volume_id=="cviwpryzao"
+          assert cfg.api_base_url.startswith("https://api.runpod.io/v2")
+          adapter=RunPodExecutionAdapter(config=cfg,secrets=EnvironmentSecretsProvider())
+          owned_prefix="hephaestus-original-five-fullcuda45-41039550620-"
+          matches=[p for p in adapter.list_pods() if str(p.get("name","")).startswith(owned_prefix)]
+          print("ORIGINAL_R6_PROVIDER_PODS_MATCHING_TAG="+str(len(matches)))
+          print("ORIGINAL_R6_PROVIDER_ORPHAN_CHECK="+("PASS" if not matches else "ATTENTION"))
+          status,catalog=adapter._request("GET","catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY")
+          if status!=200 or not isinstance(catalog,dict) or catalog.get("id")!="EU-CZ-1":
+              raise PermissionError("catalog data center identity or response invalid")
+          exact=[x for x in catalog.get("gpuAvailability",[]) if
+                 isinstance(x,dict) and str(x.get("id",x.get("gpuId","")))==
+                 "NVIDIA GeForce RTX 4090"]
+          if len(exact)>1:raise PermissionError("duplicate RTX4090 availability entries")
+          state=str(exact[0].get("availability",exact[0].get("stockStatus","unknown"))) if exact else "not_listed"
+          if state.upper() not in {"NONE","LOW","MEDIUM","HIGH","OUT","NOT_LISTED","UNKNOWN"}:
+              state="unknown"
+          print("ORIGINAL_R6_4090_EU_CZ_1_CATALOG_LABEL="+state)
+          print("CATALOG_STOCK_LABEL_NOT_ALLOCATION_GUARANTEE=true")
+          print("API_MUTATIONS_PERFORMED=0")
+          print("GPU_PODS_CREATED_BY_PROBE=0")
+          PY
