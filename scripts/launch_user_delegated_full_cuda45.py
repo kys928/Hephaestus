@@ -34,6 +34,8 @@ GPU="NVIDIA RTX PRO 6000 Blackwell Server Edition"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 MAX_GPU_HOURLY_USD=Decimal("2.49")
 MIN_GPU_VRAM_GB=48
+CONTAINER_DISK_GB=120
+MAX_CONTAINER_STORAGE_USD_PER_HOUR=Decimal("0.03")
 MAX_ALLOCATION_ATTEMPTS=6
 RESERVE_USD=Decimal("0.30")
 MAX_SECONDS=4*3600
@@ -44,7 +46,8 @@ def decide_budget(account,rate):
     if account.autopay_enabled:
         raise PermissionError("prepaid RunPod research refuses auto-pay and new liabilities")
     remaining=account.credit_balance_usd-RESERVE_USD
-    combined=rate.price_usd_per_hour+account.already_spending_usd_per_hour
+    combined=(rate.price_usd_per_hour+account.already_spending_usd_per_hour
+              +MAX_CONTAINER_STORAGE_USD_PER_HOUR)
     if combined<=0 or remaining<=0:
         raise PermissionError("no safely spendable prepaid funding")
     max_seconds=min(MAX_SECONDS,int((remaining*Decimal(3600)/combined).to_integral_value(
@@ -345,6 +348,8 @@ def main():
     print("ORIGINAL_FULL_CUDA45_GPU_RENTAL_CEILING_SECONDS="+str(seconds))
     print("ORIGINAL_CUDA_SELECTED_GPU="+GPU,flush=True)
     print("ORIGINAL_CUDA_SELECTED_GPU_SECURE_HOURLY_QUOTE="+str(quoted.price_usd_per_hour),flush=True)
+    print("ORIGINAL_CUDA_CONTAINER_DISK_GB="+str(CONTAINER_DISK_GB),flush=True)
+    print("ORIGINAL_CUDA_CONTAINER_STORAGE_HOURLY_ALLOWANCE="+str(MAX_CONTAINER_STORAGE_USD_PER_HOUR),flush=True)
     print("RUNPOD_ACCOUNT_FINANCIAL_AMOUNTS_REDACTED=true")
     print("ORIGINAL_GPU_ROLE_SOURCE_HASH_VERIFIED=true")
     code_bundle_sha256=stage_verified_code_bundle(s3,config.network_volume_id,args.commit_sha)
@@ -404,7 +409,7 @@ def main():
                 pod=adapter.create_bounded_gpu_pod(
                     name="hephaestus-original-five-fullcuda45-"+args.run_tag,
                     image_name=IMAGE,gpu_type_ids=[GPU],
-                    docker_start_cmd=command,env=env,container_disk_in_gb=40,
+                    docker_start_cmd=command,env=env,container_disk_in_gb=CONTAINER_DISK_GB,
                     operation_id="original-full-cuda45-"+args.run_tag+"-retry-"+str(attempt))
                 break
             except AmbiguousRunPodOperation as ambiguous:
