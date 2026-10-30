@@ -348,8 +348,8 @@ def _planner_r5_rejected_citation_fixture(tmp_path, *, retry_behavior="valid",
     contract=RoleMasteryContract.load(
         Path(__file__).resolve().parents[1]/
         "configs/models/hephaestus_role_mastery_runtime_v1.json")
-    assert role in {"planner","evaluator"}
-    substep = "intervention_ranking" if role=="planner" else "semantic_comparison"
+    assert role in {"planner","evaluator","judge"}
+    phase,substep = ANCHORS[role]
     tasks=[]
 
     class RejectedCitationThenRetried(TestOnlyReasoner):
@@ -397,7 +397,7 @@ def _planner_r5_rejected_citation_fixture(tmp_path, *, retry_behavior="valid",
             vocab=contract.profile(role)["vocabulary"]
             good={
                 "decision":vocab["decision"][0],
-                "action":vocab["action"][0],
+                "action":"promote_checkpoint" if role=="judge" else vocab["action"][0],
                 "primary_variable":vocab["primary_variable"][0],
                 "confidence":0.4,
                 "evidence_refs":[task.evidence[0].ref],
@@ -406,7 +406,13 @@ def _planner_r5_rejected_citation_fixture(tmp_path, *, retry_behavior="valid",
             answer=contract.parse(role,json.dumps(good),
                                   {e.ref for e in task.evidence})
             assert answer.evidence_refs==(task.evidence[0].ref,)
-            return super().propose(task,registry,context=context)
+            observed=super().propose(task,registry,context=context)
+            if role=="judge":
+                from hephaestus.control.deterministic_role_boundary import guard_role_output
+                observed.action_gate=guard_role_output(
+                    role=role,output=answer.to_dict(),context=context,
+                    evidence_registry=registry)
+            return observed
 
     reasoner=RejectedCitationThenRetried()
     stage=OriginalCudaResearchObservation(
@@ -415,7 +421,7 @@ def _planner_r5_rejected_citation_fixture(tmp_path, *, retry_behavior="valid",
         resource_approval_service=TestOnlyGpuGrant(store,role))
     request=StagedOperationRequest(
         "workflow","run","lineage","targeted_repair",
-        role,substep,"native-role-citation-repair",1,(),{})
+        phase,substep,"native-role-citation-repair",1,(),{})
     return stage,request,tasks,store
 
 
@@ -567,6 +573,62 @@ def test_r8_evaluator_foreign_lineage_rejected_receipt_fails_closed(tmp_path):
                 canonical_bytes(foreign),media_type="application/json").artifact_ref
             raise
     stage.reasoner=SimpleNamespace(propose=pretend_other_lineage)
+    with pytest.raises(PermissionError,match="rejected GPU inference evidence invalid"):
+        stage.execute(request)
+    assert len(tasks)==1
+
+
+def test_r9_judge_citation_rejection_gets_one_real_model_retry_without_action_authority(tmp_path):
+    from hephaestus.storage.verified import read_verified_json
+    stage,request,tasks,store=_planner_r5_rejected_citation_fixture(tmp_path,role="judge")
+    result=stage.execute(request)
+    assert result.status=="completed" and len(tasks)==2
+    assert request.phase=="judge_exit" and request.substep=="governed_verdict"
+    assert tasks[0].evidence==tasks[1].evidence
+    assert tasks[0].evidence[0].ref in tasks[1].situation
+    advisory=result.records[-1].payload
+    rejected=read_verified_json(store,advisory["rejected_inference_receipt_refs"][0])
+    assert rejected["status"]=="rejected" and rejected["role"]=="judge"
+    assert rejected["error"]=="role response cites missing, duplicate or empty evidence"
+    assert advisory["bounded_format_repair_attempts"]==1
+    assert advisory["deterministic_action_allowed"] is False
+    assert advisory["effective_action"] is None
+    assert advisory["promotion_authorized"] is False
+
+
+@pytest.mark.parametrize("behavior,forged,error,exception,match",[
+    ("invalid",False,"role response cites missing, duplicate or empty evidence",ValueError,"cites missing"),
+    ("valid",True,"role response cites missing, duplicate or empty evidence",PermissionError,"lacks immutable receipt"),
+    ("valid",False,"role response has invalid action",ValueError,"invalid action"),
+])
+def test_r9_judge_invalid_retry_or_unproven_or_unrelated_failure_stays_denied(
+        tmp_path,behavior,forged,error,exception,match):
+    stage,request,tasks,_=_planner_r5_rejected_citation_fixture(
+        tmp_path,role="judge",retry_behavior=behavior,forged=forged,first_error=error)
+    with pytest.raises(exception,match=match):
+        stage.execute(request)
+    assert len(tasks)==(2 if behavior=="invalid" else 1)
+
+
+@pytest.mark.parametrize("field,value",[
+    ("role","evaluator"),("run_id","foreign-run"),("lineage_id","foreign-lineage"),
+    ("stage_name","foreign-stage"),("evidence_refs",["sha256:"+"0"*64]),
+    ("execution",{"device":"cpu"}),("generator","TestDouble"),
+])
+def test_r9_judge_repair_refuses_foreign_source_identity_or_cpu_receipt(tmp_path,field,value):
+    from hephaestus.storage.verified import read_verified_json
+    stage,request,tasks,store=_planner_r5_rejected_citation_fixture(tmp_path,role="judge")
+    original=stage.reasoner.propose
+    def corrupted(task,registry,*,context):
+        try:
+            return original(task,registry,context=context)
+        except ValueError as error:
+            receipt=read_verified_json(store,error.rejected_inference_receipt_ref)
+            receipt[field]=value
+            error.rejected_inference_receipt_ref=store.put_bytes(
+                canonical_bytes(receipt),media_type="application/json").artifact_ref
+            raise
+    stage.reasoner=SimpleNamespace(propose=corrupted)
     with pytest.raises(PermissionError,match="rejected GPU inference evidence invalid"):
         stage.execute(request)
     assert len(tasks)==1

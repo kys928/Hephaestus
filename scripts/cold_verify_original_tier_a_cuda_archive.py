@@ -22,6 +22,71 @@ from hephaestus.storage.verified import canonical_bytes
 def _sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
+
+def verify_original_role_receipt(row, *, artifact, frozen, contract, state):
+    """Reparse original bytes and bind accepted/rejected attempts to one source.
+
+    A status flag is not sufficient scientific evidence. This CPU readback
+    checks the frozen parser and CUDA provenance without executing a model.
+    """
+    role=row["role"]
+    source_ref=row["domain_observation_ref"]
+    source=artifact(source_ref)
+    if (source.get("schema")!="tier-a-gpu-role-domain-observation.v1"
+            or source.get("workflow_id")!=state["workflow_id"]
+            or source.get("operation_id")!=row["operation_id"]
+            or any(source.get(k)!=state[k] for k in ("run_id","lineage_id","stage_name"))):
+        raise PermissionError("cold CUDA role source belongs to a different operation")
+    receipt=artifact(row["inference_receipt_ref"])
+    def provenance(doc):
+        execution=doc.get("execution",{})
+        if (doc.get("schema")!="role-inference.v1" or doc.get("role")!=role
+                or any(doc.get(k)!=state[k] for k in ("run_id","lineage_id","stage_name"))
+                or doc.get("model_id")!=frozen.model_id
+                or doc.get("base_revision")!=frozen.revision
+                or doc.get("adapter_sha256")!=frozen.adapter.sha256
+                or doc.get("adapter_source")!=frozen.adapter.s3_key
+                or doc.get("tokenizer_id")!=frozen.model_id
+                or doc.get("tokenizer_revision")!=frozen.revision
+                or doc.get("profile")!=contract.profile(role)
+                or doc.get("evidence_refs")!=[source_ref]
+                or doc.get("generator")!="PinnedTransformersRoleGenerator"
+                or execution.get("device")!="cuda:0"
+                or not execution.get("gpu_name") or not execution.get("cuda_version")):
+            raise PermissionError("cold original role source/model/CUDA provenance mismatch")
+        for key in ("input_token_ids","generated_token_ids"):
+            ids=execution.get(key)
+            if not isinstance(ids,list) or not ids or any(type(v) is not int or v<0 for v in ids):
+                raise PermissionError("cold original CUDA inference lacks numeric token evidence")
+        for text_key,digest_key in (("prompt","prompt_sha256"),("raw_output","output_sha256")):
+            if not isinstance(doc.get(text_key),str) or _sha(doc[text_key].encode())!=doc.get(digest_key):
+                raise PermissionError("cold original CUDA inference text digest mismatch")
+    provenance(receipt)
+    answer=contract.parse(role,receipt["raw_output"],{source_ref})
+    if receipt.get("status")!="accepted" or receipt.get("answer")!=answer.to_dict():
+        raise PermissionError("cold original accepted answer differs from strict raw parse")
+    rejected_refs=row.get("rejected_inference_receipt_refs",[])
+    if (not isinstance(rejected_refs,list) or len(rejected_refs)>1
+            or row.get("bounded_format_repair_attempts",0)!=len(rejected_refs)):
+        raise PermissionError("cold original role exceeded the single format retry")
+    for ref in rejected_refs:
+        rejected=artifact(ref)
+        provenance(rejected)
+        if (ref==row["inference_receipt_ref"] or rejected.get("status")!="rejected"
+                or rejected.get("seed")!=receipt.get("seed")
+                or rejected.get("max_new_tokens")!=receipt.get("max_new_tokens")
+                or rejected["execution"].get("decoding")!=receipt["execution"].get("decoding")):
+            raise PermissionError("cold rejected CUDA inference retry provenance mismatch")
+        try:
+            contract.parse(role,rejected["raw_output"],{source_ref})
+        except ValueError as exc:
+            expected=("role response has invalid primary_variable" if role=="controller" else
+                      "role response cites missing, duplicate or empty evidence")
+            if str(exc)!=expected or rejected.get("error")!=expected:
+                raise PermissionError("cold CUDA retry has an unapproved original rejection") from exc
+        else:
+            raise PermissionError("cold rejected CUDA inference was not actually rejected")
+
 def verify_original_cuda_archive(path, *, expected_sha256):
     if "sha256:"+_sha(Path(path).read_bytes())!=expected_sha256:
         raise PermissionError("independently pinned remote GPU archive hash mismatch")
@@ -103,6 +168,8 @@ def verify_original_cuda_archive(path, *, expected_sha256):
                      r.get("payload",{}).get("completion_marker") is True]
         if len(completions)!=45 or set(r.get("operation_id") for r in completions)!=set(operation_ids):
             raise PermissionError("45 original native SQLite completion receipts missing")
+        if [(r.get("phase"),r.get("substep")) for r in completions]!=expected:
+            raise PermissionError("original CUDA operations did not complete in dependency order")
         # Cross-check the exact original recorded operation with immutable SHA object bytes.
         def artifact(ref):
             if not isinstance(ref,str) or not ref.startswith("sha256:"):
@@ -120,7 +187,7 @@ def verify_original_cuda_archive(path, *, expected_sha256):
             if artifact(row["artifact_ref"])!=expected_row:
                 raise PermissionError("original native CUDA completion diverges from immutable artifact")
         role_rows=[r["payload"] for r in evidence if r.get("kind")=="original_cuda_advisory_role"]
-        frozen_stack,_=verified_original_roles(registry_digest())
+        frozen_stack,contract=verified_original_roles(registry_digest())
         approved=expected_gpu_operation_map(report["workflow_id"])
         actual_roles={role for role in approved.values() if role not in {
             "target_evaluation","target_training"}}
@@ -139,6 +206,7 @@ def verify_original_cuda_archive(path, *, expected_sha256):
                     or evidence_role.get("adapter_sha256")!=row.get("adapter_sha256")
                     or evidence_role.get("model_id")!=row.get("model_id")):
                 raise PermissionError("original model inference not independently proven on CUDA")
+            verify_original_role_receipt(row,artifact=artifact,frozen=frozen,contract=contract,state=state)
         step_rows=[r for k,r in rows if k=="cuda_target_optimizer_steps" and
                    r.get("run_id")==report["run_id"]]
         if len(step_rows)!=96 or {

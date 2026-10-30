@@ -538,6 +538,25 @@ def test_subsystem_exception_is_terminal_failure_not_success(tmp_path: Path) -> 
     assert any(row["kind"] == "subsystem_failure" for row in _records(repository))
 
 
+def test_subsystem_failure_preserves_private_cause_without_inlining_it_in_state(tmp_path):
+    import json
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.storage.verified import read_verified_json
+    router=FakeOperationRouter(fail_substep="semantic_comparison")
+    artifacts=FileSystemArtifactStore(tmp_path/"private-artifacts")
+    orchestrator,repository=_orchestrator(tmp_path,router,artifact_store=artifacts)
+    state=orchestrator.run()
+    assert state.status=="terminal_failure" and state.resumable is False
+    failure=next(row["payload"] for row in _records(repository)
+                 if row["kind"]=="subsystem_failure")
+    diagnostic=read_verified_json(artifacts,failure["diagnostic_ref"])
+    assert diagnostic["message"]=="fixture subsystem failure"
+    assert diagnostic["phase"]=="evaluator"
+    assert diagnostic["substep"]=="semantic_comparison"
+    assert "RuntimeError: fixture subsystem failure" in diagnostic["traceback"]
+    assert "fixture subsystem failure" not in json.dumps(_records(repository))
+
+
 def test_missing_decision_critical_record_is_terminal_failure(tmp_path: Path) -> None:
     router = FakeOperationRouter(omit_record_substep="evidence_based_diagnosis")
     orchestrator, _ = _orchestrator(tmp_path, router)
