@@ -91,6 +91,23 @@ jobs:
               for error in errors[-8:]:
                   print("R7_EXCEPTION="+error)
               print("R7_TRACEBACK_FOUND="+str(any("Traceback (most recent call last)" in l for l in lines)).lower())
+              for role in ("controller","diagnosis","planner","evaluator","judge"):
+                  print("R7_CACHE_RETIREMENT_MARKER_"+role.upper()+"="+str(
+                      any(l.strip()=="ORIGINAL_CUDA_RETIRED_ROLE_CACHE_CLEARED="+role
+                          for l in lines)).lower())
+              text="\\n".join(lines).lower()
+              # Only classified failure symptoms: never output raw private text.
+              for label,needle in {
+                  "ENOSPC":"no space left on device",
+                  "GUARD_INSUFFICIENT_DISK":"original cuda temporary role cache has insufficient free disk",
+                  "CUDA_OOM":"cuda out of memory",
+                  "HTTP_HUB_RATE_LIMIT":"429 too many requests",
+                  "HUB_FETCH_STAGE":"fetching 15 files",
+                  "MODEL_LOAD_EXCEPTION":"runtimeerror",
+                  "HF_XET_CACHE_WARNING":"xet",
+              }.items():
+                  print("R7_PRIVATE_WORKER_SYMPTOM_"+label+"="+str(needle in text).lower())
+              print("R7_PRIVATE_WORKER_SYMPTOM_PROBE_SOURCE=worker_stdout_only")
           exitbytes=optional(prefix+"worker_exit_status-"+run+".txt")
           if exitbytes:
               rows=[x.split() for x in exitbytes.decode(errors="replace").splitlines() if x.strip()]
