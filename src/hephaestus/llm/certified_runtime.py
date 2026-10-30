@@ -277,11 +277,53 @@ class PinnedTransformersRoleGenerator:
         except ImportError:
             pass
 
+    def _evict_retired_role_cache(self, retired_identity: tuple[str, str, str, str, str]) -> None:
+        """Discard only one previously completed role's *temporary* HF cache.
+
+        The signed original-role identities and all durable receipts remain
+        untouched. No cache cleanup can target a mounted /workspace volume.
+        We need this because the 5 pinned weight sets total 53.64 GiB, while
+        the authorized r4 worker used a 40 GB container disk.
+        """
+        if not self.allow_remote_pinned_download:
+            return
+        model_id = retired_identity[1]
+        if (not re.fullmatch(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+", model_id)
+                or not self.hf_cache_dir.is_absolute()
+                or self.hf_cache_dir.is_symlink()):
+            raise PermissionError("retired model cache identity or root unsafe")
+        cache_root = self.hf_cache_dir.resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        if (cache_root == temp_root or not cache_root.is_relative_to(temp_root)
+                or cache_root == Path("/")):
+            raise PermissionError("original role cache eviction must stay in temporary storage")
+        role_cache = cache_root / ("models--" + model_id.replace("/", "--"))
+        if role_cache.is_symlink():
+            raise PermissionError("original role cache eviction refuses symlinks")
+        if role_cache.exists():
+            if not role_cache.is_dir():
+                raise PermissionError("original role cache must be directory")
+            shutil.rmtree(role_cache)
+            print("ORIGINAL_CUDA_RETIRED_ROLE_CACHE_CLEARED=" + retired_identity[0], flush=True)
+
+    def _ensure_role_cache_capacity(self) -> None:
+        """Do not attempt a weight download into an already exhausted disk."""
+        cache_root = self.hf_cache_dir.resolve()
+        # 16.61 GiB is the largest exact pinned role snapshot. Allow extra
+        # space for tokenizer, temporary HF/Xet blobs, and worker state.
+        # This guard fails before any scientific state can be fabricated.
+        if self.allow_remote_pinned_download and shutil.disk_usage(cache_root).free < 22 * 1024**3:
+            raise RuntimeError("original CUDA temporary role cache has insufficient free disk")
+
     def _load(self, spec: CertifiedRoleModel, profile: Mapping[str, object], adapter_path: Path) -> None:
         identity = (spec.role, spec.model_id, spec.revision, spec.adapter.sha256, str(adapter_path.resolve()))
         if self._loaded_identity == identity:
             return
+        retired_identity = self._loaded_identity
         self.close()
+        if retired_identity is not None:
+            self._evict_retired_role_cache(retired_identity)
+        self._ensure_role_cache_capacity()
         try:
             import torch
             from huggingface_hub import snapshot_download
