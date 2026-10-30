@@ -1,0 +1,61 @@
+name: Verify alternate 96GB RTX PRO 6000 prepaid affordability (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r7-fallback-gpu-20261030]
+    paths: ['.github/workflows/verify-original-cuda45-alternate-gpu-budget-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  quoted-gpu-and-live-balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e .
+      - name: Read exact 96GB GPU price and prepaid bounded duration (no Pod)
+        run: |
+          python - <<'PY'
+          import os
+          from decimal import Decimal,ROUND_FLOOR
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          cfg=RunPodConfig.from_env()
+          assert cfg.datacenter_id=="EU-CZ-1" and cfg.network_volume_id=="cviwpryzao"
+          provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          gpu="NVIDIA RTX PRO 6000 Blackwell Server Edition"
+          price=provider.quote_gpu(gpu_id=gpu,datacenter_id=cfg.datacenter_id)
+          if price.gpu_memory_gb<48 or price.price_usd_per_hour>Decimal("2.49"):
+              raise PermissionError("fallback GPU VRAM/price exceeded reviewed ceiling")
+          account=provider.account()
+          if account.autopay_enabled:
+              raise PermissionError("prepaid original CUDA forbids autopay")
+          remaining=account.credit_balance_usd-Decimal("0.30")
+          combined=price.price_usd_per_hour+account.already_spending_usd_per_hour
+          if remaining<=0 or combined<=0:
+              raise PermissionError("insufficient safe prepaid balance")
+          seconds=min(14400,int((remaining*3600/combined).to_integral_value(rounding=ROUND_FLOOR)))
+          print("ALTERNATE_CUDA_GPU_ID="+gpu)
+          print("ALTERNATE_CUDA_GPU_VRAM_GB="+str(price.gpu_memory_gb))
+          print("ALTERNATE_CUDA_GPU_PRICE_USD_PER_HOUR="+str(price.price_usd_per_hour))
+          print("ALTERNATE_CUDA_MAX_PREPAID_SECONDS="+str(seconds))
+          print("ALTERNATE_CUDA_1H_MINIMUM_ADMISSIBLE="+str(seconds>=3600).lower())
+          print("AUTO_PAY_ENABLED=false")
+          print("RUNPOD_BALANCE_AMOUNT_REDACTED=true")
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider())
+          pods=[x for x in adapter.list_pods() if str(x.get("name","")).startswith("hephaestus-original-five-fullcuda45-41039550620-")]
+          if pods:raise PermissionError("r6 provider operation unreconciled")
+          print("PREVIOUS_R6_MATCHING_PODS=0")
+          print("API_MUTATIONS_PERFORMED=0")
+          PY
