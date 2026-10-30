@@ -1,0 +1,223 @@
+name: Diagnose failed genuine r8 Blackwell with 120GB scratch disk (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r8-expanded-role-scratch-20261030]
+    paths: ['.github/workflows/diagnose-r8-blackwell-failure-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  read-immutable-r8-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'boto3>=1.34,<2'
+      - name: Classify genuine r8 failed science boundary; never dump private model text
+        shell: bash
+        run: |
+          python - <<'PY'
+          from botocore.exceptions import ClientError
+          import boto3,json,os,re,sqlite3,tempfile
+          from pathlib import Path
+          assert os.environ["RUNPOD_NETWORK_VOLUME_ID"]=="cviwpryzao"
+          assert os.environ["RUNPOD_S3_ENDPOINT_URL"].startswith("https://s3api-eu-cz-1.runpod.io")
+          bucket="cviwpryzao"
+          prefix="hephaestus/scientific/original_cuda_45/cuda-json-45-original-five-20261030-r8/"
+          run="41050225787"
+          s3=boto3.client("s3",endpoint_url=os.environ["RUNPOD_S3_ENDPOINT_URL"],region_name="eu-cz-1",
+              aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+          def optional(key):
+              try:return s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+              except ClientError as exc:
+                  if str(exc.response.get("Error",{}).get("Code")) in {"404","NoSuchKey","NotFound"}:
+                      return None
+                  raise
+          suffix="worker_stdout-"+run+".log"
+          log=optional(prefix+suffix)
+          print("R8_WORKER_LOG_PRESENT="+str(log is not None).lower())
+          if log is not None:
+              print("R8_LOG_BYTES="+str(len(log)))
+              lines=log.decode("utf-8",errors="replace").splitlines()[-12000:]
+              markers=("ORIGINAL_CUDA_ROLE_BOUNDARY=","ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=")
+              categories={
+                  "resource_grant_start","resource_grant_approved","domain_delegate_start",
+                  "domain_delegate_returned","certified_inference_start","certified_inference_returned",
+                  "advisory_action_vetoed","receipt_verification_start",
+                  "bounded_format_repair_start","bounded_citation_repair_start"
+              }
+              for line in lines:
+                  line=line.strip()
+                  if line in {
+                      "ORIGINAL_CUDA_ROLE_FORMAT_REPAIR=failed_closed role=controller",
+                      "ORIGINAL_CUDA_ROLE_FORMAT_REPAIR=accepted role=controller",
+                      "ORIGINAL_CUDA_ROLE_CITATION_REPAIR=failed_closed role=planner",
+                      "ORIGINAL_CUDA_ROLE_CITATION_REPAIR=accepted role=planner"
+                  }:
+                      print("R8_FORMAT_REPAIR_MARKER="+line)
+                  if line.startswith(markers):
+                      m=re.fullmatch(r"ORIGINAL_CUDA_ROLE_(BOUNDARY|PERMISSION_DENIAL)=([a-z_]+) role=(controller|diagnosis|planner|evaluator|judge)(?: status=(completed|blocked|inconclusive|terminal_failure))?",line)
+                      if m and m.group(2) in categories|{"resource_grant","domain_delegate","certified_inference"}:
+                          print("R8_ROLE_MARKER="+line)
+              frames=[]
+              errors=[]
+              for line in lines:
+                  line=line.strip()
+                  frame=re.fullmatch(r'File "([^"]+)", line ([0-9]{1,5}), in ([A-Za-z_][A-Za-z0-9_<>]*)',line)
+                  if frame:
+                      path=frame.group(1).replace("\\","/")
+                      # Print only basename and line, not arbitrary paths.
+                      frames.append(path.rsplit("/",1)[-1]+":"+frame.group(2)+":"+frame.group(3))
+                  exc=re.match(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Warning))(?::\s*(.{0,300}))?$",line)
+                  if exc:
+                      msg=exc.group(2) or ""
+                      # Keep only non-sensitive characters; mask IDs/digests/tokens/emails and paths.
+                      msg=re.sub(r"https?://\S+","[URL]",msg)
+                      msg=re.sub(r"(?i)(token|secret|key|password|credential)([\s=:]+)\S+",r"\1\2[REDACTED]",msg)
+                      msg=re.sub(r"[a-zA-Z0-9+/=_-]{40,}","[LONG_VALUE]",msg)
+                      msg=re.sub(r"/(?:[A-Za-z0-9._-]+/){2,}[A-Za-z0-9._-]+","[PATH]",msg)
+                      if re.fullmatch(r"[A-Za-z0-9 _.,:+;=()\[\]'/<>-]{0,250}",msg):
+                          errors.append(exc.group(1)+":"+msg[:250])
+                      else:
+                          errors.append(exc.group(1)+":[DETAILS_REDACTED]")
+              for frame in frames[-12:]:
+                  print("R8_TRACE_FRAME="+frame)
+              for error in errors[-8:]:
+                  print("R8_EXCEPTION="+error)
+              print("R8_TRACEBACK_FOUND="+str(any("Traceback (most recent call last)" in l for l in lines)).lower())
+              for role in ("controller","diagnosis","planner","evaluator","judge"):
+                  print("R8_CACHE_RETIREMENT_MARKER_"+role.upper()+"="+str(
+                      any(l.strip()=="ORIGINAL_CUDA_RETIRED_ROLE_CACHE_CLEARED="+role
+                          for l in lines)).lower())
+              text="\\n".join(lines).lower()
+              # Only classified failure symptoms: never output raw private text.
+              for label,needle in {
+                  "ENOSPC":"no space left on device",
+                  "GUARD_INSUFFICIENT_DISK":"original cuda temporary role cache has insufficient free disk",
+                  "CUDA_OOM":"cuda out of memory",
+                  "HTTP_HUB_RATE_LIMIT":"429 too many requests",
+                  "HUB_FETCH_STAGE":"fetching 15 files",
+                  "MODEL_LOAD_EXCEPTION":"runtimeerror",
+                  "HF_XET_CACHE_WARNING":"xet",
+              }.items():
+                  print("R8_PRIVATE_WORKER_SYMPTOM_"+label+"="+str(needle in text).lower())
+              print("R8_PRIVATE_WORKER_SYMPTOM_PROBE_SOURCE=worker_stdout_only")
+              evaluator_start=[i for i,l in enumerate(lines)
+                  if l.strip()=="ORIGINAL_CUDA_ROLE_BOUNDARY=certified_inference_start role=evaluator"]
+              if evaluator_start:
+                  tail=lines[evaluator_start[-1]+1:]
+                  print("R8_EVALUATOR_LOG_LINES_AFTER_INFERENCE_START="+str(len(tail)))
+                  print("R8_EVALUATOR_FETCH_AFTER_START="+str(any("Fetching " in l and "files:" in l for l in tail)).lower())
+                  print("R8_EVALUATOR_WEIGHT_LOAD_AFTER_START="+str(any("Loading weights:" in l for l in tail)).lower())
+                  print("R8_EVALUATOR_ANY_ROLE_BOUNDARY_AFTER_START="+str(any(l.startswith("ORIGINAL_CUDA_ROLE_BOUNDARY=") for l in tail)).lower())
+                  print("R8_EVALUATOR_CACHE_MARKER_AFTER_START="+str(any("ORIGINAL_CUDA_RETIRED_ROLE_CACHE_CLEARED" in l for l in tail)).lower())
+              print("R8_EVALUATOR_PRIVATE_LOG_TEXT_EXPOSED=false")
+              capacity=[int(m.group(1)) for line in lines for m in
+                  [re.fullmatch(r"ORIGINAL_CUDA_ROLE_CACHE_FREE_GIB_BEFORE_DOWNLOAD=([0-9]{1,4})",line.strip())] if m]
+              print("R8_PRE_DOWNLOAD_DISK_FREE_GIB_SEQUENCE="+",".join(map(str,capacity[-8:])))
+              attempts=[m.group(1) for line in lines for m in
+                  [re.fullmatch(r"ORIGINAL_CUDA_ROLE_RETIREMENT_ATTEMPT=(controller|diagnosis|planner|evaluator|judge)",line.strip())] if m]
+              print("R8_ROLE_CACHE_RETIREMENT_ATTEMPTS="+",".join(attempts[-8:]))
+              print("R8_PRE_DOWNLOAD_GUARD_REFUSAL="+str(any(
+                  line.strip()=="ORIGINAL_CUDA_ROLE_CACHE_PRE_DOWNLOAD_REFUSAL=insufficient_disk"
+                  for line in lines)).lower())
+          exitbytes=optional(prefix+"worker_exit_status-"+run+".txt")
+          if exitbytes:
+              rows=[x.split() for x in exitbytes.decode(errors="replace").splitlines() if x.strip()]
+              print("R8_WORKER_RECORDED_EXIT_EVENTS="+str(len(rows)))
+              print("R8_LAST_WORKER_EXIT_NONZERO="+str(bool(rows and len(rows[-1])==2 and rows[-1][1]!="0")).lower())
+          else:
+              print("R8_WORKER_RECORDED_EXIT_EVENTS=0")
+          with tempfile.TemporaryDirectory() as td:
+              p=Path(td)/"state.sqlite"
+              raw=optional(prefix+"state.sqlite")
+              if raw is None: raise PermissionError("new original r3 SQLite missing")
+              p.write_bytes(raw)
+              for ext in ("-wal","-shm"):
+                  raw=optional(prefix+"state.sqlite"+ext)
+                  if raw is not None:Path(str(p)+ext).write_bytes(raw)
+              conn=sqlite3.connect(str(p))
+              try:
+                  assert conn.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+                  rows=conn.execute("SELECT collection,payload_json FROM state_records ORDER BY sequence").fetchall()
+              finally:conn.close()
+          states=[json.loads(v) for k,v in rows if k=="staged_workflow_states"]
+          if not states or states[-1].get("workflow_id")!="cuda-json-45-original-five-20261030-r8":
+              raise PermissionError("r2 scientific state missing/wrong identity")
+          state=states[-1]
+          print("R8_NATIVE_STATUS="+str(state.get("status"))[:40])
+          print("R8_NATIVE_COMPLETIONS="+str(sum(v.get("completion_marker") is True for v in state.get("steps",{}).values())))
+          print("R8_NATIVE_LAST_PHASE="+str(state.get("current_phase"))[:50])
+          print("R8_NATIVE_LAST_SUBSTEP="+str(state.get("current_substep"))[:50])
+          print("R8_NATIVE_RESUMABLE="+str(state.get("resumable")).lower())
+          print("R8_NATIVE_GPU_OPTIMIZER_RECEIPTS="+str(sum(k=="cuda_target_optimizer_steps" for k,_ in rows)))
+          print("R8_WORKFLOW_FAILURE_TYPES="+",".join(sorted(set(re.findall(
+              r"(?:subsystem_exception|exception):([A-Za-z]+Error)",str(state.get("blocking_issues",[]))))))[:180])
+          print("R8_STATE_BLOCKING_ISSUE_COUNT="+str(len(state.get("blocking_issues",[]))))
+          # Whitelist only deterministic exception class names and system-level
+          # issue IDs, never print provenance or private model/data payloads.
+          for issue in state.get("blocking_issues",[]):
+              if not isinstance(issue,dict):continue
+              code=str(issue.get("code",""))
+              if re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}",code):
+                  print("R8_NATIVE_BLOCKER_CODE="+code)
+              desc=str(issue.get("message",""))
+              m=re.search(r"subsystem_exception:([A-Za-z][A-Za-z0-9]{1,70})",desc)
+              if m:print("R8_NATIVE_BLOCKER_EXCEPTION_CLASS="+m.group(1))
+          print("R8_NATIVE_STEP_KINDS="+",".join(sorted(set(
+              re.sub(r"[^A-Za-z0-9_.-]","",str(v.get("phase","")))[:35]
+              for v in state.get("steps",{}).values() if v.get("completion_marker") is True)))[:500])
+          # Search the original content-addressed S3 role receipts, without
+          # exposing a prompt, model generation, or sensitive source data.
+          from hashlib import sha256
+          found=0
+          for page in s3.get_paginator("list_objects_v2").paginate(
+              Bucket=bucket,Prefix=prefix+"artifacts/objects/sha256/"):
+              for item in page.get("Contents",[]):
+                  key=item["Key"]
+                  if not re.fullmatch(r"[0-9a-f]{64}",key.rsplit("/",1)[-1]):
+                      continue
+                  if item["Size"]>2000000:continue
+                  raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+                  if sha256(raw).hexdigest()!=key.rsplit("/",1)[-1]:
+                      raise PermissionError("content-addressed r3 receipt drift")
+                  try:rec=json.loads(raw)
+                  except (TypeError,ValueError):continue
+                  if not isinstance(rec,dict) or rec.get("schema")!="role-inference.v1":
+                      continue
+                  if rec.get("role") not in {"controller","diagnosis","planner","evaluator","judge"}:
+                      continue
+                  found+=1
+                  print("R8_ROLE_INFERENCE_RECEIPT="+str(rec["role"]))
+                  print("R8_ROLE_INFERENCE_STATUS="+str(rec.get("status","unclassified"))[:30])
+                  print("R8_ROLE_INFERENCE_FINISH_REASON="+str(rec.get("finish_reason","unknown"))[:25])
+                  allowed_errors={
+                    "model did not return one complete JSON object",
+                    "role response must have exactly the frozen seven keys",
+                    "role response has invalid decision",
+                    "role response has invalid action",
+                    "role response has invalid primary_variable",
+                    "role response confidence is invalid",
+                    "role response cites missing, duplicate or empty evidence",
+                    "role response uncertainties are malformed",
+                    "role response rationale is malformed",
+                  }
+                  message=str(rec.get("error",""))
+                  print("R8_ROLE_INFERENCE_REJECTION_REASON="+(
+                      message if message in allowed_errors else "unknown_or_not_rejected"))
+                  execution=rec.get("execution",{})
+                  print("R8_ROLE_INFERENCE_DEVICE="+str(execution.get("device","unknown"))[:25])
+                  generated=execution.get("generated_token_ids",[])
+                  if isinstance(generated,list):
+                      print("R8_ROLE_INFERENCE_OUTPUT_TOKENS="+str(len(generated)))
+          print("R8_ROLE_INFERENCE_RECEIPT_COUNT="+str(found))
+          print("R8_ACCEPTED_CUDA_ROLES_AND_MODEL_TEXT_EXPOSED=false")
+          print("SOURCE_MODEL_TEXT_EXPOSED=false")
+          print("GPU_PODS_CREATED_BY_INSPECTOR=0")
+          PY
