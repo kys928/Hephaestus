@@ -1,0 +1,117 @@
+name: Independently monitor and cold verify original r10 CUDA45 (read-only)
+on:
+  push:
+    branches: [feature/cuda45-r10-judge-completion-20261030]
+    paths: ['.github/workflows/independent-r10-cold-readback.yml']
+permissions: {contents: read}
+jobs:
+  independent-native-and-cold-readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_S3_ENDPOINT_URL: ${{ vars.RUNPOD_S3_ENDPOINT_URL }}
+      RUNPOD_NETWORK_VOLUME_ID: ${{ vars.RUNPOD_NETWORK_VOLUME_ID }}
+      RUNPOD_DATACENTER_ID: ${{ vars.RUNPOD_DATACENTER_ID }}
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: d6bcec7b61bcd3b285a4bcf4cdd50036440b8edf}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[s3,independent-certification]'
+      - name: Read real native progress, reconcile cleanup and independently verify all archive bytes
+        run: |
+          python -u - <<'PY'
+          import os,sys,json,re,time,sqlite3,tempfile,hashlib
+          from pathlib import Path
+          from zipfile import ZipFile
+          sys.path.insert(0,"scripts")
+          from launch_user_delegated_full_cuda45 import client_s3,PREFIX,WORKFLOW,RUN,SOURCE_POLICY
+          from cold_verify_original_tier_a_cuda_archive import verify_original_cuda_archive
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          cfg=RunPodConfig.from_env()
+          assert cfg.network_volume_id=="cviwpryzao" and cfg.datacenter_id=="EU-CZ-1"
+          assert WORKFLOW=="cuda-json-45-original-five-20261030-r10"
+          expected_policy="sha256:2fbdee895577e0e7ffda5420f7d0c208974846bc23fffd66c9c00e77239ea3fc"
+          assert SOURCE_POLICY==expected_policy
+          s3=client_s3(cfg)
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"independent-r10-readonly")
+          def optional(name):
+              try:return s3.get_object(Bucket=cfg.network_volume_id,Key=PREFIX+"/"+name)["Body"].read()
+              except Exception as exc:
+                  if str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in {"404","NoSuchKey","NotFound"}: return None
+                  raise
+          def pods():
+              return [p for p in adapter.list_pods() if str(p.get("name","")).startswith("hephaestus-original-five-fullcuda45-41059067130-")]
+          pinned=None
+          for attempt in range(50):
+              with tempfile.TemporaryDirectory() as td:
+                  path=Path(td)/"state.sqlite"
+                  path.write_bytes(optional("state.sqlite"))
+                  wal=optional("state.sqlite-wal")
+                  if wal: Path(str(path)+"-wal").write_bytes(wal)
+                  db=sqlite3.connect(str(path))
+                  try:
+                      assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+                      rows=[(k,json.loads(v)) for k,v in db.execute("SELECT collection,payload_json FROM state_records ORDER BY sequence")]
+                  finally:db.close()
+              states=[v for k,v in rows if k=="staged_workflow_states"]
+              state=states[-1]
+              assert state["workflow_id"]==WORKFLOW and state["run_id"]==RUN
+              operations=sum(v.get("completion_marker") is True for v in state.get("steps",{}).values())
+              steps=sum(k=="cuda_target_optimizer_steps" for k,v in rows)
+              roles=[v["payload"]["role"] for k,v in rows if k=="staged_workflow_records" and v.get("kind")=="original_cuda_advisory_role"]
+              own=pods()
+              print("R10_NATIVE_READBACK="+json.dumps({"status":state["status"],"operations":operations,"optimizer_steps":steps,"accepted_role_count":len(roles),"pods":len(own)},sort_keys=True),flush=True)
+              digest=optional("original_frozen_archive_sha256.txt")
+              if state["status"]=="terminal_failure" and not own:
+                  raise PermissionError("r10 is terminal scientific failure; preserve original evidence and diagnose")
+              if digest and operations==45 and state.get("completion_marker") is True and not own:
+                  pinned=digest.decode().strip()
+                  assert re.fullmatch("[0-9a-f]{64}",pinned)
+                  break
+              time.sleep(20)
+          if pinned is None: raise TimeoutError("r10 independent readback has no complete immutable archive with provider cleanup")
+          archive=Path(os.environ["RUNNER_TEMP"])/"independent-r10-cold.zip"
+          key=PREFIX+"/original_frozen_45_archive.zip"
+          s3.download_file(cfg.network_volume_id,key,str(archive))
+          if optional("original_frozen_archive_sha256.txt").decode().strip()!=pinned:
+              raise PermissionError("remote original r10 archive commitment changed during download")
+          verified=verify_original_cuda_archive(archive,expected_sha256="sha256:"+pinned)
+          if pods(): raise PermissionError("r10 provider Pod reappeared; cleanup unconfirmed")
+          with ZipFile(archive) as z:
+              reports=[json.loads(z.read(n)) for n in z.namelist() if n.startswith("cuda-native-report-") and n.endswith(".json")]
+              report=next(r for r in reports if r.get("status")=="completed")
+              request=json.loads(z.read("cuda-grant-unsigned-request.json"))
+              assert request["source_policy_ref"]==expected_policy
+              assert request["workflow_id"]==WORKFLOW and request["run_id"]==RUN
+              dbpath=Path(os.environ["RUNNER_TEMP"])/"cold-r10.sqlite"
+              dbpath.write_bytes(z.read("state.sqlite"))
+              db=sqlite3.connect("file:"+str(dbpath)+"?mode=ro&immutable=1",uri=True)
+              try:
+                  records=[json.loads(v) for (v,) in db.execute("SELECT payload_json FROM state_records WHERE collection='staged_workflow_records' ORDER BY sequence")]
+              finally:db.close()
+              role_rows=[r["payload"] for r in records if r.get("kind")=="original_cuda_advisory_role"]
+              role_refs={r["role"]:r["inference_receipt_ref"] for r in role_rows}
+          summary={**verified,"workflow_id":WORKFLOW,"run_id":RUN,
+              "source_commit":"d6bcec7b61bcd3b285a4bcf4cdd50036440b8edf",
+              "source_policy_ref":expected_policy,"archive_s3_key":key,
+              "checkpoint_sha256":report["verified"]["cuda_target_checkpoint_sha256"],
+              "accepted_original_role_receipt_refs":role_refs,
+              "provider_r10_pods_after_verification":0,"external_historical_certification":False}
+          output=Path(os.environ["RUNNER_TEMP"])/"r10-public-safe-independent-readback.json"
+          output.write_text(json.dumps(summary,sort_keys=True,indent=2)+"\n")
+          print("R10_INDEPENDENT_COLD_RESULT="+json.dumps(summary,sort_keys=True),flush=True)
+          print("GPU_PODS_CREATED_BY_INDEPENDENT_VERIFIER=0")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: r10-public-safe-independent-cold-readback
+          path: ${{ runner.temp }}/r10-public-safe-independent-readback.json
+          retention-days: 90
