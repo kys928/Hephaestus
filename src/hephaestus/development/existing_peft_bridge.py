@@ -73,10 +73,21 @@ def _local_model(root: Path) -> tuple[Path, str, int, Any]:
     # Avoid sampling only nonprinting special tokens from the locally
     # initialized base. This is a symmetric, saved generation policy used by
     # BOTH baseline and trained candidate, not synthetic text substitution.
+    # Transformers v5 renamed the additional special-token interface.
+    # Resolve the two explicitly authored markers by exact token identity,
+    # rather than silently omitting them from the generation suppression.
+    authored_marker_ids = [
+        tokenizer.convert_tokens_to_ids(marker)
+        for marker in ("<|prompt|>", "<|target|>")
+    ]
+    if (len(set(authored_marker_ids)) != 2
+            or any(type(token_id) is not int or token_id == tokenizer.unk_token_id
+                   for token_id in authored_marker_ids)):
+        raise ValueError("local development marker IDs are not independently resolved")
     model.generation_config.suppress_tokens = [
         tokenizer.pad_token_id, tokenizer.unk_token_id,
         tokenizer.bos_token_id,
-        *tokenizer.additional_special_tokens_ids,
+        *authored_marker_ids,
     ]
     model.generation_config.min_new_tokens = 1
     model.save_pretrained(modeldir, safe_serialization=True)
