@@ -143,34 +143,40 @@ class OriginalCudaResearchObservation:
             print("ORIGINAL_CUDA_ROLE_PERMISSION_DENIAL=certified_inference role="+self.role,flush=True)
             raise
         except ValueError as exc:
-            # Genuine r5 Planner failed the ORIGINAL frozen citation parser.
+            # The genuine r5 Planner and r8 Evaluator both produced a
+            # frozen-schema evidence citation rejection. Restrict one new
+            # GPU inference to exactly those source-bound original boundaries.
             # One new GPU inference may be requested with exact VERIFIED
             # source ID feedback; NEVER alter the generated output or insert
             # a citation ourselves. On any further parser error fail closed.
-            if (self.role == "planner"
-                    and request.substep == "intervention_ranking"
+            citation_role_substeps = {
+                "planner": "intervention_ranking",
+                "evaluator": "semantic_comparison",
+            }
+            if (self.role in citation_role_substeps
+                    and request.substep == citation_role_substeps[self.role]
                     and str(exc) == "role response cites missing, duplicate or empty evidence"):
                 rejected_ref = getattr(exc, "rejected_inference_receipt_ref", None)
                 if not isinstance(rejected_ref, str) or not rejected_ref.startswith("sha256:"):
-                    raise PermissionError("original Planner citation rejection lacks immutable receipt") from exc
+                    raise PermissionError("original citation rejection lacks immutable receipt") from exc
                 rejected = read_verified_json(self.context.artifacts, rejected_ref)
                 if (rejected.get("schema") != "role-inference.v1"
                         or rejected.get("status") != "rejected"
                         or rejected.get("error") != str(exc)
-                        or rejected.get("role") != "planner"
+                        or rejected.get("role") != self.role
                         or rejected.get("run_id") != request.run_id
                         or rejected.get("lineage_id") != request.lineage_id
                         or rejected.get("stage_name") != request.stage_name
                         or rejected.get("evidence_refs") != [source]
                         or rejected.get("generator") != "PinnedTransformersRoleGenerator"
                         or rejected.get("execution",{}).get("device") != "cuda:0"):
-                    raise PermissionError("original Planner rejected GPU inference evidence invalid") from exc
+                    raise PermissionError("original rejected GPU inference evidence invalid") from exc
                 if (len(task.evidence) != 1
                         or task.evidence[0].ref != source
                         or not source.startswith("sha256:")):
-                    raise PermissionError("Planner citation retry needs exactly one verified source") from exc
+                    raise PermissionError("citation retry needs exactly one verified source") from exc
                 rejected_format_refs.append(rejected_ref)
-                print("ORIGINAL_CUDA_ROLE_BOUNDARY=bounded_citation_repair_start role=planner",flush=True)
+                print("ORIGINAL_CUDA_ROLE_BOUNDARY=bounded_citation_repair_start role="+self.role,flush=True)
                 repair_task=replace(task,situation=task.situation + (
                     "\\nFORMAT-ONLY RETRY: The previous JSON cited absent, repeated "
                     "or empty evidence IDs. The ONE independently verified "
@@ -187,9 +193,9 @@ class OriginalCudaResearchObservation:
                     observed=self.reasoner.propose(
                         repair_task,registry,context=role_context)
                 except ValueError:
-                    print("ORIGINAL_CUDA_ROLE_CITATION_REPAIR=failed_closed role=planner",flush=True)
+                    print("ORIGINAL_CUDA_ROLE_CITATION_REPAIR=failed_closed role="+self.role,flush=True)
                     raise
-                print("ORIGINAL_CUDA_ROLE_CITATION_REPAIR=accepted role=planner",flush=True)
+                print("ORIGINAL_CUDA_ROLE_CITATION_REPAIR=accepted role="+self.role,flush=True)
             else:
                 # This is a single narrow repair for the observed genuine r2
                 # Controller failure. The frozen original model uses greedy
