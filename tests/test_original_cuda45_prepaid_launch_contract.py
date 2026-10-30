@@ -213,3 +213,23 @@ def test_blackwell_fallback_obeys_total_live_prepaid_ceiling_not_hardcoded_four_
     with pytest.raises(PermissionError):
         controller.decide_budget(
             Account(Decimal("1.50"),Decimal("0.20")),Quote(Decimal("2.49")))
+
+
+def test_fallback_gpu_ephemeral_disk_is_large_enough_for_all_original_pinned_model_weights():
+    import inspect
+    assert controller.GPU=="NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    assert controller.CONTAINER_DISK_GB>=100
+    assert controller.MAX_CONTAINER_STORAGE_USD_PER_HOUR>=Decimal("0.02")
+    source=inspect.getsource(controller.main)
+    assert "container_disk_in_gb=CONTAINER_DISK_GB" in source
+
+
+def test_prepaid_budget_includes_actual_gpu_plus_other_running_spend_plus_disk_reserve():
+    account=Account(Decimal("10.00"),Decimal("0.10"))
+    quote=Quote(Decimal("2.49"))
+    seconds=controller.decide_budget(account,quote)
+    assert seconds>=3600 and seconds<14400
+    all_in_per_hour=(quote.price_usd_per_hour+account.already_spending_usd_per_hour
+                     +controller.MAX_CONTAINER_STORAGE_USD_PER_HOUR)
+    assert Decimal(seconds)*all_in_per_hour/3600 <= (
+        account.credit_balance_usd-controller.RESERVE_USD)
