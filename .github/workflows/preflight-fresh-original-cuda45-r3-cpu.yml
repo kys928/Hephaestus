@@ -59,4 +59,5 @@ jobs:
           print("FRESH_ORIGINAL_CUDA45_RUN_ID="+RUN)
           print("PREPAID_AUTOPAY_ENABLED=false")
           print("GPU_PODS_CREATED=0")
+          print("CURRENT_R3_PREPAID_ADMISSION=PASS")
           PY
