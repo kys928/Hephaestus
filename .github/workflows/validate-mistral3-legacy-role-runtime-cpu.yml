@@ -1,0 +1,57 @@
+name: Validate installed original Diagnosis Mistral3 runtime imports (CPU only)
+on:
+  push:
+    branches: [fix/cuda45-r3-diagnosis-mistral-import-20261030]
+    paths:
+      - '.github/workflows/validate-mistral3-legacy-role-runtime-cpu.yml'
+      - 'src/hephaestus/llm/certified_runtime.py'
+  pull_request:
+    paths:
+      - '.github/workflows/validate-mistral3-legacy-role-runtime-cpu.yml'
+      - 'src/hephaestus/llm/certified_runtime.py'
+      - 'pyproject.toml'
+permissions:
+  contents: read
+jobs:
+  actual-original-worker-import-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU torch 2.8 (no CUDA runtime / no RunPod)
+        run: |
+          python -m pip install -q torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+      - name: Resolve exact shared original target and frozen five-role extras, no model weights
+        run: python -m pip install -q -e '.[peft-training,role-inference,test]'
+      - name: Verify both original Mistral3 models can import with installed frozen role dependencies
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          import torch
+          import transformers
+          from transformers import Mistral3ForConditionalGeneration, MistralCommonTokenizer
+          from peft import PeftModel
+          from hephaestus.llm.certified_runtime import PinnedTransformersRoleGenerator
+          from hephaestus.llm.role_contract import RoleMasteryContract
+          from pathlib import Path
+          from inspect import getsource
+          print("ROLE_RUNTIME_TRANSFORMERS_VERSION="+transformers.__version__)
+          print("ROLE_RUNTIME_PEFT_VERSION="+version("peft"))
+          print("ROLE_RUNTIME_MISTRAL_COMMON_VERSION="+version("mistral-common"))
+          assert transformers.__version__.split(".")[0]=="4"
+          assert MistralCommonTokenizer.__name__=="MistralCommonTokenizer"
+          assert Mistral3ForConditionalGeneration.__name__=="Mistral3ForConditionalGeneration"
+          assert PeftModel.__name__=="PeftModel"
+          assert "MistralCommonTokenizer.from_pretrained(snapshot)" in getsource(PinnedTransformersRoleGenerator._load)
+          contract=RoleMasteryContract.load(Path("configs/models/hephaestus_role_mastery_runtime_v1.json"))
+          assert contract.profile("diagnosis")["load_kind"]=="mistral3"
+          assert contract.profile("planner")["load_kind"]=="mistral3"
+          print("ACTUAL_WORKER_MISTRAL3_IMPORTS=PASS")
+          print("GPU_PODS_CREATED=0")
+          PY
+      - name: Run certified role and original CUDA safety regression without a GPU
+        run: |
+          python -m pytest -q tests/test_certified_role_inference.py tests/test_tier_a_cuda_role_stages.py
