@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 
 from hephaestus.control.spine import SPINE_ORDER, SpinePhase
 from hephaestus.control.staged_state import (
@@ -34,6 +35,8 @@ from hephaestus.control.staged_state import (
 )
 from hephaestus.policy.action_registry import evaluate_action_boundary
 from hephaestus.schemas.external_operation import ExternalOperationPending
+from hephaestus.schemas.operation_invocation import OperationInvocation
+from hephaestus.state.execution_ownership import execution_owner
 
 
 def _canonical_json(payload: object) -> str:
@@ -75,6 +78,10 @@ class GovernedStagedOrchestrator:
         self.dependencies = dependencies
 
     def run(self, run_id: str | None = None) -> StagedWorkflowState:
+        with execution_owner(self.dependencies.state_repository, "workflow", self.workflow_id):
+            return self._run_owned(run_id)
+
+    def _run_owned(self, run_id: str | None = None) -> StagedWorkflowState:
         if run_id is not None and run_id != self.run_id:
             raise ValueError("staged orchestrator run_id does not match its configured workflow")
         state = self._load_or_create()
@@ -235,7 +242,45 @@ class GovernedStagedOrchestrator:
         )
         return step
 
-    def _call_service(
+    def _call_service(self, state, phase, substep, operation_id, attempt, input_refs):
+        """Persist intent before side effects; never replay an unknown outcome."""
+        if self._service_for(phase, substep) is None:
+            return self._invoke_service(state, phase, substep, operation_id, attempt, input_refs)
+        repository = self.dependencies.state_repository
+        prior = repository.get_latest("staged_operation_invocations", "operation_id", operation_id)
+        if prior is not None and prior.get("status") == "started":
+            return StagedOperationResult(status="blocked", resumable=True,
+                blocking_issues=("ambiguous_operation_outcome",),
+                metadata={"operation_id": operation_id,
+                          "requires_independent_reconciliation": True})
+        if prior is not None and int(prior["attempt"]) == attempt:
+            payload = prior.get("result")
+            if prior.get("result_ref"):
+                artifacts = self.dependencies.artifact_store
+                if artifacts is None or not artifacts.verify(prior["result_ref"]):
+                    raise ValueError("staged invocation receipt is missing or corrupt")
+                with artifacts.open(prior["result_ref"]) as stream:
+                    payload = json.load(stream)
+            if not isinstance(payload, dict):
+                raise ValueError("staged invocation result is malformed")
+            return StagedOperationResult(**{**payload,
+                "output_refs": tuple(payload.get("output_refs", [])),
+                "blocking_issues": tuple(payload.get("blocking_issues", [])),
+                "records": tuple(StagedOutputRecord(**r) for r in payload.get("records", []))})
+        intent = OperationInvocation(self.workflow_id, operation_id, attempt, "started")
+        repository.append("staged_operation_invocations", intent.to_dict())
+        result = self._invoke_service(state, phase, substep, operation_id, attempt, input_refs)
+        intent.status = "returned"
+        encoded = asdict(result)
+        if self.dependencies.artifact_store is not None:
+            intent.result_ref = self.dependencies.artifact_store.put_bytes(
+                _canonical_json(encoded).encode(), media_type="application/json").artifact_ref
+        else:
+            intent.result = encoded
+        repository.append("staged_operation_invocations", intent.to_dict())
+        return result
+
+    def _invoke_service(
         self,
         state: StagedWorkflowState,
         phase: SpinePhase,
