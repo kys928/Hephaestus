@@ -21,6 +21,15 @@ Hephaestus connects a deterministic eight-phase scientific workflow with special
 
 R10's target training generated a verifiable checkpoint, but demonstrating consistent **held-out improvement** is a separate experiment. The five specialist adapters were trained in an earlier model-role mastery campaign; R10's 96 updates were *not* further tuning of the Evaluator.
 
+## Documentation: begin here
+
+- **[Documentation home](docs/README.md)** — the canonical entry point.
+- **[Architecture](docs/architecture/README.md)** — eight control phases, roles, deterministic gates, state and evidence.
+- **[Operations](docs/operations/README.md)** — install, CPU tests, local demo, run safety and release/rollback.
+- **[Scientific reports](docs/scientific-reports/README.md)** — R10 result, exact evidence sources, unproven claims and next studies.
+
+The original `docs/evidence/`, `docs/integration_notes/` and `docs/reviews/` remain at their established locations to preserve historical links and immutable research references.
+
 ## Development quick start
 
 The project uses Python 3.11+ and an installable `src/hephaestus` package.

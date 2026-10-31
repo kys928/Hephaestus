@@ -1,9 +1,7 @@
-# Architecture
+# Architecture — stable reference path
 
-TODO: document concrete decisions and invariants for this subsystem.
+The canonical current architecture lives in [the architecture index](architecture/README.md), [control and governance](architecture/control-and-governance.md) and [data and state](architecture/data-and-state.md).
 
-## Draft capability integration notes
+The old integration narrative described additive modules rather than a monolithic rewrite: data services normalize governed inputs, role reasoning stays behind a deterministic boundary, and heavy backend evidence is represented by path/hash records. Operator console mutation intents are distinct from approved execution attempts. This remains the architectural intent; see the current source map for what actually exists.
 
-The integration branch represents the draft capability set as additive modules rather than a monolithic orchestrator rewrite. Data acquisition and preprocessing roles delegate normalization to `src/hephaestus/data/` helpers, safety decisions are represented as explicit guard records, LLM access remains behind deterministic boundary abstractions, backend execution evidence is summarized as path/hash metadata, and scoring utilities remain deterministic and JSON-serializable.
-
-Operator-originated mutation requests are deliberately separated from code-edit execution attempts: console actions are append-only operator-action records, while code-edit execution attempts remain bounded dry-run records tied to approved proposals.
+**Compatibility note:** this file is retained at its original path for historical PR links. Refer to the linked canonical guides for current operations.

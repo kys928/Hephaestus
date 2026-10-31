@@ -1,5 +1,17 @@
 # REPO_STRUCTURE_PLAN.md
 
+## Documentation organization (current)
+
+- `docs/README.md`: canonical documentation index.
+- `docs/architecture/`: implementation map, phase/role authority, data/state/evidence boundaries.
+- `docs/operations/`: safe local setup, approval/incident procedures, integration and rollback.
+- `docs/scientific-reports/`: readable claims, experiment outcomes, limitations and source links.
+- `docs/evidence/`: original published scientific artifacts and immutable historical receipt indexes. **Do not rename or rewrite evidence just to reorganize docs.**
+- `docs/integration_notes/` and `docs/reviews/`: historic development/source-review records retained at original paths.
+- Old `docs/*.md` entrypoints are maintained as compatibility/reference pages for existing PR links.
+
+These directories are curated reading paths, **not** a claim that every historical note has been moved. Moving evidence or old linked records for aesthetic reasons would break provenance.
+
 ## Top-level structure
 - `configs/`: human-authored system and policy configuration.
 - `docs/`: architectural and operational documentation.
