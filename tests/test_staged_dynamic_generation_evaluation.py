@@ -94,7 +94,8 @@ def _components(tmp_path, *, enabled=True):
         run_id="candidate", experiment_id="exp-generation",
         backend_id="cpu-training-test-double", status="completed",
         checkpoint_refs=[candidate_checkpoint],
-        metadata={"generation_handoff_ref": handoff},
+        metadata={"generation_handoff_ref": handoff, "checkpoint_manifest_hashes": {
+            candidate_checkpoint: validate_checkpoint_manifest(candidate_checkpoint)[1]}},
     )
     trainer = CompletedCpuTrainer(candidate)
     runtime.training_lifecycle.delegate = trainer

@@ -20,6 +20,8 @@ from hephaestus.storage.base import ArtifactStore, StateRepository
 from hephaestus.storage.verified import canonical_bytes
 from .staged_records import verified_workflow_payload
 from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
+from hephaestus.schemas.checkpoint_identity import CheckpointIdentity
+from hephaestus.state.checkpoint_identity_store import CheckpointIdentityStore
 
 
 _LAUNCHABLE = frozenset({"ready", "approved"})
@@ -193,6 +195,12 @@ class StagedTrainingLifecycleAdapter:
             verified, manifest_hash = validate_checkpoint_manifest(Path(checkpoint))
             if not verified:
                 raise ValueError(f"training checkpoint integrity failed: {manifest_hash}")
+            retained = handle.metadata.get("checkpoint_manifest_hashes", {})
+            if not isinstance(retained, dict) or retained.get(checkpoint) != manifest_hash:
+                raise ValueError("training checkpoint lacks matching retained producer identity")
+            CheckpointIdentityStore(self.repository).retain(CheckpointIdentity(
+                lineage_id=request.lineage_id, checkpoint_ref=checkpoint,
+                manifest_hash=manifest_hash, evidence_ref=f"training:{request.run_id}"))
             return StagedOperationResult(
                 records=(StagedOutputRecord("checkpoint_resolution", {
                     "checkpoint_ref": checkpoint, "manifest_hash": manifest_hash,
@@ -201,7 +209,7 @@ class StagedTrainingLifecycleAdapter:
                 metadata={"checkpoint_ref": checkpoint, "checkpoint_manifest_hash": manifest_hash,
                           "experiment_id": handle.experiment_id},
             )
-        except (ValueError, KeyError, TypeError, OSError) as exc:
+        except (ValueError, KeyError, TypeError, OSError, PermissionError) as exc:
             return StagedOperationResult(status="blocked", resumable=False,
                 blocking_issues=(f"training_handoff_invalid:{type(exc).__name__}",))
 

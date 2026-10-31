@@ -20,6 +20,7 @@ from hephaestus.storage.base import ArtifactStore
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.state.run_store import RunStore
+from hephaestus.state.checkpoint_identity_store import CheckpointIdentityStore
 from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
 from hephaestus.storage.base import StateRepository
 
@@ -85,6 +86,8 @@ class GovernedActionExecutor:
             raise RuntimeError("lineage diverged since prepared action; refusing overwrite")
         if current == before:
             action = str(previous["effective_action"])
+            self._validate_preconditions(LineageState.from_dict(before), action,
+                                         previous.get("checkpoint_ref"))
             policy = self.approval_policy or ApprovalPolicy()
             boundary = evaluate_action_boundary(action)
             outcome = policy.decide(action, str(before["stage_name"]), str(before["trust_level"]))
@@ -170,30 +173,7 @@ class GovernedActionExecutor:
         boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
         if not boundary["allowed"]:
             raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
-        # Action-registry admission does not establish checkpoint provenance
-        # or permit a poisoned/retired lineage to become active again.
-        if current.status in {"poisoned", "archived", "deprecated", "blocked"} and canonical in {
-            "continue_lineage_best", "continue_from_checkpoint",
-            "rerun_same_config", "reject_candidate",
-        }:
-            raise PermissionError("terminal or poisoned lineage cannot autonomously continue")
-        if canonical == "continue_from_checkpoint" and checkpoint_ref is not None:
-            known = {
-                current.best_checkpoint_ref,
-                current.last_stable_checkpoint_ref,
-                current.certified_stable_checkpoint_ref,
-                current.origin_checkpoint_ref,
-                current.branch_origin_checkpoint_ref,
-            }
-            known.update(
-                row.get("checkpoint_ref") for row in RunStore(self.state_root).all()
-                if row.get("lineage_id") == lineage_id
-            )
-            if checkpoint_ref not in known:
-                raise PermissionError("continuation checkpoint does not belong to lineage")
-            verified, _manifest_identity = validate_checkpoint_manifest(Path(checkpoint_ref))
-            if not verified:
-                raise PermissionError("continuation checkpoint manifest is invalid")
+        checkpoint_identity = self._validate_preconditions(current, canonical, checkpoint_ref)
 
         if canonical == "promote_checkpoint":
             # Authoritative immutable evaluation, never the caller's boolean.
@@ -298,6 +278,7 @@ class GovernedActionExecutor:
             "requested_action": requested_action,
             "effective_action": canonical,
             "checkpoint_ref": checkpoint_ref,
+            "checkpoint_identity": checkpoint_identity,
             "approval_status": approval_status,
             "approval_ref": approval_ref,
             "authorization": authorization,
@@ -334,6 +315,38 @@ class GovernedActionExecutor:
         self.lineage_store.set_current(current.to_dict())
         self.repository.append(ACTION_EXECUTIONS, record)
         return record
+
+    def _validate_preconditions(self, current: LineageState, canonical: str,
+                                checkpoint_ref: str | None) -> str | None:
+        """Shared admission before normal or prepared-but-unapplied mutation."""
+        if current.status in {"poisoned", "archived", "deprecated", "blocked"} and canonical in {
+            "continue_lineage_best", "continue_from_checkpoint",
+            "rerun_same_config", "reject_candidate",
+        }:
+            raise PermissionError("terminal or poisoned lineage cannot autonomously continue")
+        if canonical == "continue_from_checkpoint":
+            if not checkpoint_ref:
+                raise PermissionError("continuation requires an explicit checkpoint identity")
+            known = {
+                current.best_checkpoint_ref,
+                current.last_stable_checkpoint_ref,
+                current.certified_stable_checkpoint_ref,
+                current.origin_checkpoint_ref,
+                current.branch_origin_checkpoint_ref,
+            }
+            known.update(
+                row.get("checkpoint_ref") for row in RunStore(self.state_root).all()
+                if row.get("lineage_id") == current.lineage_id
+            )
+            if checkpoint_ref not in known:
+                raise PermissionError("continuation checkpoint does not belong to lineage")
+            verified, manifest_identity = validate_checkpoint_manifest(Path(checkpoint_ref))
+            if not verified:
+                raise PermissionError("continuation checkpoint manifest is invalid")
+            return CheckpointIdentityStore(self.repository).verify(
+                current.lineage_id, checkpoint_ref, manifest_identity)
+        return None
+
 
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
         outputs = request.prior_outputs
