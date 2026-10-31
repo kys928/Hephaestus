@@ -50,11 +50,19 @@ class RecoverableInfrastructureError(RuntimeError):
         self.details = details or {}
 
 
+class InfrastructureRetryExhausted(RecoverableInfrastructureError):
+    """Persisted failure allowance is spent; no callback was invoked."""
+
+
 @dataclass(slots=True)
 class InfrastructureRecoveryController:
     repository: StateRepository
     maximum_attempts: int = 5
     retry_codes: frozenset[str] = field(default_factory=lambda: _SAFE_CODES)
+
+    def __post_init__(self):
+        if type(self.maximum_attempts) is not int or self.maximum_attempts < 1:
+            raise ValueError("infrastructure maximum_attempts must be a positive integer")
 
     def _operation_attempts(self, operation_id: str) -> list[dict[str, object]]:
         return [
@@ -77,13 +85,22 @@ class InfrastructureRecoveryController:
         Scientific configuration changes are not permitted by this boundary.
         """
         history = self._operation_attempts(operation_id)
-        start_attempt = 1 + max([int(row.get("attempt", 0)) for row in history] or [0])
-        last: RecoverableInfrastructureError | None = None
+        # Legacy completed rows were successful observations, even if their
+        # historical attempt numbers increased. Never charge those as failures.
+        failures = [row for row in history if row.get("failure_code")]
+        if failures and (failures[-1].get("status") == "blocked"
+                         or len(failures) >= self.maximum_attempts):
+            last = failures[-1]
+            raise InfrastructureRetryExhausted(
+                str(last["failure_code"]), "infrastructure retry allowance exhausted or blocked",
+                optimizer_steps=int(last.get("optimizer_steps", 0)),
+                checkpoint_created=bool(last.get("checkpoint_created", False)),
+                details={"failure_count": len(failures), "maximum_attempts": self.maximum_attempts})
+        start_attempt = len(failures) + 1
         for attempt in range(start_attempt, self.maximum_attempts + 1):
             try:
                 value = operation(attempt)
             except RecoverableInfrastructureError as exc:
-                last = exc
                 safe = (
                     exc.code in self.retry_codes
                     and exc.optimizer_steps == 0
@@ -112,16 +129,17 @@ class InfrastructureRecoveryController:
             self.repository.append(
                 INFRA_RECOVERY,
                 {
-                    "record_id": "infra-success-" + hashlib.sha256(f"{operation_id}:{attempt}".encode()).hexdigest()[:20],
+                    "record_id": "infra-success-" + hashlib.sha256(
+                        f"{operation_id}:{attempt}:{len(history) + 1}".encode()).hexdigest()[:20],
                     "operation_id": operation_id,
                     "attempt": attempt,
                     "status": "completed",
+                    "observation_only": True,
                     "scientific_variables_changed": False,
                 },
             )
             return value
-        assert last is not None
-        raise last
+        raise InfrastructureRetryExhausted("retry_budget_exhausted", "infrastructure retry allowance exhausted")
 
     @staticmethod
     def classify_message(message: str, *, optimizer_steps: int = 0, checkpoint_created: bool = False) -> RecoverableInfrastructureError | None:
