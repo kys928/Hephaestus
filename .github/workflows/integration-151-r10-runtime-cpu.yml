@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: python -m pip install -q -e '.[test]'
+      - run: python -m pip install -q -e '.[test,s3,independent-certification]'
       - name: Require real complete R10 parent history, retained original evidence and no historical paid-workflow restoration
         shell: bash
         run: |
