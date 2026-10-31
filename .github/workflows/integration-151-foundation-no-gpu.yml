@@ -1,0 +1,51 @@
+name: Integration 151 - immutable evidence foundation (CPU only)
+on:
+  push:
+    branches:
+      - integration/151-evidence-contracts-20261031
+  pull_request:
+    paths:
+      - 'src/hephaestus/storage/verified.py'
+      - 'src/hephaestus/storage/external_evidence_pointer.py'
+      - 'src/hephaestus/schemas/cpu_campaign_config.py'
+      - 'configs/research/cpu_chat_json_repair_v1.json'
+      - 'tests/test_external_evidence_pointer.py'
+      - 'tests/test_cpu_campaign_config.py'
+      - '.github/workflows/integration-151-foundation-no-gpu.yml'
+permissions:
+  contents: read
+jobs:
+  verify-r10-source-and-cpu-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install core and pytest only
+        run: python -m pip install -q -e '.[test]'
+      - name: Exercise frozen evidence and campaign-schema gates
+        run: |
+          python -m pytest -q tests/test_external_evidence_pointer.py tests/test_cpu_campaign_config.py tests/test_certified_role_stack.py tests/test_autonomous_experiment_contracts.py
+          python -m compileall -q src/hephaestus/storage src/hephaestus/schemas
+          echo 'GOVERNED_EVIDENCE_FOUNDATION=PASS'
+          echo 'GPU_PODS_CREATED=0'
+      - name: Verify exact copied original R10 Git blob hashes
+        run: |
+          python - <<'PY'
+          import subprocess
+          expected={
+              "src/hephaestus/storage/verified.py":"a0b80cf2d4b64f4be248e5fd3ccaae97f44e3e70",
+              "src/hephaestus/storage/external_evidence_pointer.py":"4168df0276e80904dc5514a631c287e002e574c0",
+              "src/hephaestus/schemas/cpu_campaign_config.py":"4adb8da114b2c9d44e3dd0c7bb4d8be5163229d9",
+              "configs/research/cpu_chat_json_repair_v1.json":"b988e10ff86425a3687d5b7ba2d66ae603d38d45",
+              "tests/test_external_evidence_pointer.py":"f7322714847c1e06004829b51d6694a5aca028e4",
+              "tests/test_cpu_campaign_config.py":"33eb8bb044f0f75bd85dc747c99b5dc1ebb65d6f",
+          }
+          for path,sha in expected.items():
+              actual=subprocess.check_output(["git","hash-object",path],text=True).strip()
+              assert actual==sha,(path,actual,sha)
+          print("EXACT_REVIEWED_R10_BLOBS=6/6")
+          print("CUDA_SCIENCE_EXCLUDED=true")
+          PY
