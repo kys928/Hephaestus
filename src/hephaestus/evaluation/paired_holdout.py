@@ -5,6 +5,8 @@ Caller must independently custody holdout and generation receipts.
 """
 from __future__ import annotations
 
+from .exact_json import SCORER_VERSION, strict_json_object, exact_typed_equal, score_prediction
+
 from collections import Counter
 from hashlib import sha256
 import json
@@ -17,56 +19,7 @@ from hephaestus.storage.verified import canonical_bytes
 FAMILIES = ("arithmetic", "json", "symbolic", "reasoning")
 CASES_PER_FAMILY = 512
 CLAIM_SCOPE = "internal_prospective_original_task_only"
-SCHEMA = "prospective-paired-json-v1"
-
-
-def _unique_pairs(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON key")
-        result[key] = value
-    return result
-
-
-def _reject_constant(value):
-    raise ValueError("non-finite JSON is not valid")
-
-
-def strict_json_object(raw):
-    if not isinstance(raw, str):
-        return None
-    try:
-        value = json.loads(raw, object_pairs_hook=_unique_pairs,
-                           parse_constant=_reject_constant)
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return None
-    return value if type(value) is dict else None
-
-
-def exact_typed_equal(actual, expected):
-    if type(actual) is not type(expected):
-        return False
-    if isinstance(expected, dict):
-        return actual.keys() == expected.keys() and all(
-            exact_typed_equal(actual[k], v) for k, v in expected.items()
-        )
-    if isinstance(expected, list):
-        return len(actual) == len(expected) and all(
-            exact_typed_equal(a, b) for a, b in zip(actual, expected, strict=True)
-        )
-    return actual == expected
-
-
-def score_prediction(raw, target):
-    expected = strict_json_object(target)
-    if expected is None:
-        raise ValueError("reference target is not an exact JSON object")
-    parsed = strict_json_object(raw)
-    return {
-        "valid_json": parsed is not None,
-        "exact_correct": parsed is not None and exact_typed_equal(parsed, expected),
-    }
+SCHEMA = "prospective-paired-json-v2"
 
 
 def exact_mcnemar_p(wins, losses):
@@ -187,6 +140,7 @@ def score_precommitted_holdout(rows, *, expected_commitment,
     }
     return {
         "schema": SCHEMA,
+        "scorer_version": SCORER_VERSION,
         "scope": CLAIM_SCOPE,
         "holdout_commitment": commitment,
         "known_exposure_count": len(exposure_sample_ids),

@@ -1,4 +1,6 @@
 """Prospective original-task measurement. No historical benchmark claims."""
+from .exact_json import SCORER_VERSION, score_prediction
+
 from collections import Counter
 from hashlib import sha256
 import json
@@ -20,7 +22,7 @@ class CpuProspectiveEvaluator:
         from peft import PeftModel
         ctx = self.context
         protocol = ctx.admission.evaluation_store.require_frozen(ctx.scope["experiment_id"], ctx.profile_protocol)
-        input_ref = put_record(ctx.artifacts, {"protocol_ref": ctx.profile_protocol,
+        input_ref = put_record(ctx.artifacts, {"protocol_ref": ctx.profile_protocol, "scorer_version": SCORER_VERSION,
             "checkpoint": str(checkpoint) if checkpoint else "pinned-pretrained-baseline",
             "repeat": repeat, "profile_ref": ctx.profile_ref})
         cached = ctx.state.get(operation_id, input_ref)
@@ -73,19 +75,13 @@ class CpuProspectiveEvaluator:
                 raise ValueError("nonfinite held-out target negative log-likelihood")
             text = ctx.scorer.tokenizer.decode(generated[0, tokens.input_ids.shape[1]:], skip_special_tokens=True).strip()
             valid, correct = False, False
-            try:
-                answer = json.loads(text)
-                expected = json.loads(row["target"])
-                valid = isinstance(answer, dict)
-                correct = (valid and answer == expected and
-                    all(type(answer[k]) is type(v) for k, v in expected.items()))
-            except (ValueError, KeyError, TypeError):
-                pass
+            measurement = score_prediction(text, row["target"])
+            valid, correct = measurement["valid_json"], measurement["exact_correct"]
             outputs.append({"sample_id": row["sample_id"], "family": row["family"],
                 "prompt_sha256": "sha256:" + sha256(prefix.encode()).hexdigest(),
                 "output": text, "output_sha256": "sha256:" + sha256(text.encode()).hexdigest(),
                 "json_valid": valid, "correct": correct, "target_nll": nll})
-        result = {"schema": "cpu-prospective-real-generation.v1", "profile_ref": ctx.profile_ref,
+        result = {"schema": "cpu-prospective-real-generation.v2", "scorer_version": SCORER_VERSION, "profile_ref": ctx.profile_ref,
             "protocol_ref": ctx.profile_protocol, "checkpoint_ref": str(checkpoint) if checkpoint else None,
             "generation_settings_id": ("greedy-chat64-json-eos-no-truncation.v2" if
                 ctx.profile.training_recipe == "chat_json_r8_full_epoch_96_v1" else
@@ -100,6 +96,8 @@ class CpuProspectiveEvaluator:
 
     def compare(self, baseline, candidate):
         ctx = self.context
+        if (baseline.get("scorer_version") != SCORER_VERSION or candidate.get("scorer_version") != SCORER_VERSION):
+            raise ValueError("future comparisons require the same explicit scorer version")
         if (baseline["protocol_ref"] != candidate["protocol_ref"] or baseline["generation_settings_id"] != candidate["generation_settings_id"] or
                 [r["sample_id"] for r in baseline["samples"]] != [r["sample_id"] for r in candidate["samples"]]):
             raise ValueError("prospective baseline/candidate protocol parity failed")
