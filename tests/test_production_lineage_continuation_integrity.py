@@ -42,7 +42,7 @@ def test_automatic_continuation_rejects_tampered_known_checkpoint(tmp_path):
     assert executor.repository.all(ACTION_EXECUTIONS) == []
 
 
-@pytest.mark.parametrize("status", ["poisoned", "archived", "deprecated"])
+@pytest.mark.parametrize("status", ["poisoned", "archived", "deprecated", "blocked"])
 @pytest.mark.parametrize("action", ["continue_lineage_best", "continue_from_checkpoint",
                                     "rerun_same_config", "reject_candidate"])
 def test_retired_or_poisoned_lineage_cannot_reactivate_via_auto_action(tmp_path,status,action):
@@ -63,3 +63,17 @@ def test_verified_lineage_owned_checkpoint_continuation_remains_possible(tmp_pat
                             requested_action="continue_from_checkpoint", checkpoint_ref=valid)
     assert result["status"] == "applied"
     assert result["after"]["best_checkpoint_ref"] == valid
+
+
+def test_actual_abort_cannot_be_undone_by_automatic_continuation(tmp_path):
+    root = tmp_path / "state"
+    executor = _executor(root, status="active", best="checkpoint://old")
+    aborted = executor.apply(lineage_id="lineage-a", run_id="abort-one",
+                             requested_action="abort_run")
+    assert aborted["after"]["status"] == "blocked"
+    with pytest.raises(PermissionError, match="cannot autonomously continue"):
+        executor.apply(lineage_id="lineage-a", run_id="next-cycle",
+                       requested_action="continue_lineage_best")
+    assert LineageStore(root).get_current("lineage-a")["status"] == "blocked"
+    assert len([r for r in executor.repository.all(ACTION_EXECUTIONS)
+                if r["status"] == "applied"]) == 1

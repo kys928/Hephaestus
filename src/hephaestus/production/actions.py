@@ -172,7 +172,7 @@ class GovernedActionExecutor:
             raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
         # Action-registry admission does not establish checkpoint provenance
         # or permit a poisoned/retired lineage to become active again.
-        if current.status in {"poisoned", "archived", "deprecated"} and canonical in {
+        if current.status in {"poisoned", "archived", "deprecated", "blocked"} and canonical in {
             "continue_lineage_best", "continue_from_checkpoint",
             "rerun_same_config", "reject_candidate",
         }:
