@@ -95,7 +95,8 @@ class ExperimentEvaluationService:
         minimum_practical_improvement: float | None = None,
     ) -> None:
         self.pack_name = pack_name
-        self.pack = load_eval_pack(pack_name, config_dir=config_dir)
+        self.config_dir = Path(config_dir).resolve()
+        self.pack = load_eval_pack(pack_name, config_dir=self.config_dir)
         if not bool(self.pack.get("frozen", False)):
             raise ConfigError(f"semantic comparison requires frozen eval pack '{pack_name}'")
         self.judge_adapter = judge_adapter
