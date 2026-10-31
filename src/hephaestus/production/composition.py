@@ -29,6 +29,9 @@ from hephaestus.evaluation.experiment_service import ExperimentEvaluationService
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.planning.service import ClosedLoopExperimentPlanner
 from hephaestus.policy.approval_policy import ApprovalPolicy
+from hephaestus.policy.experiment_policy import ExperimentPolicy
+from hephaestus.policy.recovery_policy import RecoveryPolicy
+from hephaestus.policy.stage_policy import StagePolicy
 from hephaestus.policy.runtime_policy import RuntimePolicy
 from hephaestus.providers.datasets.huggingface import HuggingFaceDatasetProvider
 from hephaestus.providers.models.catalog import CatalogModelProvider
@@ -259,6 +262,7 @@ class ProductionCompositionRoot:
 
     def build(self) -> ProductionRuntime:
         settings = self.settings
+        settings.config_dir = settings.config_dir.resolve()
         settings.state_root.mkdir(parents=True, exist_ok=True)
         settings.artifact_root.mkdir(parents=True, exist_ok=True)
         settings.resolved_cache_root().mkdir(parents=True, exist_ok=True)
@@ -280,7 +284,8 @@ class ProductionCompositionRoot:
         scientific_evidence = ScientificEvidenceStore(state, artifacts)
         diagnosis = IntegratedDiagnosisService(EvidenceBasedDiagnosisService(evidence_adapters=(
             StateEvidenceAdapter(settings.state_root), BoundScientificEvidenceAdapter(scientific_evidence))))
-        planner = ClosedLoopExperimentPlanner(memory_query=ExperimentMemoryQuery(settings.state_root, state, artifacts))
+        planner = ClosedLoopExperimentPlanner(policy=ExperimentPolicy(approval_policy=approval_policy),
+            memory_query=ExperimentMemoryQuery(settings.state_root, state, artifacts))
 
         hf_dataset = HuggingFaceDatasetProvider(enable_network=settings.enable_dataset_network)
         registry = DatasetProviderRegistry(
@@ -320,11 +325,13 @@ class ProductionCompositionRoot:
             maximum_rows=settings.maximum_dataset_rows,
         )
         training = GuardedTrainingLifecycleService(raw_training)
-        evaluator = ExperimentEvaluationService()
+        evaluator = ExperimentEvaluationService(config_dir=settings.config_dir)
         judge = SemanticComparisonJudgeAdapter()
 
         recovery_store = DurableRecoveryAttemptStore(state)
-        recovery = BoundedRecoveryService(recovery_store)
+        recovery = BoundedRecoveryService(recovery_store,
+            policy=RecoveryPolicy(approval_policy=approval_policy),
+            stage_policy=StagePolicy(config_dir=settings.config_dir))
         infra_recovery = InfrastructureRecoveryController(
             state,
             maximum_attempts=settings.maximum_infrastructure_attempts,
