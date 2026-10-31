@@ -13,7 +13,11 @@ store is configured. A crash after that receipt but before the workflow snapshot
 reuses the returned result. A crash after intent but without a returned receipt
 blocks with `ambiguous_operation_outcome`; it does not blindly repeat an unknown
 side effect. Independent provider/worker reconciliation is required before that
-intent can be resolved. A known returned pending result may be polled again with
+intent can be resolved. A service may implement the explicit
+`ReconcilesStagedOperation.reconcile_operation` adapter to consult its durable
+provider/worker intent; the controller never substitutes ordinary `execute` for
+that contract. RunPod recovery tests exercise its existing allocation reconciler
+through this adapter. A known returned pending result may be polled again with
 the same stable operation identity and the next observation attempt.
 
 These controls preserve the existing RunPod allocation-intent reconciliation;

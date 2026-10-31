@@ -162,6 +162,15 @@ class StagedOperationService(Protocol):
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult: ...
 
 
+class ReconcilesStagedOperation(Protocol):
+    """Optional deterministic adapter for an ambiguous prior side effect.
+
+    Must consult durable provider/worker intent and receipts using the original
+    operation identity. Absence of an outcome is not permission for blind replay.
+    """
+    def reconcile_operation(self, request: StagedOperationRequest) -> StagedOperationResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class StagedApprovalRequest:
     request_id: str

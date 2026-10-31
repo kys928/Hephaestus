@@ -248,12 +248,13 @@ class GovernedStagedOrchestrator:
             return self._invoke_service(state, phase, substep, operation_id, attempt, input_refs)
         repository = self.dependencies.state_repository
         prior = repository.get_latest("staged_operation_invocations", "operation_id", operation_id)
-        if prior is not None and prior.get("status") == "started":
+        reconciling = prior is not None and prior.get("status") in {"started", "reconciling"}
+        if reconciling and not callable(getattr(self._service_for(phase, substep), "reconcile_operation", None)):
             return StagedOperationResult(status="blocked", resumable=True,
                 blocking_issues=("ambiguous_operation_outcome",),
                 metadata={"operation_id": operation_id,
                           "requires_independent_reconciliation": True})
-        if prior is not None and int(prior["attempt"]) == attempt:
+        if prior is not None and not reconciling and int(prior["attempt"]) == attempt:
             payload = prior.get("result")
             if prior.get("result_ref"):
                 artifacts = self.dependencies.artifact_store
@@ -267,9 +268,11 @@ class GovernedStagedOrchestrator:
                 "output_refs": tuple(payload.get("output_refs", [])),
                 "blocking_issues": tuple(payload.get("blocking_issues", [])),
                 "records": tuple(StagedOutputRecord(**r) for r in payload.get("records", []))})
-        intent = OperationInvocation(self.workflow_id, operation_id, attempt, "started")
+        intent = OperationInvocation(self.workflow_id, operation_id, attempt,
+                                     "reconciling" if reconciling else "started")
         repository.append("staged_operation_invocations", intent.to_dict())
-        result = self._invoke_service(state, phase, substep, operation_id, attempt, input_refs)
+        result = self._invoke_service(state, phase, substep, operation_id, attempt, input_refs,
+                                      reconciling=reconciling)
         intent.status = "returned"
         encoded = asdict(result)
         if self.dependencies.artifact_store is not None:
@@ -288,6 +291,7 @@ class GovernedStagedOrchestrator:
         operation_id: str,
         attempt: int,
         input_refs: list[str],
+        *, reconciling: bool = False,
     ) -> StagedOperationResult:
         service = self._service_for(phase, substep)
         if service is None:
@@ -309,7 +313,7 @@ class GovernedStagedOrchestrator:
             prior_outputs=self._prior_outputs(state),
         )
         try:
-            return service.execute(request)
+            return service.reconcile_operation(request) if reconciling else service.execute(request)
         except ExternalOperationPending as exc:
             return StagedOperationResult(
                 status="interrupted" if exc.resumable else "blocked",
