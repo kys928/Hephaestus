@@ -30,6 +30,7 @@ from hephaestus.schemas.experiment_contract import (
 )
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
 from hephaestus.training.peft_support import validate_recipe
+from hephaestus.training.batch_schedule import SCHEDULE_VERSION, step_limit
 from hephaestus.training.continuation_tokens import (
     FORMAT as TOKEN_ID_FORMAT, KIND as TOKEN_ID_KIND, continuation_contract,
     verified_original_tokenizer, validate_token_records,
@@ -820,6 +821,7 @@ class TransformersTrainingLifecycleService:
             "warmup_steps": integer("warmup_steps", 0, 0),
             "batch_size": integer("batch_size", 1, 1),
             "gradient_accumulation_steps": integer("gradient_accumulation_steps", 1, 1),
+            "batch_schedule_version": SCHEDULE_VERSION,
             "max_steps": max_steps,
             "max_epochs": max_epochs,
             "gradient_clipping": number("gradient_clipping", 1.0, 0.0),
@@ -859,6 +861,9 @@ class TransformersTrainingLifecycleService:
                     "All reviewed token windows must fit context and token bounds without truncation."))
         if int(config["warmup_steps"]) > max_steps:
             issues.append(_issue("warmup_exceeds_steps", "invalid_request", "warmup_steps exceeds max_steps."))
+        if config["dataloader_settings"]["shuffle"]:
+            issues.append(_issue("shuffle_not_supported", "invalid_request",
+                "This bounded worker supports a declared sequential schedule, not shuffled data."))
         if float(config["step_delay_seconds"]) > 1.0:
             issues.append(_issue("invalid_step_delay", "invalid_request", "step_delay_seconds must be <= 1."))
         special = config["special_token_ids"]
@@ -918,9 +923,8 @@ class TransformersTrainingLifecycleService:
             rows = int(data_summary.get("rows", 0))
             accumulation = int(config.get("gradient_accumulation_steps", 1))
             batches_per_epoch = math.ceil(rows / max(1, batch))
-            steps_per_epoch = max(1, math.ceil(batches_per_epoch / max(1, accumulation)))
-            epoch_steps = math.ceil(float(config["max_epochs"]) * steps_per_epoch)
-            expected_steps = min(expected_steps, epoch_steps)
+            expected_steps = (step_limit(batches_per_epoch, accumulation, expected_steps, config["max_epochs"])
+                              if batches_per_epoch > 0 and expected_steps > 0 else 0)
         return {
             "parameter_memory_bytes": parameter_memory,
             "optimizer_state_memory_bytes": optimizer_memory,

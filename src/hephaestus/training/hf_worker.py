@@ -18,6 +18,7 @@ from hephaestus.training.peft_support import validate_recipe, validate_adapter
 from hephaestus.training.continuation_tokens import FORMAT, KIND, encode_frozen_records
 from hephaestus.schemas.prompt_target_supervision import PromptTargetSupervision
 from hephaestus.data.chunking import supervision_segments
+from hephaestus.training.batch_schedule import SCHEDULE_VERSION, training_windows, step_limit, cursor_at_step
 
 _STOP_REASON: str | None = None
 
@@ -300,6 +301,9 @@ def _save_checkpoint(
     epoch: float,
     metrics: dict[str, object],
 ) -> tuple[Path, str]:
+    for name in ("examples_processed", "tokens_processed", "batches_processed"):
+        if type(metrics.get(name)) is not int or metrics[name] < 0:
+            raise ValueError(f"checkpoint requires cumulative {name}")
     root = Path(str(job["artifact_root"]))
     partial = root / f"checkpoint_step_{step}.partial"
     final = root / f"checkpoint_step_{step}"
@@ -320,8 +324,12 @@ def _save_checkpoint(
         state = {
             "step": step,
             "epoch": epoch,
-            "examples_processed": int(metrics.get("examples_processed", 0)),
-            "tokens_processed": int(metrics.get("tokens_processed", 0)),
+            "examples_processed": metrics["examples_processed"],
+            "tokens_processed": metrics["tokens_processed"],
+            "batches_processed": metrics["batches_processed"],
+            "batch_schedule_version": SCHEDULE_VERSION,
+            "last_training_loss": metrics["training_loss"],
+            "last_gradient_norm": metrics["gradient_norm"],
             "optimizer_state": optimizer.state_dict(),
             "scheduler_state": scheduler.state_dict(),
             "scaler_state": None,
@@ -431,6 +439,10 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
 
     job = json.loads(job_path.read_text(encoding="utf-8"))
     config = dict(job["training_config"])
+    if config.get("batch_schedule_version") != SCHEDULE_VERSION:
+        raise ValueError("legacy training schedule requires explicit replay with its pinned source")
+    if config.get("dataloader_settings", {}).get("shuffle"):
+        raise ValueError("shuffle is unsupported by this bounded sequential training schedule")
     compatibility = dict(job["compatibility"])
     # Recheck immutable inputs at consumption, including resumed workers.
     evidence, records = _read_prepared_data(config, compatibility)
@@ -525,6 +537,7 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     start_step = 0
     examples_processed = 0
     tokens_processed = 0
+    batches_processed = 0
     if resume_state is not None:
         optimizer.load_state_dict(resume_state["optimizer_state"])
         scheduler.load_state_dict(resume_state["scheduler_state"])
@@ -535,37 +548,42 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
         start_step = int(resume_state["step"])
         examples_processed = int(resume_state.get("examples_processed", 0))
         tokens_processed = int(resume_state.get("tokens_processed", 0))
+        if resume_state.get("batch_schedule_version") != SCHEDULE_VERSION:
+            raise ValueError("resume checkpoint lacks the current explicit batch schedule")
+        batches_processed = int(resume_state["batches_processed"])
         _event(root, run_id, start_step, "resuming", "strict checkpoint state loaded")
 
     _write_json(root / "tokenization_summary.json", tokenization_summary)
     _event(root, run_id, start_step, "running", "bounded causal-LM fine-tuning started")
     start_time = time.monotonic()
-    last_loss = math.inf
-    last_grad_norm = math.inf
-    latest_checkpoint: Path | None = None
+    last_loss = float(resume_state["last_training_loss"]) if resume_state is not None else math.inf
+    last_grad_norm = float(resume_state["last_gradient_norm"]) if resume_state is not None else math.inf
+    latest_checkpoint: Path | None = checkpoint if resume_state is not None else None
     accumulation = int(config["gradient_accumulation_steps"])
-    maximum_steps = int(config["max_steps"])
-    if config.get("max_epochs") is not None:
-        steps_per_epoch = max(1, math.ceil(len(batches) / accumulation))
-        epoch_steps = math.ceil(float(config["max_epochs"]) * steps_per_epoch)
-        maximum_steps = min(maximum_steps, epoch_steps)
+    maximum_steps = step_limit(len(batches), accumulation, int(config["max_steps"]), config.get("max_epochs"))
+    if (start_step > maximum_steps or batches_processed != cursor_at_step(
+            len(batches), accumulation, start_step, config.get("max_epochs"))):
+        raise ValueError("resume data cursor does not match the frozen optimizer schedule")
+    session_examples, session_tokens = examples_processed, tokens_processed
     checkpoint_every = int(config["checkpoint_every_steps"])
     log_every = int(config["logging_every_steps"])
     delay = float(config.get("step_delay_seconds", 0.0))
 
-    for step in range(start_step + 1, maximum_steps + 1):
+    for step, indexes in enumerate(training_windows(len(batches), accumulation,
+            int(config["max_steps"]), config.get("max_epochs")), start=1):
+        if step <= start_step:
+            continue
         optimizer.zero_grad(set_to_none=True)
         accumulated_loss = 0.0
         step_tokens = 0
         step_examples = 0
-        for micro_step in range(accumulation):
-            index = ((step - 1) * accumulation + micro_step) % len(batches)
+        for index in indexes:
             batch = {name: tensor.to(device) for name, tensor in batches[index].items()}
             output = model(**batch)
             loss = output.loss
             if not torch.isfinite(loss):
                 raise NonFiniteMetricError(f"non-finite training loss at step {step}")
-            (loss / accumulation).backward()
+            (loss / len(indexes)).backward()
             accumulated_loss += float(loss.detach().cpu())
             step_tokens += int(batch["attention_mask"].sum().item())
             step_examples += int(batch["input_ids"].shape[0])
@@ -574,10 +592,11 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             raise NonFiniteMetricError(f"non-finite gradient norm at step {step}")
         optimizer.step()
         scheduler.step()
-        last_loss = accumulated_loss / accumulation
+        last_loss = accumulated_loss / len(indexes)
         last_grad_norm = float(grad_norm.detach().cpu())
         tokens_processed += step_tokens
         examples_processed += step_examples
+        batches_processed += len(indexes)
         elapsed = max(time.monotonic() - start_time, 1e-9)
         epoch = examples_processed / max(1, len(samples))
         metric = {
@@ -589,8 +608,11 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             "gradient_norm": last_grad_norm,
             "tokens_processed": tokens_processed,
             "examples_processed": examples_processed,
-            "tokens_per_second": tokens_processed / elapsed,
-            "examples_per_second": examples_processed / elapsed,
+            "batches_processed": batches_processed,
+            "batch_indexes": list(indexes),
+            "batch_schedule_version": SCHEDULE_VERSION,
+            "tokens_per_second": (tokens_processed - session_tokens) / elapsed,
+            "examples_per_second": (examples_processed - session_examples) / elapsed,
             "elapsed_seconds": elapsed,
             "memory": _memory_usage(torch, device),
         }
@@ -647,7 +669,9 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             job=job,
             step=maximum_steps,
             epoch=epoch,
-            metrics={"training_loss": last_loss, "gradient_norm": last_grad_norm},
+            metrics={"training_loss": last_loss, "gradient_norm": last_grad_norm,
+                     "examples_processed": examples_processed, "tokens_processed": tokens_processed,
+                     "batches_processed": batches_processed},
         )
     else:
         manifest_hash = json.loads((latest_checkpoint / "checkpoint_manifest.json").read_text())["manifest_hash"]
@@ -659,7 +683,10 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
         "final_gradient_norm": last_grad_norm,
         "tokens_processed": tokens_processed,
         "examples_processed": examples_processed,
-        "tokens_per_second": tokens_processed / elapsed,
+        "batches_processed": batches_processed,
+        "batch_schedule_version": SCHEDULE_VERSION,
+        "optimizer_updates_this_session": maximum_steps - start_step,
+        "tokens_per_second": (tokens_processed - session_tokens) / elapsed,
         "elapsed_seconds": elapsed,
         "finite": math.isfinite(last_loss) and math.isfinite(last_grad_norm),
         "memory": _memory_usage(torch, device),
