@@ -568,12 +568,13 @@ class AutonomousDataPreprocessor:
             },
             "prompt_target_boundary": {
                 "status": "explicit",
-                "prompt_marker": "<|prompt|>",
-                "target_marker": "<|target|>",
+                "schema_version": "prompt-target-structured.v1",
+                "boundary_source": "per_record_structured_prompt_target_template",
+                "tokenization": "separate_prefix_and_target",
             },
             "tokenizer_compatibility": tokenizer_evidence,
             "chunking": {
-                "kind": "whitespace_token_chunks",
+                "kind": "whitespace_text_chunks_or_indivisible_structured_pair",
                 "chunk_size_tokens": self.config.chunk_size_tokens,
                 "min_tokens": self.config.min_tokens,
                 "source_records": chunked.source_records,

@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from hephaestus.training.peft_support import validate_recipe, validate_adapter
 from hephaestus.training.continuation_tokens import FORMAT, KIND, encode_frozen_records
+from hephaestus.schemas.prompt_target_supervision import PromptTargetSupervision
+from hephaestus.data.chunking import supervision_segments
 
 _STOP_REASON: str | None = None
 
@@ -140,8 +142,6 @@ def _tokenize_records(
     context_length = int(config["context_length"])
     maximum_tokens = int(config["max_total_tokens"])
     ignored = int(config["ignored_label_token"])
-    boundary = evidence.get("prompt_target_boundary", {})
-    target_marker = str(boundary.get("target_marker", "<|target|>")) if isinstance(boundary, dict) else "<|target|>"
     eos_id = int(config["special_token_ids"]["eos_token_id"])  # type: ignore[index]
     encoded: list[dict[str, list[int]]] = []
     total_tokens = 0
@@ -152,24 +152,35 @@ def _tokenize_records(
         text = str(record["text"])
         record_kind = str(record.get("record_kind", "text"))
         labels: list[int]
-        if (
-            record_kind == "prompt_target"
-            and config.get("prompt_masking") == "mask_prompt_for_prompt_target"
-            and target_marker in text
-        ):
-            prompt, target = text.split(target_marker, 1)
-            prompt_ids = tokenizer.encode(prompt + target_marker, add_special_tokens=False)
+        if record_kind == "prompt_target":
+            if config.get("prompt_masking") != "mask_prompt_for_prompt_target":
+                raise ValueError("structured prompt-target records require explicit prompt masking")
+            try:
+                supervision = PromptTargetSupervision.from_dict(record["supervision"])
+                prompt, target = supervision_segments(supervision)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("missing or invalid structured prompt-target identity") from exc
+            template = evidence.get("wrapper", {}).get("template")
+            if text != prompt + target or (template is not None and template != supervision.template):
+                raise ValueError("structured prompt-target rendering differs from prepared evidence")
+            prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
             target_ids = tokenizer.encode(target, add_special_tokens=False)
+            if not target_ids:
+                raise ValueError("structured target produced no supervised tokens")
             input_ids = [*prompt_ids, *target_ids]
             labels = [ignored] * len(prompt_ids) + list(target_ids)
             prompt_masked += 1
         else:
+            if record_kind != "text":
+                raise ValueError("unknown training record kind")
             input_ids = tokenizer.encode(text, add_special_tokens=False)
             labels = list(input_ids)
         if not input_ids or input_ids[-1] != eos_id:
             input_ids.append(eos_id)
             labels.append(eos_id)
         if len(input_ids) > context_length:
+            if record_kind == "prompt_target":
+                raise ValueError("structured prompt-target exceeds tokenizer context; truncation forbidden")
             input_ids = input_ids[:context_length]
             labels = labels[:context_length]
             truncated += 1
