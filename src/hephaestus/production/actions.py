@@ -19,6 +19,8 @@ from hephaestus.state.single_writer import single_writer
 from hephaestus.storage.base import ArtifactStore
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
+from hephaestus.state.run_store import RunStore
+from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
 from hephaestus.storage.base import StateRepository
 
 from .state import ACTION_EXECUTIONS
@@ -168,6 +170,31 @@ class GovernedActionExecutor:
         boundary = evaluate_action_boundary(canonical, context={"approval_status": approval_status})
         if not boundary["allowed"]:
             raise PermissionError(f"action registry did not authorize {canonical}: {boundary['reasons']}")
+        # Action-registry admission does not establish checkpoint provenance
+        # or permit a poisoned/retired lineage to become active again.
+        if current.status in {"poisoned", "archived", "deprecated"} and canonical in {
+            "continue_lineage_best", "continue_from_checkpoint",
+            "rerun_same_config", "reject_candidate",
+        }:
+            raise PermissionError("terminal or poisoned lineage cannot autonomously continue")
+        if canonical == "continue_from_checkpoint" and checkpoint_ref is not None:
+            known = {
+                current.best_checkpoint_ref,
+                current.last_stable_checkpoint_ref,
+                current.certified_stable_checkpoint_ref,
+                current.origin_checkpoint_ref,
+                current.branch_origin_checkpoint_ref,
+            }
+            known.update(
+                row.get("checkpoint_ref") for row in RunStore(self.state_root).all()
+                if row.get("lineage_id") == lineage_id
+            )
+            if checkpoint_ref not in known:
+                raise PermissionError("continuation checkpoint does not belong to lineage")
+            verified, _manifest_identity = validate_checkpoint_manifest(Path(checkpoint_ref))
+            if not verified:
+                raise PermissionError("continuation checkpoint manifest is invalid")
+
         if canonical == "promote_checkpoint":
             # Authoritative immutable evaluation, never the caller's boolean.
             certification_state = str(authorization["certification_state"])
