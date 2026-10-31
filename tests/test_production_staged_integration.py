@@ -220,3 +220,45 @@ def test_atomic_lineage_file_write_preserves_previous_json_when_replace_fails(tm
         document.write({"lineage-1": {"status": "after"}})
     assert document.read() == {"lineage-1": {"status": "before"}}
     assert not list(tmp_path.glob("*.partial"))
+
+
+def test_crash_after_applied_action_before_loop_snapshot_reuses_completed_stage(tmp_path, monkeypatch):
+    """A controller crash must not repeat 45 staged operations or apply Judge twice."""
+    from hephaestus.production.state import ProductionLoopStateStore
+
+    runtime = _runtime(tmp_path)
+    first = CompleteEvidenceRouter()
+    original_save = ProductionLoopStateStore.save
+    injected = False
+
+    def crash_before_final_cycle_save(self, state):
+        nonlocal injected
+        if not injected and state.cycle_index == 1 and state.metadata.get("latest_action_execution"):
+            injected = True
+            raise RuntimeError("injected crash after applied Judge action before loop snapshot")
+        return original_save(self, state)
+
+    monkeypatch.setattr(ProductionLoopStateStore, "save", crash_before_final_cycle_save)
+    with pytest.raises(RuntimeError, match="injected crash"):
+        ProductionLoopRunner(runtime, StagedProductionCycleDriver(_deps(first)),
+                             maximum_cycles=1).run(
+            program_id="post-commit-crash", lineage_id="lineage-crash",
+            stage_name="smoke_test",
+        )
+    assert injected
+    assert runtime.loop_state.get("post-commit-crash").cycle_index == 0
+    assert len([row for row in runtime.state_repository.all(ACTION_EXECUTIONS)
+                if row["status"] == "applied"]) == 1
+
+    monkeypatch.setattr(ProductionLoopStateStore, "save", original_save)
+    restarted = _runtime(tmp_path)
+    second = CompleteEvidenceRouter()
+    result = ProductionLoopRunner(restarted, StagedProductionCycleDriver(_deps(second)),
+                                  maximum_cycles=1).run(
+        program_id="post-commit-crash", lineage_id="lineage-crash",
+        stage_name="smoke_test",
+    )
+    assert result.cycle_index == 1 and result.status == "stopped"
+    assert second.launch_calls == 0 and second.comparison_calls == 0
+    assert len([row for row in restarted.state_repository.all(ACTION_EXECUTIONS)
+                if row["status"] == "applied"]) == 1
