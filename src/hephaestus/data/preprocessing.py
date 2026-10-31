@@ -158,7 +158,7 @@ def _load_parquet_records(path: Path, max_rows: int) -> tuple[list[object], bool
     return raw_records, total_rows > len(raw_records)
 
 
-def _load_records(path: Path, record_format: str, max_rows: int) -> _LoadResult:
+def _load_records(path: Path, record_format: str, max_rows: int, record_mapper=None) -> _LoadResult:
     raw_records: list[object]
     malformed = 0
     truncated = False
@@ -203,7 +203,8 @@ def _load_records(path: Path, record_format: str, max_rows: int) -> _LoadResult:
         if not isinstance(raw, dict):
             malformed += 1
             continue
-        record = normalize_record(raw)
+        mapped = record_mapper.map(raw) if record_mapper is not None else raw
+        record = normalize_record(mapped) if mapped is not None else None
         if record is None:
             malformed += 1
             continue
@@ -227,6 +228,8 @@ class AutonomousDataPreprocessor:
     record_filter: RecordFilter | None = None
     contamination_checker: ContaminationChecker | None = None
     tokenizer_checker: TokenizerCompatibilityChecker | None = None
+    record_mapper: object | None = None
+    continuation_contract: object | None = None
 
     def process(
         self,
@@ -278,6 +281,22 @@ class AutonomousDataPreprocessor:
         pipeline; it does not download, authorize, or relabel provider provenance.
         """
 
+        # WikiText-2's 7,232-row review is a position-and-content-bound
+        # frozen-tokenizer selection, NOT a generic whole-file text source.
+        # The generic path filters *normalized mapped* records without their
+        # original row indices and then chunks whitespace words. It cannot
+        # reproduce 128/32 original-token windows or prove that all 54 flagged
+        # PII rows and 2,060 duplicate rows were excluded. No amount of
+        # upstream operator approval should silently substitute this recipe.
+        # Only a future separately reviewed exact-subset materializer,
+        # invoked after native acquisition/clearance, may process these bytes.
+        if candidate.dataset_id.strip().casefold() == "salesforce/wikitext":
+            raise PermissionError(
+                "WikiText subset is screening-only: native generic preprocessing "
+                "cannot enforce reviewed source-row commitment or original "
+                "tokenizer 128+32 continuation windows"
+            )
+
         acquisition = validate_remote_acquisition_for_preprocessing(
             candidate=candidate,
             selection=selection,
@@ -307,6 +326,19 @@ class AutonomousDataPreprocessor:
             },
         )
 
+    def process_reviewed_continuation_acquisition(
+        self, *, run_id: str, lineage_id: str, stage_name: str,
+        candidate: DatasetCandidate, selection: DatasetSelectionDecision,
+        approval: DatasetAcquisitionApproval, receipt: AcquisitionReceipt,
+        review_policy, review_ref: str, public_eval_pack_path: Path,
+    ) -> DataFactoryResult:
+        """Opt-in exact-token path; requires independently accepted full clearance."""
+        from .continuation_materializer import materialize_approved_continuation
+        return materialize_approved_continuation(self, run_id=run_id, lineage_id=lineage_id,
+            stage_name=stage_name, candidate=candidate, selection=selection,
+            approval=approval, receipt=receipt, review_policy=review_policy,
+            review_ref=review_ref, public_eval_pack_path=public_eval_pack_path)
+
     def _process_acquisition(
         self,
         *,
@@ -323,6 +355,7 @@ class AutonomousDataPreprocessor:
             acquisition.source_path,
             acquisition.record_format,
             self.config.max_rows,
+            self.record_mapper,
         )
         audit_scope = "sampled_audit" if loaded.truncated else "full_scan"
 

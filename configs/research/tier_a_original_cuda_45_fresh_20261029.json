@@ -1,0 +1,15 @@
+{
+  "schema": "cpu-campaign-config.v2",
+  "workflow_id": "cuda-json-45-original-five-20261029-r2",
+  "run_id": "cuda-json-45-new-1117-r2",
+  "lineage_id": "cuda-original-five-tier-a-v2",
+  "stage_name": "targeted_repair",
+  "experiment_id": "cuda-json-45-prospective-r2",
+  "cpu_seed": 1117,
+  "dataset_seed": 20261028,
+  "maximum_training_steps": 96,
+  "maximum_cpu_seconds": 3600,
+  "include_public": false,
+  "training_recipe": "chat_json_r8_full_epoch_96_v1",
+  "recipe_sha256": "sha256:e745cbcf44d043b317c3d41400795dcc99d88030c80ccdef291cff823fe91d1f"
+}

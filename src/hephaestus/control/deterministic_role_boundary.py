@@ -238,9 +238,10 @@ def guard_role_output(
         else:
             facts[key] = value
 
+    non_executable = role == "controller" and requested_action == "noop"
     if not requested_action:
         failures.append("missing_action")
-    else:
+    elif not non_executable:
         boundary = evaluate_action_boundary(
             requested_action,
             {"approval_status": context.approval_status},
@@ -284,7 +285,7 @@ def guard_role_output(
     return DeterministicRoleGate(
         role=str(role),
         requested_action=requested_action,
-        effective_action=requested_action if allowed else None,
+        effective_action=requested_action if allowed and not non_executable else None,
         allowed=allowed,
         failures=tuple(failures),
         verified_facts=dict(sorted(facts.items())),

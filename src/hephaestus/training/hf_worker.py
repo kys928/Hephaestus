@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from hephaestus.training.peft_support import validate_recipe, validate_adapter
+from hephaestus.training.continuation_tokens import FORMAT, KIND, encode_frozen_records
 
 _STOP_REASON: str | None = None
 
@@ -77,21 +79,50 @@ def _event(root: Path, run_id: str, step: int, status: str, message: str, catego
     )
 
 
-def _load_jsonl(path: Path, maximum_rows: int) -> list[dict[str, object]]:
+def _load_jsonl(path: Path, maximum_rows: int, data_format: str = "trainable-data.v1") -> list[dict[str, object]]:
+    return _parse_jsonl(path.read_text(encoding="utf-8"), maximum_rows, data_format)
+
+
+def _parse_jsonl(raw: str, maximum_rows: int, data_format: str) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
-    with path.open("r", encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, start=1):
-            if not line.strip():
-                continue
-            if len(records) >= maximum_rows:
-                raise ValueError("processed dataset exceeds prepared row bound")
-            record = json.loads(line)
-            if not isinstance(record, dict) or not str(record.get("text", "")):
-                raise ValueError(f"processed dataset row {line_number} has no text")
-            records.append(record)
+    for line_number, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip():
+            continue
+        if len(records) >= maximum_rows:
+            raise ValueError("processed dataset exceeds prepared row bound")
+        record = json.loads(line)
+        if data_format == FORMAT:
+            if not isinstance(record, dict) or record.get("record_kind") != KIND:
+                raise ValueError(f"processed dataset row {line_number} lacks explicit frozen tokens")
+        elif (data_format != "trainable-data.v1" or not isinstance(record, dict)
+              or record.get("record_kind") == KIND or not str(record.get("text", ""))):
+            raise ValueError(f"processed dataset row {line_number} has no admissible text")
+        records.append(record)
     if not records:
         raise ValueError("processed dataset is empty")
     return records
+
+
+def _read_prepared_data(config: dict, compatibility: dict):
+    """Authenticate exact prepared inputs immediately before worker use."""
+    evidence_ref = Path(str(config["processing_evidence_ref"]))
+    buffers = {}
+    for path, expected, label in (
+        (evidence_ref, config["processing_evidence_hash"], "processing evidence"),
+        (Path(compatibility["processed_dataset_ref"]), compatibility["processed_dataset_hash"], "processed dataset"),
+        (Path(compatibility["trainable_data_contract_ref"]), compatibility["trainable_data_contract_hash"], "trainable contract"),
+    ):
+        raw = path.read_bytes()
+        if "sha256:" + hashlib.sha256(raw).hexdigest() != expected:
+            raise ValueError(f"{label} SHA changed after job preparation")
+        buffers[label] = raw
+    evidence = json.loads(buffers["processing evidence"])
+    if (evidence.get("processed_dataset_ref") != compatibility["processed_dataset_ref"]
+            or evidence.get("processed_content_hash") != compatibility["processed_dataset_hash"]):
+        raise ValueError("processing evidence does not bind the consumed dataset")
+    records = _parse_jsonl(buffers["processed dataset"].decode("utf-8"), int(config["maximum_rows"]),
+                          str(config.get("data_format", "trainable-data.v1")))
+    return evidence, records
 
 
 def _tokenize_records(
@@ -100,6 +131,12 @@ def _tokenize_records(
     config: dict[str, object],
     evidence: dict[str, object],
 ) -> tuple[list[dict[str, list[int]]], dict[str, int]]:
+    if evidence.get("data_format") == FORMAT:
+        if config.get("data_format") != FORMAT:
+            raise ValueError("frozen token schema differs from prepared training recipe")
+        return encode_frozen_records(tokenizer, records, config, evidence)
+    if config.get("data_format") == FORMAT or any(row.get("record_kind") == KIND for row in records):
+        raise ValueError("frozen token records cannot fall back to text tokenization")
     context_length = int(config["context_length"])
     maximum_tokens = int(config["max_total_tokens"])
     ignored = int(config["ignored_label_token"])
@@ -259,7 +296,15 @@ def _save_checkpoint(
         raise RuntimeError(f"checkpoint destination already exists for step {step}")
     partial.mkdir(parents=False, exist_ok=False)
     try:
-        model.save_pretrained(partial / "model", safe_serialization=False)
+        model.save_pretrained(partial / "model", safe_serialization=True)
+        if job["training_config"].get("peft_config") is not None:
+            _write_json(partial / "model" / "adapter_provenance.json", {
+                "base_model_id": job["compatibility"]["model_id"],
+                "base_revision": job["compatibility"]["model_revision"],
+                "recipe": job["training_config"]["peft_config"],
+                "optimization_state": "persisted_in_checkpoint_training_state",
+                "cross_run_optimizer_reset": job["compatibility"]["training_mode"] == "lora_continuation",
+            })
         tokenizer.save_pretrained(partial / "tokenizer")
         state = {
             "step": step,
@@ -286,6 +331,9 @@ def _save_checkpoint(
                 "model_revision": job["compatibility"]["model_revision"],  # type: ignore[index]
                 "tokenizer_revision": job["compatibility"]["tokenizer_revision"],  # type: ignore[index]
                 "trust_remote_code": False,
+                "training_mode": job["compatibility"]["training_mode"],
+                "base_model_id": job["compatibility"]["model_id"],
+                "base_revision": job["compatibility"]["model_revision"],
                 "integrity_manifest_ref": str(final / "checkpoint_manifest.json"),
             },
         )
@@ -373,6 +421,12 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     job = json.loads(job_path.read_text(encoding="utf-8"))
     config = dict(job["training_config"])
     compatibility = dict(job["compatibility"])
+    # Recheck immutable inputs at consumption, including resumed workers.
+    evidence, records = _read_prepared_data(config, compatibility)
+    if config.get("peft_config") is not None and Path(compatibility["model_id"]).is_dir():
+        from hephaestus.backends.hf_causal_lm import directory_content_identity
+        if directory_content_identity(compatibility["model_id"]) != compatibility["model_revision"]:
+            raise ValueError("base model SHA-256 changed after job preparation")
     root = Path(job["artifact_root"])
     run_id = str(job["run_id"])
     device = str(config["device"])
@@ -395,11 +449,12 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     if resume_token_path is not None:
         token = json.loads(resume_token_path.read_text(encoding="utf-8"))
         checkpoint = Path(str(token["checkpoint_ref"]))
-        model_source = str(checkpoint / "model")
+        model_source = (compatibility["model_id"] if config.get("peft_config") is not None
+                        else str(checkpoint / "model"))
         tokenizer_source = str(checkpoint / "tokenizer")
-        model_kwargs = {"trust_remote_code": False, "local_files_only": True, "token": False}
-        tokenizer_kwargs = dict(model_kwargs)
-        resume_state = torch.load(checkpoint / "training_state.pt", map_location="cpu")
+        model_kwargs = _loader_kwargs(model_source, compatibility["model_revision"], config, model_loader=True)
+        tokenizer_kwargs = {"trust_remote_code": False, "local_files_only": True, "token": False}
+        resume_state = torch.load(checkpoint / "training_state.pt", map_location="cpu", weights_only=True)
         if resume_state.get("config_fingerprint") != job["config_fingerprint"]:
             raise ValueError("checkpoint config fingerprint mismatch")
         if resume_state.get("compatibility") != compatibility:
@@ -417,12 +472,25 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, **tokenizer_kwargs)
     model = AutoModelForCausalLM.from_pretrained(model_source, **model_kwargs)
     _validate_loaded_identity(model, tokenizer, config)
+    if config.get("peft_config") is not None:
+        from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+        spec = validate_recipe(dict(config["peft_config"]), model_id=compatibility["model_id"],
+                               revision=compatibility["model_revision"], mode=compatibility["training_mode"])
+        adapter = (checkpoint / "model" if resume_state is not None
+                   else Path(spec.parent_adapter_ref) if spec.parent_adapter_ref else None)
+        if adapter is not None:
+            validate_adapter(adapter, model_id=compatibility["model_id"], revision=compatibility["model_revision"], spec=spec)
+            model = PeftModel.from_pretrained(model, str(adapter), is_trainable=True)
+        else:
+            model = get_peft_model(model, LoraConfig(r=spec.rank, lora_alpha=spec.alpha,
+                lora_dropout=spec.dropout, target_modules=spec.target_modules, bias=spec.bias,
+                task_type=TaskType.CAUSAL_LM))
+        trainable = [name for name, parameter in model.named_parameters() if parameter.requires_grad]
+        if not trainable or any("lora_" not in name for name in trainable):
+            raise ValueError("LoRA trainable parameter selection includes non-adapter weights")
     model.to(device=device, dtype=getattr(torch, str(config["dtype"])))
     model.train()
 
-    evidence_ref = Path(str(config["processing_evidence_ref"]))
-    evidence = json.loads(evidence_ref.read_text(encoding="utf-8"))
-    records = _load_jsonl(Path(compatibility["processed_dataset_ref"]), int(config["maximum_rows"]))
     samples, tokenization_summary = _tokenize_records(tokenizer, records, config, evidence)
     batches = _batches(
         torch,
@@ -432,7 +500,7 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
         int(config["ignored_label_token"]),
     )
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=float(config["learning_rate"]),
         weight_decay=float(config["weight_decay"]),
     )
@@ -533,7 +601,8 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             time.sleep(delay)
         if _STOP_REASON == "cancelled":
             _event(root, run_id, step, "cancelled", "graceful cancellation")
-            _write_json(root / "runtime_result.json", {"status": "cancelled", "step": step})
+            _write_json(root / "runtime_result.json", {"status": "cancelled", "step": step,
+                "run_id": run_id, "config_fingerprint": job["config_fingerprint"]})
             return 143
         if _STOP_REASON == "interrupted":
             if latest_checkpoint is None or latest_checkpoint.name != f"checkpoint_step_{step}":
@@ -551,7 +620,8 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             _event(root, run_id, step, "interrupted", "graceful resumable interruption")
             _write_json(
                 root / "runtime_result.json",
-                {"status": "interrupted", "step": step, "checkpoint_ref": str(latest_checkpoint)},
+                {"status": "interrupted", "step": step, "checkpoint_ref": str(latest_checkpoint),
+                 "run_id": run_id, "config_fingerprint": job["config_fingerprint"]},
             )
             return 130
 
@@ -593,6 +663,8 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     _write_json(root / "metrics_summary.json", summary)
     final_result = {
         "status": "completed",
+        "run_id": run_id,
+        "config_fingerprint": job["config_fingerprint"],
         "checkpoint_ref": str(latest_checkpoint),
         "checkpoint_manifest_hash": manifest_hash,
         "metrics_ref": str(root / "metrics_summary.json"),

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
 from hephaestus.control.staged_state import (
+    WORKFLOW_RECORD_COLLECTION,
     StagedOperationRequest,
     StagedOperationResult,
     StagedOutputRecord,
@@ -15,6 +17,7 @@ from hephaestus.schemas.experiment_contract import (
     ExperimentProposal,
     TrainingRunHandle,
 )
+from hephaestus.storage.base import StateRepository
 
 from .models import GenerationResult
 from .service import EvaluationGenerationService
@@ -111,7 +114,71 @@ class StagedExperimentEvaluationAdapter:
     proposal: ExperimentProposal
     generation: StagedGenerationAdapter
     evaluator: ExperimentEvaluationService
+    record_repository: StateRepository | None = None
     comparison: ExperimentComparison | None = field(default=None, init=False)
+
+    def _completed_handle(
+        self, request: StagedOperationRequest, substep: str, expected_run_id: str
+    ) -> TrainingRunHandle | None:
+        previous = request.prior_outputs.get(f"evaluator.{substep}", {})
+        if previous.get("generation_complete") is not True:
+            return None
+        value = previous.get("training_run_handle")
+        if not isinstance(value, dict):
+            return None
+        try:
+            run = TrainingRunHandle.from_dict(value)
+        except (KeyError, TypeError, ValueError):
+            return None
+        if run.run_id != expected_run_id or run.status != "completed":
+            return None
+        if not run.checkpoint_refs or run.checkpoint_refs[-1] != previous.get("checkpoint_ref"):
+            return None
+        if (run.metadata.get("semantic_evaluation") is None or
+            run.metadata.get("generation_report") is None):
+            return None
+        expected = (self.generation.baseline_run if expected_run_id == self.generation.baseline_run.run_id
+                    else self.generation.candidate_run)
+        try:
+            return self.generation.service.verify_completed_handle(run, expected)
+        except (ValueError, KeyError, TypeError, OSError):
+            return None
+
+    def _restore_comparison(self, request: StagedOperationRequest) -> ExperimentComparison | None:
+        prior = request.prior_outputs.get("evaluator.semantic_comparison", {})
+        identity = str(prior.get("comparison_id") or "").strip()
+        if not identity or self.record_repository is None:
+            return None
+        try:
+            receipt = read_verified_json(self.generation.service.evidence_store,
+                                        str(prior.get("comparison_receipt_ref") or ""))
+            if receipt.get("schema") != "comparison-receipt.v1":
+                return None
+            comparison = ExperimentComparison.from_dict(receipt["comparison"])
+            if comparison.comparison_id != identity or comparison.experiment_id != self.proposal.experiment_id:
+                return None
+            baseline = self._completed_handle(request, "baseline_generation", self.generation.baseline_run.run_id)
+            candidate = self._completed_handle(request, "candidate_generation", self.generation.candidate_run.run_id)
+            if baseline is None or candidate is None:
+                return None
+            proposal = ExperimentProposal(**self.proposal.to_dict())
+            proposal.baseline_ref = baseline.run_id
+            if receipt["proposal"] != proposal.to_dict():
+                return None
+            expected_refs = [r.metadata["generation_report"]["receipt_ref"] for r in (baseline, candidate)]
+            if receipt["generation_receipts"] != expected_refs:
+                return None
+            # Recompute scoring, never generation, from the verified frozen samples.
+            if self.evaluator.compare(proposal, [baseline, candidate]).to_dict() != comparison.to_dict():
+                return None
+            for row in reversed(self.record_repository.all(WORKFLOW_RECORD_COLLECTION)):
+                if (row.get("workflow_id") == request.workflow_id and
+                        row.get("substep") == "semantic_comparison" and row.get("kind") == "experiment_comparison" and
+                        isinstance(row.get("payload"), dict) and row["payload"].get("comparison_id") == identity):
+                    return comparison if row["payload"] == comparison.to_dict() else None
+        except (ValueError, KeyError, TypeError, OSError):
+            return None
+        return None
 
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
         if request.substep == "checkpoint_resolution":
@@ -137,17 +204,35 @@ class StagedExperimentEvaluationAdapter:
                 metadata={"checkpoint_ref": checkpoint},
             )
         if request.substep == "semantic_comparison":
-            if self.generation.baseline_result is None or self.generation.candidate_result is None:
+            baseline = (
+                self.generation.baseline_result.run_handle
+                if self.generation.baseline_result is not None
+                else self._completed_handle(request, "baseline_generation", self.generation.baseline_run.run_id)
+            )
+            candidate = (
+                self.generation.candidate_result.run_handle
+                if self.generation.candidate_result is not None
+                else self._completed_handle(request, "candidate_generation", self.generation.candidate_run.run_id)
+            )
+            if baseline is None or candidate is None:
                 return StagedOperationResult(
                     status="blocked",
-                    blocking_issues=("generation_evidence_missing",),
+                    blocking_issues=("verified_generation_handle_missing",),
                     resumable=True,
                 )
-            baseline = self.generation.baseline_result.run_handle
-            candidate = self.generation.candidate_result.run_handle
+            try:
+                self.generation.service.verify_completed_handle(baseline, self.generation.baseline_run)
+                self.generation.service.verify_completed_handle(candidate, self.generation.candidate_run)
+            except (ValueError, KeyError, TypeError, OSError):
+                return StagedOperationResult(status="blocked", blocking_issues=("generation_artifact_verification_failed",), resumable=False)
             proposal = ExperimentProposal(**self.proposal.to_dict())
             proposal.baseline_ref = baseline.run_id
             self.comparison = self.evaluator.compare(proposal, [baseline, candidate])
+            receipt = self.generation.service.evidence_store.put_bytes(canonical_bytes({
+                "schema":"comparison-receipt.v1", "comparison":self.comparison.to_dict(),
+                "proposal":proposal.to_dict(),
+                "generation_receipts":[r.metadata["generation_report"]["receipt_ref"] for r in (baseline, candidate)]
+            }), media_type="application/json")
             status = (
                 "blocked"
                 if self.comparison.primary_outcome == "invalid_comparison"
@@ -165,6 +250,7 @@ class StagedExperimentEvaluationAdapter:
                 ),
                 metadata={
                     "comparison_id": self.comparison.comparison_id,
+                    "comparison_receipt_ref": receipt.artifact_ref,
                     "primary_outcome": self.comparison.primary_outcome,
                     "recommendation": self.comparison.recommendation,
                     "eval_pack_id": self.comparison.metadata.get("eval_pack_id"),
@@ -172,9 +258,11 @@ class StagedExperimentEvaluationAdapter:
                 resumable=status != "completed",
             )
         if self.comparison is None:
+            self.comparison = self._restore_comparison(request)
+        if self.comparison is None:
             return StagedOperationResult(
                 status="blocked",
-                blocking_issues=("experiment_comparison_missing",),
+                blocking_issues=("verified_experiment_comparison_missing",),
                 resumable=True,
             )
         if request.substep == "deterministic_regression_evidence":

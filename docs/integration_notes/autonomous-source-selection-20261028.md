@@ -1,0 +1,11 @@
+# Autonomous source screening and selection
+
+Depends on the internal policy draft #117 and PR #116's existing tokenizer-preserving path. Discovery runs through `DatasetProviderRegistry`; `ApprovedHubRegistryProvider` queries original Hub metadata at resolved immutable commits. `EvidenceBoundSourceInspector` inspects actual publisher cards and quarantines unreviewed public candidates. Public visibility and license metadata cannot admit source text.
+
+`AutonomousDatasetIntelligence` derives requirements from diagnosis, objective, stage, architecture and tokenizer, examines multiple candidates, records every rejection and continues, ranks only policy-eligible sources, and stops under explicit candidate/byte/time budgets. Original metadata, card bytes, scans and decisions have SHA-addressed evidence. Scores are relevance/value proxies, not forecasts of improvement. Original synthetic sources cannot satisfy natural-language pretraining requests.
+
+`InternalSourceScanner` reads complete source bytes and actual frozen tokenizer output. Exact normalized prompt duplicates, lexical near matches, potential emails/phone numbers and explicit semantic overlap are measured against newly frozen development/evaluation text. Generic language requires a pinned pretrained encoder checker; generated tasks may instead use independently validated canonical task equivalence. The scanner cannot truncate text or silently use a partial source scan. Regex privacy scanning and cosine thresholds are limited evidence, not universal safety guarantees. Unsupported/unresolved sources remain Tier B.
+
+Admission recomputes the scanner's result from exact source bytes at use time. Merely replacing a report with fabricated pass flags fails. Accepted data-specific rights digests come only from configured policy authority, or an explicitly allowed original generator; a repository license badge does not become such a grant. Development and evaluation prompts must be distinct.
+
+This draft establishes the pipeline. The dependent generated-data factory provides a real selectable source and production semantic validator, and the CPU runtime draft supplies native governed handoff. Tests with fixture semantic/provider hooks are explicitly unit tests, never scientific execution evidence. No original historical manifest, certificate or campaign completion is asserted.

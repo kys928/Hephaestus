@@ -115,7 +115,7 @@ def wait_for_result(client: Any, execution: RunPodExecutionAdapter, run_id: str,
                 raise RuntimeError("evaluation terminal record is not a JSON object")
             return payload, observations
         pod = base.pod_snapshot(execution, pod_id)
-        status = str(pod.get("desiredStatus", "unknown")) if pod else "unknown"
+        status = str(pod.get("status", "unknown")) if pod else "unknown"
         if status != last_status:
             observations.append({"at": datetime.now(timezone.utc).isoformat(), "desired_status": status})
             last_status = status

@@ -1,0 +1,15 @@
+{
+  "schema": "cpu-campaign-config.v2",
+  "workflow_id": "cpu-json-repair-45-20261028",
+  "run_id": "cpu-json-repair-45-run-1117",
+  "lineage_id": "cpu-json-repair-original-v2",
+  "stage_name": "targeted_repair",
+  "experiment_id": "cpu-json-repair-45-original",
+  "cpu_seed": 1117,
+  "dataset_seed": 20261028,
+  "maximum_training_steps": 96,
+  "maximum_cpu_seconds": 3600,
+  "include_public": false,
+  "training_recipe": "chat_json_r8_full_epoch_96_v1",
+  "recipe_sha256": "sha256:e745cbcf44d043b317c3d41400795dcc99d88030c80ccdef291cff823fe91d1f"
+}

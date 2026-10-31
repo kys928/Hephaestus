@@ -50,6 +50,13 @@ class RunPodConfig:
         default_factory=lambda: _environment_secret("RUNPOD_S3_SECRET_ACCESS_KEY")
     )
 
+    def __post_init__(self) -> None:
+        if self.api_base_url != "https://api.runpod.io/v2":
+            raise RunPodConfigurationError(
+                "RUNPOD_API_BASE_URL must be https://api.runpod.io/v2; "
+                "the v1 Pod contract is not supported"
+            )
+
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "RunPodConfig":
         values = environ if environ is not None else os.environ

@@ -1,0 +1,85 @@
+name: R10 history-preserving integrated research CPU verification
+on:
+  push:
+    branches: [integration/151-r10-history-preserving-runtime-20261031]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'configs/**'
+      - 'pyproject.toml'
+      - '.github/workflows/integration-151-r10-runtime-cpu.yml'
+permissions:
+  contents: read
+concurrency:
+  group: integrated-r10-cpu-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integrity-and-activation-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -e '.[test,s3,independent-certification]'
+      - name: Require real complete R10 parent history, retained original evidence and no historical paid-workflow restoration
+        shell: bash
+        run: |
+          git merge-base --is-ancestor d6bcec7b61bcd3b285a4bcf4cdd50036440b8edf HEAD
+          git merge-base --is-ancestor e09a6876646ca4d27180096ad940156e3f0d3ccb HEAD
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".github/workflows")
+          files=sorted(x.name for x in p.glob("*.yml"))
+          historical=[x for x in files if x.startswith((
+            "execute-fresh-original-cuda45-r",
+            "prepare-fresh-original-cuda45-r",
+            "preflight-fresh-original-cuda45-r",
+            "diagnose-r","read-fresh-cuda45-r"
+          ))]
+          assert not historical, historical
+          assert len(files)<=20, ("unexpected imported one-off workflows",len(files))
+          registry=json.loads(Path("configs/models/hephaestus_role_model_stack_v1.json").read_text())
+          assert registry["automatic_role_dispatch_enabled"] is False
+          assert len(registry["roles"])==5
+          assert Path("docs/evidence/original-cuda45-r10/README.md").is_file()
+          assert Path("milestones/role-runtime-verified-v1/manifest.json").is_file()
+          assert Path("src/hephaestus/production/tier_a_cuda_campaign.py").is_file()
+          print("R10_ORIGINAL_COMMIT_ANCESTRY=PRESERVED")
+          print("PRE_EXISTING_MAIN_ANCESTRY=RETAINED")
+          print("R10_SEPARATE_MILESTONE_REPORT=RETAINED")
+          print("HISTORICAL_PAID_WORKFLOWS_IN_ACTIVE_TREE=0")
+          print("AUTOMATIC_MODEL_DISPATCH_ENABLED=false")
+          print("CPU_ONLY_INTEGRATION_CHECK=true")
+          PY
+      - name: Compile complete imported Python tree
+        run: python -m compileall -q src/hephaestus tests scripts
+      - name: Validate native existing mainline policy and custody contracts
+        run: python -m pytest -q tests/test_autonomous_experiment_contracts.py tests/test_original_cuda45_prepaid_launch_contract.py tests/test_certified_role_stack.py tests/test_external_evidence_pointer.py tests/test_cpu_campaign_config.py
+  original-r10-full-cpu-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned CPU Torch, frozen role inference and independent-custody test dependencies
+        run: |
+          python -m pip install -q torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -q -e '.[test,peft-training,role-inference,s3,independent-certification]'
+      - name: Run the complete reviewed original/native plus existing-main CPU suite
+        run: python -m pytest -q tests/
+      - name: Verify CLI install
+        run: |
+          python -m pip check
+          hephaestus-infrastructure --help
+      - name: Record scientific limits
+        run: |
+          echo 'INTEGRATED_CPU_REGRESSIONS_PASSED=true'
+          echo 'Genuine r10 45/5/96 evidence remains at independent source; no fresh science asserted.'
+          echo 'GPU_PODS_CREATED=0'

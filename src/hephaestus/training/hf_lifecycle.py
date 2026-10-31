@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -28,6 +29,11 @@ from hephaestus.schemas.experiment_contract import (
     TrainingRunHandle,
 )
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
+from hephaestus.training.peft_support import validate_recipe
+from hephaestus.training.continuation_tokens import (
+    FORMAT as TOKEN_ID_FORMAT, KIND as TOKEN_ID_KIND, continuation_contract,
+    verified_original_tokenizer, validate_token_records,
+)
 
 _ACTIVE_STATUSES = {"preparing", "queued", "running", "interrupting", "resuming"}
 _TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -274,6 +280,19 @@ class TransformersTrainingLifecycleService:
                         issues=[_issue("run_not_found", "invalid_request", f"No run evidence for '{run_id}'.")],
                     )
                 if restored.status in _ACTIVE_STATUSES:
+                    result_ref = self.artifact_root / run_id / "runtime_result.json"
+                    if result_ref.is_file():
+                        result = json.loads(result_ref.read_text())
+                        if (result.get("run_id") == run_id and
+                                result.get("config_fingerprint") == restored.metadata.get("config_fingerprint") and
+                                result.get("status") in {"completed", "interrupted", "cancelled"}):
+                            job_ref = Path(str(restored.metadata["prepared_job_ref"]))
+                            job = json.loads(job_ref.read_text())
+                            recovered = _ManagedRun(restored, job_ref, compatibility=dict(job["compatibility"]))
+                            recovered.requested_action = "interrupt" if result["status"] == "interrupted" else (
+                                "cancel" if result["status"] == "cancelled" else None)
+                            self._finalize(recovered)
+                            return recovered.handle
                     pid = restored.metadata.get("pid")
                     if isinstance(pid, int) and self._pid_alive(pid):
                         restored.metadata["process_observation"] = "pid_alive_unattached"
@@ -536,9 +555,9 @@ class TransformersTrainingLifecycleService:
                 _issue("trainable_data_contract_invalid", "artifact_integrity", f"Invalid data contract: {exc}")
             )
             return summary
-        if contract.schema_version != "trainable-data.v1":
+        if contract.schema_version not in {"trainable-data.v1", TOKEN_ID_FORMAT}:
             issues.append(
-                _issue("unsupported_data_schema", "unsupported_capability", "Only trainable-data.v1 is supported.")
+                _issue("unsupported_data_schema", "unsupported_capability", "Unsupported trainable data schema.")
             )
         processed_ref = Path(contract.processed_dataset_ref)
         if str(processed_ref) != compatibility["processed_dataset_ref"]:
@@ -589,6 +608,11 @@ class TransformersTrainingLifecycleService:
         rows = 0
         declared_tokens = 0
         try:
+            evidence = json.loads(evidence_ref.read_text(encoding="utf-8"))
+            token_format = evidence.get("data_format") == TOKEN_ID_FORMAT
+            if token_format != (contract.schema_version == TOKEN_ID_FORMAT):
+                raise ValueError("trainable contract and processing data format disagree")
+            token_records = []
             with processed_ref.open("r", encoding="utf-8") as stream:
                 for line in stream:
                     if not line.strip():
@@ -600,10 +624,21 @@ class TransformersTrainingLifecycleService:
                         )
                         break
                     record = json.loads(line)
-                    if not isinstance(record, dict) or not str(record.get("text", "")):
+                    if token_format:
+                        token_records.append(record)
+                    elif (not isinstance(record, dict) or record.get("record_kind") == TOKEN_ID_KIND
+                          or not str(record.get("text", ""))):
                         raise ValueError(f"row {rows} lacks non-empty text")
-                    declared_tokens += max(0, int(record.get("token_count", 0)))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                    else:
+                        declared_tokens += max(0, int(record.get("token_count", 0)))
+            if token_format:
+                verified_original_tokenizer(evidence)
+                frozen = continuation_contract(evidence)
+                declared_tokens = validate_token_records(token_records, evidence,
+                    vocabulary_size=int(constraints.get("vocabulary_size", 0)))
+                summary.update({"data_format": TOKEN_ID_FORMAT,
+                                "continuation_width": frozen.prefix_tokens + frozen.target_tokens})
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError, ImportError) as exc:
             issues.append(
                 _issue("processed_dataset_invalid", "artifact_integrity", f"Processed JSONL is invalid: {exc}")
             )
@@ -660,6 +695,16 @@ class TransformersTrainingLifecycleService:
                     "Checked compatible tokenizer evidence is required.",
                 )
             )
+        elif evidence.get("data_format") == TOKEN_ID_FORMAT:
+            # A content-addressed tokenizer artifact is not its HF loader path.
+            # The loaded backend is bound to original bytes by the token worker.
+            try:
+                frozen = continuation_contract(evidence)
+                if (tokenizer.get("tokenizer_ref") != frozen.tokenizer_ref
+                        or tokenizer.get("tokenizer_file_sha256") != frozen.tokenizer_file_sha256):
+                    raise ValueError("tokenizer artifact identity differs")
+            except (TypeError, ValueError, KeyError) as exc:
+                issues.append(_issue("tokenizer_compatibility_mismatch", "incompatible_candidate", str(exc)))
         elif str(tokenizer.get("tokenizer_ref", "")) != compatibility["tokenizer_id"]:
             issues.append(
                 _issue("tokenizer_compatibility_mismatch", "incompatible_candidate", "Tokenizer evidence differs.")
@@ -705,10 +750,19 @@ class TransformersTrainingLifecycleService:
                 _issue("cpu_mixed_precision_unsupported", "unsupported_capability", "CPU requires float32.")
             )
         mode = compatibility["training_mode"]
-        if mode != "full_finetune":
+        if mode not in {"full_finetune", "lora_finetune", "lora_continuation"}:
             issues.append(
-                _issue("unsupported_training_mode", "unsupported_capability", "Only full_finetune is supported.")
+                _issue("unsupported_training_mode", "unsupported_capability", "Unsupported full/LoRA training mode.")
             )
+        peft_config = None
+        if mode in {"lora_finetune", "lora_continuation"}:
+            if importlib.util.find_spec("peft") is None:
+                issues.append(_issue("peft_unavailable", "unsupported_capability", "Install the peft-training extra."))
+            try:
+                peft_config = validate_recipe(dict(constraints.get("peft_config", {})),
+                    model_id=compatibility["model_id"], revision=compatibility["model_revision"], mode=mode).to_dict()
+            except (ValueError, TypeError, OSError, KeyError) as exc:
+                issues.append(_issue("invalid_peft_recipe", "incompatible_candidate", str(exc)))
         optimizer = compatibility["optimizer"].lower()
         scheduler = compatibility["scheduler"].lower()
         if optimizer != "adamw":
@@ -755,6 +809,7 @@ class TransformersTrainingLifecycleService:
             "dtype": dtype,
             "device": device,
             "training_mode": mode,
+            "peft_config": peft_config,
             "dataset_identity": compatibility["processed_dataset_hash"],
             "dataset_summary": data_summary,
             "optimizer": optimizer,
@@ -793,6 +848,13 @@ class TransformersTrainingLifecycleService:
             "step_delay_seconds": number("step_delay_seconds", 0.0, 0.0),
             "simulate_oom": str(constraints.get("simulate_oom", "")),
         }
+        if data_summary.get("data_format") == TOKEN_ID_FORMAT:
+            config.update(data_format=TOKEN_ID_FORMAT, eos_handling="no_insertion",
+                          truncation="forbidden", prompt_masking="reviewed_token_labels")
+            if (int(config["context_length"]) < int(data_summary["continuation_width"])
+                    or int(config["max_total_tokens"]) < int(data_summary["declared_tokens"])):
+                issues.append(_issue("frozen_continuation_budget_mismatch", "budget_exceeded",
+                    "All reviewed token windows must fit context and token bounds without truncation."))
         if int(config["warmup_steps"]) > max_steps:
             issues.append(_issue("warmup_exceeds_steps", "invalid_request", "warmup_steps exceeds max_steps."))
         if float(config["step_delay_seconds"]) > 1.0:
@@ -1003,7 +1065,9 @@ class TransformersTrainingLifecycleService:
             status = "interrupted"
         elif managed.requested_action == "cancel" and worker_status == "cancelled":
             status = "cancelled"
-        elif returncode == 0 and worker_status == "completed":
+        elif worker_status == "completed" and (returncode == 0 or (
+                managed.process is None and result.get("run_id") == managed.handle.run_id and
+                result.get("config_fingerprint") == managed.handle.metadata.get("config_fingerprint"))):
             status = "completed"
         else:
             status = "failed"
@@ -1048,6 +1112,7 @@ class TransformersTrainingLifecycleService:
                 if not valid or record.get("checkpoint_manifest_hash") != observed_hash:
                     raise ValueError(observed_hash)
                 managed.handle.checkpoint_refs = [str(checkpoint_ref)]
+                managed.handle.metadata["generation_handoff_ref"] = str(checkpoint_ref / "loading_instructions.json")
                 token_ref = root / "resume_token.json"
                 managed.handle.resume_token_ref = str(token_ref) if token_ref.is_file() else None
             except (OSError, json.JSONDecodeError, ValueError) as exc:

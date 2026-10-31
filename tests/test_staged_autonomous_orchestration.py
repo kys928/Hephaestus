@@ -199,6 +199,11 @@ class FakeApprovalService:
 @dataclass
 class FakeArtifactStore:
     verified: bool
+    root: Path
+
+    def put_bytes(self, data, **kwargs):
+        from hephaestus.storage.filesystem import FileSystemArtifactStore
+        return FileSystemArtifactStore(self.root).put_bytes(data, **kwargs)
 
     def verify(self, artifact_ref: str) -> bool:
         return self.verified
@@ -415,7 +420,7 @@ def test_retryable_failure_keeps_stable_operation_identity(tmp_path: Path) -> No
 def test_corrupted_checkpoint_blocks_evaluation_before_generation(tmp_path: Path) -> None:
     router = FakeOperationRouter(checkpoint_ref=f"sha256:{'a' * 64}")
     orchestrator, _ = _orchestrator(
-        tmp_path, router, artifact_store=FakeArtifactStore(verified=False)
+        tmp_path, router, artifact_store=FakeArtifactStore(verified=False, root=tmp_path / "artifacts")
     )
 
     state = orchestrator.run()
@@ -531,6 +536,25 @@ def test_subsystem_exception_is_terminal_failure_not_success(tmp_path: Path) -> 
     assert state.resumable is False
     assert "subsystem_exception:RuntimeError" in state.blocking_issues
     assert any(row["kind"] == "subsystem_failure" for row in _records(repository))
+
+
+def test_subsystem_failure_preserves_private_cause_without_inlining_it_in_state(tmp_path):
+    import json
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.storage.verified import read_verified_json
+    router=FakeOperationRouter(fail_substep="semantic_comparison")
+    artifacts=FileSystemArtifactStore(tmp_path/"private-artifacts")
+    orchestrator,repository=_orchestrator(tmp_path,router,artifact_store=artifacts)
+    state=orchestrator.run()
+    assert state.status=="terminal_failure" and state.resumable is False
+    failure=next(row["payload"] for row in _records(repository)
+                 if row["kind"]=="subsystem_failure")
+    diagnostic=read_verified_json(artifacts,failure["diagnostic_ref"])
+    assert diagnostic["message"]=="fixture subsystem failure"
+    assert diagnostic["phase"]=="evaluator"
+    assert diagnostic["substep"]=="semantic_comparison"
+    assert "RuntimeError: fixture subsystem failure" in diagnostic["traceback"]
+    assert "fixture subsystem failure" not in json.dumps(_records(repository))
 
 
 def test_missing_decision_critical_record_is_terminal_failure(tmp_path: Path) -> None:

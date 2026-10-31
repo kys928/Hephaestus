@@ -1,0 +1,56 @@
+{
+  "schema": "hephaestus-native-cpu-45-research-evidence-index.v1",
+  "date": "2026-10-28",
+  "science_scope": "internal original validated generated-task research; not externally certified",
+  "source_code_commit": "ca88b5ea0a25f352136ad406444bd64bc85416d0",
+  "original_github_actions_run_url": "https://github.com/kys928/Hephaestus/actions/runs/40753588466",
+  "original_github_artifact_url": "https://github.com/kys928/Hephaestus/actions/runs/40753588466/artifacts/12845610807",
+  "original_artifact_zip_sha256": "sha256:23e715544cf1724090ee5a39e0a2353a6ebdeb19b2109a47be31bb69cf1b8689",
+  "original_archive_bytes_approx": 497465352,
+  "original_complete_native_operations": 45,
+  "original_real_domain_operations": 40,
+  "genuine_cpu_model_advisory_role_receipts": [
+    "controller",
+    "diagnosis",
+    "planner",
+    "evaluator",
+    "judge"
+  ],
+  "original_training": {
+    "optimizer": "AdamW",
+    "actual_optimizer_steps": 96,
+    "full_dataset_epoch_completed": true,
+    "training_recipe": "chat_json_r8_full_epoch_96_v1",
+    "adapter_sha256": "sha256:2a6ce326b8d70f988e725811275e7cba63b50a441ece3381c1c10108efb1b3cb",
+    "transformed_approved_trainable_ref": "sha256:ee98849e7141cfdaba13eafc4647cc82707da82c8cdc9dd0ec88c7caac413b73"
+  },
+  "native_provenance": {
+    "trace_ref": "sha256:f8763ac588e035749dbbc13dde515ac687e780ce5baf7693be45a9728432d786",
+    "tier_a_policy_ref": "sha256:d9d1d954a38fb85b75e074164f5deb70b7f75e59295c67b0c7663c86d1f5a614",
+    "matched_evaluation_prompt_items_ref": "sha256:26198b227b1580385321f363e6055154a56ec9ce42c11df6c46cf80e15302546"
+  },
+  "original_frozen_generated_evaluation": {
+    "cases": 24,
+    "correct_baseline": 0,
+    "correct_candidate": 2,
+    "valid_json_baseline": 0,
+    "valid_json_candidate": 24,
+    "previously_seen_in_one_shot_confirmation": true,
+    "new_blind_holdout_claimed": false
+  },
+  "governance": {
+    "internal_tier_a_approval_policy_preserved": true,
+    "model_promoted": false,
+    "original_certified_cuda_roles_executed": false,
+    "gpu_45_spine_executed": false,
+    "independent_historical_reference_review": false,
+    "independent_scientific_certificate": false,
+    "issue_102_complete": false
+  },
+  "limitations": [
+    "Independent ZIP/member SHA readback separate from the successful original state verification is pending on GPU-readiness draft.",
+    "GitHub Actions artifact has finite retention: no claim of permanent remote backup.",
+    "This is original deterministic generated data, not independently reviewed historical private natural-language source.",
+    "Current native CPU result does not replace five original distinct frozen CUDA roles."
+  ]
+}

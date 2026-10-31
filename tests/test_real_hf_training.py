@@ -299,6 +299,14 @@ def _tiny_transformers_fixture(tmp_path: Path) -> tuple[Path, str, int]:
     )
     torch.manual_seed(123)
     model = transformers.AutoModelForCausalLM.from_config(config)
+    # This randomly initialized 9-token toy fixture is not a model-quality
+    # benchmark. Exclude only nonprinting special tokens from its generation
+    # to keep the lifecycle test a deterministic, nonempty text smoke test
+    # across Transformers v4/v5; production decoding is unchanged.
+    model.generation_config.suppress_tokens = [
+        tokenizer.pad_token_id, tokenizer.eos_token_id,
+        tokenizer.unk_token_id, tokenizer.bos_token_id,
+    ]
     model.save_pretrained(model_dir, safe_serialization=False)
     tokenizer.save_pretrained(model_dir)
     parameters = sum(parameter.numel() for parameter in model.parameters())

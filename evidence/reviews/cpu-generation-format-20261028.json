@@ -1,0 +1,51 @@
+{
+  "schema": "hephaestus-public-research-evidence-index.v1",
+  "review_id": "cpu-format-observation-20261028",
+  "source_run_url": "https://github.com/kys928/Hephaestus/actions/runs/40687705730",
+  "source_artifacts": [
+    {
+      "seed": 101,
+      "artifact_id": 12816440131,
+      "zip_sha256": "e095d6881cbe2089922ee71690eef63d25967513fc0b24ec78374714801552a0"
+    },
+    {
+      "seed": 202,
+      "artifact_id": 12815168903,
+      "zip_sha256": "8ab116b7c04e98cb40e4753c0e487f648e41aa91200d0616ee82f5667b208a40"
+    },
+    {
+      "seed": 303,
+      "artifact_id": 12814983569,
+      "zip_sha256": "fe6410e0800e51b9edcb7f0a4a8bf8e39b366392480edb7d745ee1a44eef05dc"
+    }
+  ],
+  "original_archive_member_sha256_status": "all_verified",
+  "original_generation_settings_id": "greedy-max16-exact-prompt-no-truncation.v1",
+  "native_completed_operations_per_seed": 45,
+  "answer_format_observations": {
+    "baseline_generations": 72,
+    "baseline_python_code_fence": 72,
+    "candidate_generations": 72,
+    "candidate_python_code_fence": 72,
+    "json_valid_before_total": 0,
+    "json_valid_after_total": 0,
+    "exactly_correct_before_total": 0,
+    "exactly_correct_after_total": 0
+  },
+  "teacher_forced_nll_delta_by_seed": {
+    "101": -0.12835802634557059,
+    "202": -0.13178878029187535,
+    "303": -0.13523155450820923
+  },
+  "hypotheses_not_yet_verified": [
+    "plain_answer_wrapper_vs_instruction_chat_template",
+    "greedy_16_token_limit",
+    "sequential_single_example_undertraining"
+  ],
+  "no_raw_prompts_or_model_outputs_published": true,
+  "scientific_scope": "posthoc_original_evidence_format_observation",
+  "causal_root_cause_proven": false,
+  "independent_scientific_certification": false,
+  "gpu_full_spine_executed": false,
+  "model_promoted": false
+}

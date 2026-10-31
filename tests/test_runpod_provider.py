@@ -17,7 +17,7 @@ def _config() -> RunPodConfig:
             "RUNPOD_DATACENTER_ID": "EU-CZ-1",
             "RUNPOD_NETWORK_VOLUME_ID": "cviwpryzao",
             "RUNPOD_S3_ENDPOINT_URL": "https://s3api-eu-cz-1.runpod.io/",
-            "RUNPOD_API_BASE_URL": "https://rest.runpod.io/v1",
+            "RUNPOD_API_BASE_URL": "https://api.runpod.io/v2",
         }
     )
 
@@ -36,7 +36,7 @@ def test_runpod_config_preserves_exact_repository_contract() -> None:
     assert config.datacenter_id == "EU-CZ-1"
     assert config.network_volume_id == "cviwpryzao"
     assert config.s3_endpoint_url == "https://s3api-eu-cz-1.runpod.io"
-    assert config.api_base_url == "https://rest.runpod.io/v1"
+    assert config.api_base_url == "https://api.runpod.io/v2"
     assert config.api_key_ref.key == "RUNPOD_API_KEY"
     assert config.s3_access_key_id_ref.key == "RUNPOD_S3_ACCESS_KEY_ID"
     assert config.s3_secret_access_key_ref.key == "RUNPOD_S3_SECRET_ACCESS_KEY"
@@ -97,7 +97,7 @@ class FakeTransport:
         if method == "POST":
             return 201, {
                 "id": "pod-test",
-                "desiredStatus": "RUNNING",
+                "status": "PROVISIONING",
                 "networkVolume": {"id": "cviwpryzao"},
             }
         if method == "DELETE":
@@ -105,23 +105,22 @@ class FakeTransport:
         raise AssertionError(f"unexpected method: {method}")
 
 
-def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it() -> None:
+def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it(tmp_path) -> None:
     transport = FakeTransport()
     execution = RunPodExecutionAdapter(
-        config=_config(), secrets=_secrets(), transport=transport
+        config=_config(), secrets=_secrets(), transport=transport, state_root=tmp_path
     )
     pod = execution.create_disposable_cpu_pod(name="smoke")
     assert pod["id"] == "pod-test"
     create = transport.calls[0]
-    assert create["url"] == "https://rest.runpod.io/v1/pods"
+    assert create["url"] == "https://api.runpod.io/v2/pods"
     assert create["headers"]["Authorization"] == "Bearer api-test"
     body = create["json_body"]
-    assert body["computeType"] == "CPU"
-    assert body["cpuFlavorIds"] == ["cpu3c"]
+    assert body["cpu"] == {"id": "cpu3c", "vcpuCount": 2}
+    assert "gpu" not in body
     assert body["dataCenterIds"] == ["EU-CZ-1"]
-    assert body["networkVolumeId"] == "cviwpryzao"
-    assert body["volumeMountPath"] == "/workspace"
+    assert body["mounts"] == {"network": [{"volumeId": "cviwpryzao", "path": "/workspace"}]}
 
     execution.delete_pod("pod-test")
     assert transport.calls[1]["method"] == "DELETE"
-    assert transport.calls[1]["url"] == "https://rest.runpod.io/v1/pods/pod-test"
+    assert transport.calls[1]["url"] == "https://api.runpod.io/v2/pods/pod-test"

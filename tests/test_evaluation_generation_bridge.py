@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from hephaestus.evaluation import ExperimentEvaluationService
@@ -12,7 +13,8 @@ from hephaestus.generation import (
     TransformersCausalLMGenerationBackend,
 )
 from hephaestus.schemas.experiment_contract import ExperimentProposal, TrainingRunHandle
-from hephaestus.control.staged_state import StagedOperationRequest
+from hephaestus.control.staged_state import StagedOperationRequest, WORKFLOW_RECORD_COLLECTION
+from hephaestus.storage.filesystem import JsonLineStateRepository
 
 
 def _output(_run_id: str, task) -> str:
@@ -208,3 +210,86 @@ def test_transformers_generation_is_optional_and_network_free() -> None:
     assert capability["remote_code"] is False
     assert capability["network_acquisition"] is False
     assert isinstance(capability["missing_packages"], list)
+
+
+def test_completed_generation_and_comparison_rehydrate_after_restart(tmp_path: Path) -> None:
+    baseline, bh = _handle(tmp_path, "baseline")
+    candidate, ch = _handle(tmp_path, "candidate")
+    backend = DeterministicFakeGenerationBackend(fallback=_output)
+    svc = EvaluationGenerationService(tmp_path / "artifacts", backend)
+    first = StagedGenerationAdapter(
+        svc, baseline, candidate, baseline_handoff_ref=bh, candidate_handoff_ref=ch
+    )
+    baseline_step = first.execute(_request("baseline_generation"))
+    candidate_step = first.execute(_request("candidate_generation"))
+    assert baseline_step.status == candidate_step.status == "completed"
+    assert backend.calls == 2
+
+    prior = {
+        "evaluator.baseline_generation": baseline_step.metadata,
+        "evaluator.candidate_generation": candidate_step.metadata,
+    }
+    # Rebuild adapters without ever calling generate() again.
+    fresh = StagedGenerationAdapter(
+        svc, baseline, candidate, baseline_handoff_ref=bh, candidate_handoff_ref=ch
+    )
+    repository = JsonLineStateRepository(tmp_path / "staged-control")
+    evaluation = StagedExperimentEvaluationAdapter(
+        _proposal(), fresh, ExperimentEvaluationService(), record_repository=repository
+    )
+    compare = evaluation.execute(replace(_request("semantic_comparison"), prior_outputs=prior))
+    assert compare.status == "completed"
+    assert backend.calls == 2
+    saved = compare.records[0]
+    repository.append(
+        WORKFLOW_RECORD_COLLECTION,
+        {
+            "workflow_id": "workflow-1",
+            "substep": "semantic_comparison",
+            "kind": saved.kind,
+            "payload": saved.payload,
+        },
+    )
+    prior["evaluator.semantic_comparison"] = compare.metadata
+
+    # Second process restart: comparison is rehydrated from the durable control
+    # record; previously generated outputs are not produced a second time.
+    again = StagedExperimentEvaluationAdapter(
+        _proposal(), StagedGenerationAdapter(svc, baseline, candidate),
+        ExperimentEvaluationService(), record_repository=repository
+    )
+    for substep in (
+        "deterministic_regression_evidence",
+        "repeatability_variance_evidence",
+        "human_review_references",
+    ):
+        result = again.execute(replace(_request(substep), prior_outputs=prior))
+        assert result.status == "completed"
+        assert result.records
+    assert backend.calls == 2
+
+
+def test_generation_rehydration_fails_closed_on_checkpoint_mismatch(tmp_path: Path) -> None:
+    baseline, bh = _handle(tmp_path, "baseline")
+    candidate, ch = _handle(tmp_path, "candidate")
+    backend = DeterministicFakeGenerationBackend(fallback=_output)
+    svc = EvaluationGenerationService(tmp_path / "artifacts", backend)
+    first = StagedGenerationAdapter(svc, baseline, candidate, baseline_handoff_ref=bh, candidate_handoff_ref=ch)
+    b = first.execute(_request("baseline_generation"))
+    c = first.execute(_request("candidate_generation"))
+    tampered = dict(b.metadata)
+    tampered["checkpoint_ref"] = "checkpoint://wrong"
+    fresh = StagedExperimentEvaluationAdapter(
+        _proposal(), StagedGenerationAdapter(svc, baseline, candidate),
+        ExperimentEvaluationService()
+    )
+    result = fresh.execute(replace(
+        _request("semantic_comparison"),
+        prior_outputs={
+            "evaluator.baseline_generation": tampered,
+            "evaluator.candidate_generation": c.metadata,
+        }
+    ))
+    assert result.status == "blocked"
+    assert "verified_generation_handle_missing" in result.blocking_issues
+    assert backend.calls == 2
