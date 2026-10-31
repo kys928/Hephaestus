@@ -3,6 +3,8 @@
 Training/evaluation are separate from the five original certified CUDA
 advisory-role model identities. No CPU fallback or certification shortcut.
 """
+from .exact_json import SCORER_VERSION, score_prediction
+
 from collections import Counter
 from hashlib import sha256
 import json
@@ -45,7 +47,7 @@ class CudaProspectiveEvaluator:
             ctx.scope["experiment_id"],ctx.profile_protocol)
         if policy.get("historical_reference") is not False:
             raise PermissionError("historical protected evaluation is not part of Tier A")
-        input_ref=put_record(ctx.artifacts,{"schema":"cuda-target-evaluation-request.v1",
+        input_ref=put_record(ctx.artifacts,{"schema":"cuda-target-evaluation-request.v2", "scorer_version":SCORER_VERSION,
             "protocol_ref":ctx.profile_protocol,"gpu_scope":self.scope.run_id,
             "gpu_grant_ref":grant_ref,"operation_id":operation_id,
             "checkpoint":str(checkpoint) if checkpoint else "pinned-pretrained-baseline",
@@ -117,13 +119,8 @@ class CudaProspectiveEvaluator:
                 generated[0,tokens.input_ids.shape[1]:].detach().cpu(),
                 skip_special_tokens=True).strip()
             valid=correct=False
-            try:
-                actual=json.loads(answer_text);expected=json.loads(row["target"])
-                valid=isinstance(actual,dict)
-                correct=(valid and actual==expected and
-                         all(type(actual[k]) is type(v) for k,v in expected.items()))
-            except (TypeError,KeyError,ValueError):
-                pass
+            measurement=score_prediction(answer_text,row["target"])
+            valid,correct=measurement["valid_json"],measurement["exact_correct"]
             outputs.append({"sample_id":row["sample_id"],"family":row["family"],
                 "prompt_sha256":"sha256:"+sha256(prefix.encode()).hexdigest(),
                 "output":answer_text,
@@ -131,7 +128,7 @@ class CudaProspectiveEvaluator:
                 "json_valid":valid,"correct":correct,
                 "target_nll":float(nll.detach().cpu())})
         torch.cuda.synchronize(device)
-        result={"schema":"cuda-target-prospective-real-generation.v1",
+        result={"schema":"cuda-target-prospective-real-generation.v2", "scorer_version":SCORER_VERSION,
             "profile_ref":ctx.profile_ref,"protocol_ref":ctx.profile_protocol,
             "checkpoint_ref":str(checkpoint) if checkpoint else None,
             "generation_settings_id":"greedy-chat64-json-eos-no-truncation.v2",
