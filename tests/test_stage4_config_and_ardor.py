@@ -11,7 +11,7 @@ from hephaestus.backends.dry_run_backend import DryRunBackend
 from hephaestus.backends.local_process_backend import LocalProcessBackend
 from hephaestus.backends.registry import resolve_backend
 from hephaestus.config_loader import ConfigError, load_config_file
-from hephaestus.control.orchestrator import build_orchestrator
+from legacy_fixture_support import build_orchestrator
 from hephaestus.evaluation.pack_loader import load_eval_pack
 from hephaestus.policy.stage_policy import StagePolicy
 from hephaestus.roles.training_engineer import TrainingEngineerRole

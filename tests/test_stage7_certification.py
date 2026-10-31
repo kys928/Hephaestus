@@ -7,7 +7,7 @@ from pathlib import Path
 from hephaestus.backends.ardor.backend import ArdorBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
 from hephaestus.backends.local_process_backend import LocalProcessBackend
-from hephaestus.control.orchestrator import build_orchestrator
+from legacy_fixture_support import build_orchestrator
 from hephaestus.control.promotion import apply_promotion
 from hephaestus.evaluation.pack_loader import load_eval_pack
 from hephaestus.policy.promotion_policy import PromotionPolicy
