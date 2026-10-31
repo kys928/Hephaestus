@@ -45,8 +45,8 @@ def main() -> int:
             name=f"hephaestus-smoke-{uuid.uuid4().hex[:8]}"
         )
         pod_id = str(pod["id"])
-        attached = pod.get("networkVolume")
-        attached_id = attached.get("id") if isinstance(attached, dict) else None
+        mounts = pod.get("mounts", {}).get("network", [])
+        attached_id = mounts[0].get("volumeId") if mounts else None
         if attached_id is not None and attached_id != config.network_volume_id:
             raise RuntimeError(
                 "RunPod created the smoke Pod with an unexpected network volume"
@@ -56,9 +56,10 @@ def main() -> int:
                 {
                     "pod_created": {
                         "id": pod_id,
-                        "desired_status": pod.get("desiredStatus"),
+                        "status": pod.get("status"),
+                        "ready": execution.is_ready(pod),
                         "network_volume_id": attached_id or config.network_volume_id,
-                        "cost_per_hr": pod.get("costPerHr"),
+                        "cost_per_hr": pod.get("cost"),
                     }
                 },
                 sort_keys=True,

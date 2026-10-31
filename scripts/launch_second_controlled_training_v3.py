@@ -184,7 +184,7 @@ def _wait_for_current_result(client, execution, pod_id):
                 )
                 stale_hashes.add(digest)
         pod = shared.pod_snapshot(execution, pod_id)
-        status = str(pod.get("desiredStatus", "unknown")) if pod else "unknown"
+        status = str(pod.get("status", "unknown")) if pod else "unknown"
         if status != last_status:
             observations.append({"at": datetime.now(timezone.utc).isoformat(), "desired_status": status})
             last_status = status

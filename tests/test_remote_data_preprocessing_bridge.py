@@ -244,3 +244,63 @@ def test_remote_parquet_is_bounded_and_preserves_provider_evidence(
     assert result.processing_evidence["sample_validation"]["truncated_at_max_rows"] is True
     assert result.processing_evidence["source_acquisition"]["provider_id"] == "huggingface"
     assert "parquet_record_decode" in result.preprocessing_report.operations
+
+
+def test_real_wikitext_reviewed_subset_cannot_be_bypassed_by_generic_remote_preprocessor(
+    tmp_path: Path,
+) -> None:
+    """An invented 'approved' receipt is insufficient to switch selection recipe.
+
+    This test never reads WikiText bytes. The fixture is a harmless local line.
+    The negative contract must hold even if the source acquisition elsewhere
+    provided superficially valid identity, license and approval references.
+    """
+    source = tmp_path / "test-only.jsonl"
+    source.write_text('{"text":"fixture only; no external data"}\n', encoding="utf-8")
+    candidate = _candidate()
+    candidate.dataset_id = "Salesforce/wikitext"
+    candidate.revision = "b08601e04326c79dfdd32d625aee71d232d685c3"
+    selection = _selection(candidate)
+    approval = _approval(candidate, selection)
+    receipt = _receipt(source, candidate, selection)
+    output_root = tmp_path / "must-not-create-trainable-file"
+    factory = AutonomousDataPreprocessor(
+        DataProcessingConfig(artifact_root=output_root),
+    )
+    with pytest.raises(PermissionError, match="cannot enforce reviewed source-row commitment"):
+        factory.process_remote_acquisition(
+            run_id="wikitext-review-is-not-training",
+            lineage_id="scientific-review",
+            stage_name="smoke_test",
+            candidate=candidate,
+            selection=selection,
+            approval=approval,
+            receipt=receipt,
+            relative_path="data/train.jsonl",
+        )
+    assert not output_root.exists()
+
+
+@pytest.mark.parametrize("revision", [
+    "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "b" * 40,
+])
+def test_wikitext_changed_revision_does_not_escape_source_specific_guard(
+    tmp_path: Path, revision: str,
+) -> None:
+    candidate = _candidate()
+    candidate.dataset_id = "salesforce/WikiText"
+    candidate.revision = revision
+    # Denial is before receipt validation, ensuring there is no premature
+    # source-data access or generic preprocessing across revisions.
+    with pytest.raises(PermissionError, match="screening-only"):
+        AutonomousDataPreprocessor(
+            DataProcessingConfig(artifact_root=tmp_path/"out")
+        ).process_remote_acquisition(
+            run_id="unapproved", lineage_id="lineage", stage_name="smoke_test",
+            candidate=candidate,
+            selection=_selection(candidate),
+            approval=_approval(candidate, _selection(candidate)),
+            receipt=None,  # type: ignore[arg-type]
+        )
+    assert not (tmp_path/"out").exists()

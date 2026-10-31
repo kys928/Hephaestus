@@ -1,0 +1,232 @@
+{
+  "contract_id": "hephaestus-role-mastery-runtime.v1",
+  "original_training_repo_sha": "c831bbfc0e2054d54fccd1ef374fd84722612c79",
+  "original_training_pack_sha256": "6f4bb3b8c8312a4189136ea961e8fa32629c02fa5459e18fa960670badb203b3",
+  "required_exact_keys": [
+    "decision",
+    "action",
+    "primary_variable",
+    "confidence",
+    "evidence_refs",
+    "uncertainties",
+    "rationale"
+  ],
+  "roles": {
+    "controller": {
+      "rule": "Execute only an already-authorized Hephaestus transition. Never reinterpret scientific intent. Validate state, approval, lineage, artifact identity, idempotency and budget before acting.",
+      "vocabulary": {
+        "decision": [
+          "execute",
+          "blocked",
+          "retry",
+          "noop"
+        ],
+        "action": [
+          "continue_from_checkpoint",
+          "rollback_to_checkpoint",
+          "branch_new_experiment",
+          "restart_lineage",
+          "abort_run",
+          "request_recheck",
+          "promote_checkpoint",
+          "reject_checkpoint",
+          "noop"
+        ],
+        "primary_variable": [
+          "action_contract",
+          "approval_status",
+          "state_version",
+          "checkpoint_ref",
+          "budget",
+          "backend",
+          "artifact_availability",
+          "lineage_state",
+          "idempotency_key"
+        ]
+      },
+      "load_kind": "causal_lm",
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {}
+    },
+    "diagnosis": {
+      "rule": "Infer only what evidence supports. Separate observations from causes, preserve uncertainty, and prefer inconclusive when causal evidence is insufficient.",
+      "vocabulary": {
+        "decision": [
+          "inconclusive",
+          "tokenizer",
+          "evaluation_integrity",
+          "data_coverage",
+          "data_format_or_wrapper",
+          "runtime_or_numerics",
+          "undertraining",
+          "overfitting",
+          "checkpoint_integrity",
+          "model_family_limitation",
+          "observability_limit"
+        ],
+        "action": [
+          "collect_more_evidence",
+          "change_tokenizer",
+          "repair_evaluation",
+          "replace_or_mix_dataset",
+          "change_preprocessing",
+          "repair_runtime",
+          "resume_training",
+          "rollback_to_checkpoint",
+          "change_model",
+          "request_recheck"
+        ],
+        "primary_variable": [
+          "evidence",
+          "tokenizer",
+          "evaluation_protocol",
+          "dataset_mixture",
+          "preprocessing_policy",
+          "runtime",
+          "training_duration",
+          "checkpoint_resume_point",
+          "model_candidate",
+          "observability"
+        ]
+      },
+      "load_kind": "mistral3",
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "chat_template_kwargs": {}
+    },
+    "planner": {
+      "rule": "Choose the highest-value controlled next intervention. Change one primary variable, avoid known dead ends, preserve rollback and approval boundaries, and repair invalid evaluation before training.",
+      "vocabulary": {
+        "decision": [
+          "collect_more_evidence",
+          "repair_evaluation",
+          "change_preprocessing",
+          "change_model",
+          "resume_training",
+          "rollback",
+          "replace_or_mix_dataset",
+          "change_tokenizer",
+          "stop_experiment"
+        ],
+        "action": [
+          "request_recheck",
+          "branch_new_experiment",
+          "continue_from_checkpoint",
+          "rollback_to_checkpoint",
+          "abort_run"
+        ],
+        "primary_variable": [
+          "diagnostic_measurement",
+          "evaluation_protocol",
+          "preprocessing_policy",
+          "model_candidate",
+          "training_duration",
+          "checkpoint_resume_point",
+          "dataset_mixture",
+          "tokenizer",
+          "experiment_budget"
+        ]
+      },
+      "load_kind": "mistral3",
+      "decoding": {
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.95
+      },
+      "reasoning_projection": [
+        "[/THINK]",
+        "</think>"
+      ],
+      "chat_template_kwargs": {}
+    },
+    "evaluator": {
+      "rule": "Describe what completed evidence establishes. Deterministic gates, completeness, immutable provenance, repeatability and variance outrank aggregate score or external benchmark claims.",
+      "vocabulary": {
+        "decision": [
+          "improved",
+          "regressed",
+          "no_material_change",
+          "scientific_rejection",
+          "incomplete_evidence",
+          "evaluation_invalid"
+        ],
+        "action": [
+          "continue_from_checkpoint",
+          "reject_candidate",
+          "request_recheck",
+          "retain_baseline",
+          "promote_candidate"
+        ],
+        "primary_variable": [
+          "candidate_quality",
+          "hard_gate_status",
+          "runtime_evidence",
+          "evaluation_protocol",
+          "variance_risk",
+          "checkpoint_provenance",
+          "certification_state",
+          "metric_integrity"
+        ]
+      },
+      "load_kind": "causal_lm",
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {}
+    },
+    "judge": {
+      "rule": "Apply finite Hephaestus governance. Decide the permitted next transition from evaluator evidence, monitor state, stage policy, certification state and approvals. Never override hard gates with stakeholder pressure.",
+      "vocabulary": {
+        "decision": [
+          "approved",
+          "blocked"
+        ],
+        "action": [
+          "reject_checkpoint",
+          "continue_from_checkpoint",
+          "continue_lineage_best",
+          "promote_checkpoint",
+          "rollback_to_checkpoint",
+          "rerun_same_config",
+          "branch_new_experiment",
+          "restart_lineage",
+          "abort_run"
+        ],
+        "primary_variable": [
+          "deterministic_gate_status",
+          "approval_status",
+          "candidate_checkpoint",
+          "evidence",
+          "checkpoint_provenance",
+          "monitor_outcome",
+          "variance_risk",
+          "stage_policy",
+          "certification_state"
+        ]
+      },
+      "load_kind": "causal_lm",
+      "decoding": {
+        "do_sample": false
+      },
+      "reasoning_projection": [
+        "</think>"
+      ],
+      "chat_template_kwargs": {}
+    }
+  }
+}

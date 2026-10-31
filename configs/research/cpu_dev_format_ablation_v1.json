@@ -1,0 +1,39 @@
+{
+  "schema": "cpu-format-ablation-protocol.v1",
+  "claim_scope": "internal_development_diagnosis_only",
+  "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "model_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+  "original_generation_settings_id": "greedy-max16-exact-prompt-no-truncation.v1",
+  "original_development_artifact_sha256": "sha256:4c9d54866719545f9a54466cd6da7b9aed4b79f935160d61e42e0639675c3f1f",
+  "dataset_generator_seed": 20261028,
+  "generation_seed": 20261028,
+  "max_dev_examples": 24,
+  "arms": [
+    {
+      "name": "raw16",
+      "prompt_mode": "original_raw",
+      "max_new_tokens": 16
+    },
+    {
+      "name": "raw64",
+      "prompt_mode": "original_raw",
+      "max_new_tokens": 64
+    },
+    {
+      "name": "chat16",
+      "prompt_mode": "pinned_instruct_chat",
+      "max_new_tokens": 16
+    },
+    {
+      "name": "chat64",
+      "prompt_mode": "pinned_instruct_chat",
+      "max_new_tokens": 64
+    }
+  ],
+  "primary_metric": "exact_correct_json_answers_on_frozen_development_examples",
+  "secondary_metric": "valid_json_rate",
+  "general_reasoning_improvement_claimed": false,
+  "model_promotion_allowed": false,
+  "GPU_execution_allowed": false,
+  "notes": "Precommitted developmental ablation; model weights and training stay frozen. No historical/evaluation holdout access."
+}

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -49,8 +51,19 @@ class JsonSingleDocument:
         return self.root / self.filename
 
     def write(self, record: dict[str, Any]) -> None:
-        with self._path().open("w", encoding="utf-8") as handle:
-            json.dump(record, handle, indent=2, sort_keys=True)
+        # A controller crash must not leave the authoritative lineage JSON
+        # truncated. Write and sync a sibling file, then atomically replace it.
+        path = self._path()
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".partial", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(record, handle, indent=2, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def read(self) -> dict[str, Any] | None:
         path = self._path()

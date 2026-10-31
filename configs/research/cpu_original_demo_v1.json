@@ -1,0 +1,13 @@
+{
+  "schema": "cpu-campaign-config.v1",
+  "workflow_id": "cpu-research-workflow",
+  "run_id": "cpu-research-run",
+  "lineage_id": "cpu-internal-lineage",
+  "stage_name": "smoke_test",
+  "experiment_id": "internal-original-repair",
+  "cpu_seed": 20261028,
+  "dataset_seed": 20261028,
+  "maximum_training_steps": 2,
+  "maximum_cpu_seconds": 600,
+  "include_public": true
+}

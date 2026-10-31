@@ -33,6 +33,7 @@ from hephaestus.control.staged_state import (
     StagedWorkflowState,
 )
 from hephaestus.policy.action_registry import evaluate_action_boundary
+from hephaestus.schemas.external_operation import ExternalOperationPending
 
 
 def _canonical_json(payload: object) -> str:
@@ -77,7 +78,7 @@ class GovernedStagedOrchestrator:
         if run_id is not None and run_id != self.run_id:
             raise ValueError("staged orchestrator run_id does not match its configured workflow")
         state = self._load_or_create()
-        if state.completion_marker or (not state.resumable and state.status != "pending"):
+        if state.completion_marker or (not state.resumable and state.status not in {"pending", "running"}):
             return state
 
         for phase in SPINE_ORDER:
@@ -89,6 +90,7 @@ class GovernedStagedOrchestrator:
                 state.current_phase = phase.value
                 state.current_substep = substep
                 state.status = "running"
+                state.resumable = True  # A hard controller stop leaves an in-flight, reconcilable step.
                 state.blocking_issues = []
                 self._persist_state(state)
 
@@ -263,7 +265,39 @@ class GovernedStagedOrchestrator:
         )
         try:
             return service.execute(request)
+        except ExternalOperationPending as exc:
+            return StagedOperationResult(
+                status="interrupted" if exc.resumable else "blocked",
+                resumable=exc.resumable,
+                blocking_issues=("external_operation_outcome_requires_reconciliation",),
+                records=(StagedOutputRecord("external_operation_pending", {
+                    "operation_id":operation_id, "phase":phase.value, "substep":substep,
+                    "error_type":type(exc).__name__, "resumable":exc.resumable}),),
+            )
         except Exception as exc:  # subsystem exceptions are evidence, never success
+            # Full details belong in private content-addressed custody, not
+            # console logs or control memory. Preserve the original exception
+            # before converting it into the terminal staged result.
+            import traceback
+            diagnostic = {
+                "schema": "staged-subsystem-failure.v1",
+                "workflow_id": self.workflow_id, "run_id": self.run_id,
+                "lineage_id": self.lineage_id, "stage_name": self.stage_name,
+                "operation_id": operation_id, "phase": phase.value,
+                "substep": substep, "error_type": type(exc).__name__,
+                "message": str(exc), "traceback": traceback.format_exc(),
+            }
+            diagnostic_ref = None
+            diagnostic_capture_error = None
+            if self.dependencies.artifact_store is not None:
+                try:
+                    diagnostic_ref = self.dependencies.artifact_store.put_bytes(
+                        _canonical_json(diagnostic).encode("utf-8"),
+                        media_type="application/json").artifact_ref
+                except Exception as capture_error:
+                    # Storage failure must not replace the original subsystem
+                    # failure or accidentally turn it into a resumable result.
+                    diagnostic_capture_error = type(capture_error).__name__
             return StagedOperationResult(
                 status="terminal_failure",
                 blocking_issues=(f"subsystem_exception:{type(exc).__name__}",),
@@ -274,6 +308,8 @@ class GovernedStagedOrchestrator:
                             "phase": phase.value,
                             "substep": substep,
                             "error_type": type(exc).__name__,
+                            "diagnostic_ref": diagnostic_ref,
+                            "diagnostic_capture_error": diagnostic_capture_error,
                             "retryable": False,
                         },
                     ),
@@ -380,6 +416,31 @@ class GovernedStagedOrchestrator:
             requirements=requirements,
         )
         request_record = StagedOutputRecord("approval_request", request.to_dict())
+        # Scientific eligibility is owned by the data service and cannot be
+        # overridden by a permissive operator approval provider. No network IO
+        # is permitted in this readiness check.
+        if substep == "acquisition_approval_gate" and source and source.output.get("remote_dataset_review_required"):
+            service = self.dependencies.services.dataset_acquisition
+            readiness = getattr(service, "approval_readiness", None)
+            issues = ("remote_dataset_review_service_missing",)
+            if callable(readiness):
+                try:
+                    issues = readiness(StagedOperationRequest(
+                        workflow_id=self.workflow_id, run_id=self.run_id,
+                        lineage_id=self.lineage_id, stage_name=self.stage_name,
+                        phase=phase.value, substep=substep, operation_id=operation_id,
+                        attempt=1, input_refs=tuple(self._input_refs(state)),
+                        prior_outputs={k: v.output for k, v in state.steps.items()}))
+                    if not isinstance(issues, tuple) or any(not isinstance(v, str) or not v for v in issues):
+                        issues = ("remote_dataset_readiness_invalid_result",)
+                except Exception as exc:  # delegated scientific boundary: failure is never approval
+                    issues = (f"remote_dataset_readiness_failed:{type(exc).__name__}",)
+            if issues:
+                return StagedOperationResult(status="approval_pending", records=(request_record,),
+                    blocking_issues=tuple(issues), resumable=True,
+                    metadata={"approval_status": "pending",
+                        "approval_request": request.to_dict(),
+                        "required_approvals": list(requirements)})
         decision = (
             self.dependencies.approval_service.decision_for(request)
             if self.dependencies.approval_service is not None
@@ -761,6 +822,7 @@ class GovernedStagedOrchestrator:
             "workflow_id": self.workflow_id,
             "run_id": self.run_id,
             "lineage_id": self.lineage_id,
+            "stage_name": self.stage_name,
             "phase": phase.value,
             "substep": substep,
             "operation_id": operation_id,
@@ -768,6 +830,10 @@ class GovernedStagedOrchestrator:
             "kind": kind,
             "payload": payload,
         }
+        if self.dependencies.artifact_store is not None:
+            from hephaestus.storage.verified import canonical_bytes
+            artifact = self.dependencies.artifact_store.put_bytes(canonical_bytes(wrapped), media_type="application/json")
+            wrapped["artifact_ref"] = artifact.artifact_ref
         self.dependencies.state_repository.append(WORKFLOW_RECORD_COLLECTION, wrapped)
         if self.dependencies.record_sink is not None:
             self.dependencies.record_sink.append(kind, payload)
