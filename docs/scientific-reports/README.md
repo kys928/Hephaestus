@@ -8,6 +8,10 @@ This folder is the **human-readable evidence map**. Primary execution receipts a
 | Earlier selected role-mastery adapters | Frozen role models and selected Evaluator adapter existed **before** R10; not further fine-tuned in that run | [Original Evaluator section](../evidence/original-cuda45-r10/README.md) |
 | Historical first controlled development experiments | Research and custody records; do not infer universal, externally certified model improvement | [Previous experiment evidence](../evidence/second-controlled-experiment-001-33889959923/README.md) |
 
+## Prospective causal improvement study
+
+[Issue #152 protocol v1](152-prospective-protocol-v1.md) pre-registers exact matched holdout scoring, three-seed selection, strict correctness, regression gates and custody prerequisites. It is an **unexecuted research protocol**, not a new improvement claim.
+
 ## Work that remains
 
 - [External original-private-source contamination, historical baseline and custody certification](https://github.com/kys928/Hephaestus/issues/102): **pending**, not an implied consequence of internal verification.
