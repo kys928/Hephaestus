@@ -10,6 +10,8 @@ from hephaestus.runtime.stop_logic import stop_recommendation
 from hephaestus.schemas.incident_record import IncidentRecord
 from hephaestus.schemas.runtime_event import RuntimeEvent
 from hephaestus.schemas.stage_profile import StageProfile
+from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.safety.launch_guard import evaluate_launch_guard, validate_legacy_fixture_job
 
 
 def _stop_sensitivity_for_stage(stage_profile: StageProfile | None) -> str:
@@ -47,13 +49,20 @@ class RuntimeMonitorRole:
         launch_config: dict[str, object],
         data_contract: dict[str, object],
         stage_profile: StageProfile | None = None,
+        legacy_fixture_mode: bool = False,
     ) -> RuntimeMonitorResult:
+        guard = evaluate_launch_guard(launch_config, fixture_mode=legacy_fixture_mode)
+        is_demo = isinstance(self.backend, DryRunBackend) and launch_config.get("dry_run") is True
+        if not guard.passed or (not is_demo and legacy_fixture_mode is not True):
+            raise PermissionError("legacy runtime supports dry-run demos or explicitly enabled fixed fixtures only")
         prepared_job = self.backend.prepare_training_job(
             experiment_plan=experiment_plan,
             data_contract=data_contract,
             training_plan=training_plan,
             launch_config=launch_config,
         )
+        if not is_demo:
+            validate_legacy_fixture_job(prepared_job)
         launch_result = self.backend.launch_training(prepared_job)
         stop_sensitivity = _stop_sensitivity_for_stage(stage_profile)
         return self._from_launch_result(run_id, launch_result, stop_sensitivity)

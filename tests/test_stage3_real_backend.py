@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from hephaestus.backends.local_process_backend import LocalProcessBackend
-from hephaestus.control.orchestrator import build_orchestrator
+from legacy_fixture_support import build_orchestrator
 
 
 def test_backend_prepare_roundtrip() -> None:

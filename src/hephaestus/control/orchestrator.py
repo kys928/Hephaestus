@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.dry_run_backend import DryRunBackend
+from hephaestus.config_loader import ConfigError
 from hephaestus.control.branching import create_branch_state
 from hephaestus.control.lineage_transition import compute_lineage_signals
 from hephaestus.control.restart import create_restart_state
@@ -76,6 +77,7 @@ class ControlContext:
     stage_name: str
     artifact_root: str
     outputs: dict[str, object] = field(default_factory=dict)
+    legacy_fixture_mode: bool = False
 
 
 @dataclass(slots=True)
@@ -194,9 +196,12 @@ class DefaultSpineCoordinator(SpineCoordinator):
             self.context.outputs[phase.value] = output
             self.report_store.append({"kind": "training_plan", **plan.to_dict()})
             self.report_store.append({"kind": "launch_config", **launch.to_dict()})
-            launch_guard = evaluate_launch_guard(launch.to_dict())
+            launch_guard = evaluate_launch_guard(launch.to_dict(),
+                                                fixture_mode=self.context.legacy_fixture_mode)
             self.report_store.append({"kind": "safety_guard", **launch_guard.to_dict()})
             output["safety_guard"] = launch_guard.to_dict()
+            if not launch_guard.passed:
+                raise ConfigError("legacy launch guard blocked execution: " + ", ".join(launch_guard.reasons))
             return PhaseResult(phase, "ok", [], output)
 
         if phase is SpinePhase.RUNTIME_MONITOR:
@@ -211,6 +216,7 @@ class DefaultSpineCoordinator(SpineCoordinator):
                 launch_config=training["launch_config"],
                 data_contract=data_contract,
                 stage_profile=stage_profile,
+                legacy_fixture_mode=self.context.legacy_fixture_mode,
             )
             output = {
                 "outcome": monitor.outcome,
@@ -669,6 +675,7 @@ def build_orchestrator(
     operator_responses: dict[str, dict[str, str]] | None = None,
     mode: str = "legacy",
     staged_dependencies: "StagedAutonomousDependencies | None" = None,
+    legacy_fixture_mode: bool = False,
 ) -> "Orchestrator | GovernedStagedOrchestrator":
     if mode == "governed_autonomous":
         from hephaestus.control.staged_autonomous import (
@@ -688,7 +695,8 @@ def build_orchestrator(
         )
     if mode != "legacy":
         raise ValueError(f"unknown orchestration mode: {mode}")
-    context = ControlContext(run_id=run_id, lineage_id=lineage_id, stage_name=stage_name, artifact_root=f"artifacts/{run_id}")
+    context = ControlContext(run_id=run_id, lineage_id=lineage_id, stage_name=stage_name,
+                             artifact_root=f"artifacts/{run_id}", legacy_fixture_mode=legacy_fixture_mode)
     return Orchestrator(
         coordinator=DefaultSpineCoordinator(
             context=context,
