@@ -38,7 +38,7 @@ jobs:
           expected={
               "src/hephaestus/storage/verified.py":"a0b80cf2d4b64f4be248e5fd3ccaae97f44e3e70",
               "src/hephaestus/storage/external_evidence_pointer.py":"4168df0276e80904dc5514a631c287e002e574c0",
-              "src/hephaestus/schemas/cpu_campaign_config.py":"4adb8da114b2c9d44e3dd0c7bb4d8be5163229d",
+              "src/hephaestus/schemas/cpu_campaign_config.py":"4adb8da114b2c9d44e3dd0c7bb4d8be5163229d9",
               "configs/research/cpu_chat_json_repair_v1.json":"b988e10ff86425a3687d5b7ba2d66ae603d38d45",
               "tests/test_external_evidence_pointer.py":"f7322714847c1e06004829b51d6694a5aca028e4",
               "tests/test_cpu_campaign_config.py":"33eb8bb044f0f75bd85dc747c99b5dc1ebb65d6f",
