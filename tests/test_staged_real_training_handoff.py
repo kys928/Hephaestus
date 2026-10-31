@@ -52,6 +52,7 @@ def _checkpoint(root: Path) -> str:
 class ControlledLifecycle:
     def __init__(self, checkpoint):
         self.checkpoint = checkpoint
+        self.checkpoint_hash = validate_checkpoint_manifest(checkpoint)[1]
         self.active = {}
         self.launches = 0
         self.done = False
@@ -81,6 +82,7 @@ class ControlledLifecycle:
             run_id=proposal.run_id, experiment_id=proposal.experiment_id,
             backend_id="cpu-test-double", status="completed" if self.done else "running",
             checkpoint_refs=[self.checkpoint] if self.done else [],
+            metadata={"checkpoint_manifest_hashes": {self.checkpoint: self.checkpoint_hash}},
         )
 
 

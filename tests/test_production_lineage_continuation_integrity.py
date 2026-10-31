@@ -9,6 +9,9 @@ from hephaestus.production.state import ACTION_EXECUTIONS
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
+from hephaestus.schemas.checkpoint_identity import CheckpointIdentity
+from hephaestus.state.checkpoint_identity_store import CheckpointIdentityStore
+from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
 
 
 def _executor(root: Path, *, status: str, best: str) -> GovernedActionExecutor:
@@ -16,7 +19,12 @@ def _executor(root: Path, *, status: str, best: str) -> GovernedActionExecutor:
         lineage_id="lineage-a", stage_name="smoke_test",
         status=status, best_checkpoint_ref=best,
     ).to_dict())
-    return GovernedActionExecutor(root, SQLiteStateRepository(root / "state.sqlite3"))
+    executor = GovernedActionExecutor(root, SQLiteStateRepository(root / "state.sqlite3"))
+    valid, digest = validate_checkpoint_manifest(best)
+    if valid:
+        CheckpointIdentityStore(executor.repository).retain(CheckpointIdentity(
+            "lineage-a", best, digest, "synthetic:producer-identity"))
+    return executor
 
 
 def test_automatic_continuation_cannot_replace_best_with_foreign_checkpoint(tmp_path):

@@ -116,6 +116,8 @@ def validate_checkpoint_manifest(checkpoint: str | Path) -> tuple[bool, str]:
         manifest = json.loads(manifest_ref.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False, "checkpoint manifest is unreadable"
+    if not isinstance(manifest, dict):
+        return False, "checkpoint manifest must be an object"
     components = manifest.get("components")
     if not isinstance(components, dict) or not components:
         return False, "checkpoint component hashes are missing"
@@ -1027,6 +1029,10 @@ class TransformersTrainingLifecycleService:
             )
         if token.get("checkpoint_manifest_hash") != observed_manifest_hash:
             return _issue("checkpoint_manifest_mismatch", "artifact_integrity", "Resume manifest differs.")
+        retained = managed.handle.metadata.get("checkpoint_manifest_hashes", {})
+        if not isinstance(retained, dict) or retained.get(str(checkpoint_ref)) != observed_manifest_hash:
+            return _issue("checkpoint_identity_missing_or_changed", "artifact_integrity",
+                          "Resume requires the retained producer identity; legacy records require explicit migration.")
         fingerprint = str(job.get("config_fingerprint", ""))
         if token.get("config_fingerprint") != fingerprint:
             return _issue("resume_config_mismatch", "incompatible_candidate", "Config fingerprint differs.")
@@ -1111,6 +1117,11 @@ class TransformersTrainingLifecycleService:
                 valid, observed_hash = validate_checkpoint_manifest(checkpoint_ref)
                 if not valid or record.get("checkpoint_manifest_hash") != observed_hash:
                     raise ValueError(observed_hash)
+                retained = dict(managed.handle.metadata.get("checkpoint_manifest_hashes", {}))
+                if str(checkpoint_ref) in retained and retained[str(checkpoint_ref)] != observed_hash:
+                    raise ValueError("checkpoint differs from retained producer identity")
+                retained[str(checkpoint_ref)] = observed_hash
+                managed.handle.metadata["checkpoint_manifest_hashes"] = retained
                 managed.handle.checkpoint_refs = [str(checkpoint_ref)]
                 managed.handle.metadata["generation_handoff_ref"] = str(checkpoint_ref / "loading_instructions.json")
                 token_ref = root / "resume_token.json"
