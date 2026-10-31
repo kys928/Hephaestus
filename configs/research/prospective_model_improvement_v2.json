@@ -1,0 +1,25 @@
+{
+  "design_id": "original-four-family-range100.v2",
+  "purpose": "confirmatory",
+  "cases_per_family": 512,
+  "difficulty": 100,
+  "families": [
+    "arithmetic",
+    "json",
+    "symbolic",
+    "reasoning"
+  ],
+  "training_seeds": [
+    1117,
+    2227,
+    3337
+  ],
+  "minimum_gain": 0.05,
+  "maximum_loss_fraction": 0.01,
+  "alpha": 0.05,
+  "bootstrap_draws": 2000,
+  "bootstrap_seed": 152,
+  "max_new_tokens": 64,
+  "generator_contract": "unique-eval-bucket9-range100.v2",
+  "inference_scope": "fixed-four-families-and-templates-only"
+}
