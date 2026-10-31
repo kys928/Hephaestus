@@ -21,37 +21,30 @@ Hephaestus is allowed to aim big. It is not only an experiment tracker, checkpoi
 
 However, Hephaestus must never fake certainty. Any autonomy must be earned through evidence.
 
-## Current reality
+## Current reality (updated 2026-10-31)
 
-The current implementation should be treated as an audit-first control and governance shell, not a complete autonomous training factory.
+The original audit-first description below was overtaken by verified implementation and source integration. **Hephaestus now includes a real, governed research execution spine**, not just dry-run records: the full successful original R10 source lineage was integrated into `main` by ordinary non-squash Git merges, and its independently verified historical CUDA campaign finished 45 native operations, accepted the five original frozen specialist roles on CUDA, and completed 96 real target-model optimizer steps. This is an **internal single-campaign execution result**; the immutable [R10 evidence index](docs/evidence/original-cuda45-r10/README.md) records exact source/checkpoint/archive hashes.
 
-What is currently real:
+What is currently real in the integrated repository:
 
-- a mandatory staged control spine
-- role-separated workflow execution
-- dry-run training lifecycle simulation
-- dataset profile and manifest records
-- preprocessing reports and trainable data contracts
-- training plans and launch configs
-- runtime monitoring records
-- evaluation, repeatability, promotion, and certification logic
-- approval and governance metadata
-- replay verification
-- persistent JSON-line state stores
-- an early governed operator console
-- bounded code-edit proposal governance and dry-run execution records
+- an eight-phase deterministic control spine, versioned contracts and persistent run/decision/lineage evidence;
+- actual governed dataset admission, preprocessing, PEFT and bounded native CPU/CUDA research services, with model and provider interfaces;
+- original frozen five-role adapters usable through guarded inference, **not** globally authorized automatic dispatch;
+- training lifecycle, evaluation, recovery and immutable replay/custody checks that have passed scoped tests;
+- a local bounded console and read-only inspection/demo tools;
+- a maintained CPU CI surface with five workflows; historic one-off paid workflows remain in Git ancestry, not current Actions.
 
-What is not yet complete:
+Verified [PR #157](https://github.com/kys928/Hephaestus/pull/157) CPU regression: **1,060 passed, 21 skipped** in the pinned full R10 environment. This is software verification, not an additional GPU or external science campaign.
 
-- general real model training
-- production-grade dataset acquisition
-- full preprocessing implementation
-- rich evaluator metric coverage
-- polished operator UX
-- production packaging and deployment
-- fully autonomous recovery/self-healing behavior
+Still **not established or authorized**:
 
-When in doubt, treat the system as a control tower whose factory machinery is partly simulated and partly scaffolded.
+- general autonomous from-scratch pretraining across arbitrary workloads;
+- a reliable held-out, multi-seed target-model improvement over baseline (tracked by [#152](https://github.com/kys928/Hephaestus/issues/152));
+- external historical private-source contamination, custody, baseline comparisons or certification ([#102](https://github.com/kys928/Hephaestus/issues/102));
+- unconditional promotion of the R10 target checkpoint, unsupervised paid compute decisions or unrestricted role dispatch;
+- independent final acceptance of the extensive source integration and enforced `main` branch protections ([#151](https://github.com/kys928/Hephaestus/issues/151)).
+
+The operating philosophy remains **governed research lab, not omniscient autonomous factory**. Read [architecture](docs/architecture/README.md), [safe operations](docs/operations/run-safety.md) and [claims standard](docs/scientific-reports/scientific-claims.md) before describing or operating a new experiment.
 
 ## Core mission
 

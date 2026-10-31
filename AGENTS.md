@@ -5,6 +5,10 @@
 Before making architectural changes, read:
 
 - `PROJECT_MISSION.md`
+- `docs/README.md` (canonical documentation map)
+- `docs/architecture/control-and-governance.md`
+- `docs/operations/run-safety.md`
+- `docs/scientific-reports/scientific-claims.md`
 - `docs/architecture.md`
 - `docs/control_spine.md`
 - `docs/stage_policy.md`
