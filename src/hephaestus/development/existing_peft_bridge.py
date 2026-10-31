@@ -100,9 +100,12 @@ def _preparation(root: Path, train: list[dict], tokenizer, modeldir: Path) -> di
     # acquisition receipt. They are never routed through the production
     # selection/finalization gate.
     source = root / "trainable.jsonl"
+    from hephaestus.schemas.prompt_target_supervision import PromptTargetSupervision
     records = [{
         "text": "<|prompt|> " + row["prompt"] + " <|target|> " + row["response"],
         "record_kind": "prompt_target", "source_id": row["id"],
+        "supervision": PromptTargetSupervision(row["prompt"], row["response"],
+            "<|prompt|> {prompt} <|target|> {target}").to_dict(),
     } for row in train]
     source.write_text("".join(json.dumps(row, sort_keys=True)+"\n" for row in records), encoding="utf-8")
     source_sha = _hash(source)
