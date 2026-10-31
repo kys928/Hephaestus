@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 from hephaestus.control.spine import SPINE_ORDER
+from hephaestus.state.execution_ownership import execution_owner
 
 from .composition import ProductionRuntime
 from .recovery import RecoverableInfrastructureError
@@ -81,6 +82,13 @@ class ProductionLoopRunner:
     stop_on_promotion: bool = True
 
     def run(
+        self, *, program_id: str, lineage_id: str, stage_name: str, resume: bool = True,
+    ) -> ProductionLoopState:
+        with execution_owner(self.runtime.state_repository, "program", program_id):
+            return self._run_owned(program_id=program_id, lineage_id=lineage_id,
+                                   stage_name=stage_name, resume=resume)
+
+    def _run_owned(
         self,
         *,
         program_id: str,

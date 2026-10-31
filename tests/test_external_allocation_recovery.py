@@ -107,6 +107,10 @@ def test_staged_controller_recovers_acceptance_window_with_same_operation_identi
             if request.substep == "lifecycle_launch":
                 _create(_adapter(tmp_path / "provider-state", provider), operation_id=request.operation_id)
             return super().execute(request)
+        def reconcile_operation(self, request):
+            # Explicit adapter: the actual RunPod _create path reconciles its
+            # durable intent/provider identity before considering allocation.
+            return self.execute(request)
     first, _ = _orchestrator(tmp_path / "workflow", LaunchRouter())
     with pytest.raises(ControllerCrash): first.run()
     resumed, _ = _orchestrator(tmp_path / "workflow", LaunchRouter())
