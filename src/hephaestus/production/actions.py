@@ -16,6 +16,7 @@ from hephaestus.policy.action_registry import canonical_action_name, evaluate_ac
 from hephaestus.policy.approval_policy import ApprovalPolicy
 from hephaestus.policy.action_authorization import ActionAuthorizer
 from hephaestus.state.single_writer import single_writer
+from hephaestus.state.campaign_witness import state_directory_owner
 from hephaestus.storage.base import ArtifactStore
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state.lineage_store import LineageStore
@@ -65,13 +66,13 @@ class GovernedActionExecutor:
         return LineageStore(self.state_root)
 
     def apply(self, **kwargs) -> dict[str, object]:
-        with single_writer(self.state_root):
+        with state_directory_owner(self.state_root), single_writer(self.state_root):
             self.reconcile_prepared()
             return self._apply(**kwargs)
 
     def reconcile_prepared(self) -> list[dict[str, object]]:
         """Finish already-authorized intents before admitting another mutation."""
-        with single_writer(self.state_root):
+        with state_directory_owner(self.state_root), single_writer(self.state_root):
             latest = {str(r["execution_id"]): r for r in self.repository.all(ACTION_EXECUTIONS)}
             return [self._reconcile(r) for r in latest.values() if r.get("status") == "prepared"]
 
