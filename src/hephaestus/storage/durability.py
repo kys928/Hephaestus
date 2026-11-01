@@ -43,7 +43,13 @@ def atomic_write_bytes(path: Path, data: bytes, *, overwrite: bool = True) -> No
         handle.flush()
         os.fsync(handle.fileno())
     if overwrite:
-        os.replace(temporary, path)
+        try:
+            os.replace(temporary, path)
+        finally:
+            # Preserve the established mutable-document failure contract. This
+            # removes only our uncommitted sibling, never the old destination.
+            if os.path.exists(temporary):
+                os.unlink(temporary)
     else:
         # A concurrent publisher may win; immutable destinations are never replaced.
         try:
