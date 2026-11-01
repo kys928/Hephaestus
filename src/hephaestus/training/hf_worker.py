@@ -20,6 +20,7 @@ from hephaestus.schemas.prompt_target_supervision import PromptTargetSupervision
 from hephaestus.data.chunking import supervision_segments
 from hephaestus.training.batch_schedule import SCHEDULE_VERSION, training_windows, step_limit, cursor_at_step
 from hephaestus.schemas.optimizer_progress import OptimizerProgress
+from hephaestus.storage.durability import atomic_write_bytes, sync_tree, sync_directory_chain
 
 _STOP_REASON: str | None = None
 
@@ -57,22 +58,13 @@ def _hash_file(path: Path) -> str:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".partial")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    temporary.replace(path)
+    atomic_write_bytes(path, json.dumps(payload, indent=2, sort_keys=True).encode("utf-8"))
 
 
 def _fence_optimizer_progress(root,progress):
     path=root/"optimizer_progress.json"
+    # The common writer flushes the file, published name and ancestor entries.
     _write_json(path,OptimizerProgress.from_dict(progress).to_dict())
-    with path.open("rb") as stream:
-        os.fsync(stream.fileno())
-    descriptor=os.open(root,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -380,7 +372,9 @@ def _save_checkpoint(
                 "partial_write": False,
             },
         )
+        sync_tree(partial)
         os.replace(partial, final)
+        sync_directory_chain(final.parent)
     except BaseException:
         # A failed staged directory remains explicitly marked partial.  It is
         # never removed or treated as resumable evidence.

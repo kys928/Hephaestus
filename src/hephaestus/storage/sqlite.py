@@ -6,6 +6,8 @@ import json
 import re
 import sqlite3
 import time
+import os
+import tempfile
 from contextlib import contextmanager, closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +22,7 @@ from hephaestus.infrastructure.observability import (
 )
 
 from .base import LockLease
+from .durability import sync_file, sync_directory_chain
 
 
 SQLITE_STATE_SCHEMA_VERSION = 1
@@ -240,10 +243,19 @@ class SQLiteStateRepository:
         if destination.exists():
             raise FileExistsError("state snapshot destination must be new")
         destination.parent.mkdir(parents=True,exist_ok=True)
-        with self._db.connection() as source, closing(sqlite3.connect(destination)) as target:
+        descriptor, partial = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".partial", dir=destination.parent)
+        os.close(descriptor)
+        with self._db.connection() as source, closing(sqlite3.connect(partial)) as target:
+            target.execute("PRAGMA synchronous=FULL")
             source.backup(target)
             if [str(row[0]) for row in target.execute("PRAGMA integrity_check")]!=["ok"]:
                 raise StateIntegrityError("state snapshot is not healthy; retained for investigation")
+            target.execute("PRAGMA journal_mode=DELETE")
+        # Hash/read only this closed, private backup, never the live main database.
+        sync_file(Path(partial))
+        os.link(partial, destination, follow_symlinks=False)
+        os.unlink(partial)
+        sync_directory_chain(destination.parent)
 
     @staticmethod
     def _envelope(row: sqlite3.Row) -> dict[str, object]:
