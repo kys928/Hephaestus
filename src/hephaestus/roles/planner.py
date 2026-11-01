@@ -1,3 +1,9 @@
+"""Legacy dry-run adapter plus explicit typed delegation to the active planner.
+
+``run`` belongs to the local demo coordinator. Production experiment planning
+uses ``ClosedLoopExperimentPlanner`` through ``propose_experiment`` or the
+separately composed staged role owners; it does not consume this dry-run plan.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,7 +21,7 @@ class PlannerRole:
     name: str = "planner"
 
     def run(self, run_id: str, stage_name: str) -> ExperimentPlan:
-        """Preserve the existing bounded control-spine adapter until final wiring."""
+        """Return the legacy demo's bounded plan; this does not launch research."""
         return ExperimentPlan(
             plan_id=f"plan-{run_id}",
             run_id=run_id,

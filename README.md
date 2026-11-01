@@ -13,6 +13,9 @@ Hephaestus connects a deterministic eight-phase scientific workflow with special
 | Real target-model AdamW/LoRA updates | **96/96 in R10**; not a claim of behavioral improvement by itself |
 | Native archive, checkpoint and role inference hashes | Independent cold verification passed |
 | RunPod cost/Pod custody | Real scoped prepaid Pod, verified deletion |
+| Eleven 2026-10-31 audit defects | **Resolved and merged**; [exact regression/CI ledger](docs/operations/remediation-ledger.md) |
+| Authentic bounded CPU research | Real three-cycle programs, injected-failure repair and matched finite policy comparison; [plan and scope](docs/scientific-reports/cpu-autonomy-comparison-plan-v1.md) |
+| Prospective custody workflow | One-use generation/evidence pipeline and real CPU fixture rehearsal; independent #152 assessment remains pending |
 | External historical scientific certification | **Pending** (original private data custody, contamination audit and Granite comparisons) |
 | General fully autonomous model-development factory | **Not yet demonstrated** |
 | Automatic production role dispatch or checkpoint promotion | **Disabled unless separately authorized** |
@@ -27,6 +30,7 @@ R10's target training generated a verifiable checkpoint, but demonstrating consi
 - **[Architecture](docs/architecture/README.md)** — eight control phases, roles, deterministic gates, state and evidence.
 - **[Operations](docs/operations/README.md)** — install, CPU tests, local demo, run safety and release/rollback.
 - **[Scientific reports](docs/scientific-reports/README.md)** — R10 result, exact evidence sources, unproven claims and next studies.
+- **[Supported execution](docs/operations/supported-execution.md)** — actual CPU research commands, executable decisions, explicit exclusions and inactive scaffolds.
 
 The original `docs/evidence/`, `docs/integration_notes/` and `docs/reviews/` remain at their established locations to preserve historical links and immutable research references.
 
