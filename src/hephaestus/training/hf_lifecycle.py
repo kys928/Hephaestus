@@ -368,6 +368,10 @@ class TransformersTrainingLifecycleService:
             issues.append(
                 _issue("experiment_not_ready", "policy_blocked", "Proposal must be ready or approved.")
             )
+        if constraints.get("fixture_bootstrap_failure") and (
+                constraints.get("device") != "cpu" or proposal.stage_name != "bounded_cpu_research"):
+            issues.append(_issue("invalid_bootstrap_fault_scope", "invalid_request",
+                "Predeclared bootstrap faults require the bounded CPU research stage."))
         backend_id = str(constraints.get("backend_id", self.backend_id)).strip()
         if backend_id != self.backend_id:
             issues.append(
@@ -851,6 +855,7 @@ class TransformersTrainingLifecycleService:
             },
             "step_delay_seconds": number("step_delay_seconds", 0.0, 0.0),
             "simulate_oom": str(constraints.get("simulate_oom", "")),
+            "fixture_bootstrap_failure": constraints.get("fixture_bootstrap_failure", False),
         }
         if data_summary.get("data_format") == TOKEN_ID_FORMAT:
             config.update(data_format=TOKEN_ID_FORMAT, eos_handling="no_insertion",
@@ -864,6 +869,10 @@ class TransformersTrainingLifecycleService:
         if config["dataloader_settings"]["shuffle"]:
             issues.append(_issue("shuffle_not_supported", "invalid_request",
                 "This bounded worker supports a declared sequential schedule, not shuffled data."))
+        fault = config["fixture_bootstrap_failure"]
+        if type(fault) is not bool:
+            issues.append(_issue("invalid_bootstrap_fault_scope", "invalid_request",
+                "Predeclared bootstrap faults require the bounded CPU research stage and an exact boolean."))
         if float(config["step_delay_seconds"]) > 1.0:
             issues.append(_issue("invalid_step_delay", "invalid_request", "step_delay_seconds must be <= 1."))
         special = config["special_token_ids"]
@@ -1098,6 +1107,16 @@ class TransformersTrainingLifecycleService:
             )
         managed.handle.status = status
         managed.handle.metadata.update({"returncode": returncode, "runtime_result_ref": str(result_ref)})
+        progress_ref = root / "optimizer_progress.json"
+        if progress_ref.is_file():
+            try:
+                progress = json.loads(progress_ref.read_text())
+            except (ValueError, OSError):
+                progress = {}
+            if (progress.get("run_id") == managed.handle.run_id
+                    and progress.get("config_fingerprint") == managed.handle.metadata.get("config_fingerprint")):
+                managed.handle.metadata["optimizer_progress_ref"] = str(progress_ref)
+                managed.handle.metadata["optimizer_progress_hash"] = _hash_file(progress_ref)
         metrics_ref = root / "metrics_summary.json"
         record_ref = root / "checkpoint_record.json"
         required = [root / "events.jsonl", root / "runtime.log", result_ref]

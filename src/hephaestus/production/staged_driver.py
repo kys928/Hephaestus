@@ -6,6 +6,7 @@ the Judge's action_application stage. The production loop owns that commit.
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Callable
 
@@ -23,6 +24,9 @@ from .composition import ProductionRuntime
 from .loop import ProductionCycleResult
 from .state import ProductionLoopState
 from .staged_trace import verify_completed_staged_trace
+from hephaestus.schemas.staged_retry import StagedRetry
+from hephaestus.state.staged_retry_store import StagedRetryStore
+from .staged_retry import prepare_staged_retry, RetryInvariantTrainingService, finish_staged_retry
 
 
 class StagedActionIntentService:
@@ -83,6 +87,7 @@ class StagedProductionCycleDriver:
     """
 
     dependencies_for_cycle: CycleDependenciesFactory
+    maximum_training_attempts: int = 2
 
     def execute_cycle(
         self,
@@ -93,7 +98,20 @@ class StagedProductionCycleDriver:
     ) -> ProductionCycleResult:
         if cycle_index < 1:
             raise ValueError("cycle_index must be positive")
-        run_id = f"{state.program_id}-cycle-{cycle_index}"
+        cycle_key = f"{state.program_id}:cycle:{cycle_index}"
+        attempts = StagedRetryStore(runtime.state_repository)
+        current = attempts.current(cycle_key)
+        if current is None:
+            current = StagedRetry(cycle_key, 1, f"{state.program_id}-cycle-{cycle_index}", self.maximum_training_attempts)
+            attempts.save(current)
+        if current.maximum_attempts != self.maximum_training_attempts:
+            raise ValueError("staged training attempt budget changed across restart")
+        run_id = current.run_id
+        if current.not_before and datetime.now(timezone.utc) < datetime.fromisoformat(current.not_before):
+            return ProductionCycleResult(cycle_key, run_id, "", "pending", "",
+                evidence={"staged_retry": current.to_dict(), "waiting_for_recovery_backoff": True})
+        state.metadata["staged_run_id"] = run_id
+        state.metadata["staged_training_attempt"] = current.attempt
         deps = self.dependencies_for_cycle(runtime, state, cycle_index)
         if deps.state_repository is not runtime.state_repository:
             raise ValueError("cycle state must use the production runtime's durable repository")
@@ -102,6 +120,9 @@ class StagedProductionCycleDriver:
         ):
             raise ValueError("staged action executor would duplicate the production loop action")
         deps.services.action_executor = StagedActionIntentService()
+        if current.scientific_fingerprint is not None:
+            deps.services.training_lifecycle = RetryInvariantTrainingService(
+                deps.services.training_lifecycle, runtime, current.scientific_fingerprint, current.cycle_key)
         if deps.artifact_store is None:
             deps.artifact_store = runtime.artifact_store
         if state.latest_run_id and state.latest_run_id != run_id:
@@ -123,7 +144,16 @@ class StagedProductionCycleDriver:
             "blocking_issues": list(progress.blocking_issues),
         }
         if not progress.completion_marker:
+            if not progress.resumable:
+                finish_staged_retry(runtime, current, "failed")
+            retry = prepare_staged_retry(runtime, state, progress, current)
+            if retry is not None:
+                state.recovery_attempts += 1
+                evidence["staged_retry"] = retry.to_dict()
+                runtime.loop_state.event(state.program_id, "staged_training_retry_planned", retry.to_dict())
             outcome = "pending" if progress.resumable else "blocked"
+            if retry is not None:
+                outcome = "pending"
             return ProductionCycleResult(
                 cycle_id=f"{state.program_id}:cycle:{cycle_index}",
                 run_id=run_id,
@@ -133,6 +163,7 @@ class StagedProductionCycleDriver:
                 evidence=evidence,
             )
 
+        finish_staged_retry(runtime, current, "succeeded")
         def output(phase: str, substep: str) -> dict[str, object]:
             key = f"{phase}.{substep}"
             step = progress.steps.get(key)

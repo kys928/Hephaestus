@@ -338,6 +338,7 @@ class GovernedActionExecutor:
                 row.get("checkpoint_ref") for row in RunStore(self.state_root).all()
                 if row.get("lineage_id") == current.lineage_id
             )
+            known.update(row.checkpoint_ref for row in CheckpointIdentityStore(self.repository).for_lineage(current.lineage_id))
             if checkpoint_ref not in known:
                 raise PermissionError("continuation checkpoint does not belong to lineage")
             verified, manifest_identity = validate_checkpoint_manifest(Path(checkpoint_ref))
