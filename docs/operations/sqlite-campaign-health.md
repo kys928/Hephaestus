@@ -84,6 +84,18 @@ workspace trees for this profile; retain checked backups and quiescent raw
 evidence. Long-running production readiness, host/filesystem diagnostics and
 portable state migration remain unresolved. Do not close #179 from this run.
 
+## Subsequent restricted-boundary acceptance
+
+PRs #181–#184 and #187 added enforced storage admission, durable publication,
+transaction identities, retained witnesses, worker fences and complete latest-only
+recovery. Two fresh cohorts then verified 18 programs, 54 cycles, 46,025 state
+records, 216 optimizer updates plus 216 cold updates and 18 complete restores.
+Their full raw evidence and latest separate control checkpoints were retained
+outside the temporary runtime. The [restricted acceptance report](../scientific-reports/179-restricted-storage-resolution-20261101.md)
+supports #179's restricted-boundary alternative. It does not retroactively accept
+the failed cohorts, explain their cause, validate a persistent operator deployment
+or claim path portability. Historical causal uncertainty remains [#189](https://github.com/kys928/Hephaestus/issues/189).
+
 Primary references: [Python connection context semantics](https://docs.python.org/3.12/library/sqlite3.html#how-to-use-the-connection-context-manager),
 [SQLite corruption and safe snapshots](https://www.sqlite.org/howtocorrupt.html),
 [SQLite WAL-reset scope/fix](https://www.sqlite.org/wal.html#the_wal_reset_bug).

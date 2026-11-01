@@ -14,6 +14,7 @@
 | Check supported actions, real CPU research and remaining scaffolds | [Supported execution](operations/supported-execution.md) |
 | Inspect all eleven repaired audit findings | [Implementation ledger](operations/remediation-ledger.md) |
 | Inspect the complete implementation/research campaign | [Campaign report](scientific-reports/remediation-campaign-20261101.md) |
+| Operate within the verified persistence and recovery boundary | [Restricted storage acceptance](scientific-reports/179-restricted-storage-resolution-20261101.md) and [snapshot runbook](operations/campaign-snapshots.md) |
 
 ## Status as of 2026-11-01
 

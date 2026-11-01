@@ -125,6 +125,14 @@ Further integration findings are tracked separately from the eleven audit defect
 
 ## Larger capabilities and external boundaries
 
+Subsequent persistence work in #181–#184/#187 establishes an enforced restricted
+local storage boundary, unknown-commit witnesses, full snapshots and latest-only
+restore. Fresh retained endurance completed 18 programs/54 cycles/46,025 records,
+216 real updates plus 216 cold updates and 18 restores. See the [acceptance
+record](../scientific-reports/179-restricted-storage-resolution-20261101.md) for
+source identities, fault tests, CI and limits. #179's restricted operational
+resolution is distinct from the unresolved historical mechanism tracked in #189.
+
 Milestones 1 and 2 are implemented and integrated. #172 versions the prospective
 distribution and power sensitivity and records authentic original source
 recovery. #173 implements one-use custody, actual CPU generation and cold

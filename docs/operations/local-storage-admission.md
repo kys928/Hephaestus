@@ -55,8 +55,9 @@ runtime constructed before offline corruption cannot resume domain operations.
 Job readiness also checks full integrity. Invalid originals are preserved;
 no automatic index rebuild, database deletion or missing-publication creation
 is permitted. Immutable backup copies use the [durable publication API](durable-publication.md).
-Whole-campaign consistency, restore fencing and representative endurance remain
-separate acceptance work under #179.
+Whole-campaign consistency, restore fencing and representative endurance are
+documented in the [restricted #179 acceptance record](../scientific-reports/179-restricted-storage-resolution-20261101.md).
+The original corruption mechanism remains separately unresolved in #189.
 
 `test_storage_admission_and_transactions.py` covers actual pre-mutation denial,
 aliases/replacement, real migration rollback, unknown-commit reconciliation,

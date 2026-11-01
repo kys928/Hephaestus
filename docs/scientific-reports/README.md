@@ -10,6 +10,13 @@ This folder is the **human-readable evidence map**. Primary execution receipts a
 
 ## Prospective causal improvement study
 
+The [restricted storage acceptance record](179-restricted-storage-resolution-20261101.md)
+reports fresh complete CPU endurance and recovery under the admitted local
+profile. The historical corruption cause remains unresolved in #189. The
+[analytic power checks](152-analytic-power-checks.md) distinguish IID gate bounds
+from actual stratified design power and explain why larger N alone does not fix
+the observed 5pp and all-EOS boundaries.
+
 [Issue #152 protocol v2](152-prospective-protocol-v2.md) explicitly repairs distribution capacity, quantifies planning power and distinguishes development-selected improvement from replication. It awaits independent pilot/design acceptance; [v1](152-prospective-protocol-v1.md) remains an unexecuted historical candidate. The [public original model/tokenizer byte recovery](152-public-source-recovery-20261101.md), [original CPU adapter/source recovery](152-source-recovery-20261031.md) and [custody CPU rehearsal](../operations/prospective-custody.md) remove engineering dependencies without supplying an independent certificate.
 
 The [public CPU policy-comparison plan](cpu-autonomy-comparison-plan-v1.md) and
