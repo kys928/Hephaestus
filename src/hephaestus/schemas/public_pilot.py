@@ -1,5 +1,6 @@
 """Public development-only pilot identities; never final assessment authority."""
 from dataclasses import dataclass
+import re
 from ._base import JsonSchema
 
 
@@ -53,3 +54,27 @@ class PublicPilotPlan(JsonSchema):
                 or self.training_seeds != (1117,2227,3337) or self.updates_per_seed != 96
                 or self.same_seed_replay != 1117 or self.protected_final_material_authorized is not False):
             raise ValueError('public pilot sampling, dose and scope are frozen')
+
+
+@dataclass(slots=True)
+class PublicPilotMeasurement(JsonSchema):
+    model_label: str
+    model_identity: str
+    sample_id: str
+    row_commitment: str
+    pilot_contract_ref: str
+    generation_contract_ref: str
+    dataset_id: str
+    max_new_tokens: int
+    purpose: str = 'nonconfirmatory-public-development'
+
+    def __post_init__(self):
+        if (self.purpose!='nonconfirmatory-public-development'
+                or self.model_label not in {'baseline','historical-public-cpu-adapter','seed-1117','seed-2227','seed-3337'}
+                or self.dataset_id not in {'development','public-pilot'}
+                or any(not isinstance(x,str) or not re.fullmatch(r'sha256:[0-9a-f]{64}',x) for x in
+                    (self.model_identity,self.sample_id,self.row_commitment,self.pilot_contract_ref,self.generation_contract_ref))
+                or int(self.sample_id[7:],16)%10!=8 or type(self.max_new_tokens) is not int
+                or self.max_new_tokens not in {16,64,128}
+                or (self.model_label.startswith('seed-') and self.max_new_tokens!=128)):
+            raise PermissionError('resumable measurements accept only the frozen public development scope')

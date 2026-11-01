@@ -85,6 +85,33 @@ lexicographically smallest pilot canonical ID per family: 40 predeclared
 generation/NLL comparisons. This is a reproducibility subset, not additional
 independent pilot observations or a complete second 696-generation run.
 
+## Technical restart and external checkpoints
+
+The measurement plan and generation budgets remain unchanged. Contract v2 adds
+technical phase checkpoints after an actual temporary-runtime loss erased an
+unpublished attempt. That lost attempt cannot supply accepted raw evidence.
+Preserve its observed disposition; a fresh run is a new attempt, not a recreated
+historical completion.
+
+`--pause-after-training` stops only after the three 96-update candidates and the
+independent 96-update repeat have complete verified checkpoints. `resume` requires
+the separately retained contract digest, original source installation, all three
+seed/job bindings and exact repeat proof. It launches no optimizer and never
+reconstructs missing training. Pure fixed public measurements are retained under
+keys binding model, input, cap, source/plan and development-bucket identity.
+Restart reuses acknowledged raw receipts and computes only missing public
+measurements. Unknown SQL acknowledgement is reconciled by the campaign witness.
+This mechanism rejects confirmatory purposes and final bucket-9 identities; it
+never supplies a final exposure permission.
+
+`--checkpoint-root` publishes sealed complete phase snapshots and a separately
+retained control-journal copy. These remain temporary until exported to external
+retention. Save the training-ready checkpoint before long generation, then save
+subsequent completed phase checkpoints. Restore at the same logical absolute
+paths with the externally retained latest journal/manifest commitment. Missing
+control history remains blocked. Phase timing measures the current generation
+invocation; training and external pauses are reported separately.
+
 This pilot's outcome determines whether a revised final protocol is worthwhile.
 It does not supply independent design acceptance, an independent exposure ledger,
 custodian authorization, a final protected batch, or resource spending approval.

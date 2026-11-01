@@ -38,8 +38,8 @@ def execution_owner(repository, scope: str, identity: str):
                 repository.assert_integrity()
                 if witness:
                     witness.verify_chain()
-                    with repository._db.connection() as connection:
-                        repository._db.assert_witness(connection, witness)
+                with repository._db.connection() as connection:
+                    repository._db.assert_witness(connection, witness)
             active.add(name)
             try:
                 yield
