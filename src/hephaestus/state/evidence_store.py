@@ -16,6 +16,11 @@ class ScientificEvidenceStore:
 
     def register(self, binding: ScientificEvidenceBinding) -> None:
         self.resolve(binding)
+        previous=self.repository.get_latest(EVIDENCE_BINDINGS,"binding_id",binding.binding_id)
+        if previous is not None:
+            if previous!=binding.to_dict():
+                raise PermissionError("scientific evidence binding identity cannot be reassigned")
+            return
         self.repository.append(EVIDENCE_BINDINGS, binding.to_dict())
 
     def resolve(self, binding: ScientificEvidenceBinding) -> dict:

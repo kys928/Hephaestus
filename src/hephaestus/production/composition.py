@@ -267,7 +267,11 @@ class ProductionCompositionRoot:
         settings.artifact_root.mkdir(parents=True, exist_ok=True)
         settings.resolved_cache_root().mkdir(parents=True, exist_ok=True)
 
-        state = SQLiteStateRepository(settings.resolved_database_path())
+        database_path=settings.resolved_database_path()
+        if database_path.exists():
+            SQLiteStateRepository(database_path,read_only=True).assert_integrity()
+        state = SQLiteStateRepository(database_path)
+        state.assert_integrity()
         artifacts = FileSystemArtifactStore(settings.artifact_root)
         secrets = EnvironmentSecretsProvider()
         record_sink = RepositoryIntegrationRecordSink(state, artifacts)
