@@ -169,14 +169,17 @@ def test_optimizer_progress_fence_flushes_file_and_directory_before_return(tmp_p
     from hephaestus.training.hf_worker import _fence_optimizer_progress
     from hephaestus.schemas.optimizer_progress import OptimizerProgress
     import os
+    import stat
     calls=[]
     original=os.fsync
     def flush(fd):
-        calls.append(fd); original(fd)
+        calls.append((stat.S_ISDIR(os.fstat(fd).st_mode),os.readlink(f"/proc/self/fd/{fd}"))); original(fd)
     monkeypatch.setattr(os,"fsync",flush)
     proof=OptimizerProgress("r","fp",0,False,"pre_optimizer")
     _fence_optimizer_progress(tmp_path,proof.to_dict())
-    assert len(calls)==2
+    assert calls[0][0] is False
+    assert (True,str(tmp_path)) in calls
+    assert all(directory for directory,_ in calls[1:])
     assert OptimizerProgress.from_dict(json.loads((tmp_path/"optimizer_progress.json").read_text()))==proof
     with pytest.raises(ValueError):
         OptimizerProgress("r","fp",0,False,"update_in_flight")

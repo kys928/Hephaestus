@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import tempfile
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -16,6 +15,7 @@ from typing import BinaryIO
 from hephaestus.infrastructure.observability import EventSink, NullEventSink, StructuredEvent
 
 from .base import ArtifactRecord
+from .durability import atomic_write_bytes, sync_file, sync_directory_chain
 
 try:
     import fcntl
@@ -84,16 +84,16 @@ class FileSystemArtifactStore:
                     raise ArtifactIntegrityError(
                         f"immutable artifact path contains unexpected content: {path}"
                     )
+                sync_file(path)
+                sync_directory_chain(path.parent)
             else:
-                with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
-                    temporary_path = Path(handle.name)
-                    handle.write(data)
-                    handle.flush()
-                    os.fsync(handle.fileno())
                 try:
-                    os.replace(temporary_path, path)
-                finally:
-                    temporary_path.unlink(missing_ok=True)
+                    atomic_write_bytes(path, data, overwrite=False)
+                except FileExistsError:
+                    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                        raise ArtifactIntegrityError("concurrent immutable artifact content differs")
+                    sync_file(path)
+                    sync_directory_chain(path.parent)
         except (OSError, ArtifactIntegrityError) as exc:
             self._failure("put_bytes", exc)
             raise
@@ -190,6 +190,7 @@ class JsonLineStateRepository:
                 finally:
                     if fcntl is not None:
                         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            sync_directory_chain(path.parent)
         except (OSError, TypeError, ValueError) as exc:
             self.event_sink.emit(
                 StructuredEvent.create(
