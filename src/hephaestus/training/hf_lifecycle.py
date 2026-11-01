@@ -1110,8 +1110,9 @@ class TransformersTrainingLifecycleService:
         progress_ref = root / "optimizer_progress.json"
         if progress_ref.is_file():
             try:
-                progress = json.loads(progress_ref.read_text())
-            except (ValueError, OSError):
+                from hephaestus.schemas.optimizer_progress import OptimizerProgress
+                progress = OptimizerProgress.from_dict(json.loads(progress_ref.read_text())).to_dict()
+            except (ValueError, TypeError, OSError):
                 progress = {}
             if (progress.get("run_id") == managed.handle.run_id
                     and progress.get("config_fingerprint") == managed.handle.metadata.get("config_fingerprint")):

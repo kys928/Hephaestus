@@ -14,6 +14,7 @@ from hephaestus.policy.staged_retry import scientific_fingerprint
 from hephaestus.recovery.models import RecoveryRequest, RecoveryAttempt
 from hephaestus.schemas.experiment_contract import ExperimentProposal
 from hephaestus.schemas.staged_retry import StagedRetry
+from hephaestus.schemas.optimizer_progress import OptimizerProgress
 from hephaestus.state.staged_retry_store import StagedRetryStore
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
 from .staged_records import verified_workflow_payload
@@ -99,7 +100,7 @@ def prepare_staged_retry(runtime, state, progress, current: StagedRetry):
         raw = ref.read_bytes()
         if "sha256:" + sha256(raw).hexdigest() != handle.metadata["optimizer_progress_hash"]:
             return None
-        evidence = json.loads(raw)
+        evidence = OptimizerProgress.from_dict(json.loads(raw)).to_dict()
         if (evidence.get("schema") != "hf-optimizer-progress.v1" or evidence.get("run_id") != progress.run_id
                 or evidence.get("config_fingerprint") != handle.metadata["config_fingerprint"]
                 or type(evidence.get("optimizer_steps")) is not int or evidence["optimizer_steps"] != 0

@@ -39,6 +39,10 @@ class StagedActionIntentService:
         approval = request.prior_outputs.get("judge_exit.action_approval_gate", {})
         promotion = request.prior_outputs.get("judge_exit.promotion_gate", {})
         action = str(intent.get("proposed_action", ""))
+        if action in {"branch_new_experiment","restart_lineage","rollback_to_checkpoint","change_stage",
+                      "modify_data_policy","modify_training_recipe","modify_eval_policy"}:
+            return StagedOperationResult(status="blocked",resumable=False,
+                blocking_issues=("next_experiment_transition_not_implemented:"+action,))
         approval_status = str(approval.get("approval_status", "not_required"))
         boundary = evaluate_action_boundary(action, context={"approval_status": approval_status})
         if not boundary["allowed"]:
