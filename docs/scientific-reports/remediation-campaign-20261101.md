@@ -234,6 +234,24 @@ optimizer updates** plus fixed inference, beyond the matched 108-update
 experiment budget; a separate precise verification wall-time total was not
 retained. No paid infrastructure cost is claimed.
 
+Earlier attempts consumed additional real compute; their completed worker
+summaries are retained rather than hidden by the accepted-cohort budget:
+
+| Excluded operational attempt | Completed worker jobs | Recorded optimizer updates |
+| --- | ---: | ---: |
+| CPU autonomy preflight v1 | 3 | 12 |
+| CPU autonomy verified preflight v2 | 3 | 12 |
+| Workspace comparison v1, failed persistence/cold validation | 27 | 108 |
+| Workspace comparison v2, incomplete after corruption | 5 | 20 |
+
+These are 152 additional recorded training updates outside the accepted matched
+cohort. They are not fresh protected-holdout experiments. Separately, custody
+fixture v1 failed before any completed training worker, while v2/v3/v4 each
+retain three four-update worker summaries (36 updates total). Earlier partial
+cold replays, regression tests and CI add further verification compute; their
+complete aggregate update count and wall time were not retained, so no exact
+whole-campaign compute total is asserted.
+
 | Adaptive contrast | Mean paired NLL reduction | Empirical three-seed bootstrap 95% range | Exact two-sided seed sign p | Holm p |
 | --- | ---: | --- | ---: | ---: |
 | Versus fixed | .0293978254 | [.0245468915, .0379865766] | .25 | .50 |
