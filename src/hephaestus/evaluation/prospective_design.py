@@ -74,6 +74,31 @@ def holdout_commitment(rows: list[dict]) -> str:
     return "sha256:" + sha256(canonical_bytes(sorted(items, key=lambda r: r["sample_id"]))).hexdigest()
 
 
+def validate_holdout_distribution(rows, design):
+    """Check support and global partition, not just mathematical correctness.
+
+    A commitment cannot prove random sampling. The independent custodian must
+    also retain its sampling seed and reproduce the proposal draws privately.
+    """
+    holdout_commitment(rows)
+    for row in rows:
+        key = validate_original_example(row)
+        if int(row["sample_id"][7:], 16) % 10 != 9:
+            raise ValueError("holdout is outside the global evaluation partition")
+        if key[0] == "arithmetic":
+            supported = all(0 <= n < design.difficulty for n in key[2])
+        elif key[0] == "json":
+            supported = 2 <= len(key[1]) <= 5 and all(0 <= n < design.difficulty for n in key[1])
+        elif key[0] == "symbolic":
+            supported = 3 <= len(key[1]) <= 8
+        else:
+            edges = set(key[1])
+            backbone = {(i, i+1) for i in range(4)}
+            supported = backbone <= edges and len(edges - backbone) <= 6
+        if not supported:
+            raise ValueError("holdout is outside the declared range100 proposal support")
+
+
 def planning_power(*, win_probability: float, loss_probability: float,
                    trials: int = 1000, seed: int = 152000,
                    assumed_family_icc: float = 0.0, eos_success_probability: float = 1.0) -> dict:
