@@ -17,7 +17,16 @@ profile. The historical corruption cause remains unresolved in #189. The
 from actual stratified design power and explain why larger N alone does not fix
 the observed 5pp and all-EOS boundaries.
 
-[Issue #152 protocol v2](152-prospective-protocol-v2.md) explicitly repairs distribution capacity, quantifies planning power and distinguishes development-selected improvement from replication. It awaits independent pilot/design acceptance; [v1](152-prospective-protocol-v1.md) remains an unexecuted historical candidate. The [public original model/tokenizer byte recovery](152-public-source-recovery-20261101.md), [original CPU adapter/source recovery](152-source-recovery-20261031.md) and [custody CPU rehearsal](../operations/prospective-custody.md) remove engineering dependencies without supplying an independent certificate.
+[Issue #152 candidate v3](152-prospective-protocol-v3.md) records a **no-launch
+decision for the current recipe** after the [completed authentic public Smol
+pilot](152-public-pilot-results-20261101.md). Development-selected seed1117 scored
+3/64 exact, despite full JSON/EOS; the other seeds scored4/64 and3/64. The
+conditional redesign is not accepted or executable. [v2](152-prospective-protocol-v2.md)
+and [v1](152-prospective-protocol-v1.md) remain historical unexecuted candidates.
+The [public source recovery](152-public-source-recovery-20261101.md),
+[CPU adapter/source recovery](152-source-recovery-20261031.md) and [custody
+rehearsal](../operations/prospective-custody.md) supply engineering evidence,
+not an independent certificate or accepted scientific design.
 
 The [public CPU policy-comparison plan](cpu-autonomy-comparison-plan-v1.md) and
 [campaign report](remediation-campaign-20261101.md) document authentic multi-cycle
