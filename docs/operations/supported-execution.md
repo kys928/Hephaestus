@@ -24,7 +24,8 @@ SQLite backup before ending the session. From the repository checkout:
 
 ```bash
 python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e '.[test,peft-training,independent-certification]'
+python -m pip install -e '.[test,peft-training,independent-certification]' \
+  transformers==5.6.2 peft==0.21.2
 PYTHONPATH=src OMP_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   python -m hephaestus.development.cpu_autonomy_benchmark run /tmp/new-comparison
 PYTHONPATH=src OMP_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \

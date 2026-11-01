@@ -25,6 +25,24 @@ Dated audit reports and original R10 evidence have not been rewritten.
 
 ## Accepted branches, ordinary merges and full CPU CI
 
+The original root causes, separately from their observed symptoms, were:
+
+- F01: continuation trusted a checkpoint's current self-consistent manifest
+  without an independently retained producer identity.
+- F02: unapplied prepared-action recovery omitted the normal checkpoint
+  precondition check.
+- F03: persisted operation identity did not supply exclusive side-effect ownership.
+- F04: research evaluators used ordinary JSON decoding rather than the strict
+  duplicate-key and typed-answer contract.
+- F05: syntactically valid numeric overflow was not checked for decoded finiteness.
+- F06: the off-cadence final save omitted the true cumulative accounting values.
+- F07: accumulation filled its window by wrapping the batch cursor beyond the
+  declared epoch instead of ending and normalizing a partial window.
+- F08: text chunking discarded structured prompt/target identity and masking boundaries.
+- F09: composed services fell back to their own relative default configuration roots.
+- F10: successful pending observations were counted as failed infrastructure attempts.
+- F11: the legacy guard's denied result was recorded without enforcing a launch stop.
+
 Every listed PR passed all maintained workflows emitted for its exact accepted
 head, including pinned Torch CPU regression and ancestry/activation checks.
 The links identify complete CI runs; individual focused test counts are not a
