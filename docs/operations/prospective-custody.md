@@ -76,7 +76,8 @@ reproduced the outputs. `test_prospective_custody_pipeline.py` also covers
 authority/scope substitution, complete attempt selection, interrupted sessions,
 immutable publication roots, forged termination and checkpoint substitution.
 
-Original SmolLM2 base/tokenizer bytes, the separate private R10 archive,
-independent custody and blinded power/EOS pilot acceptance remain unavailable.
+The [original public SmolLM2 base/tokenizer bytes were subsequently recovered](../scientific-reports/152-public-source-recovery-20261101.md)
+and match historical hashes. The separate private R10 archive, independent
+custody and blinded power/EOS pilot acceptance remain unavailable.
 Issue #152 stays open. No paid experiment, promotion or external certificate
 is authorized by this rehearsal.

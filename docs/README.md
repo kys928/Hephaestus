@@ -1,6 +1,6 @@
 # Hephaestus documentation
 
-**Start here.** This index separates how the system is built, how to operate it safely, and what its experiments have actually demonstrated. Updated 2026-10-31; evidence links retain their original provenance.
+**Start here.** This index separates how the system is built, how to operate it safely, and what its experiments have actually demonstrated. Updated 2026-11-01; evidence links retain their original provenance.
 
 | I want to… | Read |
 | --- | --- |
@@ -11,12 +11,17 @@
 | Prepare a reviewed integration/release | [Release and rollback checklist](operations/release-checklist.md) |
 | Inspect proven CUDA45 science and limitations | [Scientific reports](scientific-reports/README.md) |
 | Understand what counts as scientific evidence | [Claims and certification standard](scientific-reports/scientific-claims.md) |
+| Check supported actions, real CPU research and remaining scaffolds | [Supported execution](operations/supported-execution.md) |
+| Inspect all eleven repaired audit findings | [Implementation ledger](operations/remediation-ledger.md) |
+| Inspect the complete implementation/research campaign | [Campaign report](scientific-reports/remediation-campaign-20261101.md) |
 
-## Status as of 2026-10-31
+## Status as of 2026-11-01
 
 The reviewed R10 source and original commit lineage were integrated into `main` by regular Git merges (#153–#157). The published original CUDA45 internal experiment completed **45 native operations, five accepted frozen CUDA role inferences, and 96 real target-model optimizer updates**. A separate cold verifier passed. Those facts do **not** establish an improved model, external historical certification, automatically authorized GPU launches, unrestricted role dispatch, or a promoted checkpoint.
 
-For live status use [integration issue #151](https://github.com/kys928/Hephaestus/issues/151), [external certification issue #102](https://github.com/kys928/Hephaestus/issues/102), and [behavioral-improvement issue #152](https://github.com/kys928/Hephaestus/issues/152); do not treat a dated Markdown snapshot as live operational state.
+The eleven audit defects are repaired in focused ordinary merges. The staged loop now handles verified zero-update training failures through bounded new attempts, while retaining failed history. Actual CPU research and one-use prospective custody have separate, explicit claim scopes; neither supplies an external certificate or general proof that autonomous research chooses better experiments.
+
+[Integration issue #151](https://github.com/kys928/Hephaestus/issues/151) remains closed for its accepted scoped review, including the documented owner protection waiver. [External certification #102](https://github.com/kys928/Hephaestus/issues/102) and [behavioral-improvement #152](https://github.com/kys928/Hephaestus/issues/152) remain open. [Documentation #159](https://github.com/kys928/Hephaestus/issues/159) tracks supported walkthroughs and remaining incomplete surfaces. Do not treat a dated snapshot as live operational state.
 
 ## Stable reference and historical material
 

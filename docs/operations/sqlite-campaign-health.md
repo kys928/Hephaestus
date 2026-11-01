@@ -61,6 +61,29 @@ test is not proof that all hardware/filesystem faults are solved. No automatic
 database repair, deletion, completion reconstruction or loss of raw history is
 authorized by a failed readiness check.
 
+## Complete isolated cohort and remaining investigation
+
+A second workspace-resident cohort failed after its first completed program,
+even with the reader-closure repair. Therefore that repair is not presented as
+the root-cause resolution. [Issue #179](https://github.com/kys928/Hephaestus/issues/179)
+tracks both failures, preserved bytes and the unassigned cause.
+
+The third cohort used a fresh isolated host-local `/tmp` root, the same frozen
+policy/data/dose and the final integrity/read-only changes. All nine programs
+published with integrity checks passing. A fresh process verified 27 cycles,
+1,215 completed native operations, every raw inference and all adapter,
+optimizer, scheduler and RNG tensors by actual reexecution. Original database
+SHA-256 stayed `d3c309414600006267524a3e58ed7db02a83fdfdcc244ad3cfc3586a884bdb89`
+before and after cold verification. Its consistent SQLite backup passed
+integrity as well. The [campaign report](../scientific-reports/remediation-campaign-20261101.md)
+records the exact publication identities and negative behavioral results.
+
+This is evidence for the bounded isolated run, not proof of a general cure or
+of synchronized storage as the cause. Keep active databases outside synchronized
+workspace trees for this profile; retain checked backups and quiescent raw
+evidence. Long-running production readiness, host/filesystem diagnostics and
+portable state migration remain unresolved. Do not close #179 from this run.
+
 Primary references: [Python connection context semantics](https://docs.python.org/3.12/library/sqlite3.html#how-to-use-the-connection-context-manager),
 [SQLite corruption and safe snapshots](https://www.sqlite.org/howtocorrupt.html),
 [SQLite WAL-reset scope/fix](https://www.sqlite.org/wal.html#the_wal_reset_bug).

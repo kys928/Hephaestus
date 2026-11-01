@@ -28,8 +28,9 @@ Policies are frozen before the comparison:
 | Hephaestus adaptive | Start .02. After accepted development improvement, move one position up [.005,.01,.02,.03,.04]; otherwise move down one. Clamp at the endpoints. Read only immutable preceding experiment memory. |
 
 The adaptive rule is a finite deterministic experimental Hephaestus policy.
-It does not invoke or evaluate the five frozen specialist models. The human
-heuristic is a conventional decreasing schedule authored before these runs.
+It does not invoke or evaluate the five frozen specialist models. The
+predetermined heuristic is a conventional decreasing schedule fixed before
+these runs. No human participant authored or selected it in this campaign.
 No policy, hyperparameter grid, sample or threshold may be tuned from test
 outputs. Programs are interleaved by training seed, then fixed/heuristic/
 adaptive. They share model/data, update counts, failure injection and limits;
@@ -75,3 +76,7 @@ Earlier operational preflights are retained separately. They are excluded
 from the matched comparison and cannot be represented as fresh heldout science.
 Changes to verification code or operational correctness must retain those
 attempts and freeze a new complete source identity before the comparison.
+
+Editorial clarification, 2026-11-01: the earlier phrase "human heuristic" was
+incorrect. This correction changes neither the predeclared decreasing schedule
+nor any data, budget, selection rule or statistical analysis.

@@ -10,7 +10,12 @@ This folder is the **human-readable evidence map**. Primary execution receipts a
 
 ## Prospective causal improvement study
 
-[Issue #152 protocol v1](152-prospective-protocol-v1.md) pre-registers exact matched holdout scoring, three-seed selection, strict correctness, regression gates and custody prerequisites. It is an **unexecuted research protocol**, not a new improvement claim.
+[Issue #152 protocol v2](152-prospective-protocol-v2.md) explicitly repairs distribution capacity, quantifies planning power and distinguishes development-selected improvement from replication. It awaits independent pilot/design acceptance; [v1](152-prospective-protocol-v1.md) remains an unexecuted historical candidate. The [public original model/tokenizer byte recovery](152-public-source-recovery-20261101.md), [original CPU adapter/source recovery](152-source-recovery-20261031.md) and [custody CPU rehearsal](../operations/prospective-custody.md) remove engineering dependencies without supplying an independent certificate.
+
+The [public CPU policy-comparison plan](cpu-autonomy-comparison-plan-v1.md) and
+[campaign report](remediation-campaign-20261101.md) document authentic multi-cycle
+engineering research separately from #152. Target NLL, exact generated behavior
+and a claim that adaptive decisions outperform alternatives are distinct outcomes.
 
 ## Work that remains
 

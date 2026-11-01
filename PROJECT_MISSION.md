@@ -21,7 +21,7 @@ Hephaestus is allowed to aim big. It is not only an experiment tracker, checkpoi
 
 However, Hephaestus must never fake certainty. Any autonomy must be earned through evidence.
 
-## Current reality (updated 2026-10-31)
+## Current reality (updated 2026-11-01)
 
 The original audit-first description below was overtaken by verified implementation and source integration. **Hephaestus now includes a real, governed research execution spine**, not just dry-run records: the full successful original R10 source lineage was integrated into `main` by ordinary non-squash Git merges, and its independently verified historical CUDA campaign finished 45 native operations, accepted the five original frozen specialist roles on CUDA, and completed 96 real target-model optimizer steps. This is an **internal single-campaign execution result**; the immutable [R10 evidence index](docs/evidence/original-cuda45-r10/README.md) records exact source/checkpoint/archive hashes.
 
@@ -33,8 +33,16 @@ What is currently real in the integrated repository:
 - training lifecycle, evaluation, recovery and immutable replay/custody checks that have passed scoped tests;
 - a local bounded console and read-only inspection/demo tools;
 - a maintained CPU CI surface with five workflows; historic one-off paid workflows remain in Git ancestry, not current Actions.
+- focused repairs for all eleven audited integrity, scoring, supervision, configuration and training-dose defects; [implementation evidence](docs/operations/remediation-ledger.md);
+- bounded real CPU three-cycle research, failed-run recovery, frozen finite policy comparison and optimizer/model cold replay; this is a small engineering proof, not general research superiority;
+- operational one-use prospective custody and a null authentic CPU rehearsal, separate from independent #152 confirmation.
 
 Verified [PR #157](https://github.com/kys928/Hephaestus/pull/157) CPU regression: **1,060 passed, 21 skipped** in the pinned full R10 environment. This is software verification, not an additional GPU or external science campaign.
+
+The later [#177 full CPU regression](https://github.com/kys928/Hephaestus/actions/runs/41272930183)
+passed **1,177 tests, 21 skipped**. Its [campaign report](docs/scientific-reports/remediation-campaign-20261101.md)
+records the actual three-policy comparison: all models scored 0/16 exact
+answers, and three training seeds do not establish adaptive superiority.
 
 Still **not established or authorized**:
 
@@ -42,7 +50,7 @@ Still **not established or authorized**:
 - a reliable held-out, multi-seed target-model improvement over baseline (tracked by [#152](https://github.com/kys928/Hephaestus/issues/152));
 - external historical private-source contamination, custody, baseline comparisons or certification ([#102](https://github.com/kys928/Hephaestus/issues/102));
 - unconditional promotion of the R10 target checkpoint, unsupervised paid compute decisions or unrestricted role dispatch;
-- independent final acceptance of the extensive source integration and enforced `main` branch protections ([#151](https://github.com/kys928/Hephaestus/issues/151)).
+- enforced `main` branch protection: the owner accepted a documented waiver in the closed scoped [#151 review](docs/reviews/151-post-integration-security-audit-20261031.md); this does not imply protections are enabled.
 
 The operating philosophy remains **governed research lab, not omniscient autonomous factory**. Read [architecture](docs/architecture/README.md), [safe operations](docs/operations/run-safety.md) and [claims standard](docs/scientific-reports/scientific-claims.md) before describing or operating a new experiment.
 

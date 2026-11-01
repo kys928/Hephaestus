@@ -27,11 +27,16 @@ Large logs/checkpoints/reports stay in `artifacts/` and are referenced by path.
 
 ## Finite judge actions
 Judge actions are finite and reviewable:
-- approve and continue,
-- hold for missing evidence,
-- rollback,
-- restart with bounded plan,
-- block promotion.
+- continue only through a verified admitted checkpoint/plan,
+- reject a candidate and retain its baseline,
+- hold for missing evidence or stop at a frozen budget,
+- retry a proven pre-optimizer process failure within its persisted ceiling,
+- block ineligible promotion.
+
+Standalone governed rollback/branch/restart state APIs require their own authority.
+The default staged driver excludes automatic rollback, branch, restart, stage and
+policy changes until a verified next-experiment handoff exists. See the current
+[supported execution matrix and CPU walkthrough](docs/operations/supported-execution.md).
 
 ## Safety rules
 Safety guards must explicitly check:

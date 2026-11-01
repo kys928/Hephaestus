@@ -1,3 +1,8 @@
+"""Standalone text-template utility with no active production call sites.
+
+Frozen specialist inference uses RoleMasteryContract.prompt/parse instead.
+The top-level prompts/ TODO files are inactive scaffolds, not those contracts.
+"""
 from __future__ import annotations
 
 from pathlib import Path

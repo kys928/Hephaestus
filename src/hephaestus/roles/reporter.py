@@ -1,3 +1,4 @@
+"""Deterministic legacy demo summary, not a model-backed scientific reporter."""
 from __future__ import annotations
 
 from dataclasses import dataclass

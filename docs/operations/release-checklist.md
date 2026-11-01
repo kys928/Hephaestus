@@ -11,11 +11,11 @@ Use this checklist for production-code or documentation integration on `main`.
 - [ ] Run focused tests plus Python 3.11/3.12 checks. For research runtime changes, run pinned original CPU regression and activation/approval negative-path checks.
 - [ ] Verify a clean install and supported local CLI/demo before claiming usability.
 - [ ] Record evidence source SHA, reviewed PR number, original archive reference and current merge SHA.
-- [ ] Obtain **independent review** for large security- or production-critical diffs.
+- [ ] Obtain independent review for large security- or production-critical diffs. Record the actual reviewer and scope; same-agent adversarial review is not independent review or external scientific certification.
 
 ## Required repository governance
 
-Configure `main` branch protection / repository rulesets with PR review, required status checks and restrictions on destructive history changes. **As of the 2026-10-31 #151 audit, `main` was not protected**. This is an unresolved maintainer-setting task, not something passing tests can substitute for.
+The [accepted #151 review](../reviews/151-post-integration-security-audit-20261031.md) records the owner's branch-protection waiver. `main` protection was not enabled by that acceptance or this remediation campaign. Maintain ordinary PR merges, exact-head checks and scientific ancestry; repository rulesets remain a separate maintainer choice. Do not reopen historical #151 acceptance over the waived setting.
 
 Do not set required check names without verifying currently emitted check contexts; otherwise a misnamed gate can accidentally prevent every merge. Keep risky external-provider workflows separately and explicitly approved.
 
@@ -24,7 +24,7 @@ Do not set required check names without verifying currently emitted check contex
 - [ ] Verify `main` points to the expected two-parent merge commit; compare original research source against `main` to confirm ancestry.
 - [ ] Verify current active Actions, docs nav, package import, CPU tests and restricted role dispatch behavior.
 - [ ] Check that publication does not rewrite the scientific outcome or imply checkpoint promotion.
-- [ ] Update [issue #151](https://github.com/kys928/Hephaestus/issues/151) with exact evidence; close only after required final independent review and protection gates.
+- [ ] Update the issue owning the actual work with exact evidence. #151 remains closed for its historical scope; #152/#102 require their genuine scientific/independent custody exit criteria.
 
 ## Recovery or rollback
 
