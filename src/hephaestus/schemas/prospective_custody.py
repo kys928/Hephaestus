@@ -48,3 +48,7 @@ class CustodySession(JsonSchema):
     bundle_ref: str | None = None
     error_type: str | None = None
     partial_generation_refs: dict = field(default_factory=dict)
+    exposure_request_ref: str | None = None
+    exposure_receipt_ref: str | None = None
+    exposure_authority_scope: str | None = None
+    partial_raw_index_ref: str | None = None

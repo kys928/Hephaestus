@@ -55,12 +55,12 @@ def _assert_quiescent(root, repository):
             raise StateIntegrityError('campaign snapshot requires every training handle to be settled')
         pid = handle.get('metadata', {}).get('pid')
         if isinstance(pid, int):
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                pass
-            else:
-                raise StateIntegrityError('training worker still exists; reap it before campaign snapshot')
+            # Bare PIDs can be reused and refer to different processes in a new
+            # PID namespace. Only the lifecycle's persisted reaped exit status
+            # proves that its actual worker finished. An unknown/lost worker is
+            # blocked even when that numeric PID is absent in this namespace.
+            if type(handle.get('metadata', {}).get('returncode')) is not int:
+                raise StateIntegrityError('worker exit is unacknowledged; reconcile/reap the original worker before snapshot')
     latest = {}
     for row in repository.all('production_action_executions'):
         latest[row['execution_id']] = row

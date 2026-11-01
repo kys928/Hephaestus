@@ -348,3 +348,16 @@ def test_read_only_inspector_cannot_be_used_to_execute_research(tmp_path):
     with pytest.raises(PermissionError, match='inspectors'):
         with execution_owner(inspector, 'research', 'forbidden'):
             pytest.fail('read-only inspection was used as execution custody')
+
+
+def test_quiescence_uses_acknowledged_worker_exit_not_reused_or_foreign_namespace_pid(tmp_path):
+    root=tmp_path/'campaign';repository=campaign(root)
+    handle=root/'training'/'job'/'handle.json';handle.parent.mkdir(parents=True)
+    # The old numeric PID now names this inspector, not the reaped worker.
+    handle.write_text(json.dumps({'status':'completed','metadata':{'pid':os.getpid(),'returncode':0}}))
+    snapshot_campaign(root,repository,tmp_path/'verified')
+    # A disappeared PID in another namespace does not prove that an unknown
+    # worker exited; an observed service-level exit acknowledgement is required.
+    handle.write_text(json.dumps({'status':'failed','metadata':{'pid':99999999}}))
+    with pytest.raises(StateIntegrityError,match='unacknowledged'):
+        snapshot_campaign(root,repository,tmp_path/'unknown-worker')

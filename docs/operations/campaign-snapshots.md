@@ -51,6 +51,11 @@ retained witness receipt. File and directory barriers precede atomic publication
 A killed copy has only a visibly partial directory, never a completed snapshot.
 No live SQLite database is hashed or copied using raw file handles.
 
+Worker quiescence uses the lifecycle's persisted reaped exit acknowledgement,
+not the continued presence/absence of a bare numeric PID. PIDs can be reused or
+name different processes across PID namespaces. A terminal handle with an unknown
+worker exit blocks snapshots even if its numeric PID is absent locally.
+
 Retain the returned manifest SHA separately from the bundle. Use
 `verify_snapshot(..., expected_manifest_sha256=...)` for cold readback.
 `restore_campaign(..., expected_manifest_sha256=...)` validates the bundle and
