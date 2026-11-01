@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os  # Retain the existing atomic-replace fault-injection surface.
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
