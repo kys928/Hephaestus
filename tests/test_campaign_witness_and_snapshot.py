@@ -361,3 +361,51 @@ def test_quiescence_uses_acknowledged_worker_exit_not_reused_or_foreign_namespac
     handle.write_text(json.dumps({'status':'failed','metadata':{'pid':99999999}}))
     with pytest.raises(StateIntegrityError,match='unacknowledged'):
         snapshot_campaign(root,repository,tmp_path/'unknown-worker')
+
+
+def _recovered_worker(root):
+    from hephaestus.schemas.campaign_storage import WorkerFenceReference
+    handle=root/'training'/'job'/'handle.json';handle.parent.mkdir(parents=True)
+    handle.write_text(json.dumps({'run_id':'job','status':'completed','metadata':{
+        'pid':99999999,'returncode':None,'config_fingerprint':'known-config',
+        'worker_fence':WorkerFenceReference().to_dict()}}))
+    (handle.parent/'runtime_result.json').write_text(json.dumps({
+        'run_id':'job','status':'completed','config_fingerprint':'known-config'}))
+    return handle
+
+
+def test_recovered_terminal_worker_requires_free_real_fence_and_matching_producer_result(tmp_path):
+    root=tmp_path/'campaign';repository=campaign(root);handle=_recovered_worker(root)
+    child=subprocess.Popen([sys.executable,'-c','''
+import sys
+from pathlib import Path
+from hephaestus.state.worker_ownership import worker_owner
+with worker_owner(Path(sys.argv[1])):
+    print('owned',flush=True)
+    sys.stdin.read()
+''',str(handle.parent)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        assert child.stdout.readline().strip()=='owned'
+        with pytest.raises(StateIntegrityError,match='still owns'):
+            snapshot_campaign(root,repository,tmp_path/'live-worker')
+    finally:
+        child.communicate('',timeout=15)
+    assert child.returncode==0
+    saved=snapshot_campaign(root,repository,tmp_path/'settled-worker')
+    assert 'training/job/.hf-worker-writer.lock' in verify_snapshot(
+        tmp_path/'settled-worker',expected_manifest_sha256=saved['manifest_sha256'])['files']
+    (handle.parent/'runtime_result.json').write_text(json.dumps({
+        'run_id':'another-job','status':'completed','config_fingerprint':'known-config'}))
+    with pytest.raises(StateIntegrityError,match='does not match'):
+        snapshot_campaign(root,repository,tmp_path/'foreign-worker')
+
+
+def test_snapshot_cannot_call_a_same_thread_running_worker_quiescent(tmp_path):
+    from hephaestus.state.worker_ownership import worker_owner
+    root=tmp_path/'campaign';repository=campaign(root);handle=_recovered_worker(root)
+    with worker_owner(handle.parent):
+        with pytest.raises(StateIntegrityError,match='still owns'):
+            snapshot_campaign(root,repository,tmp_path/'not-quiescent')
+    (handle.parent/'.hf-worker-writer.lock').unlink()
+    with pytest.raises(StateIntegrityError,match='missing'):
+        snapshot_campaign(root,repository,tmp_path/'cannot-mint-a-fence')

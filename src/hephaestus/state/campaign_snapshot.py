@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import stat
 import tempfile
+from contextlib import ExitStack
 
 from hephaestus.policy.campaign_storage import require_separate_control
 from hephaestus.policy.storage_admission import admit_storage, reject_symlinks
@@ -20,6 +21,9 @@ from hephaestus.storage.durability import atomic_write_bytes, sync_tree, sync_di
 from hephaestus.storage.sqlite import SQLiteStateRepository, StateIntegrityError
 from hephaestus.storage.verified import canonical_bytes
 from .campaign_witness import CampaignWitness, CampaignRollbackError
+from .worker_ownership import worker_owner,WORKER_LOCK_FILE
+from .single_writer import WriterBusyError
+from hephaestus.schemas.campaign_storage import WorkerFenceReference
 
 
 def _hash(path):
@@ -46,7 +50,7 @@ def _database(repository):
     return repository.storage_identity()
 
 
-def _assert_quiescent(root, repository):
+def _assert_quiescent(root, repository, worker_fences):
     # No controller can start work while the external campaign fence is held.
     # Workers do not take that fence; unknown or live asynchronous jobs block.
     for path in root.rglob('handle.json'):
@@ -54,13 +58,33 @@ def _assert_quiescent(root, repository):
         if handle.get('status') not in {'completed', 'failed', 'cancelled', 'interrupted'}:
             raise StateIntegrityError('campaign snapshot requires every training handle to be settled')
         pid = handle.get('metadata', {}).get('pid')
+        metadata=handle.get('metadata',{})
+        descriptor=metadata.get('worker_fence')
+        if descriptor is not None:
+            reject_symlinks(path.parent/WORKER_LOCK_FILE)
+            if descriptor!=WorkerFenceReference().to_dict() or not (path.parent/WORKER_LOCK_FILE).is_file():
+                raise StateIntegrityError('worker fence is missing or unsupported; no automatic replacement proof')
+            if (path.parent/WORKER_LOCK_FILE).stat().st_nlink!=1:
+                raise StateIntegrityError('worker fence must not have hard-link aliases')
+            try:
+                worker_fences.enter_context(worker_owner(path.parent,prove_quiescent=True))
+            except WriterBusyError as exc:
+                raise StateIntegrityError('worker still owns its producer fence; snapshot must wait for quiescence') from exc
         if isinstance(pid, int):
             # Bare PIDs can be reused and refer to different processes in a new
-            # PID namespace. Only the lifecycle's persisted reaped exit status
-            # proves that its actual worker finished. An unknown/lost worker is
-            # blocked even when that numeric PID is absent in this namespace.
-            if type(handle.get('metadata', {}).get('returncode')) is not int:
-                raise StateIntegrityError('worker exit is unacknowledged; reconcile/reap the original worker before snapshot')
+            # PID namespace. Accept a reaped exit or a bound terminal producer
+            # result whose worker fence is unowned and held through the copy.
+            if type(metadata.get('returncode')) is not int:
+                if descriptor is None:
+                    raise StateIntegrityError('worker exit is unacknowledged; reconcile/reap the original worker before snapshot')
+                try:
+                    result=json.loads((path.parent/'runtime_result.json').read_text())
+                except (OSError,ValueError) as exc:
+                    raise StateIntegrityError('recovered worker lacks a readable terminal result') from exc
+                if (result.get('status')!=handle.get('status') or result.get('status') not in {'completed','interrupted','cancelled'}
+                        or result.get('run_id')!=handle.get('run_id') or not metadata.get('config_fingerprint')
+                        or result.get('config_fingerprint')!=metadata.get('config_fingerprint')):
+                    raise StateIntegrityError('recovered terminal worker identity does not match its fenced result')
     latest = {}
     for row in repository.all('production_action_executions'):
         latest[row['execution_id']] = row
@@ -129,11 +153,11 @@ def snapshot_campaign(root, repository, destination):
     require_separate_control(destination, witness.root)
     if destination.is_relative_to(root) or root.is_relative_to(destination):
         raise ValueError('backup and campaign roots must be disjoint')
-    with witness.owner(blocking=False):
+    with witness.owner(blocking=False), ExitStack() as worker_fences:
         witness.verify_chain()
         identity = _database(repository)
         witness.assert_current(identity, required=True, reconcile=False)
-        _assert_quiescent(root, repository)
+        _assert_quiescent(root, repository,worker_fences)
         relationships = _verify_relationships(root, repository)
         if destination.exists():
             raise FileExistsError('completed campaign snapshot destination must be new')
@@ -144,7 +168,7 @@ def snapshot_campaign(root, repository, destination):
         database_relative = repository.path.relative_to(root)
         excluded = {repository.path, Path(str(repository.path)+'-wal'), Path(str(repository.path)+'-shm')}
         for path in _safe_files(root):
-            if path in excluded or path.name.endswith('-writer.lock') or path.name.endswith('.initialization.lock'):
+            if path in excluded or (path.name.endswith('-writer.lock') and path.name!=WORKER_LOCK_FILE) or path.name.endswith('.initialization.lock'):
                 continue
             if path.name.endswith(('.sqlite', '.sqlite3', '.db')):
                 raise StateIntegrityError('additional SQLite database requires its own coordinated backup; unsupported')
@@ -207,7 +231,7 @@ def restore_campaign(snapshot, target, *, expected_manifest_sha256, storage_prof
         raise ValueError('absolute-path campaign must be restored at its original logical root; relocation is unsupported')
     witness = CampaignWitness(target / manifest['database_relative_path'], profile)
     require_separate_control(target, witness.root)
-    with witness.owner(blocking=False):
+    with witness.owner(blocking=False), ExitStack() as worker_fences:
         witness.verify_chain()
         witness.assert_current(manifest['storage_identity'], required=True, reconcile=False)
         if witness.receipt() != manifest['witness']:
@@ -226,7 +250,7 @@ def restore_campaign(snapshot, target, *, expected_manifest_sha256, storage_prof
             live = SQLiteStateRepository(target / manifest['database_relative_path'], read_only=True)
             if _database(live) != manifest['storage_identity']:
                 raise CampaignRollbackError('live state advanced or diverged since snapshot; no replacement permitted')
-            _assert_quiescent(target, live)
+            _assert_quiescent(target, live,worker_fences)
             os.rename(target, quarantine)
             sync_directory_chain(quarantine.parent)
             sync_directory_chain(target.parent)

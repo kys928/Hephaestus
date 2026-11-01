@@ -956,6 +956,8 @@ class TransformersTrainingLifecycleService:
         }
 
     def _start(self, managed: _ManagedRun, resume_token: Path | None = None) -> None:
+        from hephaestus.schemas.campaign_storage import WorkerFenceReference
+        managed.handle.metadata['worker_fence']=WorkerFenceReference().to_dict()
         log_ref = Path(str(managed.handle.metadata["log_ref"]))
         log_ref.parent.mkdir(parents=True, exist_ok=True)
         command = [self.python_executable, str(Path(__file__).with_name("hf_worker.py")), "--job", str(managed.job_ref)]

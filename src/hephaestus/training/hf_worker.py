@@ -441,6 +441,13 @@ def _memory_usage(torch: Any, device: str) -> dict[str, int | None]:
 
 
 def run(job_path: Path, resume_token_path: Path | None = None) -> int:
+    from hephaestus.state.worker_ownership import worker_owner
+    job=json.loads(job_path.read_text(encoding='utf-8'))
+    with worker_owner(Path(job['artifact_root'])):
+        return _run_owned(job_path,resume_token_path)
+
+
+def _run_owned(job_path: Path, resume_token_path: Path | None = None) -> int:
     import torch  # type: ignore[import-not-found]
     from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore[import-not-found]
 
@@ -776,6 +783,18 @@ def main() -> int:
     arguments = parser.parse_args()
     signal.signal(signal.SIGINT, _request_interrupt)
     signal.signal(signal.SIGTERM, _request_cancel)
+    from hephaestus.state.worker_ownership import worker_owner
+    try:
+        job=json.loads(arguments.job.read_text(encoding='utf-8'))
+    except (OSError,ValueError):
+        job={}
+    # Include exception normalization under the same producer fence. A second
+    # worker denied ownership must not overwrite the original worker's result.
+    with worker_owner(Path(str(job.get('artifact_root',arguments.job.parent)))):
+        return _main_owned(arguments)
+
+
+def _main_owned(arguments) -> int:
     job: dict[str, object] = {}
     try:
         job = json.loads(arguments.job.read_text(encoding="utf-8"))

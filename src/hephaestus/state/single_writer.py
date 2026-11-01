@@ -19,7 +19,7 @@ class WriterBusyError(RuntimeError):
 
 
 @contextmanager
-def single_writer(root: Path, name: str = "lineage", *, blocking: bool = False):
+def single_writer(root: Path, name: str = "lineage", *, blocking: bool = False, reentrant: bool = True):
     import fcntl  # Fail closed on platforms without process-safe flock.
 
     root = root.resolve()
@@ -33,6 +33,8 @@ def single_writer(root: Path, name: str = "lineage", *, blocking: bool = False):
     _held.locks = held
     try:
         if path in held:
+            if not reentrant:
+                raise WriterBusyError('current thread still owns the producer fence')
             yield held[path]
             return
         with open(path, "a+b") as stream:
