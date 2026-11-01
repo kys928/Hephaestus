@@ -88,6 +88,13 @@ Fresh endurance used the exact merged #187 tree
 Each ran the frozen [endurance plan](179-endurance-plan-v1.md), with authentic
 native CPU training, concurrent state inspectors and cold optimizer/model replay.
 
+The observed current mount is Linux overlay at `/`, with
+`rw,nosuid,nodev,relatime`, running as UID 0. The admitted `/tmp` roots isolate
+campaign paths; they do not demonstrate a separate physical filesystem from the
+workspace. Other filesystem admission cases are policy fixtures, not live
+persistent-deployment tests. The original host's mount, write and copy traces
+were not retained, so this current observation supplies no historical cause.
+
 | Measurement | Cohort 0 | Cohort 1 |
 | --- | --- | --- |
 | Programs / native cycles | 9 / 27 | 9 / 27 |
