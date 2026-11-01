@@ -55,7 +55,8 @@ def prepare(root):
     modules=("schemas.cpu_autonomy","policy.cpu_autonomy","control.cpu_autonomy","control.cpu_autonomy_context",
         "roles.cpu_autonomy_planning","roles.cpu_autonomy_data","roles.cpu_autonomy_execution","roles.cpu_autonomy_evaluation",
         "evaluation.cpu_autonomy","evaluation.cpu_autonomy_verification","development.cpu_autonomy_benchmark","training.hf_worker","training.hf_lifecycle",
-        "production.staged_driver","production.staged_retry","production.actions","evaluation.prospective_pipeline")
+        "production.staged_driver","production.staged_retry","production.actions","evaluation.prospective_pipeline",
+        "storage.sqlite","state.evidence_store","production.composition","control.staged_autonomous")
     method_files={str(Path(import_module("hephaestus."+name).__file__).resolve()):file_digest(import_module("hephaestus."+name).__file__)
                   for name in modules}
     manifest={"schema":"public-cpu-autonomy-manifest.v1","plan":json.loads(canonical_bytes(plan.to_dict())),"method_files":method_files,
@@ -72,11 +73,17 @@ def prepare(root):
     return manifest,ref
 
 
-def load(root):
-    root=Path(root).resolve(); rt=runtime(root)
+def load(root,*,read_only=False):
+    root=Path(root).resolve()
+    if read_only:
+        from hephaestus.control.cpu_autonomy_context import readback_runtime
+        rt=readback_runtime(root)
+    else:
+        rt=runtime(root)
     anchor=json.loads((root/"manifest.json").read_text())["manifest_ref"]
     manifest=read_verified_json(rt.artifact_store,anchor)
-    if CpuAutonomyStore(rt.state_repository,rt.artifact_store).freeze("public-tiny-cpu-autonomy",manifest)!=anchor:
+    retained=rt.state_repository.get_latest("cpu_autonomy_manifests","benchmark_id","public-tiny-cpu-autonomy")
+    if retained is None or retained["manifest_ref"]!=anchor:
         raise PermissionError("CPU benchmark manifest anchor differs")
     return rt,manifest,anchor,CpuAutonomyPlan.from_dict(manifest["plan"])
 
@@ -117,6 +124,7 @@ def run_program(root,policy,seed):
             raise RuntimeError("CPU native program did not complete its three cycles: "+json.dumps(state.to_dict()))
         context=CpuAutonomyContext(rt,state,plan,m,anchor,policy,seed,3)
         selected=context.parent()
+        rt.state_repository.assert_integrity()
         identity=digest({"manifest":anchor,"program":program,"selected":selected.identity(),"test":digest(m["test"])})
         store=CpuAutonomyStore(rt.state_repository,rt.artifact_store)
         store.consume_final(program,identity)
@@ -158,7 +166,9 @@ def run_program(root,policy,seed):
             "wall_seconds":(datetime.now(timezone.utc)-datetime.fromisoformat(start["started_at"])).total_seconds(),
             "external_certification":False,"production_promotion":False,"behavioral_gain_claimed":False,
             "lineage":LineageStore(rt.settings.state_root).get_current(lineage)}
-        return store.complete_final(program,identity,result)
+        result=store.complete_final(program,identity,result)
+        rt.state_repository.assert_integrity()
+        return result
 
 
 def run_benchmark(root):
@@ -190,7 +200,7 @@ if __name__=="__main__":
         if args.action=="cold-program":
             outcome=verify_program(args.root,f"cpu-{args.policy}-{args.seed}")
         else:
-            rt,m,anchor,plan=load(args.root)
+            rt,m,anchor,plan=load(args.root,read_only=True)
             checks=[verify_program(args.root,f"cpu-{policy}-{seed}") for seed in plan.seeds for policy in plan.policies]
             store=CpuAutonomyStore(rt.state_repository,rt.artifact_store)
             results=[read_verified_json(rt.artifact_store,store.final(c["program_id"])["result_ref"]) for c in checks]

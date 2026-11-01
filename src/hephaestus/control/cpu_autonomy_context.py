@@ -14,6 +14,28 @@ from hephaestus.evaluation.prospective_pipeline import file_digest, digest
 from hephaestus.training.hf_lifecycle import validate_checkpoint_manifest
 
 
+@dataclass(slots=True)
+class CpuAutonomyReadbackRuntime:
+    settings: object
+    state_repository: object
+    artifact_store: object
+    loop_state: object
+    planner: object
+
+
+def readback_runtime(root):
+    from types import SimpleNamespace
+    from hephaestus.storage.sqlite import SQLiteStateRepository
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.production.state import ProductionLoopStateStore
+    from hephaestus.state.experiment_memory import ExperimentMemoryQuery
+    repository=SQLiteStateRepository(root/"state"/"production.sqlite3",read_only=True)
+    repository.assert_integrity()
+    artifacts=FileSystemArtifactStore(root/"artifacts")
+    return CpuAutonomyReadbackRuntime(SimpleNamespace(state_root=root/"state"),repository,artifacts,
+        ProductionLoopStateStore(repository),SimpleNamespace(memory_query=ExperimentMemoryQuery(root/"state",repository,artifacts)))
+
+
 @dataclass
 class CpuAutonomyContext:
     runtime: object

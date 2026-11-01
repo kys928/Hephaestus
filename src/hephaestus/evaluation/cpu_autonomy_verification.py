@@ -52,7 +52,7 @@ def replay_training(job_path,checkpoint):
 def verify_program(root,program_id,*,reexecute_models=True,reexecute_training=True):
     import torch
     torch.set_num_threads(1)
-    rt,m,anchor,plan=load(root)
+    rt,m,anchor,plan=load(root,read_only=True)
     for path,expected in {**m["input_files"],**m["method_files"]}.items():
         if file_digest(path)!=expected:
             raise ValueError("cold benchmark input or method source changed")
