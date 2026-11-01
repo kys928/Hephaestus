@@ -11,11 +11,14 @@ import json
 from pathlib import Path
 import random
 from importlib.metadata import version
+from uuid import uuid4
 
 from hephaestus.backends.hf_causal_lm import directory_content_identity
 from hephaestus.schemas.prospective_model_binding import ProspectiveModelBinding
 from hephaestus.schemas.prospective_study import ProspectiveDesign
 from hephaestus.schemas.prospective_custody import CustodyGrant, DevelopmentAttempt, CustodySession
+from hephaestus.schemas.exposure_ledger import ExposureReservation,RawSampleReceiptLink
+from hephaestus.state.exposure_authority import verify_exposure_receipt
 from hephaestus.state.prospective_session_store import ProspectiveSessionStore, STUDY_SESSIONS
 from hephaestus.state.execution_ownership import execution_owner
 from hephaestus.storage.base import ArtifactStore, StateRepository
@@ -211,7 +214,7 @@ def verify_model_binding(binding: ProspectiveModelBinding, design: ProspectiveDe
             raise PermissionError("confirmatory original model/tokenizer bytes are not recovered")
 
 
-def generate_cpu(binding, rows, design):
+def generate_cpu(binding, rows, design, *, sample_sink=None):
     """Only this concrete loader produces real-generation receipts."""
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -248,6 +251,8 @@ def generate_cpu(binding, rows, design):
             "raw_decode": tokenizer.decode(new, skip_special_tokens=False, clean_up_tokenization_spaces=False),
             "answer_text": tokenizer.decode(body, skip_special_tokens=False, clean_up_tokenization_spaces=False),
             "prompt_sha256": "sha256:" + sha256(prefix.encode()).hexdigest()})
+        if sample_sink is not None:
+            sample_sink(outputs[-1])
     verify_model_binding(binding, design)
     return {"schema": "prospective-real-cpu-generation.v1", "model_identity": binding.identity(),
         "execution_profile": generation_profile(),
@@ -304,11 +309,29 @@ def analyse_pairs(rows, baseline, candidate, design, *, alpha=.05):
 
 
 class ProspectiveCustodyRunner:
-    def __init__(self, repository: StateRepository, artifacts: ArtifactStore, trusted_public_keys: dict):
+    def __init__(self, repository: StateRepository, artifacts: ArtifactStore, trusted_public_keys: dict,
+                 *, exposure_ledger=None, trusted_exposure_keys=None, trusted_ledger_namespace=None):
         self.repository, self.artifacts, self.trusted_public_keys = repository, artifacts, trusted_public_keys
         self.sessions = ProspectiveSessionStore(repository)
+        self.exposure_ledger=exposure_ledger
+        self.trusted_exposure_keys=trusted_exposure_keys or {}
+        self.trusted_ledger_namespace=trusted_ledger_namespace
+
+    def _require_exposure_authority(self,design):
+        ledger=self.exposure_ledger
+        configured=(ledger is not None and self.trusted_exposure_keys and self.trusted_ledger_namespace
+                    and ledger.namespace==self.trusted_ledger_namespace)
+        if ledger is not None and not configured:
+            raise PermissionError('external exposure service requires separately entrusted keys and namespace')
+        if design.purpose=='confirmatory' and (not configured
+                or ledger.authority_scope!='entrusted-external-service'
+                or ledger.namespace.startswith('fixture/')):
+            raise PermissionError('final launch blocked: independently operated durable one-use exposure service and out-of-band trust are required')
 
     def run(self, *, study_id, design, rows, exposure_sample_ids, bindings, selection, grant):
+        # Fail before reading any sample/model/selection when independent final
+        # exposure authority is absent. Local backup history cannot supply it.
+        self._require_exposure_authority(design)
         design.commitment()
         models = {b.label: b for b in bindings}
         if len(models) != len(bindings) or "baseline" not in models:
@@ -356,17 +379,37 @@ class ProspectiveCustodyRunner:
             session = CustodySession(study_id, digest(submission),
                 self.artifacts.put_bytes(canonical_bytes(submission)).artifact_ref,
                 self.artifacts.put_bytes(canonical_bytes(grant), expected_hash=grant_ref).artifact_ref, started_at)
+            reservation=None
+            if self.exposure_ledger is not None:
+                reservation=ExposureReservation(study_id,design.purpose,digest(submission),
+                    submission['holdout_commitment'],grant_ref,str(uuid4())).to_dict()
+                session.exposure_request_ref=self.artifacts.put_bytes(canonical_bytes(reservation)).artifact_ref
+                session.exposure_authority_scope=self.exposure_ledger.authority_scope
             self.sessions.consume(session)
             refs = {}
             try:
+                if reservation is not None:
+                    # Local consumption precedes the remote call; remote durable
+                    # consumption and a freshly nonce-bound response precede ANY
+                    # model generation. Timeout/unknown never grants a retry.
+                    receipt=self.exposure_ledger.consume_once(reservation,grant,submission=submission)
+                    receipt_ref=verify_exposure_receipt(receipt,reservation=reservation,
+                        trusted_keys=self.trusted_exposure_keys,namespace=self.trusted_ledger_namespace,
+                        authority_scope=self.exposure_ledger.authority_scope)
+                    session.exposure_receipt_ref=self.artifacts.put_bytes(canonical_bytes(receipt),expected_hash=receipt_ref).artifact_ref
+                    self.sessions.retain_authority_receipt(session)
                 for label, binding in models.items():
-                    output = generate_cpu(binding, rows, design)
+                    def retain_sample(sample):
+                        ref=self.artifacts.put_bytes(canonical_bytes(sample)).artifact_ref
+                        self.sessions.retain_raw_sample(RawSampleReceiptLink(study_id,label,sample['sample_id'],ref))
+                    output = (generate_cpu(binding, rows, design,sample_sink=retain_sample) if reservation is not None
+                              else generate_cpu(binding, rows, design))
                     refs[label] = self.artifacts.put_bytes(canonical_bytes(output)).artifact_ref
                 generated = {k: read_verified_json(self.artifacts, ref) for k, ref in refs.items()}
                 primary = analyse_pairs(rows, generated["baseline"], generated[f"seed-{selected}"], design)
                 replications = {str(seed): analyse_pairs(rows, generated["baseline"], generated[f"seed-{seed}"],
                     design, alpha=design.alpha/3) for seed in design.training_seeds if f"seed-{seed}" in generated}
-                bundle = {"schema": "prospective-custody-bundle.v1", "purpose": design.purpose,
+                bundle = {"schema": "prospective-custody-bundle.v2" if reservation is not None else "prospective-custody-bundle.v1", "purpose": design.purpose,
                     "submission": submission, "design": design.to_dict(), "grant": grant,
                     "session_started_at": started_at,
                     "holdout_ref": self.artifacts.put_bytes(canonical_bytes({"rows": rows})).artifact_ref,
@@ -379,6 +422,15 @@ class ProspectiveCustodyRunner:
                     "limitations": ["Entrusted authority independence is an out-of-band requirement.",
                         "A signed custody grant is not a historical external scientific certificate.",
                         "Claims are conditional on four fixed task families/templates."]}
+                if reservation is not None:
+                    bundle['exposure_authority']={'request_ref':session.exposure_request_ref,
+                        'receipt_ref':session.exposure_receipt_ref,'namespace':self.trusted_ledger_namespace,
+                        'authority_scope':self.exposure_ledger.authority_scope}
+                    links=self.sessions.raw_samples(study_id)
+                    expected={(label,sample['sample_id']) for label,output in generated.items() for sample in output['samples']}
+                    if (len(links)!=len(expected) or {(r['model_label'],r['sample_id']) for r in links}!=expected):
+                        raise ValueError('complete assessment lacks its durable per-sample raw journal')
+                    bundle['raw_sample_index_ref']=self.artifacts.put_bytes(canonical_bytes({'links':links})).artifact_ref
                 bundle_ref = self.artifacts.put_bytes(canonical_bytes(bundle)).artifact_ref
                 session.status, session.bundle_ref = "completed", bundle_ref
                 self.sessions.finish(session)
@@ -390,15 +442,36 @@ class ProspectiveCustodyRunner:
                 if prior is not None and prior["status"] == "consumed":
                     session.status, session.error_type = "failed", type(exc).__name__
                     session.partial_generation_refs = refs
+                    if reservation is not None:
+                        session.partial_raw_index_ref=self.artifacts.put_bytes(
+                            canonical_bytes({'links':self.sessions.raw_samples(study_id)})).artifact_ref
                     self.sessions.finish(session)
                 raise
 
 
-def verify_cold_bundle(bundle, artifacts, *, expected_bundle_ref, trusted_public_keys, bindings=None, reexecute=False):
+def verify_cold_bundle(bundle, artifacts, *, expected_bundle_ref, trusted_public_keys, bindings=None, reexecute=False,
+                       trusted_exposure_keys=None,trusted_ledger_namespace=None):
     if digest(bundle) != expected_bundle_ref or read_verified_json(artifacts, expected_bundle_ref) != bundle:
         raise ValueError("cold bundle differs from the separately retained publication commitment")
     design = ProspectiveDesign.from_dict(bundle["design"])
     submission = bundle["submission"]
+    if bundle.get('schema') not in {'prospective-custody-bundle.v1','prospective-custody-bundle.v2'}:
+        raise ValueError('unknown custody bundle version')
+    if design.purpose=='confirmatory' and bundle['schema']!='prospective-custody-bundle.v2':
+        raise PermissionError('legacy local custody cannot certify independent anti-rollback exposure')
+    if bundle['schema']=='prospective-custody-bundle.v2':
+        authority=bundle['exposure_authority']
+        if not trusted_exposure_keys or trusted_ledger_namespace!=authority['namespace']:
+            raise PermissionError('cold independent exposure readback requires separately entrusted keys/namespace')
+        reservation=read_verified_json(artifacts,authority['request_ref'])
+        if (reservation['study_id']!=submission['study_id'] or reservation['purpose']!=design.purpose
+                or reservation['submission_commitment']!=digest(submission)
+                or reservation['material_commitment']!=submission['holdout_commitment']
+                or reservation['grant_ref']!=digest(bundle['grant'])):
+            raise PermissionError('cold external reservation differs from sealed assessment')
+        receipt=read_verified_json(artifacts,authority['receipt_ref'])
+        verify_exposure_receipt(receipt,reservation=reservation,trusted_keys=trusted_exposure_keys,
+            namespace=trusted_ledger_namespace,authority_scope=authority['authority_scope'])
     if (bundle["purpose"] != design.purpose or submission["design_commitment"] != design.commitment()
             or submission["scorer_version"] != SCORER_VERSION
             or bundle["external_certification"] is not False or bundle["model_promoted"] is not False):
@@ -417,6 +490,15 @@ def verify_cold_bundle(bundle, artifacts, *, expected_bundle_ref, trusted_public
     if holdout_commitment(rows) != submission["holdout_commitment"]:
         raise ValueError("cold holdout commitment differs")
     generated = {k: read_verified_json(artifacts, ref) for k, ref in bundle["generation_refs"].items()}
+    if bundle['schema']=='prospective-custody-bundle.v2':
+        links=read_verified_json(artifacts,bundle['raw_sample_index_ref'])['links']
+        expected={(label,sample['sample_id']):sample for label,output in generated.items() for sample in output['samples']}
+        if (len(links)!=len(expected) or {(r['model_label'],r['sample_id']) for r in links}!=set(expected)):
+            raise ValueError('cold per-sample journal is incomplete or duplicated')
+        for link in links:
+            if (link['study_id']!=submission['study_id'] or read_verified_json(artifacts,link['raw_sample_ref'])
+                    !=expected[(link['model_label'],link['sample_id'])]):
+                raise ValueError('cold per-sample raw receipt differs from completed model output')
     if (set(generated) != set(submission["models"])
             or select_development_seed(submission["selection"]["attempts"], design) != submission["selection"]["selected_seed"]):
         raise ValueError("cold model set or predeclared development selection differs")

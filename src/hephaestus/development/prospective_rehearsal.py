@@ -87,7 +87,8 @@ def prepare_cpu_proposal(root, *, run_id, seed, model_path, tokenizer, parameter
             "max_total_tokens": 100000, "local_files_only": True})
 
 
-def run_rehearsal(root: Path):
+def run_rehearsal(root: Path, *, campaign_witness=False, external_fixture_root=None,
+                  before_assessment=None):
     import torch
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -124,7 +125,14 @@ def run_rehearsal(root: Path):
             str(model_path), identity, seed, str(checkpoint / "model"), directory_content_identity(checkpoint / "model"),
             str(checkpoint), result.metadata["checkpoint_manifest_hashes"][str(checkpoint)], str(job_path), file_digest(job_path)))
     artifacts = FileSystemArtifactStore(root / "custody-artifacts")
-    repository = SQLiteStateRepository(root / "custody.sqlite3")
+    repository = SQLiteStateRepository(root / "custody.sqlite3",campaign_witness=campaign_witness)
+    if campaign_witness:
+        from hephaestus.schemas.checkpoint_identity import CheckpointIdentity
+        from hephaestus.state.checkpoint_identity_store import CheckpointIdentityStore
+        for binding in bindings[1:]:
+            evidence=artifacts.put_bytes(canonical_bytes(binding.to_dict())).artifact_ref
+            CheckpointIdentityStore(repository).retain(CheckpointIdentity('fixture-'+str(binding.seed),
+                binding.checkpoint_path,binding.checkpoint_manifest_hash,evidence))
     selection = freeze_development_selection(artifacts, design, development, bindings)
     exposure = {r["sample_id"] for split in splits.values() for r in split}
     rows = build_custodian_holdout(design, custodian_seed=152100, exposure_sample_ids=exposure)
@@ -142,7 +150,25 @@ def run_rehearsal(root: Path):
         "submission_commitment": digest(submission), "authority_id": authority,
         "issued_at": now.isoformat(), "expires_at": (now+timedelta(hours=1)).isoformat()}
     grant = {"payload": payload, "signature_hex": key.sign(canonical_bytes(payload)).hex()}
-    bundle = ProspectiveCustodyRunner(repository, artifacts, {authority: public}).run(
+    ledger_options={}
+    if external_fixture_root is not None:
+        from hephaestus.development.fixture_exposure_ledger import FixtureExposureLedger
+        external_fixture_root=Path(external_fixture_root).absolute()
+        if external_fixture_root.is_relative_to(root) or root.is_relative_to(external_fixture_root):
+            raise ValueError('external fixture service must remain outside the campaign/backup root')
+        ledger_key=Ed25519PrivateKey.generate()
+        ledger_public=ledger_key.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw).hex()
+        ledger=FixtureExposureLedger(SQLiteStateRepository(external_fixture_root/'ledger.sqlite3',campaign_witness=True),
+            private_key=ledger_key,authority_id='fixture-exposure-only',
+            trusted_custodian_keys={authority:public},namespace='fixture/public-launch-dry-run')
+        ledger_options=dict(exposure_ledger=ledger,trusted_exposure_keys={'fixture-exposure-only':ledger_public},
+                            trusted_ledger_namespace=ledger.namespace)
+        trust={'keys':{'fixture-exposure-only':ledger_public},'namespace':ledger.namespace}
+        (root/'fixture-exposure-trust.json').write_bytes(canonical_bytes(trust))
+        (external_fixture_root/'fixture-exposure-trust.json').write_bytes(canonical_bytes(trust))
+    if before_assessment is not None:
+        before_assessment(repository,artifacts,ledger_options)
+    bundle = ProspectiveCustodyRunner(repository, artifacts, {authority: public},**ledger_options).run(
         study_id="cpu-fixture-rehearsal", design=design, rows=rows, exposure_sample_ids=exposure,
         bindings=bindings, selection=selection, grant=grant)
     (root / "bundle.json").write_bytes(canonical_bytes(bundle))
@@ -153,16 +179,22 @@ def run_rehearsal(root: Path):
         "primary": bundle["primary"], "confirmatory_effect_claimed": False, "external_certification": False}
 
 
-def cold_rehearsal(root, *, reexecute=True):
+def cold_rehearsal(root, *, reexecute=True, expected_bundle_ref=None, external_trust_file=None):
     root = Path(root)
     from hephaestus.state.prospective_session_store import ProspectiveSessionStore
-    session = ProspectiveSessionStore(SQLiteStateRepository(root / "custody.sqlite3")).get("cpu-fixture-rehearsal")
+    session = ProspectiveSessionStore(SQLiteStateRepository(root / "custody.sqlite3",read_only=True)).get("cpu-fixture-rehearsal")
+    if expected_bundle_ref is not None and session['bundle_ref']!=expected_bundle_ref:
+        raise ValueError('cold rehearsal publication differs from separately retained commitment')
+    exposure={}
+    trust_path=Path(external_trust_file) if external_trust_file is not None else root/'fixture-exposure-trust.json'
+    if trust_path.exists():
+        trust=json.loads(trust_path.read_text());exposure=dict(trusted_exposure_keys=trust['keys'],trusted_ledger_namespace=trust['namespace'])
     return verify_cold_bundle(json.loads((root / "bundle.json").read_text()),
         FileSystemArtifactStore(root / "custody-artifacts"),
         expected_bundle_ref=session["bundle_ref"],
         trusted_public_keys=json.loads((root / "fixture-public-trust.json").read_text()),
         bindings=[ProspectiveModelBinding.from_dict(v) for v in json.loads((root / "bindings.json").read_text())["bindings"]],
-        reexecute=reexecute)
+        reexecute=reexecute,**exposure)
 
 
 if __name__ == "__main__":
@@ -170,5 +202,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("run", "cold"))
     parser.add_argument("root", type=Path)
+    parser.add_argument('--expected-bundle-ref')
+    parser.add_argument('--external-trust-file',type=Path)
     args = parser.parse_args()
-    print(json.dumps(run_rehearsal(args.root) if args.action == "run" else cold_rehearsal(args.root), indent=2))
+    print(json.dumps(run_rehearsal(args.root) if args.action == "run" else cold_rehearsal(args.root,
+        expected_bundle_ref=args.expected_bundle_ref,external_trust_file=args.external_trust_file), indent=2))

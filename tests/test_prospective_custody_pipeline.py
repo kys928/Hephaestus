@@ -33,13 +33,16 @@ def custody(tmp_path, monkeypatch):
                  for seed in design.training_seeds]
     calls = []
 
-    def stub_generate(binding, items, _design):
+    def stub_generate(binding, items, _design, *, sample_sink=None):
         calls.append(binding.label)
-        return {"model_identity": binding.identity(), "execution_profile": {"stub": True},
+        output={"model_identity": binding.identity(), "execution_profile": {"stub": True},
             "scorer_version": pipeline.SCORER_VERSION, "chat_template_sha256": identity,
             "samples": [{"sample_id": r["sample_id"], "prompt_tokens": [3, 4],
                 "generated_tokens": [5, 1], "eos_token_id": 1, "eos": True, "truncated": False,
                 "raw_decode": "invalid<eos>", "answer_text": "invalid"} for r in items]}
+        if sample_sink is not None:
+            for sample in output['samples']:sample_sink(sample)
+        return output
 
     monkeypatch.setattr(pipeline, "generate_cpu", stub_generate)
     monkeypatch.setattr(pipeline, "verify_model_binding", lambda *_: None)
