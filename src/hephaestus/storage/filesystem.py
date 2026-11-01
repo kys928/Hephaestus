@@ -16,6 +16,8 @@ from hephaestus.infrastructure.observability import EventSink, NullEventSink, St
 
 from .base import ArtifactRecord
 from .durability import atomic_write_bytes, sync_file, sync_directory_chain
+from hephaestus.schemas.storage_admission import LocalStorageProfile
+from hephaestus.policy.storage_admission import admit_storage
 
 try:
     import fcntl
@@ -41,6 +43,11 @@ def _normalized_expected_hash(expected_hash: str | None) -> str | None:
 class FileSystemArtifactStore:
     root: Path
     event_sink: EventSink = field(default_factory=NullEventSink)
+    storage_profile: LocalStorageProfile | None = None
+
+    def __post_init__(self):
+        if self.storage_profile is not None:
+            self.root=Path(admit_storage(self.root,self.storage_profile).path)
 
     def _path_for_digest(self, digest: str) -> Path:
         return self.root / "objects" / "sha256" / digest[:2] / digest
@@ -77,6 +84,8 @@ class FileSystemArtifactStore:
             raise exc
         path = self._path_for_digest(digest)
         try:
+            if self.storage_profile is not None:
+                admit_storage(path,self.storage_profile)
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists():
                 existing_digest = hashlib.sha256(path.read_bytes()).hexdigest()

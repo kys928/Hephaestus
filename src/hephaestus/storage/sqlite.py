@@ -8,11 +8,14 @@ import sqlite3
 import time
 import os
 import tempfile
+import threading
 from contextlib import contextmanager, closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
-from uuid import uuid4
+from uuid import uuid4, UUID
+from hephaestus.policy.storage_admission import admit_storage, reject_symlinks
+from hephaestus.schemas.storage_admission import LocalStorageProfile
 
 from hephaestus.infrastructure.observability import (
     EventSink,
@@ -36,6 +39,20 @@ class StateOperationConflict(RuntimeError):
 
 class StateIntegrityError(RuntimeError):
     """No workflow may claim healthy durable state after an integrity failure."""
+
+
+class StateCommitUncertain(RuntimeError):
+    """A failed acknowledgement is not proof that the SQL transaction rolled back."""
+    def __init__(self, path):
+        super().__init__(f"SQLite commit outcome unknown at {path}; inspect operation identities before retry")
+        self.operation_ids = ()
+
+
+def _schema_statements(connection, text):
+    # executescript() would implicitly COMMIT the caller's BEGIN IMMEDIATE.
+    for statement in text.split(';'):
+        if statement.strip():
+            connection.execute(statement)
 
 
 class LockTimeoutError(TimeoutError):
@@ -82,27 +99,103 @@ def _canonical_record(record: dict[str, object]) -> str:
 
 
 class _SQLiteDatabase:
-    def __init__(self, path: Path, busy_timeout_seconds: float, read_only: bool = False) -> None:
-        self.path = Path(path)
+    def __init__(self, path: Path, busy_timeout_seconds: float, read_only: bool = False,
+                 storage_profile: LocalStorageProfile | None = None) -> None:
+        self.path = reject_symlinks(Path(path))
         self.busy_timeout_seconds = busy_timeout_seconds
         self.read_only = read_only
+        self.profile = storage_profile or LocalStorageProfile()
+        self.admission = None if read_only else admit_storage(self.path,self.profile)
+        self._file_identity = None
+        self._database_id = None
+        self._pid = os.getpid()
+        self._local = threading.local()
 
-    def connect(self) -> sqlite3.Connection:
+    def _check_file_identity(self):
+        if os.getpid()!=self._pid:
+            raise StateIntegrityError("storage repository inherited across fork; reconstruct it in the child process")
+        reject_symlinks(self.path)
+        if self.path.exists():
+            info=self.path.stat()
+            if info.st_nlink!=1:
+                raise StateIntegrityError("SQLite storage identity must not have hard-link aliases")
+            actual=(info.st_dev,info.st_ino)
+            if self._file_identity is not None and actual!=self._file_identity:
+                raise StateIntegrityError("SQLite database file identity changed or was replaced")
+        elif self._file_identity is not None:
+            raise StateIntegrityError("SQLite database identity disappeared; restore explicitly before reopening")
+
+    @staticmethod
+    def _storage_identity(connection):
+        if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='storage_identity'").fetchone() is None:
+            return None
+        row=connection.execute("SELECT database_id,commit_id FROM storage_identity WHERE singleton=1").fetchone()
+        if row is None:
+            raise StateIntegrityError("SQLite storage identity is incomplete")
+        try:
+            identity=(str(row[0]),str(row[1]))
+            if any(str(UUID(value))!=value for value in identity):raise ValueError('noncanonical identity')
+        except (ValueError,TypeError) as exc:
+            raise StateIntegrityError("SQLite storage identity is malformed") from exc
+        return identity
+
+    @contextmanager
+    def initialization_owner(self):
+        if self.read_only:raise PermissionError("read-only storage cannot be initialized")
+        admit_storage(self.path,self.profile)
+        self.path.parent.mkdir(parents=True,exist_ok=True)
+        import fcntl
+        descriptor=os.open(self.path.parent/f'.{self.path.name}.initialization.lock',
+            os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+        try:
+            fcntl.flock(descriptor,fcntl.LOCK_EX)
+            self._local.initializing=True
+            yield
+        finally:
+            self._local.initializing=False
+            fcntl.flock(descriptor,fcntl.LOCK_UN)
+            os.close(descriptor)
+
+    def validate_existing_component(self,component,version):
+        if not self.path.exists():return
+        with self.connection() as connection:
+            if [str(r[0]) for r in connection.execute('PRAGMA integrity_check')]!=['ok']:
+                raise StateIntegrityError("SQLite storage integrity failed before initialization; preserve originals")
+            table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='infrastructure_schema_migrations'").fetchone()
+            if table is not None:
+                row=connection.execute('SELECT version FROM infrastructure_schema_migrations WHERE component=?',(component,)).fetchone()
+                if row is not None and row[0]!=version:
+                    raise StateIntegrityError("SQLite schema version is unsupported; no implicit upgrade or downgrade")
+
+    def connect(self, *, read_only: bool | None = None) -> sqlite3.Connection:
+        readonly = self.read_only if read_only is None else read_only
+        self._check_file_identity()
         if not self.read_only:
+            self.admission=admit_storage(self.path,self.profile)
+        if not readonly:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(
-            self.path.resolve().as_uri()+"?mode=ro" if self.read_only else self.path,
+            self.path.as_uri()+"?mode=ro" if readonly else self.path,
             timeout=self.busy_timeout_seconds,
             isolation_level=None,
-            uri=self.read_only,
+            uri=readonly,
         )
         try:
             connection.row_factory = sqlite3.Row
             connection.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_seconds * 1000)}")
             connection.execute("PRAGMA foreign_keys=ON")
-            if not self.read_only:
-                connection.execute("PRAGMA journal_mode=WAL")
+            self._check_file_identity()
+            info=self.path.stat(); self._file_identity=(info.st_dev,info.st_ino)
+            identity=self._storage_identity(connection)
+            if self._database_id is not None and (identity is None or identity[0]!=self._database_id):
+                raise StateIntegrityError("SQLite logical database identity changed")
+            if identity is not None:self._database_id=identity[0]
+            if not readonly:
+                mode=connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+                if str(mode).lower()!='wal':raise StateIntegrityError("SQLite WAL mode was not established")
                 connection.execute("PRAGMA synchronous=FULL")
+                if connection.execute('PRAGMA synchronous').fetchone()[0]!=2:
+                    raise StateIntegrityError("SQLite FULL synchronous durability was not established")
         except BaseException:
             connection.close()
             raise
@@ -112,7 +205,7 @@ class _SQLiteDatabase:
     def connection(self) -> Iterator[sqlite3.Connection]:
         # sqlite3.Connection.__exit__ commits/rolls back; it does not close.
         # Explicit closure also keeps connections out of later worker forks.
-        connection = self.connect()
+        connection = self.connect(read_only=True)
         try:
             yield connection
         finally:
@@ -125,19 +218,35 @@ class _SQLiteDatabase:
         connection = self.connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
+            if self._storage_identity(connection) is None and not getattr(self._local,'initializing',False):
+                raise StateIntegrityError("storage identity missing; explicitly initialize a healthy admitted legacy database first")
             yield connection
-            connection.commit()
+            self._check_file_identity()
+            identity=self._storage_identity(connection)
+            if identity is not None:
+                connection.execute('UPDATE storage_identity SET commit_id=? WHERE singleton=1',(str(uuid4()),))
+            try:
+                connection.commit()
+                sync_directory_chain(self.path.parent)
+                self._check_file_identity()
+                identity=self._storage_identity(connection)
+                if identity is not None:self._database_id=identity[0]
+            except Exception as exc:
+                raise StateCommitUncertain(self.path) from exc
         except BaseException:
-            connection.rollback()
+            try:connection.rollback()
+            except sqlite3.Error:pass
             raise
         finally:
-            connection.close()
+            try:connection.close()
+            except Exception as exc:raise StateCommitUncertain(self.path) from exc
 
 
 class SQLiteStateTransaction:
     def __init__(self, repository: "SQLiteStateRepository", connection: sqlite3.Connection) -> None:
         self.repository = repository
         self.connection = connection
+        self.operation_ids = []
 
     def append(
         self,
@@ -148,7 +257,8 @@ class SQLiteStateTransaction:
         record_key: str | None = None,
         timestamp: datetime | None = None,
     ) -> dict[str, object]:
-        return self.repository._append(
+        operation_id = operation_id or str(uuid4())
+        result = self.repository._append(
             self.connection,
             collection,
             record,
@@ -156,6 +266,8 @@ class SQLiteStateTransaction:
             record_key=record_key,
             timestamp=timestamp,
         )
+        self.operation_ids.append(operation_id)
+        return result
 
 
 class SQLiteStateRepository:
@@ -169,10 +281,11 @@ class SQLiteStateRepository:
         event_sink: EventSink | None = None,
         initialize: bool = True,
         read_only: bool = False,
+        storage_profile: LocalStorageProfile | None = None,
     ) -> None:
         if busy_timeout_seconds < 0:
             raise ValueError("busy_timeout_seconds must not be negative")
-        self._db = _SQLiteDatabase(path, busy_timeout_seconds, read_only)
+        self._db = _SQLiteDatabase(path, busy_timeout_seconds, read_only,storage_profile)
         self.event_sink = event_sink or NullEventSink()
         if initialize and not read_only:
             self.initialize()
@@ -182,8 +295,13 @@ class SQLiteStateRepository:
         return self._db.path
 
     def initialize(self) -> None:
+        with self._db.initialization_owner():
+            self._initialize_owned()
+
+    def _initialize_owned(self):
+        self._db.validate_existing_component('state_repository',SQLITE_STATE_SCHEMA_VERSION)
         with self._db.transaction() as connection:
-            connection.executescript(
+            _schema_statements(connection,
                 """
                 CREATE TABLE IF NOT EXISTS infrastructure_schema_migrations (
                     component TEXT PRIMARY KEY,
@@ -204,6 +322,7 @@ class SQLiteStateRepository:
                     ON state_records(collection, record_key, sequence DESC);
                 """
             )
+            self._initialize_identity(connection)
             connection.execute(
                 """
                 INSERT INTO infrastructure_schema_migrations(component, version, applied_at)
@@ -213,6 +332,16 @@ class SQLiteStateRepository:
                 """,
                 (SQLITE_STATE_SCHEMA_VERSION, _iso(_timestamp())),
             )
+
+    @staticmethod
+    def _initialize_identity(connection):
+        connection.execute('CREATE TABLE IF NOT EXISTS storage_identity (singleton INTEGER PRIMARY KEY CHECK(singleton=1),database_id TEXT NOT NULL,commit_id TEXT NOT NULL)')
+        connection.execute('INSERT OR IGNORE INTO storage_identity VALUES(1,?,?)',(str(uuid4()),str(uuid4())))
+
+    def storage_identity(self):
+        with self._db.connection() as connection:
+            identity=self._db._storage_identity(connection)
+        return None if identity is None else {'database_id':identity[0],'commit_id':identity[1]}
 
     def schema_version(self) -> int:
         with self._db.connection() as connection:
@@ -240,6 +369,7 @@ class SQLiteStateRepository:
     def snapshot_to(self, destination: Path) -> None:
         """A consistent SQLite backup, never a live main-file-only copy."""
         destination=Path(destination)
+        admit_storage(destination,self._db.profile)
         if destination.exists():
             raise FileExistsError("state snapshot destination must be new")
         destination.parent.mkdir(parents=True,exist_ok=True)
@@ -320,6 +450,7 @@ class SQLiteStateRepository:
         record_key: str | None = None,
         timestamp: datetime | None = None,
     ) -> dict[str, object]:
+        operation_id=operation_id or str(uuid4())
         try:
             with self._db.transaction() as connection:
                 envelope = self._append(
@@ -331,6 +462,7 @@ class SQLiteStateRepository:
                     timestamp=timestamp,
                 )
         except Exception as exc:
+            if isinstance(exc,StateCommitUncertain):exc.operation_ids=(operation_id,)
             emit_safely(
                 self.event_sink,
                 StructuredEvent.create(
@@ -357,8 +489,14 @@ class SQLiteStateRepository:
 
     @contextmanager
     def transaction(self) -> Iterator[SQLiteStateTransaction]:
-        with self._db.transaction() as connection:
-            yield SQLiteStateTransaction(self, connection)
+        transaction=None
+        try:
+            with self._db.transaction() as connection:
+                transaction=SQLiteStateTransaction(self, connection)
+                yield transaction
+        except StateCommitUncertain as exc:
+            exc.operation_ids=tuple(transaction.operation_ids) if transaction else ()
+            raise
 
     def records(self, collection: str) -> list[dict[str, object]]:
         _validate_name(collection, "state collection")
@@ -413,8 +551,9 @@ class SQLiteLockProvider:
         busy_timeout_seconds: float = 5.0,
         event_sink: EventSink | None = None,
         initialize: bool = True,
+        storage_profile: LocalStorageProfile | None = None,
     ) -> None:
-        self._db = _SQLiteDatabase(path, busy_timeout_seconds)
+        self._db = _SQLiteDatabase(path, busy_timeout_seconds, storage_profile=storage_profile)
         self.event_sink = event_sink or NullEventSink()
         if initialize:
             self.initialize()
@@ -424,8 +563,13 @@ class SQLiteLockProvider:
         return self._db.path
 
     def initialize(self) -> None:
+        with self._db.initialization_owner():
+            self._initialize_owned()
+
+    def _initialize_owned(self):
+        self._db.validate_existing_component('lock_provider',SQLITE_LOCK_SCHEMA_VERSION)
         with self._db.transaction() as connection:
-            connection.executescript(
+            _schema_statements(connection,
                 """
                 CREATE TABLE IF NOT EXISTS infrastructure_schema_migrations (
                     component TEXT PRIMARY KEY,
@@ -442,6 +586,7 @@ class SQLiteLockProvider:
                 );
                 """
             )
+            SQLiteStateRepository._initialize_identity(connection)
             connection.execute(
                 """
                 INSERT INTO infrastructure_schema_migrations(component, version, applied_at)

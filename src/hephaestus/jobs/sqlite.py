@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
+from hephaestus.storage.sqlite import _SQLiteDatabase, _schema_statements, SQLiteStateRepository, StateCommitUncertain, StateIntegrityError
+from hephaestus.schemas.storage_admission import LocalStorageProfile
 
 from hephaestus.infrastructure.observability import (
     EventSink,
@@ -64,6 +66,7 @@ class SQLiteJobQueue:
         busy_timeout_seconds: float = 5.0,
         event_sink: EventSink | None = None,
         initialize: bool = True,
+        storage_profile: LocalStorageProfile | None = None,
     ) -> None:
         if maximum_attempts <= 0:
             raise ValueError("maximum_attempts must be positive")
@@ -71,7 +74,8 @@ class SQLiteJobQueue:
             raise ValueError("maximum_lease_expirations must be positive")
         if busy_timeout_seconds < 0:
             raise ValueError("busy_timeout_seconds must not be negative")
-        self.path = Path(path)
+        self._db = _SQLiteDatabase(path,busy_timeout_seconds,storage_profile=storage_profile)
+        self.path = self._db.path
         self.maximum_attempts = maximum_attempts
         self.maximum_lease_expirations = maximum_lease_expirations
         self.busy_timeout_seconds = busy_timeout_seconds
@@ -80,35 +84,29 @@ class SQLiteJobQueue:
             self.initialize()
 
     def _connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(
-            self.path,
-            timeout=self.busy_timeout_seconds,
-            isolation_level=None,
-        )
-        connection.row_factory = sqlite3.Row
-        connection.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_seconds * 1000)}")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        return connection
+        return self._db.connect()
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
+        pending=[]
         try:
-            connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
+            with self._db.transaction() as connection:
+                table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='job_audit'").fetchone()
+                before=connection.execute('SELECT COALESCE(MAX(sequence),0) FROM job_audit').fetchone()[0] if table else 0
+                yield connection
+                pending=[str(r[0]) for r in connection.execute('SELECT DISTINCT job_id FROM job_audit WHERE sequence>?',(before,))]
+        except StateCommitUncertain as exc:
+            exc.operation_ids=tuple(pending)
             raise
-        finally:
-            connection.close()
 
     def initialize(self) -> None:
+        with self._db.initialization_owner():
+            self._initialize_owned()
+
+    def _initialize_owned(self):
+        self._db.validate_existing_component('job_queue',SQLITE_QUEUE_SCHEMA_VERSION)
         with self._transaction() as connection:
-            connection.executescript(
+            _schema_statements(connection,
                 """
                 CREATE TABLE IF NOT EXISTS infrastructure_schema_migrations (
                     component TEXT PRIMARY KEY,
@@ -157,6 +155,7 @@ class SQLiteJobQueue:
                 );
                 """
             )
+            SQLiteStateRepository._initialize_identity(connection)
             now = _iso(datetime.now(timezone.utc))
             connection.execute(
                 """
@@ -170,7 +169,7 @@ class SQLiteJobQueue:
             )
 
     def schema_version(self) -> int:
-        with self._connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute(
                 "SELECT version FROM infrastructure_schema_migrations WHERE component='job_queue'"
             ).fetchone()
@@ -178,10 +177,12 @@ class SQLiteJobQueue:
 
     def ready(self) -> bool:
         try:
-            with self._connect() as connection:
+            with self._db.connection() as connection:
+                if [str(row[0]) for row in connection.execute('PRAGMA integrity_check')]!=['ok']:
+                    return False
                 connection.execute("SELECT 1 FROM jobs LIMIT 1").fetchone()
             return self.schema_version() == SQLITE_QUEUE_SCHEMA_VERSION
-        except sqlite3.Error:
+        except (sqlite3.Error,StateIntegrityError):
             return False
 
     @staticmethod
@@ -335,12 +336,12 @@ class SQLiteJobQueue:
         return record
 
     def get(self, job_id: str) -> JobRecord | None:
-        with self._connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
         return None if row is None else self._record(row)
 
     def all(self) -> list[JobRecord]:
-        with self._connect() as connection:
+        with self._db.connection() as connection:
             rows = connection.execute("SELECT * FROM jobs ORDER BY created_at, job_id").fetchall()
         return [self._record(row) for row in rows]
 
@@ -881,7 +882,7 @@ class SQLiteJobQueue:
         return updated
 
     def audit_records(self, job_id: str) -> list[dict[str, object]]:
-        with self._connect() as connection:
+        with self._db.connection() as connection:
             rows = connection.execute(
                 "SELECT * FROM job_audit WHERE job_id=? ORDER BY sequence", (job_id,)
             ).fetchall()
