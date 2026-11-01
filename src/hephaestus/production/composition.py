@@ -279,8 +279,11 @@ class ProductionCompositionRoot:
         database_path=settings.resolved_database_path()
         if database_path.exists():
             SQLiteStateRepository(database_path,read_only=True).assert_integrity()
-        state = SQLiteStateRepository(database_path,storage_profile=settings.storage_profile)
+        state = SQLiteStateRepository(database_path,storage_profile=settings.storage_profile,
+                                      campaign_witness=True)
         state.assert_integrity()
+        from hephaestus.state.campaign_witness import bind_state_directory
+        bind_state_directory(settings.state_root, state)
         artifacts = FileSystemArtifactStore(settings.artifact_root,
             storage_profile=settings.storage_profile or LocalStorageProfile())
         secrets = EnvironmentSecretsProvider()

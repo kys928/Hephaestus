@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from hephaestus.storage.durability import atomic_write_bytes, append_bytes
+from .campaign_witness import state_directory_owner
 
 
 @dataclass(slots=True)
@@ -18,8 +19,9 @@ class JsonStore:
         return self.root / self.filename
 
     def append(self, record: dict[str, Any]) -> None:
-        path = self._path()
-        append_bytes(path, (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
+        with state_directory_owner(self.root):
+            path = self._path()
+            append_bytes(path, (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
 
     def all(self) -> list[dict[str, Any]]:
         path = self._path()
@@ -52,8 +54,9 @@ class JsonSingleDocument:
     def write(self, record: dict[str, Any]) -> None:
         # A controller crash must not leave the authoritative lineage JSON
         # truncated. Write and sync a sibling file, then atomically replace it.
-        path = self._path()
-        atomic_write_bytes(path, json.dumps(record, indent=2, sort_keys=True).encode("utf-8"))
+        with state_directory_owner(self.root):
+            path = self._path()
+            atomic_write_bytes(path, json.dumps(record, indent=2, sort_keys=True).encode("utf-8"))
 
     def read(self) -> dict[str, Any] | None:
         path = self._path()

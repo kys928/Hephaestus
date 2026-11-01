@@ -7,6 +7,7 @@ from typing import Any
 from hephaestus.schemas.lineage_state import LineageState
 from hephaestus.state._json_store import JsonSingleDocument
 from hephaestus.state.single_writer import single_writer
+from .campaign_witness import state_directory_owner
 
 
 @dataclass(slots=True)
@@ -34,7 +35,7 @@ class LineageStore:
         self._all_doc().write(ordered)
 
     def set_current(self, record: dict[str, Any]) -> None:
-        with single_writer(self.root):
+        with state_directory_owner(self.root), single_writer(self.root):
             state = LineageState.from_dict(dict(record))
             lineage_id = str(state.lineage_id)
             states = self._read_all()
@@ -58,7 +59,7 @@ class LineageStore:
         return self.list_lineages()
 
     def add_child(self, parent_lineage_id: str, child_lineage_id: str) -> None:
-        with single_writer(self.root):
+        with state_directory_owner(self.root), single_writer(self.root):
             states = self._read_all()
             parent = states.get(parent_lineage_id)
             if parent is None:

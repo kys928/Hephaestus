@@ -9,7 +9,7 @@ import time
 import os
 import tempfile
 import threading
-from contextlib import contextmanager, closing
+from contextlib import contextmanager, closing, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
@@ -100,7 +100,7 @@ def _canonical_record(record: dict[str, object]) -> str:
 
 class _SQLiteDatabase:
     def __init__(self, path: Path, busy_timeout_seconds: float, read_only: bool = False,
-                 storage_profile: LocalStorageProfile | None = None) -> None:
+                 storage_profile: LocalStorageProfile | None = None, *, campaign_witness=False) -> None:
         self.path = reject_symlinks(Path(path))
         self.busy_timeout_seconds = busy_timeout_seconds
         self.read_only = read_only
@@ -110,6 +110,40 @@ class _SQLiteDatabase:
         self._database_id = None
         self._pid = os.getpid()
         self._local = threading.local()
+        self._witness = None
+        self._require_witness = campaign_witness
+
+    def witness(self):
+        if self.read_only:
+            return None
+        # A second repository/queue/lock object cannot bypass a campaign's
+        # previously registered fence by omitting the composition-root option.
+        from hephaestus.policy.campaign_storage import campaign_control_path
+        if self._witness is None and (self._require_witness or
+                (campaign_control_path(self.path, self.profile) / 'commits.jsonl').exists()):
+            from hephaestus.state.campaign_witness import CampaignWitness
+            self._witness = CampaignWitness(self.path, self.profile)
+        return self._witness
+
+    @staticmethod
+    def _identity_dict(identity):
+        return None if identity is None else dict(database_id=identity[0], commit_id=identity[1])
+
+    @staticmethod
+    def _witness_required(connection):
+        table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='storage_witness'").fetchone()
+        return table is not None
+
+    def assert_witness(self, connection, witness, *, reconcile=True):
+        required = self._witness_required(connection)
+        if witness is None:
+            if required:
+                raise StateIntegrityError('campaign witness missing; restore the separately retained control journal before writing')
+            return
+        table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='state_records'").fetchone()
+        has_records = table is not None and connection.execute('SELECT 1 FROM state_records LIMIT 1').fetchone() is not None
+        witness.assert_current(self._identity_dict(self._storage_identity(connection)),
+            has_records=has_records, required=required, reconcile=reconcile)
 
     def _check_file_identity(self):
         if os.getpid()!=self._pid:
@@ -143,6 +177,15 @@ class _SQLiteDatabase:
     def initialization_owner(self):
         if self.read_only:raise PermissionError("read-only storage cannot be initialized")
         admit_storage(self.path,self.profile)
+        witness = self.witness()
+        with witness.owner() if witness else nullcontext():
+            if witness and not self.path.exists():
+                witness.assert_current(None)
+            with self._initialization_owner():
+                yield
+
+    @contextmanager
+    def _initialization_owner(self):
         self.path.parent.mkdir(parents=True,exist_ok=True)
         import fcntl
         descriptor=os.open(self.path.parent/f'.{self.path.name}.initialization.lock',
@@ -191,6 +234,8 @@ class _SQLiteDatabase:
                 raise StateIntegrityError("SQLite logical database identity changed")
             if identity is not None:self._database_id=identity[0]
             if not readonly:
+                if self._witness_required(connection) and self.witness() is None:
+                    raise StateIntegrityError('campaign witness missing; automatic reset is forbidden')
                 mode=connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
                 if str(mode).lower()!='wal':raise StateIntegrityError("SQLite WAL mode was not established")
                 connection.execute("PRAGMA synchronous=FULL")
@@ -215,22 +260,42 @@ class _SQLiteDatabase:
     def transaction(self) -> Iterator[sqlite3.Connection]:
         if self.read_only:
             raise PermissionError("read-only state repository cannot start a write transaction")
+        witness = self.witness()
+        with witness.owner() if witness else nullcontext():
+            if witness and not self.path.exists():
+                witness.assert_current(None)
+            with self._transaction_owned(witness) as connection:
+                yield connection
+
+    @contextmanager
+    def _transaction_owned(self, witness):
         connection = self.connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
+            self.assert_witness(connection, witness)
+            before = self._identity_dict(self._storage_identity(connection))
             if self._storage_identity(connection) is None and not getattr(self._local,'initializing',False):
                 raise StateIntegrityError("storage identity missing; explicitly initialize a healthy admitted legacy database first")
             yield connection
             self._check_file_identity()
             identity=self._storage_identity(connection)
             if identity is not None:
-                connection.execute('UPDATE storage_identity SET commit_id=? WHERE singleton=1',(str(uuid4()),))
+                after = dict(database_id=identity[0], commit_id=str(uuid4()))
+                if witness:
+                    # This table makes a missing external journal fail closed,
+                    # even when an ordinary low-level writer opens the backup.
+                    connection.execute('CREATE TABLE IF NOT EXISTS storage_witness (singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL)')
+                    connection.execute('INSERT OR IGNORE INTO storage_witness VALUES(1,1)')
+                    witness.prepare(before, after)
+                connection.execute('UPDATE storage_identity SET commit_id=? WHERE singleton=1',(after['commit_id'],))
             try:
                 connection.commit()
                 sync_directory_chain(self.path.parent)
                 self._check_file_identity()
                 identity=self._storage_identity(connection)
                 if identity is not None:self._database_id=identity[0]
+                if witness:
+                    witness.committed(before, after)
             except Exception as exc:
                 raise StateCommitUncertain(self.path) from exc
         except BaseException:
@@ -282,10 +347,12 @@ class SQLiteStateRepository:
         initialize: bool = True,
         read_only: bool = False,
         storage_profile: LocalStorageProfile | None = None,
+        campaign_witness: bool = False,
     ) -> None:
         if busy_timeout_seconds < 0:
             raise ValueError("busy_timeout_seconds must not be negative")
-        self._db = _SQLiteDatabase(path, busy_timeout_seconds, read_only,storage_profile)
+        self._db = _SQLiteDatabase(path, busy_timeout_seconds, read_only,storage_profile,
+                                   campaign_witness=campaign_witness)
         self.event_sink = event_sink or NullEventSink()
         if initialize and not read_only:
             self.initialize()
