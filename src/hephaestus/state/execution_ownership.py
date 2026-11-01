@@ -30,6 +30,8 @@ def execution_owner(repository, scope: str, identity: str):
     if name in active:
         raise WriterBusyError("recursive execution of an already owned operation")
     with single_writer(root, name=name):
+        if not active and isinstance(repository,SQLiteStateRepository):
+            repository.assert_integrity()
         active.add(name)
         try:
             yield

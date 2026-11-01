@@ -42,6 +42,8 @@ from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
+from hephaestus.schemas.storage_admission import LocalStorageProfile
+from hephaestus.policy.storage_admission import admit_storage
 
 from .actions import GovernedActionExecutor
 from .evidence import ArtifactModelEvidenceBinder
@@ -71,6 +73,7 @@ class ProductionCompositionSettings:
     maximum_dataset_bytes: int = 512 * 1024 * 1024
     maximum_dataset_rows: int = 1_000_000
     maximum_infrastructure_attempts: int = 5
+    storage_profile: LocalStorageProfile | None = None
 
     def resolved_cache_root(self) -> Path:
         return self.cache_root or self.state_root / "cache"
@@ -263,6 +266,12 @@ class ProductionCompositionRoot:
     def build(self) -> ProductionRuntime:
         settings = self.settings
         settings.config_dir = settings.config_dir.resolve()
+        for path in (settings.state_root,settings.artifact_root,settings.resolved_cache_root(),settings.resolved_database_path()):
+            admit_storage(path,settings.storage_profile)
+        settings.state_root=settings.state_root.absolute()
+        settings.artifact_root=settings.artifact_root.absolute()
+        if settings.cache_root is not None:settings.cache_root=settings.cache_root.absolute()
+        if settings.database_path is not None:settings.database_path=settings.database_path.absolute()
         settings.state_root.mkdir(parents=True, exist_ok=True)
         settings.artifact_root.mkdir(parents=True, exist_ok=True)
         settings.resolved_cache_root().mkdir(parents=True, exist_ok=True)
@@ -270,9 +279,10 @@ class ProductionCompositionRoot:
         database_path=settings.resolved_database_path()
         if database_path.exists():
             SQLiteStateRepository(database_path,read_only=True).assert_integrity()
-        state = SQLiteStateRepository(database_path)
+        state = SQLiteStateRepository(database_path,storage_profile=settings.storage_profile)
         state.assert_integrity()
-        artifacts = FileSystemArtifactStore(settings.artifact_root)
+        artifacts = FileSystemArtifactStore(settings.artifact_root,
+            storage_profile=settings.storage_profile or LocalStorageProfile())
         secrets = EnvironmentSecretsProvider()
         record_sink = RepositoryIntegrationRecordSink(state, artifacts)
 
