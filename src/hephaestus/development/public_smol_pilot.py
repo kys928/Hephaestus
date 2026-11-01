@@ -15,7 +15,7 @@ import sys
 import time
 
 from hephaestus.backends.hf_causal_lm import directory_content_identity
-from hephaestus.schemas.public_pilot import PublicPilotPlan, PublicGenerationContract
+from hephaestus.schemas.public_pilot import PublicPilotPlan, PublicGenerationContract,PublicPilotMeasurement
 from hephaestus.schemas.experiment_contract import ExperimentProposal, TrainingControlRequest
 from hephaestus.schemas.prospective_model_binding import ProspectiveModelBinding
 from hephaestus.schemas.trainable_data_contract import TrainableDataContract
@@ -31,6 +31,7 @@ from hephaestus.storage.durability import atomic_write_bytes
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
 from hephaestus.state.checkpoint_identity_store import CheckpointIdentityStore
 from hephaestus.state.execution_ownership import execution_owner
+from hephaestus.state.public_pilot_store import PublicPilotGenerationStore
 from hephaestus.evaluation.prospective_pipeline import digest,file_digest,verify_model_binding
 from hephaestus.evaluation.public_pilot import (
     FAMILIES,load_public_model,sample_public_pilot,public_surfaces,generate_public_sample,
@@ -114,7 +115,7 @@ def _compare_replay(original,replay):
             'optimizer_scheduler_rng_and_dose_equal':True,'updates_reexecuted':96}
 
 
-def run_public_pilot(root,*,original_model,historical_adapter,source_commit):
+def run_public_pilot(root,*,original_model,historical_adapter,source_commit,phase_checkpoint=None,pause_after_training=False):
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
     torch.set_num_threads(1); torch.use_deterministic_algorithms(True)
@@ -137,7 +138,8 @@ def run_public_pilot(root,*,original_model,historical_adapter,source_commit):
         raise PermissionError('public original train/development reconstruction differs')
     excluded={r['sample_id'] for split in original.values() for r in split}
     pilot=sample_public_pilot(plan,excluded); surfaces=public_surfaces(pilot,plan)
-    contract={'schema':'public-smol-pilot-contract.v1','plan':plan.to_dict(),'generation':generation.to_dict(),
+    contract={'schema':'public-smol-pilot-contract.v2','plan':plan.to_dict(),'generation':generation.to_dict(),
+        'restart_contract':'nonconfirmatory-fixed-generation-cache.v1',
         'source_commit':source_commit,'source_files':inventory,'calibration_caps':[16,64,128],
         'calibration_rows':'original public development only','model_parameter_count':parameter_count,
         'base_identity':directory_content_identity(model_path),'historical_adapter_identity':directory_content_identity(historical_path),
@@ -179,33 +181,77 @@ def run_public_pilot(root,*,original_model,historical_adapter,source_commit):
             if state['step']!=96 or state['examples_processed']!=96:raise ValueError('pilot training dose differs')
             bindings.append(binding)
             print(json.dumps({'phase':'training-complete','seed':seed,'updates':96}),flush=True)
-    first=next(b for b in bindings if b.seed==plan.same_seed_replay)
-    replay=root/'same-seed-replay'; replay.mkdir()
-    job=json.loads(Path(first.job_path).read_text()); job['artifact_root']=str(replay)
-    atomic_write_bytes(replay/'job.json',canonical_bytes(job),overwrite=False)
-    with (replay/'stdout.log').open('wb') as out,(replay/'stderr.log').open('wb') as error:
-        completed=subprocess.run([sys.executable,'-m','hephaestus.training.hf_worker','--job',str(replay/'job.json')],
-                                 stdout=out,stderr=error,timeout=1800,check=False)
-    if completed.returncode!=0:raise RuntimeError('same-seed replay failed; retain all bytes')
-    reproducibility=_compare_replay(first.checkpoint_path,replay/'checkpoint_step_96')
-    replay_valid,replay_identity=validate_checkpoint_manifest(replay/'checkpoint_step_96')
-    if not replay_valid:raise ValueError('replay checkpoint incomplete')
-    replay_ref=_publish(repository,artifacts,'same-seed-reproducibility',reproducibility)
-    CheckpointIdentityStore(repository).retain(CheckpointIdentity('public-pilot-replay',str(replay/'checkpoint_step_96'),replay_identity,replay_ref))
+    with execution_owner(repository,'public-pilot-reproducibility',str(plan.same_seed_replay)):
+        first=next(b for b in bindings if b.seed==plan.same_seed_replay)
+        replay=root/'same-seed-replay'; replay.mkdir()
+        job=json.loads(Path(first.job_path).read_text()); job['artifact_root']=str(replay)
+        atomic_write_bytes(replay/'job.json',canonical_bytes(job),overwrite=False)
+        with (replay/'stdout.log').open('wb') as out,(replay/'stderr.log').open('wb') as error:
+            completed=subprocess.run([sys.executable,'-m','hephaestus.training.hf_worker','--job',str(replay/'job.json')],
+                                     stdout=out,stderr=error,timeout=1800,check=False)
+        if completed.returncode!=0:raise RuntimeError('same-seed replay failed; retain all bytes')
+        reproducibility=_compare_replay(first.checkpoint_path,replay/'checkpoint_step_96')
+        replay_valid,replay_identity=validate_checkpoint_manifest(replay/'checkpoint_step_96')
+        if not replay_valid:raise ValueError('replay checkpoint incomplete')
+        replay_ref=_publish(repository,artifacts,'same-seed-reproducibility',reproducibility)
+        CheckpointIdentityStore(repository).retain(CheckpointIdentity('public-pilot-replay',str(replay/'checkpoint_step_96'),replay_identity,replay_ref))
+    atomic_write_bytes(root/'bindings.json',canonical_bytes({'bindings':[b.to_dict() for b in bindings]}),overwrite=False)
+    ready_ref=_publish(repository,artifacts,'training-ready',{'contract_ref':digest(contract),
+        'bindings':[b.to_dict() for b in bindings],'reproducibility':reproducibility})
+    if phase_checkpoint is not None:phase_checkpoint('training-ready',repository)
+    if pause_after_training:return {'training_ready_ref':ready_ref,'contract_ref':digest(contract),'root':str(root)}
+    return _measure_public_pilot(root,contract,bindings,reproducibility,repository,artifacts,phase_checkpoint=phase_checkpoint)
+
+
+def _measure_public_pilot(root,contract,bindings,reproducibility,repository,artifacts,*,phase_checkpoint=None):
+    import torch
+    torch.set_num_threads(1); torch.use_deterministic_algorithms(True)
+    started=time.monotonic(); inventory=contract['source_files']
+    plan=PublicPilotPlan.from_dict(contract['plan']);generation=PublicGenerationContract.from_dict(contract['generation'])
+    model_path=root/'public-base';historical_path=root/'historical-public-cpu-adapter'
+    development=json.loads((root/'original-public-development.json').read_text())['rows']
+    surfaces=json.loads((root/'public-pilot.json').read_text())['surfaces']
+    store=PublicPilotGenerationStore(repository,artifacts)
+    completed=repository.get_latest('public_pilot_evidence','kind','analysis')
+    if completed is not None:
+        analysis=read_verified_json(artifacts,completed['artifact_ref'])
+        if analysis['contract']!=contract:raise PermissionError('completed pilot contract differs')
+        publication={'analysis_ref':completed['artifact_ref'],'analysis':analysis}
+        if not (root/'analysis.json').exists():atomic_write_bytes(root/'analysis.json',canonical_bytes(publication),overwrite=False)
+        return {'analysis_ref':completed['artifact_ref'],'root':str(root),'cached_complete_analysis':True}
     outputs={}; development_outputs={}; calibration={}; model_receipts={}
     models=[('baseline',None,False),('historical-public-cpu-adapter',historical_path,True)]
     models += [(b.label,Path(b.adapter_path),False) for b in bindings]
     for label,adapter,historical in models:
         with execution_owner(repository,'public-pilot-generation',label):
+            cached=repository.get_latest('public_pilot_evidence','kind','generation-'+label)
+            if cached is not None:
+                output=read_verified_json(artifacts,cached['artifact_ref'])
+                if output['contract']!=generation.to_dict():raise PermissionError('cached generation contract differs')
+                outputs[label]=output;model_receipts[label]=cached['artifact_ref']
+                development_outputs[label]=output['development']
+                if output['calibration']:calibration[label]=output['calibration']
+                continue
+            candidate=next((binding for binding in bindings if binding.label==label),None)
+            if candidate is not None:verify_model_binding(candidate,plan)
             model,loaded_tokenizer,info=load_public_model(model_path,adapter_path=adapter,historical=historical)
+            identity=digest({'base':contract['base_identity'],'adapter':None if adapter is None else directory_content_identity(adapter)})
+            generation_contract_refs={}
+            def measure(row,cap_contract,dataset):
+                if cap_contract.contract_id not in generation_contract_refs:
+                    generation_contract_refs[cap_contract.contract_id]=artifacts.put_bytes(canonical_bytes(cap_contract.to_dict())).artifact_ref
+                request=PublicPilotMeasurement(label,identity,row['sample_id'],digest(row),digest(contract),
+                    generation_contract_refs[cap_contract.contract_id],dataset,cap_contract.max_new_tokens)
+                return store.measure(request,lambda:generate_public_sample(model,loaded_tokenizer,row,cap_contract))
             dev_by_cap={}
             for cap in ([16,64,128] if label in {'baseline','historical-public-cpu-adapter'} else [128]):
                 cap_contract=PublicGenerationContract(contract_id=f'smol-public-json-cap{cap}.v1',max_new_tokens=cap)
-                samples=[generate_public_sample(model,loaded_tokenizer,row,cap_contract) for row in development]
+                samples=[measure(row,cap_contract,'development') for row in development]
                 dev_by_cap[str(cap)]={'contract':cap_contract.to_dict(),'samples':samples,'summary':summarize_public_samples(samples)}
+                if phase_checkpoint is not None:phase_checkpoint(label+'-development-'+str(cap),repository)
             development_outputs[label]=dev_by_cap['128']
             if len(dev_by_cap)>1:calibration[label]=dev_by_cap
-            samples=[generate_public_sample(model,loaded_tokenizer,row,generation) for row in surfaces]
+            samples=[measure(row,generation,'public-pilot') for row in surfaces]
             output={'model_label':label,'samples':samples,'summary':summarize_public_samples(samples),
                 'by_family':{f:summarize_public_samples([s for s in samples if s['family']==f and s['template_id']=='original-canonical.v1']) for f in FAMILIES},
                 'by_difficulty':{group:summarize_public_samples([s for s in samples
@@ -213,16 +259,19 @@ def run_public_pilot(root,*,original_model,historical_adapter,source_commit):
                     for group in sorted({s['task_characteristics']['difficulty_group'] for s in samples})},
                 'by_template':{t:summarize_public_samples([s for s in samples if s['template_id']==t])
                                for t in ('original-canonical.v1','task-wrapper-sensitivity.v1')},
-                'loader_info':info,'contract':generation.to_dict(),'confirmatory':False}
+                'loader_info':info,'contract':generation.to_dict(),'confirmatory':False,
+                'development':dev_by_cap['128'],'calibration':dev_by_cap if len(dev_by_cap)>1 else {}}
+            if candidate is not None:verify_model_binding(candidate,plan)
             ref=_publish(repository,artifacts,'generation-'+label,output)
             model_receipts[label]=ref; outputs[label]=output
             print(json.dumps({'phase':'generation-complete','label':label,'summary':output['by_template']['original-canonical.v1']}),flush=True)
             del model; gc.collect()
+        if phase_checkpoint is not None:phase_checkpoint(label+'-complete',repository)
     attempts=[{'seed':b.seed,'development_terminated_exact':development_outputs[b.label]['summary']['terminated_exact'],
                'development_valid_json':development_outputs[b.label]['summary']['valid_json']} for b in bindings]
     selected=max(attempts,key=lambda row:(row['development_terminated_exact'],row['development_valid_json'],-row['seed']))['seed']
     canonical=lambda label:[s for s in outputs[label]['samples'] if s['template_id']=='original-canonical.v1']
-    analysis={'schema':'public-smol-pilot-analysis.v1','purpose':plan.purpose,'contract':contract,
+    analysis={'schema':'public-smol-pilot-analysis.v2','purpose':plan.purpose,'contract':contract,
         'training_updates':288,'replay_updates':96,'training_reproducibility':reproducibility,
         'development_seed_attempts':attempts,'development_selected_seed':selected,
         'generation_refs':model_receipts,'calibration':calibration,'development':development_outputs,
@@ -231,17 +280,83 @@ def run_public_pilot(root,*,original_model,historical_adapter,source_commit):
         'by_difficulty':{label:outputs[label]['by_difficulty'] for label,_,_ in models},
         'template_sensitivity':{label:outputs[label]['by_template'] for label,_,_ in models},
         'paired_canonical':{label:paired_public_summary(canonical('baseline'),canonical(label)) for label,_,_ in models if label!='baseline'},
-        'elapsed_seconds':time.monotonic()-started,'confirmatory_improvement_established':False,
+        'elapsed_seconds':time.monotonic()-started,
+        'timing_scope':'current generation invocation; training and external checkpoint pauses excluded',
+        'confirmatory_improvement_established':False,
         'external_certification':False,'protected_final_holdout_exposed':False}
     if (_source_inventory()!=inventory or directory_content_identity(model_path)!=contract['base_identity']
             or directory_content_identity(historical_path)!=contract['historical_adapter_identity']):
         raise ValueError('public pilot source or fixed pretrained bytes changed during execution')
     analysis_ref=_publish(repository,artifacts,'analysis',analysis)
     atomic_write_bytes(root/'analysis.json',canonical_bytes({'analysis_ref':analysis_ref,'analysis':analysis}),overwrite=False)
-    atomic_write_bytes(root/'bindings.json',canonical_bytes({'bindings':[b.to_dict() for b in bindings]}),overwrite=False)
+    if phase_checkpoint is not None:phase_checkpoint('analysis-complete',repository)
     return {'analysis_ref':analysis_ref,'root':str(root),'paired_canonical':analysis['paired_canonical'],
             'canonical_pilot':analysis['canonical_pilot'],'training_reproducibility':reproducibility,
             'protected_final_holdout_exposed':False}
+
+
+def resume_public_pilot(root,*,expected_contract_ref,phase_checkpoint=None):
+    """Resume ONLY fixed public generation from a proven complete training phase."""
+    from transformers import AutoTokenizer
+    root=Path(root).absolute()
+    repository=SQLiteStateRepository(root/'state'/'production.sqlite3',initialize=False,campaign_witness=True)
+    artifacts=FileSystemArtifactStore(root/'artifacts')
+    with execution_owner(repository,'public-pilot-resume','frozen-training-complete'):
+        contract=read_verified_json(artifacts,expected_contract_ref)
+        anchor=repository.get_latest('public_pilot_evidence','kind','contract')
+        ready=repository.get_latest('public_pilot_evidence','kind','training-ready')
+        if (anchor is None or anchor['artifact_ref']!=expected_contract_ref or ready is None
+                or json.loads((root/'pilot-contract.json').read_text())!=contract
+                or contract.get('restart_contract')!='nonconfirmatory-fixed-generation-cache.v1'
+                or _source_inventory()!=contract['source_files']):
+            raise PermissionError('public restart requires the externally committed contract, completed training and original source')
+        plan=PublicPilotPlan.from_dict(contract['plan'])
+        retained=read_verified_json(artifacts,ready['artifact_ref'])
+        if retained['contract_ref']!=expected_contract_ref:raise PermissionError('training belongs to another pilot')
+        bindings=[ProspectiveModelBinding.from_dict(row) for row in retained['bindings']]
+        if {b.seed for b in bindings}!=set(plan.training_seeds) or len(bindings)!=3:
+            raise PermissionError('restart cannot reconstruct missing training seeds')
+        if json.loads((root/'bindings.json').read_text())!={'bindings':retained['bindings']}:
+            raise PermissionError('public training checkpoint roster changed')
+        tokenizer=AutoTokenizer.from_pretrained(root/'public-base',local_files_only=True,trust_remote_code=False)
+        verify_public_base(root/'public-base',tokenizer)
+        import torch
+        for binding in bindings:
+            verify_model_binding(binding,plan)
+            state=torch.load(Path(binding.checkpoint_path)/'training_state.pt',map_location='cpu',weights_only=True)
+            if state['step']!=96 or state['examples_processed']!=96:
+                raise PermissionError('restart requires all original 96-update candidate jobs')
+        if (directory_content_identity(root/'public-base')!=contract['base_identity']
+                or directory_content_identity(root/'historical-public-cpu-adapter')!=contract['historical_adapter_identity']):
+            raise PermissionError('public restart model identities changed')
+        first=next(b for b in bindings if b.seed==plan.same_seed_replay)
+        proof=_compare_replay(first.checkpoint_path,root/'same-seed-replay'/'checkpoint_step_96')
+        if proof!=retained['reproducibility']:raise PermissionError('same-seed training proof changed')
+        return _measure_public_pilot(root,contract,bindings,proof,repository,artifacts,phase_checkpoint=phase_checkpoint)
+
+
+def phase_snapshot_writer(checkpoint_root):
+    """Publish closed phase bundles; external retention is a separate operation."""
+    from hephaestus.state.campaign_snapshot import snapshot_campaign
+    from hephaestus.storage.durability import sync_file,sync_directory_chain
+    checkpoint_root=Path(checkpoint_root).absolute()
+    def checkpoint(phase,repository):
+        witness=repository._db.witness()
+        with witness.owner():
+            checkpoint_root.mkdir(parents=True,exist_ok=True)
+            sequence=1+max([int(p.name.split('-',1)[0]) for p in checkpoint_root.iterdir() if p.is_dir()] or [0])
+            destination=checkpoint_root/f'{sequence:03d}-{phase}'
+            destination.mkdir()
+            campaign=repository.path.parent.parent
+            receipt=snapshot_campaign(campaign,repository,destination/'complete-snapshot')
+            journal=destination/'separately-retained-control-journal.jsonl'
+            shutil.copyfile(witness.journal,journal);sync_file(journal);sync_directory_chain(destination)
+            receipt.update(phase=phase,control_journal_sha256=file_digest(journal),
+                protected_final_holdout_exposed=False,
+                pilot_contract_ref=digest(json.loads((campaign/'pilot-contract.json').read_text())))
+            atomic_write_bytes(destination/'checkpoint.json',canonical_bytes(receipt),overwrite=False)
+            print(json.dumps({'phase_checkpoint':phase,'checkpoint_receipt':str(destination/'checkpoint.json')}),flush=True)
+    return checkpoint
 
 
 def cold_public_pilot(root,*,expected_analysis_ref,reexecute=True):
@@ -347,16 +462,25 @@ def cold_public_pilot(root,*,expected_analysis_ref,reexecute=True):
 if __name__=='__main__':
     import argparse
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('run','cold'))
+    parser.add_argument('action',choices=('run','resume','cold'))
     parser.add_argument('root',type=Path)
     parser.add_argument('--original-model',type=Path)
     parser.add_argument('--historical-adapter',type=Path)
     parser.add_argument('--source-commit')
     parser.add_argument('--expected-analysis-ref')
+    parser.add_argument('--expected-contract-ref')
+    parser.add_argument('--checkpoint-root',type=Path)
+    parser.add_argument('--pause-after-training',action='store_true')
     args=parser.parse_args()
     if args.action=='run':
         if not all((args.original_model,args.historical_adapter,args.source_commit)):parser.error('run requires original source paths and source commit')
-        result=run_public_pilot(args.root,original_model=args.original_model,historical_adapter=args.historical_adapter,source_commit=args.source_commit)
+        result=run_public_pilot(args.root,original_model=args.original_model,historical_adapter=args.historical_adapter,
+            source_commit=args.source_commit,phase_checkpoint=phase_snapshot_writer(args.checkpoint_root) if args.checkpoint_root else None,
+            pause_after_training=args.pause_after_training)
+    elif args.action=='resume':
+        if not args.expected_contract_ref:parser.error('resume requires the externally retained public contract reference')
+        result=resume_public_pilot(args.root,expected_contract_ref=args.expected_contract_ref,
+            phase_checkpoint=phase_snapshot_writer(args.checkpoint_root) if args.checkpoint_root else None)
     else:
         if not args.expected_analysis_ref:parser.error('cold requires the separately retained analysis reference')
         result=cold_public_pilot(args.root,expected_analysis_ref=args.expected_analysis_ref)
