@@ -74,6 +74,12 @@ def test_three_authentic_native_cycles_failure_repair_lineage_memory_and_full_co
     rt,_,_,_=load(root)
     store=CpuAutonomyStore(rt.state_repository,rt.artifact_store)
     with pytest.raises(PermissionError): store.consume_final(result["program_id"],"replacement")
+    # A cycle intentionally recovered its bound terminal worker result in a new
+    # service instance. Its original OS return code may remain unknown; snapshot
+    # must prove quiescence through the producer's retained kernel fence.
+    from hephaestus.state.campaign_snapshot import snapshot_campaign
+    saved=snapshot_campaign(root,rt.state_repository,tmp_path/'complete-native-backup')
+    assert saved['retained_checkpoints']==3 and saved['state_records']>2400
     # A changed frozen input must fail cold verification before inference.
     from hephaestus.evaluation.cpu_autonomy_verification import verify_program
     source=root/"public-source.json"

@@ -17,6 +17,16 @@ class StateDirectoryBinding(JsonSchema):
 
 
 @dataclass(slots=True)
+class WorkerFenceReference(JsonSchema):
+    schema: str = 'hf-worker-ownership.v1'
+    lock_name: str = 'hf-worker'
+
+    def __post_init__(self):
+        if self.schema!='hf-worker-ownership.v1' or self.lock_name!='hf-worker':
+            raise ValueError('unsupported worker ownership fence')
+
+
+@dataclass(slots=True)
 class CampaignWitnessRecord(JsonSchema):
     sequence: int
     previous: str
