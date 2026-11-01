@@ -23,6 +23,10 @@ failed workflow remains terminal and incomplete. The production loop returns
 `waiting` while the retry/backoff is pending; normal resume polling executes
 the next attempt. A retry does not count as a completed scientific cycle.
 
+The typed progress fence flushes the receipt file and its parent directory
+before an update can begin. This closes the window where an unflushed
+`update_in_flight` rename could be lost after optimization started.
+
 Before relaunch, a wrapper checks the finalized scientific proposal against
 the failed attempt: model, tokenizer, actual processed-data hash, parent
 adapter, seed, recipe, optimizer, dose and hyperparameters must agree. New
@@ -36,6 +40,13 @@ corruption, missing evidence and approval failures have no automatic retry
 through this bridge. They need their existing governed recovery/approval path
 or operator investigation. No scientific parameter adjustment, code edit,
 rollback, branch or promotion is authorized here.
+
+The default staged action-intent service explicitly blocks automatic branch,
+restart, rollback, stage changes and recipe/data/evaluation policy mutation.
+The standalone governed action executor retains its independently approved
+state-transition APIs; those APIs do not by themselves implement the next
+scientific experiment. A future automatic transition must provide a typed,
+verified handoff to its child/reset/rollback run before this exclusion changes.
 
 The `bounded_cpu_research` stage is an opt-in local research profile without
 certification or promotion eligibility. Its predeclared bootstrap fault runs

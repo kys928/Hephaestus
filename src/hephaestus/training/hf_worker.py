@@ -19,6 +19,7 @@ from hephaestus.training.continuation_tokens import FORMAT, KIND, encode_frozen_
 from hephaestus.schemas.prompt_target_supervision import PromptTargetSupervision
 from hephaestus.data.chunking import supervision_segments
 from hephaestus.training.batch_schedule import SCHEDULE_VERSION, training_windows, step_limit, cursor_at_step
+from hephaestus.schemas.optimizer_progress import OptimizerProgress
 
 _STOP_REASON: str | None = None
 
@@ -60,6 +61,18 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".partial")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     temporary.replace(path)
+
+
+def _fence_optimizer_progress(root,progress):
+    path=root/"optimizer_progress.json"
+    _write_json(path,OptimizerProgress.from_dict(progress).to_dict())
+    with path.open("rb") as stream:
+        os.fsync(stream.fileno())
+    descriptor=os.open(root,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -438,6 +451,8 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore[import-not-found]
 
     job = json.loads(job_path.read_text(encoding="utf-8"))
+    if job.get("stage_name") == "bounded_cpu_research":
+        torch.set_num_threads(1)
     config = dict(job["training_config"])
     if config.get("batch_schedule_version") != SCHEDULE_VERSION:
         raise ValueError("legacy training schedule requires explicit replay with its pinned source")
@@ -457,7 +472,7 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     progress = {"schema": "hf-optimizer-progress.v1", "run_id": run_id,
         "config_fingerprint": job["config_fingerprint"], "optimizer_steps": 0,
         "optimizer_update_started": resume_token_path is not None, "phase": "pre_optimizer"}
-    _write_json(root / "optimizer_progress.json", progress)
+    _fence_optimizer_progress(root,progress)
     device = str(config["device"])
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available")
@@ -601,11 +616,11 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
         if not torch.isfinite(grad_norm):
             raise NonFiniteMetricError(f"non-finite gradient norm at step {step}")
         progress.update(optimizer_steps=step-1, optimizer_update_started=True, phase="update_in_flight")
-        _write_json(root / "optimizer_progress.json", progress)
+        _fence_optimizer_progress(root,progress)
         optimizer.step()
         scheduler.step()
         progress.update(optimizer_steps=step, phase="updated")
-        _write_json(root / "optimizer_progress.json", progress)
+        _fence_optimizer_progress(root,progress)
         last_loss = accumulated_loss / len(indexes)
         last_grad_norm = float(grad_norm.detach().cpu())
         tokens_processed += step_tokens

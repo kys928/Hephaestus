@@ -151,3 +151,32 @@ def test_retry_cannot_change_learning_rate_before_launch(tmp_path):
     req = StagedOperationRequest("w", "r", "L", "smoke_test", "training_engineer", "lifecycle_launch", "op", 1, (), {})
     result = service.execute(req)
     assert result.status == "blocked" and launches == []
+
+
+@pytest.mark.parametrize("action",["branch_new_experiment","restart_lineage","rollback_to_checkpoint","change_stage",
+                                  "modify_data_policy","modify_training_recipe","modify_eval_policy"])
+def test_state_only_transitions_cannot_claim_a_next_executable_staged_experiment(action):
+    from hephaestus.production.staged_driver import StagedActionIntentService
+    from hephaestus.control.staged_state import StagedOperationRequest
+    req=StagedOperationRequest("w","r","L","smoke_test","judge_exit","action_application","op",1,(),{
+        "judge_exit.action_boundary":{"proposed_action":action},
+        "judge_exit.action_approval_gate":{"approval_status":"approved"}})
+    result=StagedActionIntentService().execute(req)
+    assert result.status=="blocked" and "next_experiment_transition_not_implemented" in result.blocking_issues[0]
+
+
+def test_optimizer_progress_fence_flushes_file_and_directory_before_return(tmp_path,monkeypatch):
+    from hephaestus.training.hf_worker import _fence_optimizer_progress
+    from hephaestus.schemas.optimizer_progress import OptimizerProgress
+    import os
+    calls=[]
+    original=os.fsync
+    def flush(fd):
+        calls.append(fd); original(fd)
+    monkeypatch.setattr(os,"fsync",flush)
+    proof=OptimizerProgress("r","fp",0,False,"pre_optimizer")
+    _fence_optimizer_progress(tmp_path,proof.to_dict())
+    assert len(calls)==2
+    assert OptimizerProgress.from_dict(json.loads((tmp_path/"optimizer_progress.json").read_text()))==proof
+    with pytest.raises(ValueError):
+        OptimizerProgress("r","fp",0,False,"update_in_flight")
