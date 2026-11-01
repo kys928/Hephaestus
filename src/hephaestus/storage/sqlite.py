@@ -6,7 +6,7 @@ import json
 import re
 import sqlite3
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
@@ -29,6 +29,10 @@ _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$")
 
 class StateOperationConflict(RuntimeError):
     pass
+
+
+class StateIntegrityError(RuntimeError):
+    """No workflow may claim healthy durable state after an integrity failure."""
 
 
 class LockTimeoutError(TimeoutError):
@@ -75,26 +79,46 @@ def _canonical_record(record: dict[str, object]) -> str:
 
 
 class _SQLiteDatabase:
-    def __init__(self, path: Path, busy_timeout_seconds: float) -> None:
+    def __init__(self, path: Path, busy_timeout_seconds: float, read_only: bool = False) -> None:
         self.path = Path(path)
         self.busy_timeout_seconds = busy_timeout_seconds
+        self.read_only = read_only
 
     def connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.read_only:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(
-            self.path,
+            self.path.resolve().as_uri()+"?mode=ro" if self.read_only else self.path,
             timeout=self.busy_timeout_seconds,
             isolation_level=None,
+            uri=self.read_only,
         )
-        connection.row_factory = sqlite3.Row
-        connection.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_seconds * 1000)}")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_seconds * 1000)}")
+            connection.execute("PRAGMA foreign_keys=ON")
+            if not self.read_only:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=FULL")
+        except BaseException:
+            connection.close()
+            raise
         return connection
 
     @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        # sqlite3.Connection.__exit__ commits/rolls back; it does not close.
+        # Explicit closure also keeps connections out of later worker forks.
+        connection = self.connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        if self.read_only:
+            raise PermissionError("read-only state repository cannot start a write transaction")
         connection = self.connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -141,12 +165,13 @@ class SQLiteStateRepository:
         busy_timeout_seconds: float = 5.0,
         event_sink: EventSink | None = None,
         initialize: bool = True,
+        read_only: bool = False,
     ) -> None:
         if busy_timeout_seconds < 0:
             raise ValueError("busy_timeout_seconds must not be negative")
-        self._db = _SQLiteDatabase(path, busy_timeout_seconds)
+        self._db = _SQLiteDatabase(path, busy_timeout_seconds, read_only)
         self.event_sink = event_sink or NullEventSink()
-        if initialize:
+        if initialize and not read_only:
             self.initialize()
 
     @property
@@ -187,7 +212,7 @@ class SQLiteStateRepository:
             )
 
     def schema_version(self) -> int:
-        with self._db.connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute(
                 "SELECT version FROM infrastructure_schema_migrations WHERE component='state_repository'"
             ).fetchone()
@@ -195,11 +220,30 @@ class SQLiteStateRepository:
 
     def ready(self) -> bool:
         try:
-            with self._db.connect() as connection:
-                connection.execute("SELECT 1 FROM state_records LIMIT 1").fetchone()
+            self.assert_integrity()
             return self.schema_version() == SQLITE_STATE_SCHEMA_VERSION
-        except sqlite3.Error:
+        except (sqlite3.Error, StateIntegrityError):
             return False
+
+    def assert_integrity(self) -> None:
+        try:
+            with self._db.connection() as connection:
+                rows = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
+            if rows != ["ok"]:
+                raise StateIntegrityError("SQLite state integrity check failed; preserve the original and investigate")
+        except sqlite3.Error as exc:
+            raise StateIntegrityError("SQLite state cannot be verified; no automatic repair is permitted") from exc
+
+    def snapshot_to(self, destination: Path) -> None:
+        """A consistent SQLite backup, never a live main-file-only copy."""
+        destination=Path(destination)
+        if destination.exists():
+            raise FileExistsError("state snapshot destination must be new")
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        with self._db.connection() as source, closing(sqlite3.connect(destination)) as target:
+            source.backup(target)
+            if [str(row[0]) for row in target.execute("PRAGMA integrity_check")]!=["ok"]:
+                raise StateIntegrityError("state snapshot is not healthy; retained for investigation")
 
     @staticmethod
     def _envelope(row: sqlite3.Row) -> dict[str, object]:
@@ -306,7 +350,7 @@ class SQLiteStateRepository:
 
     def records(self, collection: str) -> list[dict[str, object]]:
         _validate_name(collection, "state collection")
-        with self._db.connect() as connection:
+        with self._db.connection() as connection:
             rows = connection.execute(
                 "SELECT * FROM state_records WHERE collection=? ORDER BY sequence",
                 (collection,),
@@ -319,7 +363,7 @@ class SQLiteStateRepository:
     def latest_by_key(self, collection: str, record_key: str) -> dict[str, object] | None:
         _validate_name(collection, "state collection")
         _validate_name(record_key, "record key")
-        with self._db.connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute(
                 """
                 SELECT * FROM state_records
@@ -333,9 +377,12 @@ class SQLiteStateRepository:
     def get_latest(
         self, collection: str, key: str, value: object
     ) -> dict[str, object] | None:
-        for record in reversed(self.all(collection)):
-            if record.get(key) == value:
-                return record
+        _validate_name(collection,"state collection")
+        with self._db.connection() as connection:
+            for row in connection.execute("SELECT payload_json FROM state_records WHERE collection=? ORDER BY sequence DESC",(collection,)):
+                record=json.loads(row[0])
+                if record.get(key)==value:
+                    return record
         return None
 
 
@@ -394,7 +441,7 @@ class SQLiteLockProvider:
             )
 
     def schema_version(self) -> int:
-        with self._db.connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute(
                 "SELECT version FROM infrastructure_schema_migrations WHERE component='lock_provider'"
             ).fetchone()
@@ -402,7 +449,7 @@ class SQLiteLockProvider:
 
     def ready(self) -> bool:
         try:
-            with self._db.connect() as connection:
+            with self._db.connection() as connection:
                 connection.execute("SELECT 1 FROM lock_leases LIMIT 1").fetchone()
             return self.schema_version() == SQLITE_LOCK_SCHEMA_VERSION
         except sqlite3.Error:
@@ -516,7 +563,7 @@ class SQLiteLockProvider:
 
     def assert_owned(self, lease: LockLease, *, now: datetime | None = None) -> None:
         timestamp = _timestamp(now)
-        with self._db.connect() as connection:
+        with self._db.connection() as connection:
             row = connection.execute(
                 "SELECT * FROM lock_leases WHERE lock_name=?", (lease.name,)
             ).fetchone()
