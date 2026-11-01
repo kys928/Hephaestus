@@ -98,6 +98,19 @@ def test_identity_store_never_replaces_an_accepted_commitment(tmp_path):
             "L", str(checkpoint), "sha256:" + "f" * 64, "synthetic:new-receipt"))
 
 
+def test_new_staged_checkpoint_membership_comes_from_its_lineage_bound_producer(tmp_path):
+    executor, checkpoint = setup(tmp_path)
+    current = executor.lineage_store.get_current("L")
+    current["best_checkpoint_ref"] = None
+    executor.lineage_store.set_current(current)
+    assert apply(executor, checkpoint)["status"] == "applied"
+    foreign = dict(executor.lineage_store.get_current("L"), lineage_id="foreign", best_checkpoint_ref=None)
+    executor.lineage_store.set_current(foreign)
+    with pytest.raises(PermissionError, match="belong"):
+        executor.apply(lineage_id="foreign", run_id="foreign-run", requested_action="continue_from_checkpoint",
+                       checkpoint_ref=str(checkpoint))
+
+
 def test_resume_token_cannot_redefine_retained_checkpoint_identity(tmp_path):
     from types import SimpleNamespace
     from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService

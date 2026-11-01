@@ -16,6 +16,10 @@ CHECKPOINT_IDENTITIES = "checkpoint_identities"
 class CheckpointIdentityStore:
     repository: StateRepository
 
+    def for_lineage(self, lineage_id):
+        return [CheckpointIdentity(**r) for r in self.repository.all(CHECKPOINT_IDENTITIES)
+                if r.get("lineage_id") == lineage_id]
+
     def get(self, lineage_id: str, checkpoint_ref: str) -> CheckpointIdentity | None:
         rows = [CheckpointIdentity(**r) for r in self.repository.all(CHECKPOINT_IDENTITIES)
                 if r.get("lineage_id") == lineage_id and r.get("checkpoint_ref") == checkpoint_ref]

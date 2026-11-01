@@ -452,6 +452,12 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
             raise ValueError("base model SHA-256 changed after job preparation")
     root = Path(job["artifact_root"])
     run_id = str(job["run_id"])
+    # Missing evidence is unknown progress. A pre-update receipt is written
+    # before optimizer construction and fenced before every update begins.
+    progress = {"schema": "hf-optimizer-progress.v1", "run_id": run_id,
+        "config_fingerprint": job["config_fingerprint"], "optimizer_steps": 0,
+        "optimizer_update_started": resume_token_path is not None, "phase": "pre_optimizer"}
+    _write_json(root / "optimizer_progress.json", progress)
     device = str(config["device"])
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available")
@@ -515,6 +521,10 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
     model.train()
 
     samples, tokenization_summary = _tokenize_records(tokenizer, records, config, evidence)
+    if config.get("fixture_bootstrap_failure"):
+        if device != "cpu" or job["stage_name"] != "bounded_cpu_research":
+            raise PermissionError("bootstrap fault injection is limited to bounded CPU research")
+        raise RuntimeError("predeclared CPU bootstrap fault after real model/tokenizer preparation")
     batches = _batches(
         torch,
         samples,
@@ -590,8 +600,12 @@ def run(job_path: Path, resume_token_path: Path | None = None) -> int:
         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float(config["gradient_clipping"]))
         if not torch.isfinite(grad_norm):
             raise NonFiniteMetricError(f"non-finite gradient norm at step {step}")
+        progress.update(optimizer_steps=step-1, optimizer_update_started=True, phase="update_in_flight")
+        _write_json(root / "optimizer_progress.json", progress)
         optimizer.step()
         scheduler.step()
+        progress.update(optimizer_steps=step, phase="updated")
+        _write_json(root / "optimizer_progress.json", progress)
         last_loss = accumulated_loss / len(indexes)
         last_grad_norm = float(grad_norm.detach().cpu())
         tokens_processed += step_tokens
