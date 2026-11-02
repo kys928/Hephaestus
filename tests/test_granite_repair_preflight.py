@@ -24,15 +24,15 @@ def _inputs(tmp_path: Path):
     reg = tmp_path / "registry.json"
     reg.write_text(json.dumps({"roles": {"evaluator": {
         "model_id": "ibm-granite/granite-3.3-8b-instruct",
-        "revision": "frozen-revision",
-        "adapter": {"sha256": "frozen-adapter"},
+        "revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+        "adapter": {"sha256": "e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325"},
     }}}))
     index = tmp_path / "index.json"
     identity = {"schema": "granite-repair-historical-index.v1",
                 "historical_exposed": True,
                 "model_id": "ibm-granite/granite-3.3-8b-instruct",
-                "model_revision": "frozen-revision",
-                "adapter_sha256": "frozen-adapter",
+                "model_revision": "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b",
+                "adapter_sha256": "e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325",
                 "files": {"old.json": data_sha}}
     index_sha = _write(index, json.dumps(identity).encode())
     return {"registry": reg, "index": index, "index_sha256": index_sha,
@@ -102,4 +102,16 @@ def test_preflight_denies_empty_historical_index(tmp_path: Path):
     old["files"] = {}
     args["index_sha256"] = _write(args["index"], json.dumps(old).encode())
     with pytest.raises(PinnedEvidenceError, match="no pinned source"):
+        preflight(**args)
+
+
+def test_preflight_denies_joint_registry_and_index_substitution(tmp_path: Path):
+    args = _inputs(tmp_path)
+    catalog = json.loads(args["registry"].read_text())
+    catalog["roles"]["evaluator"]["revision"] = "fake-revision"
+    args["registry"].write_text(json.dumps(catalog))
+    index = json.loads(args["index"].read_text())
+    index["model_revision"] = "fake-revision"
+    args["index_sha256"] = _write(args["index"], json.dumps(index).encode())
+    with pytest.raises(PinnedEvidenceError, match="frozen Evaluator identity"):
         preflight(**args)
