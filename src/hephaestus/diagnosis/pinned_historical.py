@@ -108,8 +108,10 @@ class PinnedHistoricalEvidenceAdapter:
                 handle = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
                 try:
                     info = os.fstat(handle)
-                    if not stat.S_ISREG(info.st_mode) or info.st_size > self.max_bytes:
-                        raise PinnedEvidenceError("evidence is not a bounded regular file")
+                    if not stat.S_ISREG(info.st_mode):
+                        raise PinnedEvidenceError("evidence is not a regular file")
+                    if info.st_size > self.max_bytes:
+                        raise PinnedEvidenceError("evidence exceeds byte limit")
                     chunks: list[bytes] = []
                     remaining = self.max_bytes + 1
                     while remaining:
