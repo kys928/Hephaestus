@@ -77,10 +77,16 @@ def preflight(*, registry: Path, index: Path, index_sha256: str,
         evidence_refs=sorted(hashes),
         requested_by="offline_operator_preflight",
     )
-    # An untrusted archived assertion must never become a verified eval report.
-    diagnosis = EvidenceBasedDiagnosisService(evidence_adapters=(
-        PinnedHistoricalEvidenceAdapter(evidence_root, hashes),
-    )).diagnose(req)
+    # Verify all files *before* diagnosis. The generic diagnosis service
+    # intentionally catches unavailable adapters, but this preflight must
+    # fail closed if a pinned archive is absent, altered, or malformed.
+    admitted = PinnedHistoricalEvidenceAdapter(evidence_root, hashes).load(req)
+    if not admitted:
+        raise PinnedEvidenceError("pinned historical evidence contains no records")
+    from dataclasses import replace
+    diagnosis = EvidenceBasedDiagnosisService().diagnose(
+        replace(req, evidence_refs=[], observed_failures=admitted)
+    )
     interventions = ClosedLoopExperimentPlanner().propose_interventions(diagnosis)
     if not all(p.intervention_kind == "collect_more_evidence" for p in interventions):
         raise PinnedEvidenceError("historical-only intake unexpectedly admitted intervention")
