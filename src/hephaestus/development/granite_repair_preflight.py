@@ -27,6 +27,8 @@ from hephaestus.schemas.diagnosis_contract import DiagnosisRequest
 _SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _SCHEMA = "granite-evaluator-repair-preflight.v1"
 _EXPECTED_MODEL = "ibm-granite/granite-3.3-8b-instruct"
+_EXPECTED_REVISION = "51dd4bc2ade4059a6bd87649d68aa11e4fb2529b"
+_EXPECTED_ADAPTER_SHA256 = "e60497854ea64655fc18be7962dec29f13091c75ea91e576726b0fa5c6eb2325"
 
 
 def _pinned_json(path: Path, expected: str, *, max_bytes: int = 1024 * 1024) -> dict:
@@ -59,6 +61,8 @@ def preflight(*, registry: Path, index: Path, index_sha256: str,
     frozen = catalog.get("roles", {}).get("evaluator", {})
     adapter = frozen.get("adapter", {})
     if (frozen.get("model_id") != _EXPECTED_MODEL or
+            frozen.get("revision") != _EXPECTED_REVISION or
+            adapter.get("sha256") != _EXPECTED_ADAPTER_SHA256 or
             source.get("model_id") != frozen.get("model_id") or
             source.get("model_revision") != frozen.get("revision") or
             source.get("adapter_sha256") != adapter.get("sha256")):
