@@ -15,6 +15,7 @@
 | Inspect all eleven repaired audit findings | [Implementation ledger](operations/remediation-ledger.md) |
 | Inspect the complete implementation/research campaign | [Campaign report](scientific-reports/remediation-campaign-20261101.md) |
 | Operate within the verified persistence and recovery boundary | [Restricted storage acceptance](scientific-reports/179-restricted-storage-resolution-20261101.md) and [snapshot runbook](operations/campaign-snapshots.md) |
+| Inspect the authentic public Smol pilot and no-launch decision | [Pilot results](scientific-reports/152-public-pilot-results-20261101.md), [v3 review record](scientific-reports/152-prospective-protocol-v3.md) and [custodian handoff](operations/152-independent-custodian-handoff.md) |
 
 ## Status as of 2026-11-01
 

@@ -77,7 +77,12 @@ authority/scope substitution, complete attempt selection, interrupted sessions,
 immutable publication roots, forged termination and checkpoint substitution.
 
 The [original public SmolLM2 base/tokenizer bytes were subsequently recovered](../scientific-reports/152-public-source-recovery-20261101.md)
-and match historical hashes. The separate private R10 archive, independent
-custody and blinded power/EOS pilot acceptance remain unavailable.
+and match historical hashes. The [actual public Smol pilot](../scientific-reports/152-public-pilot-results-20261101.md)
+is now complete: three96-update jobs plus a96-update repeat,696 fixed measurements,
+complete packaged restore and40 exact cold reexecutions. It recommends no launch
+of the current recipe: development-selected seed1117 scored3/64 exact, with full
+JSON/EOS. The [v3 review record](../scientific-reports/152-prospective-protocol-v3.md)
+requires an independent redesign decision; it is not an executable final contract.
+The separate private R10 archive and independent custody remain unavailable.
 Issue #152 stays open. No paid experiment, promotion or external certificate
 is authorized by this rehearsal.

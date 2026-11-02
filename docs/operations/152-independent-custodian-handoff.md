@@ -24,6 +24,24 @@ lost acknowledgements. A local witness or colocated fixture ledger does not meet
 this institutional requirement. No production service or entrusted final keys
 are configured in this repository.
 
+## Current stop: independent redesign review
+
+The [completed public pilot](../scientific-reports/152-public-pilot-results-20261101.md)
+recommends **no launch of the current96-update recipe**. Development-selected
+seed1117 scored3/64 exact despite complete JSON/EOS. The [v3 review record](../scientific-reports/152-prospective-protocol-v3.md)
+is a conditional redesign proposal, not an accepted executable final protocol.
+The next action is independent review and a recipe/protocol decision, not final
+batch generation. A changed accepted protocol needs matching implementation and
+a complete fixture rehearsal before any final material is sealed or exposed.
+
+The expanded known public catalog includes2,612 identities, commitment
+`sha256:7a2cd6aceead43f177f34a82a6d2e625163a28df2c60eebf80ac39f8889703e1`.
+It includes all splits of the explicitly synthetic large scorer fixture, the
+original-generator unit seeds, public rehearsals, pilot and literal grammar
+prompts. Known remaining range100 arithmetic bucket9 capacity is1,992. External
+and dynamic history still requires independent reconciliation; this is not a
+certificate of complete contamination clearance.
+
 ## Source and partition acceptance
 
 Verify the exact pinned original public base, tokenizer, config files, chat

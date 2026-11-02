@@ -145,8 +145,14 @@ engineering rehearsal, not confirmatory science.
 chat-template bytes; the original CPU adapter and 96/24 training/development
 examples are also recovered and hash-verified. The separate private R10
 archive remains unavailable, independent entrusted custody has not acted,
-and the blinded power/EOS pilot and final design acceptance are outstanding.
-No original-model confirmatory study was executed in this campaign.
+and independent final design acceptance is outstanding. The authentic public
+Smol pilot is now complete:384 actual optimizer updates including the repeat,
+696 measurements and40 exact cold reexecutions after full packaged restore.
+Selected seed1117 scored3/64 exact, versus0/64 baseline, with full JSON/EOS;
+the [results](../scientific-reports/152-public-pilot-results-20261101.md) recommend
+no current-recipe launch. The [v3 review record](../scientific-reports/152-prospective-protocol-v3.md)
+requires an independent redesign decision and does not supply an executable
+approved final study. No original-model confirmatory study was executed here.
 
 Milestone 4's bounded native recovery is integrated in #174/#175. #177's
 complete isolated cohort contains nine authentic programs, 27 sequential
