@@ -138,14 +138,22 @@ class PinnedHistoricalEvidenceAdapter:
                 for index, item in enumerate(items):
                     if not isinstance(item, dict):
                         raise PinnedEvidenceError("evidence record must be a JSON object")
-                    record = dict(item)
-                    if "source_ref" in record:
-                        record["claimed_source_ref"] = record.pop("source_ref")
-                    record["source_ref"] = f"sha256:{digest}#{index}"
-                    record["pinned_source_file"] = name
-                    record["source_hash_verified"] = True
-                    record["historical_exposed"] = True
-                    records.append(record)
+                    # An old report can *claim* eval_integrity_verified or
+                    # arbitrary diagnosis signals. Hashing its bytes does not
+                    # validate those scientific claims. Never pass its nested
+                    # keys through the signal-extracting normalizer.
+                    summary = item.get("summary")
+                    records.append({
+                        "evidence_kind": "historical_observation",
+                        "source_ref": f"sha256:{digest}#{index}",
+                        "summary": summary[:500] if isinstance(summary, str)
+                                   else "Pinned historical evidence available for independent review",
+                        "pinned_source_file": name,
+                        "original_evidence_kind": str(item.get("evidence_kind") or
+                                                     item.get("kind") or "unknown")[:80],
+                        "source_hash_verified": True,
+                        "historical_exposed": True,
+                    })
         finally:
             os.close(directory)
         return records
