@@ -230,9 +230,6 @@ def validate_proposed_pack(pack: dict) -> None:
         raise ValueError("public development must have exactly 120 cases")
     if len({r["case_id"] for r in rows}) != 120:
         raise ValueError("duplicate public development case ID")
-    by_state = Counter(r["reference"]["decision"] for r in rows)
-    if by_state != Counter({name: 20 for name in PRODUCTION_DECISIONS}):
-        raise ValueError("six-state public diagnostic is unbalanced")
     groups: dict[str, list[dict]] = {}
     for row in rows:
         groups.setdefault(row["pair_id"], []).append(row)
@@ -244,6 +241,9 @@ def validate_proposed_pack(pack: dict) -> None:
             raise ValueError("public diagnostic evidence malformed")
         if "PROMETHEUS-PUBLIC" in row["situation"]:
             raise ValueError("evaluation identity leaked into situation")
+    by_state = Counter(r["reference"]["decision"] for r in rows)
+    if by_state != Counter({name: 20 for name in PRODUCTION_DECISIONS}):
+        raise ValueError("six-state public diagnostic is unbalanced")
     if len(groups) != 60 or any(len(pair) != 2 for pair in groups.values()):
         raise ValueError("public diagnostic paired cases incomplete")
     for pair in groups.values():
