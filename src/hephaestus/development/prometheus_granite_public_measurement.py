@@ -27,6 +27,7 @@ from hephaestus.development.prometheus_scientific_decision import (
 from hephaestus.diagnosis.pinned_historical import PinnedEvidenceError, _parse_json
 from hephaestus.llm.inference_receipts import verify_inference_receipt
 from hephaestus.llm.role_contract import RoleEvidence, RoleTask
+from hephaestus.policy.model_proposals import planner_selection
 from hephaestus.llm.certified_runtime import CertifiedRoleReasoner
 from hephaestus.storage.verified import canonical_bytes
 
@@ -54,13 +55,26 @@ def admit_decision(reasoner: CertifiedRoleReasoner, decision_root: Path) -> dict
         raise PermissionError("Planner did not select an admissible evidence collection action")
     if admitted.get("primary_variable") != "diagnostic_measurement":
         raise PermissionError("Planner did not select the diagnostic measurement variable")
+    receipts = {}
     for role,field in (
         ("diagnosis","model_diagnosis_receipt_ref"), ("planner","model_planner_receipt_ref")
     ):
         ref = value.get(field)
         if not isinstance(ref,str) or not ref.startswith("sha256:"):
             raise PinnedEvidenceError("missing original model inference receipt")
-        _require_actual_gpu_receipt(reasoner, ref, role)
+        receipts[role] = _require_actual_gpu_receipt(reasoner, ref, role)
+    # Verify the *selected action*, not merely the existence of genuine CUDA
+    # receipts. A substituted scientific-decision.json must not turn a
+    # model-selected stop into a public measurement authorization.
+    planner_receipt = receipts["planner"]
+    answer = reasoner.contract.parse("planner", planner_receipt["raw_output"],
+                                     set(planner_receipt["evidence_refs"]))
+    actual_selection = planner_selection(answer, value["model_planner_receipt_ref"]).to_dict()
+    if (value.get("model_planner_selection") != actual_selection
+            or admitted.get("intervention_kind") != actual_selection["intervention_kind"]
+            or admitted.get("primary_variable") != actual_selection["primary_variable"]
+            or admitted.get("metadata", {}).get("model_selection") != actual_selection):
+        raise PinnedEvidenceError("admitted intervention differs from original Planner output")
     provenance = admitted.get("metadata", {}).get("model_inference_receipt_ref")
     if provenance != value["model_planner_receipt_ref"]:
         raise PinnedEvidenceError("admitted intervention not bound to actual Planner receipt")
