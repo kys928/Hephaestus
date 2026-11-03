@@ -151,6 +151,37 @@ def _read_exit(s3,bucket,prefix):
     return int(value)
 
 
+def _require_independent_watchdog(s3, bucket: str, prefix: str, sha: str) -> dict:
+    """Never allocate a billed resource without a separately running supervisor."""
+    key=prefix+"/status/watchdog-ready.json"
+    deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        try:
+            item=s3.get_object(Bucket=bucket,Key=key)
+            raw=item["Body"].read(4096)
+            item["Body"].close()
+        except Exception as exc:
+            code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+            if code not in ("404","NoSuchKey","NotFound"):
+                raise
+            time.sleep(10)
+            continue
+        doc=json.loads(raw)
+        if (doc.get("schema")!="prometheus-independent-offpod-watchdog.v1"
+            or doc.get("source_sha")!=sha
+            or doc.get("prefix")!=prefix
+            or doc.get("network_volume_id")!=bucket
+            or doc.get("owner")!="separately_scheduled_github_actions_watchdog"):
+            raise PermissionError("independent watchdog readiness identity mismatch")
+        from datetime import datetime as _dt
+        ready_deadline=_dt.fromisoformat(doc["hard_deadline"])
+        if (ready_deadline.tzinfo is None
+            or (ready_deadline-datetime.now(timezone.utc)).total_seconds()<900):
+            raise PermissionError("off-pod termination watchdog is expired or unsafe")
+        return doc
+    raise PermissionError("independent off-pod watchdog was not running; refuse paid allocation")
+
+
 def launch(args, *, config, adapter, provider, s3):
     sha=args.source_sha
     prefix,name=_source_scope(sha)
@@ -182,6 +213,7 @@ def launch(args, *, config, adapter, provider, s3):
         _put_once(s3,config.network_volume_id,prefix+"/source/historical-d-dev.json",d),
         _put_once(s3,config.network_volume_id,prefix+"/source/code.tar.gz",bundle),
     ]
+    _require_independent_watchdog(s3,config.network_volume_id,prefix,sha)
     intent={
         "schema":"prometheus-paid-one-time-launch-intent.v1",
         "source_sha":sha,"prefix":prefix,"pod_basename":name,
