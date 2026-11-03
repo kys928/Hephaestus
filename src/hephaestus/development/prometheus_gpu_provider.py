@@ -187,7 +187,14 @@ def launch(args, *, config, adapter, provider, s3):
     prefix,name=_source_scope(sha)
     if config.datacenter_id!="EU-CZ-1" or config.network_volume_id!="cviwpryzao":
         raise PermissionError("Prometheus GPU region/volume scope differs from original verified research")
-    if adapter.state_root.is_relative_to(Path("/tmp")) is False:
+    # GitHub hosted runners use /home/runner/work/_temp, not /tmp.
+    # Only its own absolute isolated temporary directory may hold provider
+    # operation intents; never create those in checkout or shared volume.
+    runner_temp = Path(os.environ.get("RUNNER_TEMP", "/tmp")).resolve()
+    intent_root = adapter.state_root
+    if (not intent_root.is_absolute() or intent_root.is_symlink()
+        or runner_temp == intent_root.resolve()
+        or not intent_root.resolve().is_relative_to(runner_temp)):
         raise PermissionError("provider intent store path was not admitted")
     parent=_identity_source(args.parent_report,PARENT_SHA)
     d=_identity_source(args.d_report,D_SHA)
