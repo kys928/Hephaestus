@@ -18,7 +18,7 @@ from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
-from scripts.launch_prometheus_gpu_once import (
+from hephaestus.development.prometheus_gpu_provider import (
     ID, MAX_LEASE_SECONDS, _source_scope, _read_exit, _s3_existing, _put_once, IMAGE,
 )
 
