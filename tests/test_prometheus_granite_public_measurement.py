@@ -13,6 +13,9 @@ from hephaestus.development.prometheus_granite_public_measurement import (
 )
 from hephaestus.development.prometheus_scientific_decision import REF_PARENT, REF_D
 from hephaestus.diagnosis.pinned_historical import PinnedEvidenceError
+from hephaestus.llm.role_contract import RoleAnswer
+from hephaestus.policy.model_proposals import planner_selection
+import hephaestus.development.prometheus_granite_public_measurement as measurement_module
 
 
 def _decision():
@@ -85,6 +88,41 @@ def test_no_decision_means_no_gpu_inference(tmp_path):
         run_public_measurement(object(),
             decision_root=tmp_path/"missing",output=tmp_path/"no-output")
     assert not (tmp_path/"no-output").exists()
+
+
+def test_public_measurement_binds_action_to_actual_planner_output(tmp_path, monkeypatch):
+    # Offline stub isolates the second admission check. It is NOT evidence
+    # of model inference or permission to run an actual CUDA measurement.
+    actual = RoleAnswer(
+        "collect_more_evidence", "request_recheck", "diagnostic_measurement",
+        0.6, (REF_PARENT,), (), "Public development evidence is insufficient.",
+    )
+    source = _decision()
+    selection = planner_selection(actual, source["model_planner_receipt_ref"]).to_dict()
+    source["model_planner_selection"] = selection
+    source["independently_admitted_intervention"]["metadata"]["model_selection"] = selection
+
+    class Contract:
+        def parse(self, role, raw, allowed_refs):
+            assert role == "planner" and allowed_refs == {REF_PARENT}
+            return actual
+
+    class Reasoner:
+        contract = Contract()
+
+    monkeypatch.setattr(measurement_module, "_require_actual_gpu_receipt",
+        lambda reasoner, ref, role: {
+            "raw_output": "offline-stub-only", "evidence_refs": [REF_PARENT],
+        })
+    root = _write(tmp_path / "valid", source)
+    assert admit_decision(Reasoner(), root) == source
+
+    tampered = _decision()
+    tampered["model_planner_selection"] = dict(selection, intervention_kind="stop")
+    tampered["independently_admitted_intervention"]["metadata"]["model_selection"] = selection
+    root = _write(tmp_path / "tampered", tampered)
+    with pytest.raises(PinnedEvidenceError, match="original Planner output"):
+        admit_decision(Reasoner(), root)
 
 
 def test_scope_constant_declares_public_only():
