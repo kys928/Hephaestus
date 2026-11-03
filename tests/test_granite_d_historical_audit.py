@@ -7,7 +7,14 @@ import pytest
 
 from hephaestus.evaluation.granite_dev_scoring import RESEARCH_ONTOLOGY
 from hephaestus.diagnosis.pinned_historical import PinnedEvidenceError
-from scripts import audit_granite_d_historical_readonly as audit
+import importlib.util
+from pathlib import Path
+
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "audit_granite_d_historical_readonly.py"
+_SPEC = importlib.util.spec_from_file_location("prometheus_historical_audit", _SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+audit = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(audit)
 
 
 class _FakeS3:
