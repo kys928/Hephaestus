@@ -16,6 +16,7 @@ jobs:
   independent-off-pod-termination:
     if: >-
       github.event.label.name == 'prometheus-gpu-go' &&
+      github.actor == 'kys928' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'feature/prometheus-model-backed-scientific-decision' &&
       github.event.pull_request.number == 201
