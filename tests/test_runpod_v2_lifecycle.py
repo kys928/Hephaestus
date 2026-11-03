@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from hephaestus.providers.runpod.config import RunPodConfig, RunPodConfigurationError
-from hephaestus.providers.runpod.execution import AmbiguousRunPodOperation
+from hephaestus.providers.runpod.execution import AmbiguousRunPodOperation, RunPodApiError
 from hephaestus.schemas.external_operation import ExternalOperation
 from hephaestus.state.external_operation_store import ExternalOperationStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
