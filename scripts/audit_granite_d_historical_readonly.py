@@ -90,12 +90,14 @@ def _references(manifest: object) -> list[dict]:
     return refs
 
 
-def rescore_readonly(client, manifest: object, *, shards=SHARDS) -> dict:
+def rescore_readonly(client, manifest: object, *, shards=None) -> dict:
     """Score original generated outputs, retaining only aggregate scientific evidence.
 
     The shards parameter exists for fake-client tests; the CLI always uses the
     hardcoded SHA-pinned original two-shard manifest, not arbitrary S3 keys.
     """
+    if shards is None:
+        shards = SHARDS
     refs = _references(manifest)
     entries, receipts = [], []
     for key, size, sha in shards:
