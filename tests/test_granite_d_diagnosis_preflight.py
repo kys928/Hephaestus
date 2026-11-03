@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -88,3 +90,19 @@ def test_observation_is_source_pinned_and_not_a_causal_hypothesis():
     assert '"scientific_repair_established": false' in payload
     assert '"model_backed_specialist_inference": false' in payload
     assert '"training_executed": false' in payload
+
+
+def test_cli_executes_actual_hephaestus_services_without_model_or_network(tmp_path):
+    output = tmp_path / "diagnosis-preflight.json"
+    process = subprocess.run(
+        [sys.executable, "-m",
+         "hephaestus.development.granite_d_diagnosis_preflight",
+         "--aggregate", str(OBSERVATION), "--output", str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert "GRANITE_D_DIAGNOSIS_PREFLIGHT" in process.stdout
+    assert result["diagnosis"]["status"] == "inconclusive"
+    assert result["model_backed_specialist_inference"] is False
+    assert result["training_executed"] is False
+    assert result["interventions"]
