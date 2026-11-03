@@ -8,6 +8,7 @@ The watchdog deletes an admitted Pod after worker exit or at its finite deadline
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime,timedelta,timezone
 import json
 import os
@@ -18,6 +19,7 @@ from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
+from hephaestus.storage.verified import canonical_bytes
 from hephaestus.development.prometheus_gpu_provider import (
     ID, MAX_LEASE_SECONDS, _source_scope, _read_exit, _s3_existing, _put_once, IMAGE,
 )
@@ -27,13 +29,25 @@ WATCHDOG_GRACE_SECONDS=480
 
 
 def _matching(adapter, *, prefix, basename, config):
+    # Reconstruct the complete provider-generated resource name from the
+    # immutable source SHA and original operation ID. A human-supplied name
+    # prefix alone is insufficient to authorize a paid-resource deletion.
+    sha = prefix.rsplit("/", 1)[-1]
+    expected_prefix, expected_basename = _source_scope(sha)
+    if prefix != expected_prefix or basename != expected_basename:
+        raise PermissionError("watchdog campaign identity does not match source SHA")
+    key = hashlib.sha256(canonical_bytes([
+        config.api_base_url, config.network_volume_id, ID+"-"+sha,
+    ])).hexdigest()
+    exact_name = basename + "-" + key[:32]
     pods=[]
     for p in adapter.list_pods():
         if not str(p.get("name","")).startswith(basename+"-"):
             continue
-        # A model-created or unrelated Pod with an imitated name cannot be
-        # confidently deleted. Refuse and escalate instead of guessing.
-        if (p.get("dataCenterId")!=config.datacenter_id
+        # RunPod may omit/redact returned env fields. Require the exact
+        # deterministic operation name and verify every available field.
+        if (p.get("name") != exact_name
+            or p.get("dataCenterId")!=config.datacenter_id
             or p.get("cloud")!="SECURE"
             or p.get("image")!=IMAGE
             or (isinstance(p.get("env"),dict)
