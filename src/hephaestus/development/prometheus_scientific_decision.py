@@ -300,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--d-report", type=Path, required=True)
     parser.add_argument("--s3-endpoint", required=True)
     parser.add_argument("--s3-bucket", required=True)
+    parser.add_argument("--s3-region", default="EU-CZ-1")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--adapter-cache", type=Path, required=True)
     parser.add_argument("--hf-cache", type=Path, required=True)
@@ -318,7 +319,8 @@ def main(argv: list[str] | None = None) -> int:
         stack=load_certified_role_model_stack(args.registry),
         contract=RoleMasteryContract.load(args.contract),
         adapters=VerifiedRoleAdapters(
-            boto3.client("s3", endpoint_url=args.s3_endpoint),
+            boto3.client("s3", endpoint_url=args.s3_endpoint,
+                region_name=args.s3_region),
             args.s3_bucket, args.adapter_cache),
         generator=generator,
         artifact_store=FileSystemArtifactStore(args.out/"inference-receipts"),
