@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.launch_prometheus_gpu_once import (
+from hephaestus.development.prometheus_gpu_provider import (
     _wallet_lease, _pod_command, _source_scope, _require_independent_watchdog,
     MAX_LEASE_SECONDS, _s3_existing,
 )
@@ -93,7 +93,7 @@ class _S3:
 
 
 def test_launch_refuses_paid_allocation_without_independent_watchdog(monkeypatch):
-    import scripts.launch_prometheus_gpu_once as l
+    import hephaestus.development.prometheus_gpu_provider as l
     monkeypatch.setattr(l.time,"sleep",lambda sec: (_ for _ in ()).throw(RuntimeError("wait")))
     with pytest.raises(RuntimeError,match="wait"):
         _require_independent_watchdog(_S3(), "cviwpryzao",
@@ -132,7 +132,7 @@ def test_watchdog_filters_to_immutable_source_and_volumes():
     sha="a"*40
     prefix,name=_source_scope(sha)
     config=SimpleNamespace(datacenter_id="EU-CZ-1",network_volume_id="cviwpryzao")
-    from scripts.launch_prometheus_gpu_once import IMAGE
+    from hephaestus.development.prometheus_gpu_provider import IMAGE
     good={
         "id":"paid-diagnostic-test",
         "name":name+"-123456789",
