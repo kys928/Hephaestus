@@ -35,7 +35,7 @@ def _decision():
 
 def _write(tmp_path, document):
     root=tmp_path/"decision"
-    root.mkdir(exist_ok=True)
+    root.mkdir(parents=True,exist_ok=True)
     (root/"scientific-decision.json").write_text(json.dumps(document),encoding="utf-8")
     return root
 
