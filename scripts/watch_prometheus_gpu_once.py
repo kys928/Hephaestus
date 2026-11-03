@@ -36,7 +36,8 @@ def _matching(adapter, *, prefix, basename, config):
         if (p.get("dataCenterId")!=config.datacenter_id
             or p.get("cloud")!="SECURE"
             or p.get("image")!=IMAGE
-            or p.get("env",{}).get("PROMETHEUS_CAMPAIGN_ID")!=prefix
+            or (isinstance(p.get("env"),dict)
+                and p["env"].get("PROMETHEUS_CAMPAIGN_ID",prefix)!=prefix)
             or p.get("gpu",{}).get("count")!=1
             or p.get("mounts")!={"network":[{"volumeId":config.network_volume_id,"path":"/workspace"}]}):
             raise PermissionError("matched-name Pod has an unexpected immutable source or volume identity")
