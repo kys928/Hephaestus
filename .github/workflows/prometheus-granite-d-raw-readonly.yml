@@ -1,0 +1,89 @@
+name: Prometheus Granite D raw evidence re-score (read-only)
+
+on:
+  pull_request:
+    paths:
+      - "scripts/audit_granite_d_historical_readonly.py"
+      - "tests/test_granite_d_historical_audit.py"
+      - ".github/workflows/prometheus-granite-d-raw-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-d-readonly-audit:
+    # No existing S3 credentials are exposed to code from external forks.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout current tested source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: current
+      - name: Checkout exactly pinned historical D reference generator
+        uses: actions/checkout@v4
+        with:
+          ref: ffa0458d5850f9d572a06d5ee6660fd63fc8acc6
+          persist-credentials: false
+          path: historical
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install local CPU/scoring and S3-read dependencies
+        working-directory: current
+        run: python -m pip install -q -e '.[test,s3]'
+      - name: Build exact exposed development reference IDs with no S3 secrets
+        env:
+          PYTHONPATH: historical/scripts:historical/src
+        run: |
+          test "$(git -C historical rev-parse HEAD)" = ffa0458d5850f9d572a06d5ee6660fd63fc8acc6
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import build_evaluator_semantic_invariance_repair_v1 as frozen
+          from evaluator_semantic_v2_screen import screen_cases, screen_hash
+          pack = frozen.build_pack()
+          frozen.validate(pack)
+          cases = pack['partitions']['evaluator']['development_diagnostic']
+          raw = json.dumps(cases, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+          digest = hashlib.sha256(raw).hexdigest()
+          assert digest == 'ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912'
+          selected = screen_cases(cases)
+          order = screen_hash(selected)
+          assert order == '98c3346fde66cc92d355bae019de811cb9c7614746073d1e4f93e6a069dbe11c'
+          manifest = {
+              'schema': 'granite-d-exposed-screen-references.v1',
+              'source_repo_sha': 'ffa0458d5850f9d572a06d5ee6660fd63fc8acc6',
+              'development_sha256': digest,
+              'screen_case_order_sha256': order,
+              'ontology': 'historical-semantic-invariance-evaluator.v1',
+              'references': [
+                  {'case_id': x['case_id'], 'expected_decision': x['expected']['decision']}
+                  for x in selected
+              ],
+          }
+          target = Path(os.environ['RUNNER_TEMP']) / 'granite-d-exposed-references.json'
+          target.write_text(json.dumps(manifest, sort_keys=True) + '\n', encoding='utf-8')
+          print('PINNED_EXPOSED_D_REFERENCE_IDS', len(selected))
+          PY
+      - name: Verify offline fake-S3 regressions
+        working-directory: current
+        run: pytest -q tests/test_granite_d_historical_audit.py tests/test_granite_dev_scoring.py tests/test_pinned_historical_evidence.py
+      - name: Read two exact SHA-pinned historical D shards; re-score and publish aggregate only
+        working-directory: current
+        env:
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          HEPHAESTUS_D_REFERENCES: ${{ runner.temp }}/granite-d-exposed-references.json
+          HEPHAESTUS_D_REPORT: granite-d-readonly-rescore.json
+        run: python scripts/audit_granite_d_historical_readonly.py
+      - name: Publish aggregate audit without prompts or generations
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prometheus-granite-d-readonly-rescore
+          path: current/granite-d-readonly-rescore.json
+          retention-days: 30
