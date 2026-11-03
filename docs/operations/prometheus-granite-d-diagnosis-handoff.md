@@ -2,6 +2,10 @@
 
 **Scope:** read-only CPU preflight of authentic, previously exposed *eight-state historical D* model outputs. This is **not** a six-state measurement of the currently frozen production Granite Evaluator.
 
+## Original recovery integration
+
+The source-recovery PR #197 is merged into main as two-parent commit `766fe01611e9c54358b8a01e3129f3561d3e6209`, after 1,322 passing CPU regressions and both integration workflows. The read-only audit has no active S3-authenticated workflow in the final merged tree.
+
 ## Independent source and what is retained
 
 Run [41609821443](https://github.com/kys928/Hephaestus/actions/runs/41609821443) read and verified the two exact original D S3 sample shards (no arbitrary listing, no writes). Raw generations were independently re-scored using the already merged strict ontology-specific scorer, reproducing **33/64 correct**, exactly **0 per-case disagreements** with the saved scores, and all original by-state counts. The aggregate-only report is stored as GitHub Actions artifact `13217803440` with verified report SHA-256 `7398eeed835422151678e4e1a79ee4c0d8ead4daf9dba61dd4333aa9acfbf953`.
