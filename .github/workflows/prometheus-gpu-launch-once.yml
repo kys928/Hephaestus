@@ -59,6 +59,22 @@ jobs:
       - name: Verify Prometheus source and provider negative paths before any secrets are loaded
         working-directory: source
         run: pytest -q tests/test_prometheus_scientific_decision.py tests/test_prometheus_granite_public_measurement.py tests/test_prometheus_gpu_provider_guard.py
+      - name: Authenticate historical evidence scope with real CPU diagnosis before GPU allocation
+        working-directory: source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          from hephaestus.development.prometheus_scientific_decision import _verify, prepare, PARENT_SHA, D_SHA
+          root = Path(os.environ["RUNNER_TEMP"])
+          parent = _verify(root / "prometheus-parent/granite-original-parent-dev-aggregate.json", PARENT_SHA)
+          d = _verify(root / "prometheus-D/granite-d-readonly-rescore.json", D_SHA)
+          report, options, facts = prepare(parent, d)
+          print("PROMETHEUS_AUTHENTIC_CPU_PREFLIGHT_STATUS=" + report.status)
+          print("PROMETHEUS_ALLOWED_ACTIONS=" + ",".join(sorted({p.intervention_kind for p in options})))
+          assert report.status in ("inconclusive", "needs_evidence", "blocked")
+          assert options and len(facts) == 2
+          PY
       - name: Launch ONE genuine GPU Pod only after independently authenticated watchdog readiness
         working-directory: source
         timeout-minutes: 135
