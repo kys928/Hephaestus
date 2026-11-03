@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -18,6 +19,7 @@ from hephaestus.development.prometheus_gpu_provider import (
     MAX_LEASE_SECONDS, _s3_existing,
 )
 from hephaestus.development.prometheus_gpu_watchdog import _matching
+from hephaestus.storage.verified import canonical_bytes
 
 
 def test_prepaid_finite_execution_is_not_an_unbounded_money_sink():
@@ -131,11 +133,15 @@ def test_valid_ready_receipt_is_bound_to_campaign():
 def test_watchdog_filters_to_immutable_source_and_volumes():
     sha="a"*40
     prefix,name=_source_scope(sha)
-    config=SimpleNamespace(datacenter_id="EU-CZ-1",network_volume_id="cviwpryzao")
-    from hephaestus.development.prometheus_gpu_provider import IMAGE
+    config=SimpleNamespace(api_base_url="https://api.runpod.io/v2",
+        datacenter_id="EU-CZ-1",network_volume_id="cviwpryzao")
+    from hephaestus.development.prometheus_gpu_provider import IMAGE, ID
+    operation_key=hashlib.sha256(canonical_bytes([
+        config.api_base_url, config.network_volume_id, ID+"-"+sha,
+    ])).hexdigest()
     good={
         "id":"paid-diagnostic-test",
-        "name":name+"-123456789",
+        "name":name+"-"+operation_key[:32],
         "cloud":"SECURE",
         "dataCenterId":"EU-CZ-1","image":IMAGE,
         "gpu":{"id":"NVIDIA H100 80GB HBM3","count":1},
@@ -148,3 +154,15 @@ def test_watchdog_filters_to_immutable_source_and_volumes():
     with pytest.raises(PermissionError):
         _matching(SimpleNamespace(list_pods=lambda:[other]),
                   prefix=prefix,basename=name,config=config)
+    # Even matching GPU, mounts and env do not authorize a different Pod:
+    # the provider operation ID must match the pinned campaign source.
+    mimicked=dict(good,name=name+"-"+"f"*32)
+    with pytest.raises(PermissionError, match="unexpected immutable"):
+        _matching(SimpleNamespace(list_pods=lambda:[mimicked]),
+                  prefix=prefix,basename=name,config=config)
+    # Provider responses can omit credentials; exact source-bound identity
+    # remains available even if env is redacted.
+    redacted=dict(good)
+    redacted.pop("env")
+    assert _matching(SimpleNamespace(list_pods=lambda:[redacted]),
+                     prefix=prefix,basename=name,config=config)==[redacted]
