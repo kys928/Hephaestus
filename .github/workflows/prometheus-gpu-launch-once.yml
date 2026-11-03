@@ -10,7 +10,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: prometheus-once-launch-201
+  group: prometheus-once-launch-201-${{ github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 jobs:
