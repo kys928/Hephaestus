@@ -1,7 +1,6 @@
 """Genuine Diagnosis/Planner preflight from a pinned, previously exposed D metric."""
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from pathlib import Path
 
@@ -37,8 +36,8 @@ def test_real_historical_aggregate_runs_existing_diagnosis_and_planner():
                for issue in result["diagnosis"]["issues"])
     assert any(o["source_ref"] == SHA_REPORT
                for o in result["diagnosis"]["observations"])
-    assert all("model_originated" is not True for p in result["interventions"]
-               for _ in [None] if True)  # no simulated model-inference receipt
+    assert all(not p.get("metadata", {}).get("model_originated", False)
+               for p in result["interventions"])  # no simulated model inference
     assert "no_material_change" not in json.dumps(result["diagnosis"]["observations"])
 
 
