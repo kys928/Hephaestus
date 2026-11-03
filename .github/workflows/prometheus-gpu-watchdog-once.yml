@@ -9,7 +9,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: prometheus-once-watchdog-201
+  group: prometheus-once-watchdog-201-${{ github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 jobs:
