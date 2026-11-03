@@ -2,7 +2,7 @@ name: Independent Prometheus GPU termination watchdog (TEMPORARY, remove before 
 
 on:
   pull_request:
-    types: [labeled]
+    types: [ready_for_review]
 
 permissions:
   contents: read
@@ -15,7 +15,6 @@ concurrency:
 jobs:
   independent-off-pod-termination:
     if: >-
-      github.event.label.name == 'prometheus-gpu-go' &&
       github.actor == 'kys928' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'feature/prometheus-model-backed-scientific-decision' &&
