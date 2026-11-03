@@ -33,7 +33,10 @@ jobs:
           python-version: '3.12'
       - name: Install separate off-pod RunPod provider adapter
         working-directory: source
-        run: python -m pip install -q -e '.[s3]'
+        run: python -m pip install -q -e '.[test,s3]'
+      - name: Verify Prometheus source and provider negative paths before any secrets are loaded
+        working-directory: source
+        run: pytest -q tests/test_prometheus_scientific_decision.py tests/test_prometheus_granite_public_measurement.py tests/test_prometheus_gpu_provider_guard.py
       - name: Publish independently authenticated readiness and enforce finite paid Pod deletion
         working-directory: source
         timeout-minutes: 140
