@@ -17,7 +17,7 @@ from hephaestus.development.prometheus_gpu_provider import (
     _wallet_lease, _pod_command, _source_scope, _require_independent_watchdog,
     MAX_LEASE_SECONDS, _s3_existing,
 )
-from scripts.watch_prometheus_gpu_once import _matching
+from hephaestus.development.prometheus_gpu_watchdog import _matching
 
 
 def test_prepaid_finite_execution_is_not_an_unbounded_money_sink():
