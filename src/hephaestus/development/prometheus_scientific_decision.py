@@ -25,7 +25,6 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import re
 
 from hephaestus.control.deterministic_role_boundary import (
     DeterministicRoleContext, EvidenceRecord, EvidenceRegistry,
@@ -179,9 +178,35 @@ def _precommit(diagnosis, options, facts) -> dict:
     }
 
 
+def _require_actual_gpu_receipt(reasoner: CertifiedRoleReasoner, ref: str, role: str) -> dict:
+    """A CPU fixture or hand-authored JSON must never count as model science."""
+    raw = verify_inference_receipt(reasoner.artifact_store, ref, reasoner.contract)
+    execution = raw.get("execution")
+    if (type(reasoner.generator) is not PinnedTransformersRoleGenerator
+            or reasoner.generator.device != "cuda:0"
+            or raw.get("generator") != "PinnedTransformersRoleGenerator"
+            or raw.get("role") != role
+            or not isinstance(execution, dict)
+            or execution.get("device") != "cuda:0"
+            or not isinstance(execution.get("gpu_name"), str)
+            or not execution["gpu_name"].strip()
+            or not isinstance(execution.get("generated_token_ids"), list)
+            or not execution.get("tokenizer_id") == raw.get("model_id")
+            or raw.get("status") != "accepted"):
+        raise PermissionError("authentic CUDA specialist execution evidence is absent")
+    expected = reasoner.stack.resolve(role)
+    if (raw.get("model_id") != expected.model_id
+            or raw.get("base_revision") != expected.revision
+            or raw.get("adapter_sha256") != expected.adapter.sha256):
+        raise PermissionError("specialist inference is not the frozen certified role")
+    return raw
+
+
 def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path) -> dict:
     """Execute *real* frozen role inference, then independently admit its result."""
     diagnosis, options, facts = prepare(parent, d)
+    if type(reasoner.generator) is not PinnedTransformersRoleGenerator:
+        raise PermissionError("genuine scientific mode refuses a synthetic role generator")
     if out.exists() and any(out.iterdir()):
         raise FileExistsError("research decision directory must be fresh, never overwrite prior receipts")
     out.mkdir(parents=True, exist_ok=True)
@@ -199,9 +224,8 @@ def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path)
         facts, RUN, LINEAGE, STAGE)
     diagnosis_observation = reasoner.propose(task_d, registry, context=context,
                                              max_new_tokens=768)
-    verify_inference_receipt(reasoner.artifact_store,
-                              diagnosis_observation.inference_receipt_ref,
-                              reasoner.contract)
+    _require_actual_gpu_receipt(reasoner, diagnosis_observation.inference_receipt_ref,
+                                "diagnosis")
     reviewed_diagnosis = select_model_hypothesis(
         diagnosis, diagnosis_observation.answer, diagnosis_observation.inference_receipt_ref)
     candidates = ClosedLoopExperimentPlanner().propose_interventions(reviewed_diagnosis)
@@ -229,9 +253,10 @@ def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path)
         "recipe from unmatched historical D research.",
         (*facts, options_fact), RUN, LINEAGE, STAGE)
     proposed = reasoner.propose(planner_task, reg, context=context, max_new_tokens=768)
-    verify_inference_receipt(reasoner.artifact_store,
-                              proposed.inference_receipt_ref, reasoner.contract)
+    _require_actual_gpu_receipt(reasoner, proposed.inference_receipt_ref, "planner")
     selected = planner_selection(proposed.answer, proposed.inference_receipt_ref)
+    if not set(selected.evidence_refs).intersection({REF_PARENT, REF_D}):
+        raise PinnedEvidenceError("model decision must cite authentic observed scientific evidence")
     chosen = ClosedLoopExperimentPlanner().admit_model_selection(
         reviewed_diagnosis, selected,
         set(reg.validate(selected.evidence_refs, run_id=RUN, lineage_id=LINEAGE).valid_refs),
