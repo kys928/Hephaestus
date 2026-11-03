@@ -313,8 +313,22 @@ class RunPodExecutionAdapter:
         status, catalog = self._request("GET", "catalog/datacenters/" + quote(self.config.datacenter_id, safe="") + "?include=GPU_AVAILABILITY")
         if status != 200 or not isinstance(catalog, dict) or catalog.get("id") != self.config.datacenter_id:
             raise RunPodApiError("GPU placement catalog unavailable; no allocation attempted")
-        available = {item.get("id") for item in catalog.get("gpuAvailability", [])
-                     if isinstance(item, dict) and item.get("availability") in {"LOW", "MEDIUM", "HIGH"}}
+        # RunPod REST v2 datacenter catalogs report gpuId + stockStatus.
+        # Older provider fixtures used id + availability; accept either form
+        # only with a positive recognized stock level, never assume stock.
+        rows = catalog.get("gpuAvailability")
+        if not isinstance(rows, list):
+            raise RunPodApiError("GPU placement stock list missing; no allocation attempted")
+        available = set()
+        for item in rows:
+            if not isinstance(item, dict):
+                raise RunPodApiError("malformed GPU placement record; no allocation attempted")
+            gpu_id = item.get("gpuId", item.get("id"))
+            stock = item.get("stockStatus", item.get("availability"))
+            if (isinstance(gpu_id, str) and gpu_id.strip()
+                    and isinstance(stock, str)
+                    and stock.strip().upper() in {"LOW", "MEDIUM", "HIGH"}):
+                available.add(gpu_id)
         for gpu_id in allowed:
             if gpu_id in available:
                 return gpu_id
