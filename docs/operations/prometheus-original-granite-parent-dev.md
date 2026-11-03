@@ -35,3 +35,21 @@ The script does not load model weights, infer new tokens, train, spend paid GPU 
 After the forensic run, **delete the temporary credentials-bearing GitHub workflow from the proposed merge tree**, retaining evidence and read-only source/tests, and rerun the maintained CPU/integration CI. Do not modify the active workflow allowlist or allow repository secrets into permanent CI.
 
 Next, pass source-authenticated six-state development aggregates as **observations**, not causal prescriptions, to the existing Diagnosis and Planner. Any actual training intervention must be chosen by Hephaestus after sufficient evidence, using bounded governed executors and appropriate compute authorization. Keep separate source/model/ontology provenance for the eight-state historical D research.
+
+## Verified result (2026-11-03)
+
+[Original six-state parent development forensic run 41645367124](https://github.com/kys928/Hephaestus/actions/runs/41645367124) **passed** after regenerating the 200-case original source references from frozen source commit, then reading ONLY the two original parent S3 objects. **32 offline regressions passed**. The GitHub aggregate artifact is `13233709387`, GitHub artifact ZIP digest `sha256:e0a8ad6f370d09cd042f2b8a04dc98d9b7d870ce8cf33f45de7fe63967caee6a`, and original in-ZIP JSON SHA-256 `2d1ffa37a9e14939c5c0e9c3365a5fe0a4220a37b502678a1f72f5def366378f`.
+
+Results on the **already-exposed checkpoint-selection development set**:
+
+- **200/200** correct six-state decisions from independently strict-parsed normalized outputs.
+- **200/200** correct directly from strict-parsed raw generations.
+- **0** per-case decision-score disagreements with original stored scoring.
+- Original selected dev summary fully reproduced: quality **99.875/100**, schema **1.0**, grounding **1.0**.
+- Per-class: improved 50/50; incomplete_evidence 66/66; evaluation_invalid 34/34; regressed 17/17; scientific_rejection 17/17; no_material_change 16/16.
+- The original 300 certification response rows and any protected final assessment were **not retrieved**.
+- Observed S3 result metadata digest: `e581987920b75ad17740565a36d8ce35050edaa4d77e66b9e3c08e55dd1c2744`; observed original dev JSONL digest: `95b2a9970227611a77a661b161bce49fc79d9df9a64291e38be757d81367985a`. These two raw-object hashes were first observed in this audit, **not** independently precommitted before the run.
+
+**Research implication:** the original six-state certified parent shows no errors on its original development distribution. This is not evidence that it generalizes to hard semantic contrasts. Conversely, the later eight-state D candidate's observed failures cannot be assigned to this frozen production parent. We do **not** currently possess compatible independently measured weaknesses in this original certified model that justify a specific repair intervention.
+
+The temporary secret-bearing forensic workflow that generated this evidence was removed from the proposed integration tree afterward. The default-tree workflow allowlist and no-repository-secrets invariant remain unchanged. The read-only audit program and fake-S3 tests remain for reproducibility under separately reviewed, credentialed, non-active execution.
