@@ -11,15 +11,39 @@ This is a **historical, exposed eight-state development re-score**, not evaluati
 - Exact frozen development pack hash: `ae8b2bd702d9b0751f9b1b04958d5a4559188971fcaf1dd818be4da233cd6912`.
 - Exact 64-case ordered screen hash: `98c3346fde66cc92d355bae019de811cb9c7614746073d1e4f93e6a069dbe11c`.
 
-## Workflow
+## Completed one-time verification
 
-The CPU-only GitHub Actions workflow `.github/workflows/prometheus-granite-d-raw-readonly.yml` checks out the current source and the historical immutable source commit separately. With **no S3 credentials yet injected**, it regenerates the original 64 exposed reference IDs/expected labels and checks the frozen development and screen hashes.
+The CPU-only branch workflow run **41609821443** completed on source head
+`29eeb7b385b0bf07592fe78b12dffb1c05a0fdd9`. It independently
+checked out the original historical reference generator at the pinned source
+commit, regenerated the original 64-case development reference order, and
+verified its SHA-256 before using S3. Offline fake-S3 checks: **46 passed**.
 
-Next it runs offline fake-S3 regressions. Only after these steps pass does it inject the repository's existing S3 read credentials into a single step that uses **GET only** for the two exact, hardcoded D shard keys. It checks the original byte lengths and SHA-256 digests against independent archived receipts before parsing raw projected model outputs.
+Only then did the ephemeral runner use existing repository-held S3 credentials
+to read the two exact, previously exposed D shard objects via GET. Byte lengths
+and SHA-256 hashes matched their archival receipts. Strict raw-output re-score:
 
-The new `scripts/audit_granite_d_historical_readonly.py` independently scores complete raw JSON decisions using the ontology-scoped scorer merged in PR #196; it compares strict per-case judgments against the historical stored Boolean scores and compares recorded per-state counts against the archived assessment.
+- **33/64 exact decisions**, matching the archived independent D summary.
+- **0 per-case disagreements** with the original stored decision scores.
+- Full per-state historical counts reproduced.
+- Original raw generations and development case text were **not** published.
+- No new model inference, optimizer updates, pod or paid GPU launched.
 
-Outputs are **aggregates and SHA receipts only**. The action must not publish raw generations, prompts, private reference rows, model weights, credentials or protected final assessment data.
+Source receipts: [GitHub run 41609821443](https://github.com/kys928/Hephaestus/actions/runs/41609821443),
+aggregate artifact ID `13217803440`; verified aggregate report SHA-256
+`7398eeed835422151678e4e1a79ee4c0d8ead4daf9dba61dd4333aa9acfbf953`.
+
+**The temporary S3-authenticated workflow was deliberately removed from the
+proposed merge tree after this one-time run.** The maintained
+`tests/test_active_workflow_allowlist.py` forbids active workflows from loading
+repository secrets. We preserve that guard without adding an exception.
+The read-only audit script, offline regressions, original run receipts and
+this documentation remain. Any future live S3 read requires its own
+appropriately reviewed, scoped execution; none is scheduled by this change.
+
+The code in `scripts/audit_granite_d_historical_readonly.py` uses the
+ontology-scoped raw scorer merged in PR #196. Its safe output is aggregates
+plus SHA receipts; it never accepts arbitrary S3 object keys as CLI input.
 
 ## What this does not establish
 
@@ -27,4 +51,4 @@ Hash agreement with historical source receipts proves which bytes were rescored.
 
 Do not treat an eight-state D score as a direct measure of the six-state certified original Granite Evaluator. Do not infer a causal training diagnosis from raw decision mistakes alone. The correct next step is to pass independently verified *observational* metrics to Hephaestus's Diagnosis and Planner, with model and ontology identities clearly bound. The system must choose its own proposed action under frozen policy; Sol must not inject a preferred intervention.
 
-No paid GPU, new model inference, training, final holdout access, production activation or promotion is authorized by this workflow.
+No paid GPU, new model inference, training, final holdout access, production activation or promotion is authorized by this evidence-recovery code.
