@@ -1,0 +1,54 @@
+{
+  "schema": "prometheus-granite-d-observation.v1",
+  "source_workflow_run_id": 41609821443,
+  "source_artifact_id": 13217803440,
+  "original_aggregate_report_sha256": "sha256:7398eeed835422151678e4e1a79ee4c0d8ead4daf9dba61dd4333aa9acfbf953",
+  "original_archive_zip_sha256": "sha256:25ff27dea3153f601876d3ffb6bf5628cba734596f89364e7911286a1e4173ff",
+  "historical_source_repo_sha": "ffa0458d5850f9d572a06d5ee6660fd63fc8acc6",
+  "historical_adapter_sha256_claim": "5124d3e1e5ddfcb69f85e9746d2dbd737423834e46dc7eb4c56c786acebc02f1",
+  "ontology": "historical-semantic-invariance-evaluator.v1",
+  "partition": "exposed_development",
+  "sample_count": 64,
+  "strict_correct_count": 33,
+  "historical_saved_correct_count": 33,
+  "strict_disagreements_with_saved": 0,
+  "by_state_correct": {
+    "certification_ready": 7,
+    "equivalent": 0,
+    "improved": 4,
+    "incomplete_evidence": 5,
+    "inconclusive": 8,
+    "recheck_required": 0,
+    "regressed": 4,
+    "scientific_rejection": 5
+  },
+  "by_state_total": {
+    "certification_ready": 8,
+    "equivalent": 8,
+    "improved": 8,
+    "incomplete_evidence": 8,
+    "inconclusive": 8,
+    "recheck_required": 8,
+    "regressed": 8,
+    "scientific_rejection": 8
+  },
+  "source_shards": [
+    {
+      "key": "hephaestus/scientific/v5/evaluator_semantic_repair_v2/evaluator-semantic-v2-D-38945578442/checkpoints/step-096/evaluation/samples/shard-0001.json",
+      "bytes": 124152,
+      "sha256": "934363b71fd76d835b1d05bbc8892645605b3644e1415fa3a82d82e385f67dbc"
+    },
+    {
+      "key": "hephaestus/scientific/v5/evaluator_semantic_repair_v2/evaluator-semantic-v2-D-38945578442/checkpoints/step-096/evaluation/samples/shard-0002.json",
+      "bytes": 124363,
+      "sha256": "471897bcfaa66a707599f234e5a7405b8d3783c67d876f34ff029f3c8fc2d1e1"
+    }
+  ],
+  "s3_bytes_sha256_verified": true,
+  "model_weights_independently_verified": false,
+  "scientific_causality_established": false,
+  "independent_final_assessment": false,
+  "protected_final_holdout_accessed": false,
+  "scientific_certification": false,
+  "no_model_inference_or_training_performed": true
+}
