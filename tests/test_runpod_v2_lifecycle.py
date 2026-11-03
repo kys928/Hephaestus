@@ -72,6 +72,38 @@ def test_gpu_catalog_selection_is_pinned_and_not_repeated_on_retry(tmp_path):
     assert recovered["gpu"]["id"] == "fallback" and provider.posts == 1
 
 
+def test_v2_datacenter_gpu_id_and_stock_status_are_understood(tmp_path):
+    # Current RunPod REST v2 catalog payload, unlike the historical fixture's
+    # id/availability fields. False no-stock must not block paid research.
+    class Catalog(AcceptingProvider):
+        def request(self, method, url, **kwargs):
+            if "/catalog/" in url:
+                return 200, {"id": "EU-CZ-1", "gpuAvailability": [
+                    {"gpuId": "NVIDIA L40S", "displayName": "L40S", "stockStatus": "Medium"},
+                    {"gpuId": "NVIDIA A100 80GB PCIe", "stockStatus": "None"},
+                ]}
+            return super().request(method, url, **kwargs)
+    provider=Catalog(crash_after_accept=False)
+    chosen=_adapter(tmp_path,provider).select_gpu(["NVIDIA A100 80GB PCIe","NVIDIA L40S"])
+    assert chosen=="NVIDIA L40S"
+    assert provider.posts==0
+
+
+def test_v2_datacenter_unrecognized_or_absent_stock_fails_closed(tmp_path):
+    class Catalog(AcceptingProvider):
+        def request(self, method, url, **kwargs):
+            if "/catalog/" in url:
+                return 200, {"id": "EU-CZ-1", "gpuAvailability": [
+                    {"gpuId": "NVIDIA L40S", "stockStatus": "None"},
+                    {"gpuId": "NVIDIA H100 80GB HBM3", "stockStatus": "Unknown"},
+                ]}
+            return super().request(method, url, **kwargs)
+    provider=Catalog()
+    with pytest.raises(RunPodApiError, match="No allowed GPU"):
+        _adapter(tmp_path,provider).select_gpu(["NVIDIA L40S","NVIDIA H100 80GB HBM3"])
+    assert provider.posts==0
+
+
 def test_unsupported_interruptible_request_has_no_external_effects(tmp_path):
     provider = AcceptingProvider()
     with pytest.raises(ValueError, match="interruptible"):
