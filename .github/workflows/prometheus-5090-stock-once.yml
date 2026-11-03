@@ -32,5 +32,8 @@ jobs:
           for e in d.get("dataCenters",[]) or []:
               if isinstance(e,dict) and str(e.get("dataCenterId",e.get("id",""))).startswith("EU-"):
                   print("EU_GPU_STOCK="+json.dumps({k:v for k,v in e.items() if k in ("dataCenterId","id","cloudType","availability","stockStatus","stock","cudaVersions","count","gpuCount")},sort_keys=True))
+          print("5090_AVAILABILITY="+json.dumps(d.get("availability"),sort_keys=True))
+          print("5090_DATACENTERS="+json.dumps(d.get("dataCenters"),sort_keys=True))
+          print("5090_SECURE="+json.dumps(d.get("secure"),sort_keys=True))
           print("5090_TOP_KEYS="+",".join(sorted(d.keys())))
           PY
