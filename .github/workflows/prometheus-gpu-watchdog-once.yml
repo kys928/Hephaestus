@@ -52,7 +52,7 @@ jobs:
           set -Eeuo pipefail
           python -u -m scripts.watch_prometheus_gpu_once \
             --source-sha "${{ github.event.pull_request.head.sha }}" \
-            --state-root "$RUNNER_TEMP/prometheus-independent-watchdog-state"
+            --state-root "/tmp/prometheus-watchdog-${{ github.event.pull_request.head.sha }}"
       - name: Preserve execution status
         if: always()
         run: |
