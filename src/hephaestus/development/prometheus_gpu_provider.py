@@ -24,7 +24,7 @@ from hephaestus.development.prometheus_scientific_decision import (
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
-from hephaestus.providers.runpod.execution import RunPodExecutionAdapter, AmbiguousRunPodOperation
+from hephaestus.providers.runpod.execution import RunPodExecutionAdapter, AmbiguousRunPodOperation, RunPodApiError
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
 
 ID = "prometheus-certified-granite-decision-first-v1"
@@ -40,6 +40,9 @@ MIN_LEASE_SECONDS = 900
 RESERVE_USD = Decimal("0.40")
 OTHER_SPEND_PER_HOUR = Decimal("0.05")
 MAX_IDLE_SECONDS = 900
+MAX_STOCK_SEARCH_SECONDS = 1800
+STOCK_POLL_SECONDS = 30
+WATCHDOG_MARGIN_SECONDS = 240
 
 
 def _source_scope(sha: str) -> tuple[str,str]:
@@ -94,6 +97,48 @@ def _wallet_lease(account, quote) -> int:
     if seconds<MIN_LEASE_SECONDS:
         raise PermissionError("prepaid balance cannot safely support one bounded model-inference window")
     return seconds
+
+
+def _find_gpu_within_window(adapter, *, max_seconds=MAX_STOCK_SEARCH_SECONDS,
+                            clock=time) -> str:
+    """Search only live EU-CZ-1 exact-stock evidence, for at most 30 minutes.
+
+    Retry only an explicit stock-negative/missing-list reply. Authentication,
+    parsing, or network failures outside the known stock-negative categories
+    fail closed. Never POST a Pod from this function.
+    """
+    if not 0 < max_seconds <= MAX_STOCK_SEARCH_SECONDS:
+        raise ValueError("GPU availability search must be at most 30 minutes")
+    deadline = clock.monotonic() + max_seconds
+    rejected = (
+        "GPU placement stock list missing;",
+        "No allowed GPU available in the pinned datacenter;",
+    )
+    while True:
+        try:
+            return adapter.select_gpu(list(GPU_PREFERENCES))
+        except RunPodApiError as exc:
+            if not str(exc).startswith(rejected):
+                raise
+            remaining = deadline - clock.monotonic()
+            if remaining <= 0:
+                raise RunPodApiError(
+                    "PROMETHEUS_STOCK_SEARCH_EXPIRED_30_MINUTES; no Pod allocated"
+                ) from exc
+            print("PROMETHEUS_WAITING_FOR_EXACT_EU_CZ_1_STOCK=true", flush=True)
+            clock.sleep(min(STOCK_POLL_SECONDS, remaining))
+
+
+def _limit_lease_to_watchdog(lease: int, ready: dict) -> int:
+    """Do not let a late GPU allocation outrun its independent supervisor."""
+    expiration = datetime.fromisoformat(ready["hard_deadline"])
+    if expiration.tzinfo is None:
+        raise PermissionError("independent watchdog hard deadline has no timezone")
+    remaining = int((expiration-datetime.now(timezone.utc)).total_seconds())
+    safe_lease = min(lease, remaining-WATCHDOG_MARGIN_SECONDS)
+    if safe_lease < MIN_LEASE_SECONDS:
+        raise PermissionError("independent watchdog cannot supervise a safe remaining paid lease")
+    return safe_lease
 
 
 def _pod_command(prefix: str, bundle_hash: str, duration: int) -> tuple[list[str],dict[str,str]]:
@@ -213,7 +258,7 @@ def launch(args, *, config, adapter, provider, s3):
              if str(p.get("name","")).startswith(name+"-")]
     if already:
         raise PermissionError("Prometheus provider resource already exists; reconcile before launching another")
-    gpu_id=adapter.select_gpu(list(GPU_PREFERENCES))
+    gpu_id=_find_gpu_within_window(adapter)
     account=provider.account()
     quote=provider.quote_gpu(gpu_id=gpu_id,
                              datacenter_id=config.datacenter_id,cloud="SECURE")
@@ -225,7 +270,8 @@ def launch(args, *, config, adapter, provider, s3):
         _put_once(s3,config.network_volume_id,prefix+"/source/historical-d-dev.json",d),
         _put_once(s3,config.network_volume_id,prefix+"/source/code.tar.gz",bundle),
     ]
-    _require_independent_watchdog(s3,config.network_volume_id,prefix,sha)
+    ready=_require_independent_watchdog(s3,config.network_volume_id,prefix,sha)
+    lease=_limit_lease_to_watchdog(lease,ready)
     intent={
         "schema":"prometheus-paid-one-time-launch-intent.v1",
         "source_sha":sha,"prefix":prefix,"pod_basename":name,
