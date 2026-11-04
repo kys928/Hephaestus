@@ -17,9 +17,80 @@ import pytest
 from hephaestus.development.prometheus_gpu_provider import (
     _wallet_lease, _pod_command, _source_scope, _require_independent_watchdog,
     MAX_LEASE_SECONDS, _s3_existing, GPU_PREFERENCES, _require_admitted_intent_root,
+    _find_gpu_within_window, _limit_lease_to_watchdog, _require_current_watchdog_heartbeat,
 )
 from hephaestus.development.prometheus_gpu_watchdog import _matching
 from hephaestus.storage.verified import canonical_bytes
+from hephaestus.providers.runpod.execution import RunPodApiError
+
+
+class _FakeClock:
+    def __init__(self): self.now=0.0
+    def monotonic(self): return self.now
+    def sleep(self,seconds): self.now+=seconds
+
+
+def test_30_minute_exact_stock_search_cannot_overshoot_window():
+    clock=_FakeClock()
+    class NoCapacity:
+        attempts=0
+        def select_gpu(self,allowed):
+            self.attempts+=1
+            assert allowed==["NVIDIA RTX PRO 6000 Blackwell Server Edition"]
+            raise RunPodApiError("No allowed GPU available in the pinned datacenter; no allocation attempted")
+    adapter=NoCapacity()
+    with pytest.raises(RunPodApiError,match="EXPIRED_30_MINUTES"):
+        _find_gpu_within_window(adapter,max_seconds=1800,clock=clock)
+    assert clock.now==1800
+    assert adapter.attempts==61
+
+
+def test_30_minute_search_admits_stock_arriving_during_window():
+    clock=_FakeClock()
+    class Eventually:
+        attempts=0
+        def select_gpu(self,allowed):
+            self.attempts+=1
+            if self.attempts<3:
+                raise RunPodApiError("GPU placement stock list missing; no allocation attempted")
+            return allowed[0]
+    adapter=Eventually()
+    assert _find_gpu_within_window(adapter,max_seconds=1800,clock=clock)==GPU_PREFERENCES[0]
+    assert clock.now==60
+
+
+def test_stock_search_does_not_swallow_auth_or_parser_failures():
+    clock=_FakeClock()
+    class Fatal:
+        def select_gpu(self,allowed):
+            raise RunPodApiError("RunPod API request failed with HTTP 401",status_code=401)
+    with pytest.raises(RunPodApiError,match="401"):
+        _find_gpu_within_window(Fatal(),clock=clock)
+    assert clock.now==0
+
+
+def test_late_stock_selection_leaves_watchdog_safe_budget():
+    good={"hard_deadline":(datetime.now(timezone.utc)+timedelta(seconds=1700)).isoformat()}
+    lease=_limit_lease_to_watchdog(7200,good)
+    assert 1300<=lease<=1460
+    expired={"hard_deadline":(datetime.now(timezone.utc)+timedelta(seconds=600)).isoformat()}
+    with pytest.raises(PermissionError,match="cannot supervise"):
+        _limit_lease_to_watchdog(7200,expired)
+
+
+def test_paid_allocation_rejects_stale_or_wrong_heartbeat():
+    sha="a"*40
+    prefix,_=_source_scope(sha)
+    def validate(when,source=sha):
+        doc={"schema":"prometheus-independent-watchdog-heartbeat.v1",
+             "source_sha":source,"prefix":prefix,"observed_at":when.isoformat()}
+        _require_current_watchdog_heartbeat(
+            _S3(json.dumps(doc).encode()),"cviwpryzao",prefix,sha)
+    validate(datetime.now(timezone.utc))
+    with pytest.raises(PermissionError,match="stale"):
+        validate(datetime.now(timezone.utc)-timedelta(minutes=3))
+    with pytest.raises(PermissionError,match="identity mismatch"):
+        validate(datetime.now(timezone.utc),"b"*40)
 
 
 def test_source_scoped_sqlite_intent_root_is_admitted_local_tmp_only():
