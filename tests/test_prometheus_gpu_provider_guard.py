@@ -16,10 +16,15 @@ import pytest
 
 from hephaestus.development.prometheus_gpu_provider import (
     _wallet_lease, _pod_command, _source_scope, _require_independent_watchdog,
-    MAX_LEASE_SECONDS, _s3_existing,
+    MAX_LEASE_SECONDS, _s3_existing, GPU_PREFERENCES,
 )
 from hephaestus.development.prometheus_gpu_watchdog import _matching
 from hephaestus.storage.verified import canonical_bytes
+
+
+def test_one_time_gpu_is_pinned_to_exact_operator_selected_model():
+    # No silent GPU-family substitution on the fresh paid authorization.
+    assert GPU_PREFERENCES == ("NVIDIA RTX PRO 6000 Blackwell Server Edition",)
 
 
 def test_prepaid_finite_execution_is_not_an_unbounded_money_sink():
