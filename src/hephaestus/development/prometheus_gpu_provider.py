@@ -228,6 +228,27 @@ def _require_independent_watchdog(s3, bucket: str, prefix: str, sha: str) -> dic
     raise PermissionError("independent off-pod watchdog was not running; refuse paid allocation")
 
 
+def _require_current_watchdog_heartbeat(s3, bucket: str,
+                                         prefix: str, sha: str) -> None:
+    # A historically valid ready receipt is not proof that a 30-minute
+    # watcher is still running. Require recent, campaign-pinned activity.
+    item=s3.get_object(Bucket=bucket,Key=prefix+"/status/watchdog-heartbeat.json")
+    try:
+        doc=json.loads(item["Body"].read(4096))
+    finally:
+        item["Body"].close()
+    if (doc.get("schema")!="prometheus-independent-watchdog-heartbeat.v1"
+            or doc.get("source_sha")!=sha
+            or doc.get("prefix")!=prefix):
+        raise PermissionError("independent watchdog heartbeat identity mismatch")
+    observed=datetime.fromisoformat(doc["observed_at"])
+    if observed.tzinfo is None:
+        raise PermissionError("watchdog heartbeat has no timezone")
+    age=(datetime.now(timezone.utc)-observed).total_seconds()
+    if not -15 <= age <= 90:
+        raise PermissionError("independent off-pod watchdog heartbeat is stale")
+
+
 def _require_admitted_intent_root(path: Path, sha: str) -> None:
     # The bounded GitHub controller's SQLite journal must live on an
     # admitted isolated local Linux root, not under /home/runner/work/_temp.
@@ -289,9 +310,11 @@ def launch(args, *, config, adapter, provider, s3):
         "production_activation_allowed":False,
         "created_at":datetime.now(timezone.utc).isoformat(),
     }
+    _require_current_watchdog_heartbeat(s3,config.network_volume_id,prefix,sha)
     _put_once(s3,config.network_volume_id,prefix+"/launch-intent.json",
               json.dumps(intent,sort_keys=True).encode())
     command,env=_pod_command(prefix,bundle_sha,lease)
+    _require_current_watchdog_heartbeat(s3,config.network_volume_id,prefix,sha)
     pod_id=None
     status="provider_not_allocated"
     try:
