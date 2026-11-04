@@ -21,10 +21,10 @@ from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
 from hephaestus.storage.verified import canonical_bytes
 from hephaestus.development.prometheus_gpu_provider import (
-    ID, MAX_LEASE_SECONDS, _source_scope, _read_exit, _s3_existing, _put_once, IMAGE,
+    ID, MAX_LEASE_SECONDS, MAX_STOCK_SEARCH_SECONDS, _source_scope, _read_exit, _s3_existing, _put_once, IMAGE,
 )
 
-START_GRACE_SECONDS=1200
+START_GRACE_SECONDS=MAX_STOCK_SEARCH_SECONDS+420
 WATCHDOG_GRACE_SECONDS=480
 
 
@@ -80,6 +80,17 @@ def watch(args, *, config,adapter,s3,clock=time):
     seen=False
     first=time.monotonic()
     while datetime.now(timezone.utc)<hard_deadline:
+        # Evidence that this off-pod process is still alive during the
+        # operator's 30-minute stock search. The launcher refuses a stale
+        # heartbeat even if the original ready receipt exists.
+        beat={
+            "schema":"prometheus-independent-watchdog-heartbeat.v1",
+            "source_sha":args.source_sha,"prefix":prefix,
+            "observed_at":datetime.now(timezone.utc).isoformat(),
+        }
+        s3.put_object(Bucket=config.network_volume_id,
+                      Key=prefix+"/status/watchdog-heartbeat.json",
+                      Body=json.dumps(beat,sort_keys=True).encode())
         pods=_matching(adapter,prefix=prefix,basename=basename,config=config)
         if len(pods)>1:
             # Delete every *individually* authenticated duplicate campaign Pod
