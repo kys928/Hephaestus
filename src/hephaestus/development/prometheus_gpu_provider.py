@@ -191,11 +191,13 @@ def launch(args, *, config, adapter, provider, s3):
     # GitHub hosted runners use /home/runner/work/_temp, not /tmp.
     # Only its own absolute isolated temporary directory may hold provider
     # operation intents; never create those in checkout or shared volume.
-    runner_temp = Path(os.environ.get("RUNNER_TEMP", "/tmp")).resolve()
+    # SQLite admission is intentionally restricted to isolated Linux /tmp
+    # (or operator-managed /var/lib/hephaestus), not GitHub RUNNER_TEMP at
+    # /home/runner/work/_temp. Use one exact source-scoped ephemeral root.
     intent_root = adapter.state_root
+    expected_root = Path("/tmp") / ("prometheus-runpod-" + sha)
     if (not intent_root.is_absolute() or intent_root.is_symlink()
-        or runner_temp == intent_root.resolve()
-        or not intent_root.resolve().is_relative_to(runner_temp)):
+        or intent_root.resolve() != expected_root):
         raise PermissionError("provider intent store path was not admitted")
     parent=_identity_source(args.parent_report,PARENT_SHA)
     d=_identity_source(args.d_report,D_SHA)
