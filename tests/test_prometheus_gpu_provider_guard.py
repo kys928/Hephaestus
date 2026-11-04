@@ -16,10 +16,19 @@ import pytest
 
 from hephaestus.development.prometheus_gpu_provider import (
     _wallet_lease, _pod_command, _source_scope, _require_independent_watchdog,
-    MAX_LEASE_SECONDS, _s3_existing, GPU_PREFERENCES,
+    MAX_LEASE_SECONDS, _s3_existing, GPU_PREFERENCES, _require_admitted_intent_root,
 )
 from hephaestus.development.prometheus_gpu_watchdog import _matching
 from hephaestus.storage.verified import canonical_bytes
+
+
+def test_source_scoped_sqlite_intent_root_is_admitted_local_tmp_only():
+    sha = "a" * 40
+    _require_admitted_intent_root(Path("/tmp/prometheus-runpod-" + sha), sha)
+    with pytest.raises(PermissionError, match="not admitted"):
+        _require_admitted_intent_root(Path("/home/runner/work/_temp/prometheus-operator-state"), sha)
+    with pytest.raises(PermissionError, match="not admitted"):
+        _require_admitted_intent_root(Path("/tmp/prometheus-runpod-" + "b" * 40), sha)
 
 
 def test_one_time_gpu_is_pinned_to_exact_operator_selected_model():
