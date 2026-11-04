@@ -93,7 +93,7 @@ jobs:
             --code-bundle "$RUNNER_TEMP/prometheus-code.tar.gz" \
             --parent-report "$RUNNER_TEMP/prometheus-parent/granite-original-parent-dev-aggregate.json" \
             --d-report "$RUNNER_TEMP/prometheus-D/granite-d-readonly-rescore.json" \
-            --state-root "$RUNNER_TEMP/prometheus-operator-state"
+            --state-root "/tmp/prometheus-runpod-${{ github.event.pull_request.head.sha }}"
       - name: Report sources of scientific truth, never raw model text
         if: always()
         run: |
