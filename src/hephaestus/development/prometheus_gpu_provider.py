@@ -183,6 +183,15 @@ def _require_independent_watchdog(s3, bucket: str, prefix: str, sha: str) -> dic
     raise PermissionError("independent off-pod watchdog was not running; refuse paid allocation")
 
 
+def _require_admitted_intent_root(path: Path, sha: str) -> None:
+    # The bounded GitHub controller's SQLite journal must live on an
+    # admitted isolated local Linux root, not under /home/runner/work/_temp.
+    expected = Path("/tmp") / ("prometheus-runpod-" + sha)
+    if (not path.is_absolute() or path.is_symlink()
+            or path.resolve() != expected):
+        raise PermissionError("provider intent store path was not admitted")
+
+
 def launch(args, *, config, adapter, provider, s3):
     sha=args.source_sha
     prefix,name=_source_scope(sha)
@@ -191,14 +200,7 @@ def launch(args, *, config, adapter, provider, s3):
     # GitHub hosted runners use /home/runner/work/_temp, not /tmp.
     # Only its own absolute isolated temporary directory may hold provider
     # operation intents; never create those in checkout or shared volume.
-    # SQLite admission is intentionally restricted to isolated Linux /tmp
-    # (or operator-managed /var/lib/hephaestus), not GitHub RUNNER_TEMP at
-    # /home/runner/work/_temp. Use one exact source-scoped ephemeral root.
-    intent_root = adapter.state_root
-    expected_root = Path("/tmp") / ("prometheus-runpod-" + sha)
-    if (not intent_root.is_absolute() or intent_root.is_symlink()
-        or intent_root.resolve() != expected_root):
-        raise PermissionError("provider intent store path was not admitted")
+    _require_admitted_intent_root(adapter.state_root, sha)
     parent=_identity_source(args.parent_report,PARENT_SHA)
     d=_identity_source(args.d_report,D_SHA)
     bundle=args.code_bundle.read_bytes()
