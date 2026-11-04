@@ -29,23 +29,11 @@ from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
 
 ID = "prometheus-certified-granite-decision-first-v1"
 GPU_PREFERENCES = (
-    # Prioritize the exact 96 GB RTX PRO 6000 shown as available in the
-    # operator's EU-CZ-1 screen; verify stock, exact ID, Secure tier and
-    # prepaid quote live before any create request.
+    # This fresh, operator-selected execution is approved for the 96 GB
+    # RTX PRO 6000 only. Do not silently change GPU family or price tier.
     "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-    # Real GPU IDs already enumerated by this repository's historical
-    # RunPod selection adapter. Admission still requires live datacenter
-    # stock, authoritative quoted VRAM >=48 GiB and one CUDA-visible device.
-    "NVIDIA L40S",
-    "NVIDIA L40",
-    "NVIDIA A40",
-    "NVIDIA A100-SXM4-80GB",
-    "NVIDIA H100 PCIe",
-    "NVIDIA H100 NVL",
-    "NVIDIA H200",
-    "NVIDIA H100 80GB HBM3",
-    "NVIDIA A100 80GB PCIe",
 )
+
 IMAGE = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 MAX_LEASE_SECONDS = 7200
 MIN_LEASE_SECONDS = 900
