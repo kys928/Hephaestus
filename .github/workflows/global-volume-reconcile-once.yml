@@ -1,0 +1,84 @@
+name: Reconcile Hephaestus Global Volume Once
+
+on:
+  push:
+    branches: [chore/global-volume-bootstrap-20261106]
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-global-volume:
+    if: >-
+      github.repository == 'kys928/Hephaestus' &&
+      github.ref == 'refs/heads/chore/global-volume-bootstrap-20261106' &&
+      github.event.head_commit.message == 'Reconcile created Hephaestus Global Volume by read-only API listing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Recover exact Global Volume ID and verify ownership without mutations
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import urllib.parse
+          import time
+          key=os.getenv("RUNPOD_API_KEY")
+          if not key:
+              raise SystemExit("Credential unavailable; no mutation attempted")
+          target="hephaestus-global-artifacts"
+          matches=[]
+          for attempt in range(4):
+              cursor=None
+              found=[]
+              for index in range(100):
+                  query="?limit=100"+("&cursor="+urllib.parse.quote(cursor,safe="") if cursor else "")
+                  req=urllib.request.Request(
+                      "https://api.runpod.io/v2/global-volumes"+query,
+                      headers={"Authorization":"Bearer "+key,"Accept":"application/json"},
+                      method="GET")
+                  with urllib.request.urlopen(req,timeout=25) as resp:
+                      if resp.status!=200:
+                          raise RuntimeError("unexpected list response")
+                      payload=json.load(resp)
+                  if not isinstance(payload,dict) or not isinstance(payload.get("globalVolumes"),list):
+                      raise RuntimeError("global volume list response has unexpected schema: "+str(sorted(payload))[:300])
+                  found.extend(x for x in payload["globalVolumes"] if isinstance(x,dict) and x.get("name")==target)
+                  pagination=payload.get("pagination")
+                  if not isinstance(pagination,dict) or pagination.get("hasNextPage") is not True:
+                      break
+                  cursor=pagination.get("nextCursor")
+                  if not isinstance(cursor,str) or not cursor:
+                      raise RuntimeError("invalid list pagination")
+              else:
+                  raise RuntimeError("exhausted bounded pagination")
+              if found:
+                  matches=found
+                  break
+              time.sleep(3)
+          print("HEPHAESTUS_GLOBAL_VOLUME_MATCH_COUNT="+str(len(matches)))
+          if len(matches)!=1:
+              raise RuntimeError("cannot uniquely identify created global volume; no mutation attempted")
+          v=matches[0]
+          ident=v.get("id")
+          if not isinstance(ident,str) or not ident:
+              raise RuntimeError("Global Volume listing lacks ID; no mutation attempted")
+          print("HEPHAESTUS_GLOBAL_VOLUME_ID="+ident)
+          print("HEPHAESTUS_GLOBAL_VOLUME_NAME="+str(v.get("name")))
+          print("HEPHAESTUS_GLOBAL_VOLUME_CREATED_AT="+str(v.get("createdAt")))
+          req=urllib.request.Request(
+              "https://api.runpod.io/v2/global-volumes/"+urllib.parse.quote(ident,safe=""),
+              headers={"Authorization":"Bearer "+key,"Accept":"application/json"},method="GET")
+          with urllib.request.urlopen(req,timeout=25) as resp:
+              body=json.load(resp)
+          obj=body.get("globalVolume",body) if isinstance(body,dict) else body
+          if not isinstance(obj,dict) or obj.get("id")!=ident or obj.get("name")!=target:
+              raise RuntimeError("GET read-back schema/identity mismatch; no mutation attempted")
+          print("HEPHAESTUS_GLOBAL_VOLUME_IDENTITY_VERIFIED=true")
+          print("HEPHAESTUS_REGION_PINNED=false")
+          print("HEPHAESTUS_ASSETS_MIGRATED=false")
+          print("HEPHAESTUS_POD_CREATED=false")
+          PY
