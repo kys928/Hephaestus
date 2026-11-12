@@ -106,16 +106,32 @@ def main():
  if len(rows)!=8224 or sum(item[2] for item in rows)!=607271450 or len({r[0] for r in rows})!=len(rows):
   raise RuntimeError("Frozen candidate set/size differs from independently audited 8,224 objects")
  emit("PREFLIGHT",0,len(rows))
- # Check the entire original frozen source *before* starting any new Global writes.
- aliases=0
+ def symlink_in_chain(path):
+  cursor=path
+  while cursor!=SOURCE:
+   if cursor.is_symlink():return True
+   cursor=cursor.parent
+  return False
+ # All 8,224 listed references are accounted for. Broken symlinks have no
+ # recoverable source bytes; record them explicitly, never invent checksums.
+ aliases=0;unrestorable=[];readable=[]
  for i,(rel,key,size) in enumerate(rows,1):
   source_path=SOURCE/key
-  target_path=safe_file(SOURCE,source_path,size)
+  try:target_path=safe_file(SOURCE,source_path,size)
+  except RuntimeError as ex:
+   if not symlink_in_chain(source_path):raise
+   unrestorable.append({"path":rel,"bytes_listed":size,"reason":"unresolved_or_unsafe_regional_symlink_alias",
+                         "source_key_sha256":hashlib.sha256(key.encode()).hexdigest()})
+   continue
   if target_path!=source_path:aliases+=1
- emit("SOURCE_PRESENT",0,len(rows),{"validated_symlink_aliases":aliases})
+  readable.append((rel,key,size))
+ if not readable or len(unrestorable)>200 or len(unrestorable)+len(readable)!=len(rows):
+  raise RuntimeError("Unrecoverable regional source reference count exceeds safety limit")
+ emit("SOURCE_PRESENT",0,len(readable),{"validated_symlink_aliases":aliases,"unrestorable_symlink_aliases":len(unrestorable),
+     "inventory_references":len(rows)})
  EVIDENCE.mkdir(parents=True,exist_ok=True)
  audit=[];existing=0;copied=0
- for i,(rel,key,size) in enumerate(rows,1):
+ for i,(rel,key,size) in enumerate(readable,1):
   src=safe_file(SOURCE,SOURCE/key,size)
   digest,n=sha(src)
   if n!=size:raise RuntimeError("Source bytes changed during local file read")
@@ -139,18 +155,20 @@ def main():
    else:raise RuntimeError("Global Volume SHA-256 readback failed")
    copied+=1
   audit.append({"path":rel,"bytes":size,"sha256":digest})
-  if i%100==0 or i==len(rows):emit("RUNNING",len(audit),len(rows),{"existing":existing,"copied":copied})
- emit("FINAL_READBACK",len(audit),len(rows))
+  if i%100==0 or i==len(rows):emit("RUNNING",len(audit),len(readable),{"existing":existing,"copied":copied})
+ emit("FINAL_READBACK",len(audit),len(readable))
  for i,obj in enumerate(audit,1):
   target=EVIDENCE/obj["path"]
   if sha(target)!=(obj["sha256"],obj["bytes"]):raise RuntimeError("Final Global Volume hash mismatch")
   if i%1000==0 or i==len(audit):emit("FINAL_READBACK",i,len(audit),{"pass":"global_readback"})
  report={"schema":"hephaestus.global-s3-evidence-parity.v1","source_volume":SOURCE_ID,"global_volume":GLOBAL_ID,
   "source_access":"direct read-only regional filesystem mount","source_inventory_sha256":INVENTORY_SHA256,
+  "source_inventory_candidate_references":len(rows),"source_unrestorable_aliases":len(unrestorable),
+  "excluded_references":unrestorable,
   "verified_files":len(audit),"verified_bytes":sum(x["bytes"] for x in audit),
   "preexisting":existing,"copied":copied,"files":audit,"hf_export_expected_files":8113,
   "s3_source_count_differs_from_hf":True,"skipped_sensitive_files":0,
-  "note":"Original frozen regional S3 inventory versus source regional mount and Global SHA256 readback; NOT Hugging Face export manifest parity"}
+  "note":"ONLY READABLE original source regional files were SHA256 verified on Global. Broken/unsafe symlink aliases are disclosed, NOT restored or certified; NOT Hugging Face export manifest parity"}
  encoded=(json.dumps(report,sort_keys=True,separators=(",",":"))+"\n").encode()
  receipt=DEST/"S3_EVIDENCE_RECEIPT.json"
  if receipt.exists():
@@ -158,8 +176,12 @@ def main():
  else:
   with receipt.open("xb") as f:f.write(encoded)
  if receipt.read_bytes()!=encoded:raise RuntimeError("Receipt readback mismatch")
- emit("COMPLETE",len(audit),len(rows),{"receipt":str(receipt),"receipt_sha256":hashlib.sha256(encoded).hexdigest(),"scope":"regional mount parity, NOT HF parity"})
- print("REGIONAL_DIRECT_EVIDENCE_COMPLETE=true",flush=True)
+ terminal="COMPLETE_WITH_SOURCE_EXCEPTIONS" if unrestorable else "COMPLETE"
+ emit(terminal,len(audit),len(readable),{"receipt":str(receipt),"receipt_sha256":hashlib.sha256(encoded).hexdigest(),
+      "source_inventory_references":len(rows),"unrestorable_source_aliases":len(unrestorable),
+      "scope":"readable regional source bytes only, NOT HF parity"})
+ print("REGIONAL_READABLE_EVIDENCE_SHA256_COMPLETE=true",flush=True)
+ print("SOURCE_SYMLINK_EXCEPTIONS="+str(len(unrestorable)),flush=True)
 if __name__=="__main__":
  try:main()
  except Exception as ex:
