@@ -31,7 +31,7 @@ This inventory was classified by **path and extension only**; category membershi
 | Third-party upstream model cache | 36,180 | 18,995,970,957 | Excluded from curated export; treat as re-fetchable cache only if pinned revisions and hashes are reproducible |
 | Miscellaneous unclassified | 157 | 23,624 | Requires purpose inspection; no automatic certification |
 
-Audited root counts: `hephaestus/scientific/` 12,738 objects (25,924,826,156 bytes); `hephaestus/research/` 88 objects (921,815,731 bytes); `Hephaestus/artifacts/` 222 objects (24,435 bytes); `hephaestus-cache/` 36,180 objects (18,995,970,957 bytes). The additional source roots `.cache/`, `codex-worktrees/`, `hephaestus-tmp/` were identified at bucket root; counts are tracked in a separate supplemental audit.
+Audited root counts: `hephaestus/scientific/` 12,738 objects (25,924,826,156 bytes); `hephaestus/research/` 88 objects (921,815,731 bytes); `Hephaestus/artifacts/` 222 objects (24,435 bytes); `hephaestus-cache/` 36,180 objects (18,995,970,957 bytes). Additional [supplemental audit #43258381025](https://github.com/kys928/Hephaestus/actions/runs/43258381025) found `.cache/` 238 objects (128,307,475 bytes), `codex-worktrees/` 1,537 objects (3,437,901 bytes), and `hephaestus-tmp/` 11 objects (573,342 bytes). These are cache, development-worktree, and temporary source roots; retain them on original storage for now, but **do not promote them as portable immutable research artifacts** without individual selection and review.
 
 ## Restoration evidence and boundaries
 
