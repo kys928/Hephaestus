@@ -7,7 +7,7 @@ import boto3
 API="https://api.runpod.io/v2"
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-WORKER_SHA="258a233e858e28af7f818b9286c714bc0108c4cd"
+WORKER_SHA="a3b9009f15bb6170d9c16a5ce357e66f107694b1"
 MAX_HOURS=4
 RATE_CEILING=Decimal("0.60")
 TOTAL_COST_CEILING=Decimal("3.00")
