@@ -1,4 +1,4 @@
-name: Hephaestus independent Global readable-evidence validation (explicit exceptions)
+name: Hephaestus independent sealed Global evidence receipt validation
 on:
   push:
     branches: [ops/global-volume-recovery-20261112]
