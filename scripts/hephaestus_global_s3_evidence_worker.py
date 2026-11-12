@@ -115,13 +115,16 @@ def run():
    if index%50==0 or index==len(rows):status("RUNNING",len(audit),len(rows),{"existing":existing,"new":copied})
  for record in audit:
   if sha_file(DEST/record["path"])!=(record["sha256"],record["bytes"]):raise RuntimeError("FINAL_SHA_MISMATCH "+record["path"])
+ if not audit:raise RuntimeError("No source evidence verified; refusing receipt")
  if len(audit)!=8113:
-  status("COUNT_MISMATCH",len(audit),len(rows),{"expected":8113,"excluded_sensitive":skipped_sensitive})
-  raise RuntimeError("S3 evidence classifier count differs from HF export; refusing complete receipt")
+  print("S3_EVIDENCE_SCOPE_DIFFERS_FROM_HF=true; SOURCE_COUNT="+str(len(audit))+"; HF_EXPORT_COUNT=8113",flush=True)
+  status("SOURCE_SCOPE_DIFFERS",len(audit),len(rows),{"hf_export_count":8113,"excluded_sensitive":skipped_sensitive})
  receipt=BASE/"S3_EVIDENCE_RECEIPT.json"
  report={"schema":"hephaestus.global-s3-evidence-parity.v1","source_volume":SOURCE,"global_volume":GLOBAL,"verified_files":len(audit),
   "verified_bytes":sum(r["bytes"] for r in audit),"preexisting":existing,"copied":copied,"files":audit,
-  "note":"S3/source SHA256 parity only, not the Hugging Face export manifest verification"}
+  "hf_export_expected_files":8113,"s3_source_count_differs_from_hf":len(audit)!=8113,
+  "skipped_sensitive_files":skipped_sensitive,
+  "note":"S3/source SHA256 parity only, NOT the Hugging Face export manifest verification"}
  raw=(json.dumps(report,sort_keys=True,separators=(",",":"))+"\n").encode()
  if receipt.exists():
   if receipt.read_bytes()!=raw:raise RuntimeError("Existing S3 receipt differs; refusing overwrite")
