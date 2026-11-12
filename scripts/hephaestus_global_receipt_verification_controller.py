@@ -6,7 +6,7 @@ from botocore.exceptions import ClientError
 import boto3
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
 SOURCE="cviwpryzao"
-ORIGIN_RUN="43261158020"
+ORIGIN_RUN="43261952175"
 VERIFIER_SHA="4148ceea9c5f1e001a7abf169590fc7606e3b17d"
 RATE_CEILING=Decimal("0.60")
 SPEND_CEILING=Decimal("3.00")
