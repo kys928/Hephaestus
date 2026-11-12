@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
@@ -80,7 +81,17 @@ def run():
   temp=Path(folder)/"source"
   for index,(rel,key,size,etag) in enumerate(rows,1):
    h=hashlib.sha256();received=0;tail=b"";sensitive=False
-   response=s3.get_object(Bucket=SOURCE,Key=key)
+   os.environ["HEPHAESTUS_RECOVERY_LAST_KEY_SHA256"]=hashlib.sha256(key.encode()).hexdigest()
+   response=None
+   for attempt in range(6):
+    try:
+     response=s3.get_object(Bucket=SOURCE,Key=key)
+     break
+    except ClientError as ex:
+     code=str(ex.response.get("Error",{}).get("Code",""))
+     if code not in {"NoSuchKey","404","NotFound"}:raise
+     if attempt==5:raise RuntimeError("S3 source object disappeared after listing; see private key-hash diagnostic") from ex
+     time.sleep(min(2**attempt,16))
    with temp.open("wb") as out:
     stream=response["Body"]
     try:
@@ -111,6 +122,7 @@ def run():
      time.sleep(2)
     else:raise RuntimeError("Global Volume readback mismatch: "+rel)
     copied+=1
+   os.environ.pop("HEPHAESTUS_RECOVERY_LAST_KEY_SHA256",None)
    audit.append({"path":rel,"bytes":size,"sha256":h.hexdigest()})
    if index%50==0 or index==len(rows):status("RUNNING",len(audit),len(rows),{"existing":existing,"new":copied})
  for record in audit:
@@ -136,5 +148,16 @@ def run():
 if __name__=="__main__":
  try:run()
  except Exception as exc:
-  print("S3_EVIDENCE_RESTORE_FAILED="+type(exc).__name__+": "+str(exc)[:180],flush=True)
+  # Never enter an unobserved restart loop: the off-Pod controller aborts on FAILED.
+  failure={"schema":"hephaestus.s3-evidence-progress.v1","run_id":os.environ.get("RECOVERY_RUN_ID",""),
+           "status":"FAILED","error_class":type(exc).__name__,"failed_key_sha256":os.environ.get("HEPHAESTUS_RECOVERY_LAST_KEY_SHA256"),
+           "updated_utc":datetime.now(timezone.utc).isoformat()}
+  try:
+   client=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
+     aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+   client.put_object(Bucket=SOURCE,Key="hephaestus/recovery-status/"+failure["run_id"]+".json",
+      Body=json.dumps(failure,sort_keys=True).encode(),ContentType="application/json")
+  except Exception as report_exc:
+   print("S3_FAILURE_STATUS_WRITE_FAILED="+type(report_exc).__name__,flush=True)
+  print("S3_EVIDENCE_RESTORE_FAILED="+type(exc).__name__,flush=True)
   sys.exit(1)
