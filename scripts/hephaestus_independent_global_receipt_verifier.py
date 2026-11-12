@@ -20,7 +20,7 @@ from botocore.config import Config
 
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-SOURCE_RUN="43248214667"
+SOURCE_RUN="43261158020"
 ROOT=Path("/workspace")
 BASE=ROOT/"hephaestus/hf-restores/export-129d690ef9ae24ef141fbb0c"
 RECEIPT=BASE/"S3_EVIDENCE_RECEIPT.json"
@@ -62,7 +62,9 @@ def main():
  expected_sha=source_status.get("receipt_sha256")
  if not isinstance(expected_sha,str) or not SHA.fullmatch(expected_sha):
   raise RuntimeError("Original S3 restore receipt SHA missing")
- if str(RECEIPT)!=source_status.get("receipt"):
+ if source_status.get("schema")!="hephaestus.regional-direct-recovery.v1":
+  raise RuntimeError("Unexpected source restore progress schema")
+ if source_status.get("receipt") not in {str(RECEIPT),str(RECEIPT).replace("/workspace/","/workspace-global/",1)}:
   raise RuntimeError("Expected receipt path disagrees with original progress status")
  if RECEIPT.is_symlink() or not RECEIPT.is_file() or RECEIPT.stat().st_size>MAX_RECEIPT_BYTES:
   raise RuntimeError("Missing/unsafe receipt")
