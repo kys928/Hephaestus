@@ -3,9 +3,9 @@
 import json,os,time,urllib.request
 from botocore.exceptions import ClientError
 import boto3
-ORIGIN_RUN="43262879222"
+ORIGIN_RUN="43305182543"
 SOURCE="cviwpryzao"
-POD_NAME="hephaestus-regional-global-recovery-"+ORIGIN_RUN
+POD_NAME="hephaestus-global-evidence-seal-"+ORIGIN_RUN
 def get(url,token):
  req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json"})
  with urllib.request.urlopen(req,timeout=30) as resp:return json.load(resp)
