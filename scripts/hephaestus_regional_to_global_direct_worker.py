@@ -50,13 +50,26 @@ def sha(path):
  return h.hexdigest(),n
 def safe_file(base,path,expected_size):
  if not path.is_relative_to(base) or path==base:raise RuntimeError("Path outside mounted volume")
- cursor=path
- while cursor!=base:
-  if cursor.is_symlink():raise RuntimeError("Symlink in source/destination path")
-  cursor=cursor.parent
- try:st=path.lstat()
+ try:
+  resolved=path.resolve(strict=True)
+ except (FileNotFoundError,RuntimeError) as exc:
+  raise RuntimeError("Frozen regional source path is unavailable or broken") from exc
+ if not resolved.is_relative_to(base) or resolved==base:
+  raise RuntimeError("Regional symlink escapes the original Czech volume")
+ # Resolve aliases ONLY to approved evidence paths, not private, mutable, or model data.
+ key=resolved.relative_to(base).as_posix()
+ approved=False
+ for prefix,_ in ROOTS.items():
+  if key.startswith(prefix):
+   tail=PurePosixPath(key[len(prefix):])
+   approved=not reject(tail) and kind(tail)=="evidence"
+   break
+ if not approved:raise RuntimeError("Regional symlink points outside eligible evidence scope")
+ try:st=resolved.lstat()
  except FileNotFoundError:raise RuntimeError("Frozen regional source file disappeared or is missing")
- if not stat.S_ISREG(st.st_mode) or st.st_size!=expected_size:raise RuntimeError("Regional source file size/type changed")
+ if not stat.S_ISREG(st.st_mode) or st.st_size!=expected_size:
+  raise RuntimeError("Resolved regional source file size/type differs from S3 inventory")
+ return resolved
 def main():
  if os.environ.get("RUNPOD_NETWORK_VOLUME_ID")!=SOURCE_ID or os.environ.get("RUNPOD_GLOBAL_VOLUME_ID")!=GLOBAL_ID:
   raise RuntimeError("Wrong advertised volume identity")
@@ -94,14 +107,16 @@ def main():
   raise RuntimeError("Frozen candidate set/size differs from independently audited 8,224 objects")
  emit("PREFLIGHT",0,len(rows))
  # Check the entire original frozen source *before* starting any new Global writes.
+ aliases=0
  for i,(rel,key,size) in enumerate(rows,1):
-  safe_file(SOURCE,SOURCE/key,size)
- emit("SOURCE_PRESENT",0,len(rows))
+  source_path=SOURCE/key
+  target_path=safe_file(SOURCE,source_path,size)
+  if target_path!=source_path:aliases+=1
+ emit("SOURCE_PRESENT",0,len(rows),{"validated_symlink_aliases":aliases})
  EVIDENCE.mkdir(parents=True,exist_ok=True)
  audit=[];existing=0;copied=0
  for i,(rel,key,size) in enumerate(rows,1):
-  src=SOURCE/key
-  safe_file(SOURCE,src,size)
+  src=safe_file(SOURCE,SOURCE/key,size)
   digest,n=sha(src)
   if n!=size:raise RuntimeError("Source bytes changed during local file read")
   target=EVIDENCE/rel
