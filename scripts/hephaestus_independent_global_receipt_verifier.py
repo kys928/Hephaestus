@@ -20,7 +20,7 @@ from botocore.config import Config
 
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-SOURCE_RUN="43261952175"
+SOURCE_RUN="43262879222"
 ROOT=Path("/workspace")
 BASE=ROOT/"hephaestus/hf-restores/export-129d690ef9ae24ef141fbb0c"
 RECEIPT=BASE/"S3_EVIDENCE_RECEIPT.json"
@@ -57,7 +57,7 @@ def main():
  s3.head_bucket(Bucket=SOURCE)
  origin=s3.get_object(Bucket=SOURCE,Key="hephaestus/recovery-status/"+SOURCE_RUN+".json")
  with origin["Body"] as f: source_status=json.load(f)
- if source_status.get("status")!="COMPLETE" or source_status.get("run_id")!=SOURCE_RUN:
+ if source_status.get("status") not in {"COMPLETE","COMPLETE_WITH_SOURCE_EXCEPTIONS"} or source_status.get("run_id")!=SOURCE_RUN:
   raise RuntimeError("Original S3 restore has no completed receipt status")
  expected_sha=source_status.get("receipt_sha256")
  if not isinstance(expected_sha,str) or not SHA.fullmatch(expected_sha):
@@ -83,6 +83,14 @@ def main():
  records=receipt.get("files")
  if not isinstance(records,list) or len(records)<1 or len(records)>14000 or len(records)!=receipt.get("verified_files"):
   raise RuntimeError("Invalid evidence file count in receipt")
+ if (receipt.get("source_inventory_sha256")!="046dde9ebe9a712665081794586d502de5722f7f815a61567377414b680f5fb8"
+     or type(receipt.get("source_unrestorable_aliases")) is not int
+     or type(receipt.get("source_inventory_candidate_references")) is not int
+     or receipt["source_unrestorable_aliases"]!=len(receipt.get("excluded_references",[]))
+     or receipt["source_unrestorable_aliases"]+len(records)!=receipt["source_inventory_candidate_references"]
+     or receipt["source_inventory_candidate_references"]!=8224
+     or receipt["source_unrestorable_aliases"]!=source_status.get("unrestorable_source_aliases",0)):
+  raise RuntimeError("Original source inventory and broken alias exclusions do not reconcile")
  if receipt.get("verified_files")!=source_status.get("verified"):
   raise RuntimeError("Receipt file count disagrees with original S3 status")
  status_key="hephaestus/recovery-verification/"+run+".json"
@@ -124,7 +132,7 @@ def main():
  publish("COMPLETE",count)
  print("INDEPENDENT_GLOBAL_EVIDENCE_SHA256_VERIFIED=true",flush=True)
  print("INDEPENDENT_VERIFIED_FILES="+str(count),flush=True)
- print("SOURCE_PARITY_ONLY=true",flush=True)
+ print("SOURCE_PARITY_ONLY=true",flush=True)\n print("UNRESTORABLE_SOURCE_ALIASES="+str(receipt["source_unrestorable_aliases"]),flush=True)
 if __name__=="__main__":
  try:main()
  except Exception as ex:
