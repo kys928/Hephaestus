@@ -7,7 +7,7 @@ import boto3
 API="https://api.runpod.io/v2"
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-WORKER_SHA="a62df545655e3fd1ab22fba1b3523257105b2f96"
+WORKER_SHA="75abae6b0a8adf21ff3be5b1cdb34b461046357b"
 MAX_HOURS=4
 RATE_CEILING=Decimal("0.60")
 TOTAL_COST_CEILING=Decimal("3.00")
@@ -91,7 +91,8 @@ def main():
      print("RECOVERY_COMPLETE_RECEIPT="+str(state.get("receipt")),flush=True)
      print("RECOVERY_CONTROLLER_SUCCESS=true",flush=True)
      return
-    if state.get("status")=="COUNT_MISMATCH":raise RuntimeError("S3 evidence count does not match HF; no false success")
+    if state.get("status") in {"COUNT_MISMATCH","FAILED","PARTIAL"}:
+     raise RuntimeError("S3 recovery worker reported non-complete terminal state: "+str(state.get("error_class",state.get("status"))))
    live=req("GET","/pods/"+pod_id)
    if live.get("desiredStatus",live.get("status")) in {"EXITED","TERMINATED"}:raise RuntimeError("Worker exited before COMPLETE receipt")
    print("RECOVERY_MONITOR_ACTIVE=true",flush=True)
