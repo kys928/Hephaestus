@@ -26,3 +26,10 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install 'boto3>=1.35,<2'
       - run: python -u scripts/hephaestus_global_recovery_preflight.py
+      - name: Inspect presence of optional HF read secret (no values)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+          HF_READ_TOKEN: ${{ secrets.HF_READ_TOKEN }}
+        run: python -c 'import os; print("HF_READ_SECRET_AVAILABLE=" + str(any(os.getenv(k) for k in ("HF_TOKEN", "HUGGINGFACE_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_READ_TOKEN"))).lower())'
