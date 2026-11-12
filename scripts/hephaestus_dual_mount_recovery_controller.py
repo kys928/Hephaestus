@@ -7,7 +7,7 @@ import boto3
 API="https://api.runpod.io/v2"
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-WORKER_SHA="a3b9009f15bb6170d9c16a5ce357e66f107694b1"
+WORKER_SHA="79c61f759edc2e4b88af839f101c7e760c339823"
 MAX_HOURS=4
 RATE_CEILING=Decimal("0.60")
 TOTAL_COST_CEILING=Decimal("3.00")
@@ -89,9 +89,15 @@ def main():
    if state and state.get("run_id")==run_id:
     progress=(state.get("status"),state.get("verified"),state.get("total"))
     if progress!=previous:print("RECOVERY_PROGRESS="+str(progress),flush=True);previous=progress
-    if state.get("status")=="COMPLETE":
-     print("RECOVERY_COMPLETE_RECEIPT="+str(state.get("receipt")),flush=True)
-     print("RECOVERY_CONTROLLER_SUCCESS=true",flush=True)
+    if state.get("status") in {"COMPLETE","COMPLETE_WITH_SOURCE_EXCEPTIONS"}:
+     refs=state.get("source_inventory_references",state.get("verified"))
+     exceptions=state.get("unrestorable_source_aliases",0)
+     verified=state.get("verified")
+     if any(type(v) is not int or v<0 for v in (refs,exceptions,verified)) or verified+exceptions!=refs or exceptions>200:
+      raise RuntimeError("Source inventory and explicit exception accounting do not reconcile")
+     print("RECOVERY_READABLE_RECEIPT="+str(state.get("receipt")),flush=True)
+     print("UNRESTORABLE_ORIGINAL_SYMLINK_ALIASES="+str(exceptions),flush=True)
+     print("RECOVERY_READABLE_CONTROLLER_SUCCESS=true",flush=True)
      return
     if state.get("status") in {"COUNT_MISMATCH","FAILED","PARTIAL"}:
      raise RuntimeError("S3 recovery worker reported non-complete terminal state: "+str(state.get("error_class",state.get("status"))))
