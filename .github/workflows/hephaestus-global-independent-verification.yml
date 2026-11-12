@@ -1,4 +1,4 @@
-name: Hephaestus independent Global Volume receipt validation
+name: Hephaestus independent Global receipt validation (dual-mount recovery)
 on:
   push:
     branches: [ops/global-volume-recovery-20261112]
