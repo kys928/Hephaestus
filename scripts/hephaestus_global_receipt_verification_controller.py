@@ -6,7 +6,7 @@ from botocore.exceptions import ClientError
 import boto3
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
 SOURCE="cviwpryzao"
-ORIGIN_RUN="43262879222"
+ORIGIN_RUN="43305182543"
 VERIFIER_SHA="1323a788ba795780000f558ac9c0114c06882234"
 RATE_CEILING=Decimal("0.60")
 SPEND_CEILING=Decimal("3.00")
@@ -45,7 +45,7 @@ def main():
  original=s3.get_object(Bucket=SOURCE,Key="hephaestus/recovery-status/"+ORIGIN_RUN+".json")
  with original["Body"] as f:state=json.load(f)
  if state.get("status") not in {"COMPLETE","COMPLETE_WITH_SOURCE_EXCEPTIONS"} or not state.get("receipt_sha256"):raise RuntimeError("Source readable evidence restore receipt missing")
- if [p for p in pods() if p.get("name")=="hephaestus-regional-global-recovery-"+ORIGIN_RUN]:raise RuntimeError("Original recovery Pod still exists")
+ if [p for p in pods() if p.get("name")=="hephaestus-global-evidence-seal-"+ORIGIN_RUN]:raise RuntimeError("Original recovery Pod still exists")
  credit,spend=account()
  if credit<Decimal("2.00"):raise RuntimeError("RunPod remaining balance below prepaid $2 guard")
  url="https://raw.githubusercontent.com/kys928/Hephaestus/"+VERIFIER_SHA+"/scripts/hephaestus_independent_global_receipt_verifier.py"
