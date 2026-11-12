@@ -3,7 +3,7 @@
 import json,os,time,urllib.request
 from botocore.exceptions import ClientError
 import boto3
-ORIGIN_RUN="43261952175"
+ORIGIN_RUN="43262879222"
 SOURCE="cviwpryzao"
 POD_NAME="hephaestus-regional-global-recovery-"+ORIGIN_RUN
 def get(url,token):
@@ -32,7 +32,7 @@ def main():
   if run.get("status")=="completed" and run.get("conclusion")!="success":
    raise RuntimeError("Original S3 recovery failed; independent validation cannot start")
   if (run.get("status")=="completed" and run.get("conclusion")=="success" and
-      status.get("status")=="COMPLETE" and status.get("receipt_sha256") and not matches):
+      status.get("status") in {"COMPLETE","COMPLETE_WITH_SOURCE_EXCEPTIONS"} and status.get("receipt_sha256") and not matches):
    print("ORIGINAL_S3_EVIDENCE_RESTORE_COMPLETE_AND_STOPPED=true",flush=True)
    return
   time.sleep(80)
