@@ -49,6 +49,12 @@ def main():
             "updated_at":datetime.now(timezone.utc).isoformat(),**kwargs}
         # status is an operational report, not a scientific certificate.
         status_path.write_text(json.dumps(record,sort_keys=True)+"\n")
+        import boto3
+        client=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
+            aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+        client.put_object(Bucket=REGIONAL_ID,Key="hephaestus/boot-status/"+rid+".json",
+            Body=(json.dumps(record,sort_keys=True)+"\n").encode(),ContentType="application/json")
         print("HEPHAESTUS_BOOT_STATUS="+json.dumps({k:v for k,v in record.items() if k not in {"updated_at"}},sort_keys=True),flush=True)
 
     status("MOUNT_CONFIRMED")
@@ -64,10 +70,10 @@ def main():
     require(len(children)==1,"Unexpected GitHub checkout tree")
     code=children[0]
     status("CODE_DOWNLOADED",github_commit=REPO_SHA,zip_sha256=code_digest)
-    subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-cache-dir","-e",str(code),"safetensors>=0.5,<1"],check=True,stdout=subprocess.DEVNULL)
+    subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-cache-dir","-e",str(code),"safetensors>=0.5,<1","numpy>=1.26,<3"],check=True,stdout=subprocess.DEVNULL)
     env=os.environ.copy()
     env["PYTHONUNBUFFERED"]="1"
-    state_root=base/"console-state"
+    state_root=pathlib.Path("/tmp/hephaestus-console-state")
     state_root.mkdir(exist_ok=True)
     demo=subprocess.run([sys.executable,"-m","hephaestus.cli.create_demo_state",
         "--state-root",str(state_root),"--run-id","boot-"+rid,"--format","json"],env=env,text=True,capture_output=True,timeout=90)
@@ -78,6 +84,10 @@ def main():
     replay=subprocess.run([sys.executable,"-m","hephaestus.cli.verify_replay",
         "--state-root",str(state_root),"--run-id","boot-"+rid,"--format","json"],env=env,text=True,capture_output=True,timeout=60)
     require(replay.returncode==0,"Hephaestus replay CLI failed")
+    # Preserve a cold copy of JSON/inspection state, not active SQLite.
+    snapshot_dir=base/"console-state-cold"
+    if snapshot_dir.exists():raise RuntimeError("Existing cold console snapshot directory")
+    shutil.copytree(state_root,snapshot_dir,symlinks=False)
     status("APP_IMPORTS_AND_DEMO_OK",doctor=json.loads(doctor.stdout).get("status"),demo_run="boot-"+rid)
 
     # These five archives are the real originally trained role adapters,
@@ -106,7 +116,7 @@ def main():
             temp=pathlib.Path("/tmp")/("hephaestus-"+role+"-adapter.safetensors")
             temp.write_bytes(adapter_bytes)
             try:
-                with safe_open(str(temp),framework="pt",device="cpu") as tensors:
+                with safe_open(str(temp),framework="np",device="cpu") as tensors:
                     names=list(tensors.keys())
                     require(names,"Adapter safetensors contains no tensor")
                     selected=None
@@ -118,13 +128,8 @@ def main():
                         if numel<=1000000:
                             selected=n;break
                     require(selected is not None,"No reasonably small adapter tensor available")
-                    # safetensors.framework='pt' requires torch; use numpy 
-                    # framework here if torch is unavailable. torch is installed below.
-                    try: tensor=tensors.get_tensor(selected)
-                    except ImportError:
-                        with safe_open(str(temp),framework="np") as np_tensors:
-                            tensor=np_tensors.get_tensor(selected)
-                    require(getattr(tensor,"numel",lambda: getattr(tensor,"size",0))()!=0,"Tensor loading produced empty weights")
+                    tensor=tensors.get_tensor(selected)
+                    require(tensor.size>0,"Adapter tensor load produced empty weights")
                 entries[role]={"archive_sha256":digest,"tensor_count":len(names),"one_tensor_loaded":True}
                 count+=1
             finally:temp.unlink(missing_ok=True)
@@ -187,4 +192,17 @@ if __name__=="__main__":
     except Exception as exc:
         # never reveal HF/S3/GitHub secrets in a logged traceback
         print("HEPHAESTUS_BOOT_FAILED="+type(exc).__name__+": "+str(exc)[:160],flush=True)
+        try:
+            import boto3
+            run=os.environ.get("BOOT_RUN_ID","")
+            if run.isdecimal():
+                client=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
+                  aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+                  aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+                client.put_object(Bucket=REGIONAL_ID,Key="hephaestus/boot-status/"+run+".json",
+                  Body=json.dumps({"schema":"hephaestus.boot-smoke.v1","run_id":run,"phase":"FAILED",
+                      "error_class":type(exc).__name__,"error_summary":str(exc)[:120]},sort_keys=True).encode(),
+                  ContentType="application/json")
+        except Exception:
+            print("HEPHAESTUS_BOOT_FAILURE_RECEIPT_UNAVAILABLE=true",flush=True)
         raise SystemExit(1)
