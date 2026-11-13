@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 API="https://api.runpod.io/v2"
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-BOOT_WORKER_SHA="84c80ccc4c7354ef143c0c68e685c5a287909976"
+BOOT_WORKER_SHA="bf5cee591087f451d934c65d290bc20dea5f629e"
 HEPHAESTUS_SOURCE_SHA="f27882fc08aa6d7c162a4b12c5dc522e9cdb69e2"
 EXPECTED_ROLES=5
 MAX_BOOT_SECONDS=17*60
