@@ -1,0 +1,27 @@
+name: Locate Hephaestus five role adapters in pinned HF manifest (read only)
+on:
+  push:
+    branches: [ops/boot-hephaestus-global-20261113]
+    paths: [.github/workflows/hephaestus-role-path-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - name: Find exact original role archive entries without fetching weights
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          token=os.environ['HF_TOKEN']
+          url='https://huggingface.co/datasets/DavidDulovic/hephaestus-scientific-evidence/resolve/50cce2d27351/EXPORT_MANIFEST.json'
+          req=urllib.request.Request(url,headers={'Authorization':'Bearer '+token})
+          with urllib.request.urlopen(req,timeout=35) as r:data=json.load(r)
+          for role in ('controller','diagnosis','planner','evaluator','judge'):
+              needle='/roles/'+role+'/selected-adapter.tar.gz'
+              rows=[x for x in data['artifacts'] if needle in x.get('path','')]
+              print('ROLE_ENTRY='+json.dumps({'role':role,'matches':[{'repo':x['repo'],'repo_type':x['repo_type'],'path':x['path'],'size':x['bytes']} for x in rows]},sort_keys=True))
+          PY
