@@ -1,0 +1,65 @@
+name: Check Hugging Face secret access (read-only)
+on:
+  push:
+    branches: [ops/czech-bulk-snapshot-20261113]
+    paths:
+      - .github/workflows/hf-token-access-check.yml
+permissions:
+  contents: read
+jobs:
+  verify-private-hf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - name: Verify token and private repository access without exposing credentials
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+
+          token = os.getenv("HF_TOKEN", "")
+          if not token:
+              print("HF_TOKEN_PRESENT=false")
+              raise SystemExit(1)
+          print("HF_TOKEN_PRESENT=true")
+
+          def api_get(path):
+              req = Request(
+                  "https://huggingface.co" + path,
+                  headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+              )
+              try:
+                  with urlopen(req, timeout=25) as response:
+                      return json.load(response)
+              except HTTPError as exc:
+                  print("HF_API_HTTP_STATUS=" + str(exc.code))
+                  raise SystemExit(1) from None
+              except (URLError, TimeoutError):
+                  print("HF_API_NETWORK_ERROR=true")
+                  raise SystemExit(1) from None
+
+          who = api_get("/api/whoami-v2")
+          if who.get("name") != "DavidDulovic":
+              print("HF_ACCOUNT_EXPECTED=false")
+              raise SystemExit(1)
+          print("HF_ACCOUNT_EXPECTED=true")
+
+          repos = (
+              ("models", "/api/models/DavidDulovic/hephaestus-trained-models"),
+              ("training_data", "/api/datasets/DavidDulovic/hephaestus-training-data"),
+              ("evidence", "/api/datasets/DavidDulovic/hephaestus-scientific-evidence"),
+          )
+          for label, endpoint in repos:
+              info = api_get(endpoint)
+              if info.get("private") is not True:
+                  print("HF_PRIVATE_" + label.upper() + "=false")
+                  raise SystemExit(1)
+              print("HF_PRIVATE_" + label.upper() + "=true")
+
+          print("HF_TOKEN_READ_ACCESS_VERIFIED=true")
+          PY
