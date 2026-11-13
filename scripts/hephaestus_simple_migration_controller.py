@@ -85,9 +85,20 @@ def main():
  pod_id=None
  try:
   try:created=req("POST","/pods",body)
-  except Exception:
+  except Exception as exc:
    matches=[p for p in pods() if p.get("name")==name]
-   if len(matches)!=1:raise RuntimeError("Pod launch ambiguous; no duplicate POST retry")
+   if len(matches)!=1:
+    if isinstance(exc,urllib.error.HTTPError):
+     print("RUNPOD_CREATE_HTTP_STATUS="+str(exc.code),flush=True)
+     # Never print raw provider response: it could echo input env secrets.
+     try:raw=exc.read().decode("utf-8","replace").lower()
+     except Exception:raw=""
+     categories=("insufficient","balance","funds","credit","capacity","stock","unavailable",
+       "region","datacenter","disk","volume","network","global","cpu","invalid","validation","permission")
+     print("RUNPOD_CREATE_ERROR_CATEGORIES="+",".join(x for x in categories if x in raw),flush=True)
+    else:
+     print("RUNPOD_CREATE_ERROR_CLASS="+type(exc).__name__,flush=True)
+    raise RuntimeError("Pod creation rejected and exact Pod name is absent; no blind retry") from exc
    created=matches[0]
   pod_id=created.get("id")
   if not isinstance(pod_id,str) or not pod_id:raise RuntimeError("Pod identity unavailable")
