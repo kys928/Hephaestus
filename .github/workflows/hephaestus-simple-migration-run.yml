@@ -1,4 +1,4 @@
-name: Hephaestus simple HF-to-Global plus Czech-only archive
+name: Hephaestus simple HF-to-Global plus Czech-only archive (provider diagnostic)
 on:
   workflow_dispatch:
   push:
