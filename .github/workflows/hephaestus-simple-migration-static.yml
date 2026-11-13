@@ -1,0 +1,27 @@
+name: Hephaestus simple migration static validation
+on:
+  push:
+    branches: [ops/czech-bulk-snapshot-20261113]
+    paths:
+      - .github/workflows/hephaestus-simple-migration-static.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile migration worker before any paid action
+        run: |
+          python -m py_compile scripts/hephaestus_simple_migration.py
+          python -m py_compile scripts/hephaestus_hf_czech_inventory_preflight.py
+          python - <<'PY'
+          import ast, pathlib
+          tree=ast.parse(pathlib.Path('scripts/hephaestus_simple_migration.py').read_text())
+          assert any(isinstance(x,ast.FunctionDef) and x.name=='main' for x in tree.body)
+          print('SIMPLE_MIGRATION_STATIC_VALIDATION=passed')
+          PY
