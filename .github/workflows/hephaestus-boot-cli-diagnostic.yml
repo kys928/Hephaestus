@@ -1,0 +1,22 @@
+name: Diagnose Hephaestus boot CLI on GitHub runner (no Pod)
+on:
+  push:
+    branches: [ops/boot-hephaestus-global-20261113]
+    paths: [.github/workflows/hephaestus-boot-cli-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  local-cli-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e . 'safetensors>=0.5,<1' 'numpy>=1.26,<3'
+      - name: Test exact source-pinned demo CLI and show any error
+        run: |
+          python -m hephaestus.cli.create_demo_state --state-root /tmp/hephaestus-console-state --run-id boot-43425214210 --format json
+          python -m hephaestus.cli.doctor --state-root /tmp/hephaestus-console-state --format json
+          python -m hephaestus.cli.verify_replay --state-root /tmp/hephaestus-console-state --run-id boot-43425214210 --format json
