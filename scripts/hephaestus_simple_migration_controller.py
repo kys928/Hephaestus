@@ -73,7 +73,7 @@ def main():
   "python -u /tmp/migrate.py && exec sleep infinity")
  body={
   "name":name,"cpu":{"id":"cpu3c","vcpuCount":2},"cloud":"SECURE",
-  "dataCenterIds":["EU-CZ-1"],"image":"python:3.12-slim","disk":24,
+  "dataCenterIds":["EU-CZ-1"],"image":"python:3.12-slim","disk":20,
   "mounts":{"network":[{"volumeId":SOURCE,"path":"/workspace-source"}],
             "global":[{"volumeId":GLOBAL,"path":"/workspace-global"}]},
   "cmd":["bash","-lc",bootstrap],
