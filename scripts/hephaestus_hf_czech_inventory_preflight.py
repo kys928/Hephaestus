@@ -44,8 +44,8 @@ def main():
   print("HF_PIN_"+group.upper()+"="+sha[:12],flush=True)
  manifest_url="https://huggingface.co/datasets/"+HF_OWNER+"/hephaestus-scientific-evidence/resolve/"+revisions["evidence"]+"/EXPORT_MANIFEST.json"
  raw=req(manifest_url,token)
- digest=hashlib.sha256(raw).hexdigest()
- if digest!=EXPECTED_MANIFEST:raise RuntimeError("HF manifest digest changed: "+digest)
+ manifest_sha=hashlib.sha256(raw).hexdigest()
+ if manifest_sha!=EXPECTED_MANIFEST:raise RuntimeError("HF manifest digest changed: "+manifest_sha)
  data=json.loads(raw)
  if data.get("schema")!="hephaestus-hf-export-v1" or data.get("source_volume_id")!=SOURCE:raise RuntimeError("Export identity mismatch")
  entries=data.get("artifacts",[])
@@ -65,7 +65,7 @@ def main():
   counts[g]+=1
  if len(entries)!=8986 or any(counts[g]!=HF[g][3] for g in HF):
   raise RuntimeError("Curated HF export counts changed")
- print("HF_EXPORT_MANIFEST_SHA256="+digest,flush=True)
+ print("HF_EXPORT_MANIFEST_SHA256="+manifest_sha,flush=True)
  print("HF_EXPORT_COUNTS="+json.dumps(dict(counts),sort_keys=True),flush=True)
  s3=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
   aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
