@@ -1,4 +1,4 @@
-name: Hephaestus corrected repository-root Pod status (read only)
+name: Hephaestus five-Global-model Pod status (read only)
 on:
   push:
     branches: [ops/boot-hephaestus-global-20261113]
@@ -20,7 +20,7 @@ jobs:
           python - <<'PY'
           import os,json,urllib.request,boto3
           from botocore.exceptions import ClientError
-          rid='43426431029'
+          rid='43426990148'
           request=urllib.request.Request('https://api.runpod.io/v2/pods',headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY']})
           with urllib.request.urlopen(request,timeout=30) as r: ps=json.load(r)
           rows=ps if isinstance(ps,list) else ps.get('pods',ps.get('data',[]))
