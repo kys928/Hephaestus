@@ -73,6 +73,14 @@ def main():
     subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-cache-dir","-e",str(code),"safetensors>=0.5,<1","numpy>=1.26,<3"],check=True,stdout=subprocess.DEVNULL)
     env=os.environ.copy()
     env["PYTHONUNBUFFERED"]="1"
+    # Pinned source is authoritative even when an editable package install
+    # does not expose a .pth file to this container's subprocess environment.
+    source_path=str(code/"src")
+    require((code/"src/hephaestus/__init__.py").is_file(),"Missing pinned Hephaestus source package")
+    env["PYTHONPATH"]=source_path+os.pathsep+env.get("PYTHONPATH","")
+    sys.path.insert(0,source_path)
+    import hephaestus
+    status("SOURCE_IMPORT_CONFIRMED",pythonpath=source_path)
     state_root=pathlib.Path("/tmp/hephaestus-console-state")
     state_root.mkdir(exist_ok=True)
     from hephaestus.state.run_store import RunStore
