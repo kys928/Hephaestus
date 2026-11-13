@@ -1,4 +1,4 @@
-name: Boot Hephaestus on Global + Czech State (repo-root corrected)
+name: Boot Hephaestus on Global + Czech State (five pinned Global adapters)
 on:
   push:
     branches: [ops/boot-hephaestus-global-20261113]
