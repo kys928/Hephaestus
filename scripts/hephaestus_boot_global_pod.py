@@ -39,7 +39,7 @@ def main():
     require(EXPORT.is_dir(),"Curated HF restore path missing")
     require(REPO_SHA and len(REPO_SHA)==40 and all(ch in "0123456789abcdef" for ch in REPO_SHA),"Git source revision missing")
 
-    base=REGIONAL/"hephaestus/runtime/boot-"+rid
+    base=REGIONAL/("hephaestus/runtime/boot-"+rid)
     require(not base.is_symlink(),"Runtime root must not be symlink")
     base.mkdir(parents=True,exist_ok=True)
     status_path=base/"boot-status.json"
