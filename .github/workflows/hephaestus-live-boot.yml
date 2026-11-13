@@ -1,4 +1,4 @@
-name: Boot Hephaestus on Global + Czech State (restart-safe CPU smoke)
+name: Boot Hephaestus on Global + Czech State (explicit Python source boot)
 on:
   push:
     branches: [ops/boot-hephaestus-global-20261113]
