@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 API="https://api.runpod.io/v2"
 SOURCE="cviwpryzao"
 GLOBAL="cmw51pjsk000007l9a0mv1jga"
-BOOT_WORKER_SHA="3c8c1f1915de884851159c4ab34282275372988e"
+BOOT_WORKER_SHA="bd6e3f9d08c26dc75eabbeeb755ce44e5206a7ce"
 HEPHAESTUS_SOURCE_SHA="f27882fc08aa6d7c162a4b12c5dc522e9cdb69e2"
 EXPECTED_ROLES=5
 MAX_BOOT_SECONDS=17*60
@@ -109,7 +109,7 @@ def main():
     if phase=="READY":
      if report.get("global_volume")!=GLOBAL or report.get("regional_volume")!=SOURCE:
       raise RuntimeError("Wrong boot resource identity")
-     if report.get("model_scope")!="five original LoRA adapters materialized; no base-model CUDA inference":
+     if report.get("model_scope")!="five original LoRA adapters SHA256 loaded from Global; no CUDA base inference":
       raise RuntimeError("Actual trained adapter loading was not reported")
      print("HEPHAESTUS_APP_READY=true",flush=True)
      print("HEPHAESTUS_CONSOLE_LOCAL_URL=http://127.0.0.1:8765",flush=True)
