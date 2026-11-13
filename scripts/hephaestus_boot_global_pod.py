@@ -120,14 +120,33 @@ def main():
     from safetensors import safe_open
     registry=load_certified_role_model_stack(code/"configs/models/hephaestus_role_model_stack_v1.json")
     count=0;entries={}
+    runtime_roles=GLOBAL/"hephaestus/runtime-models/role-mastery-v1"
+    require(not runtime_roles.is_symlink(),"Unsafe Global model runtime root")
+    runtime_roles.mkdir(parents=True,exist_ok=True)
     for role,spec in registry.roles.items():
         key=spec.adapter.s3_key
-        require(key.startswith("hephaestus/"),"Unexpected source adapter key")
-        rel=key[len("hephaestus/"):]
-        path=EXPORT/"evidence"/rel
-        require(path.is_file() and not path.is_symlink(),"Trained role adapter missing on Global")
-        digest,size=hash_file(path)
-        require((digest,size)==(spec.adapter.sha256,spec.adapter.bytes),"Trained role archive checksum mismatch")
+        require(key.startswith("hephaestus/") and ".." not in pathlib.PurePosixPath(key).parts,
+                "Unexpected source adapter key")
+        source=REGIONAL/key
+        try:resolved=source.resolve(strict=True)
+        except OSError as exc:raise RuntimeError("Pinned original Czech role archive absent") from exc
+        require(resolved.is_relative_to(REGIONAL) and resolved.is_file(),
+                "Pinned role archive escaped the original Czech volume")
+        digest,size=hash_file(resolved)
+        require((digest,size)==(spec.adapter.sha256,spec.adapter.bytes),
+                "Original Czech trained role archive checksum differs from pinned registry")
+        path=runtime_roles/role/("selected-adapter-"+digest[:24]+".tar.gz")
+        require(not path.is_symlink() and not path.parent.is_symlink(),
+                "Unsafe Global runtime adapter target")
+        path.parent.mkdir(parents=True,exist_ok=True)
+        if path.exists():
+            require(path.is_file() and hash_file(path)==(digest,size),
+                "Previously copied Global role adapter conflicts with original")
+        else:
+            with resolved.open("rb") as original,path.open("xb") as global_out:
+                shutil.copyfileobj(original,global_out,length=BUF)
+            require(hash_file(path)==(digest,size),"Global role archive readback differs")
+        status("REAL_ROLE_ARCHIVE_VERIFIED_ON_GLOBAL",role=role,adapter_sha256=digest)
         with tarfile.open(path,"r:gz") as tar:
             cfg=tar.extractfile("adapter/adapter_config.json")
             member=tar.extractfile("adapter/adapter_model.safetensors")
@@ -201,7 +220,7 @@ def main():
             time.sleep(1)
     require(response is not None and console.poll() is None,"Hephaestus console did not boot")
     status("READY",console="http://127.0.0.1:8765",console_pid=console.pid,
-        model_scope="five original LoRA adapters materialized; no base-model CUDA inference",
+        model_scope="five original LoRA adapters SHA256 loaded from Global; no CUDA base inference",
         source_of_truth="GitHub pinned main; HF-derived Global artifacts",
         runtime_state="local SQLite, cold backup on regional volume")
     # Keep the inspection console available within this Pod until it is stopped.
