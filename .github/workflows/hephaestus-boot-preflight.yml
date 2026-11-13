@@ -1,0 +1,39 @@
+name: Hephaestus Boot Read-Only Provider Check
+on:
+  push:
+    branches: [ops/boot-hephaestus-global-20261113]
+    paths: [.github/workflows/hephaestus-boot-preflight.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Read RunPod prepaid balance, active Pods, and Global Volume (no allocations)
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          token=os.environ.get('RUNPOD_API_KEY','')
+          if not token:raise RuntimeError('RUNPOD_API_KEY not configured')
+          def get(path,method='GET',body=None):
+              root='https://api.runpod.io'
+              headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+              with urllib.request.urlopen(urllib.request.Request(root+path,method=method,headers=headers,data=json.dumps(body).encode() if body is not None else None),timeout=35) as r:
+                  return json.load(r)
+          acc=get('/graphql','POST',{'query':'query HephaestusBootBudget { myself { clientBalance currentSpendPerHr isAutoPayEnabled } }'}).get('data',{}).get('myself',{})
+          if not acc:raise RuntimeError('RunPod balance cannot be determined')
+          print('PREPAID_CREDIT_USD='+str(acc['clientBalance']))
+          print('CURRENT_SPEND_PER_HOUR='+str(acc['currentSpendPerHr']))
+          print('AUTOPAY='+str(acc.get('isAutoPayEnabled')))
+          pods=get('/v2/pods')
+          entries=pods if isinstance(pods,list) else pods.get('pods',pods.get('data',[]))
+          print('POD_COUNT='+str(len(entries)))
+          print('HEPHAESTUS_POD_COUNT='+str(sum('hephaestus' in str(p.get('name','')).lower() for p in entries)))
+          global_volumes=get('/v2/global-volumes')
+          vs=global_volumes if isinstance(global_volumes,list) else global_volumes.get('globalVolumes',global_volumes.get('global_volumes',global_volumes.get('volumes',global_volumes.get('data',[]))))
+          print('EXPECTED_GLOBAL_VOLUME_PRESENT='+str(any(v.get('id')=='cmw51pjsk000007l9a0mv1jga' for v in vs)))
+          print('BOOT_PREFLIGHT_COMPLETE=true')
+          PY
