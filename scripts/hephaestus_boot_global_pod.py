@@ -69,6 +69,9 @@ def main():
     children=[p for p in pathlib.Path("/tmp/hephaestus-repo").iterdir() if (p/"pyproject.toml").is_file()]
     require(len(children)==1,"Unexpected GitHub checkout tree")
     code=children[0]
+    # Hephaestus loads relative configs/ paths from the repository root.
+    # Running from the Pod's initial working directory breaks those lookups.
+    os.chdir(str(code))
     status("CODE_DOWNLOADED",github_commit=REPO_SHA,zip_sha256=code_digest)
     subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-cache-dir","-e",str(code),"safetensors>=0.5,<1","numpy>=1.26,<3"],check=True,stdout=subprocess.DEVNULL)
     env=os.environ.copy()
