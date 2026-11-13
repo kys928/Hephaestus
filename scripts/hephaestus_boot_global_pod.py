@@ -75,9 +75,20 @@ def main():
     env["PYTHONUNBUFFERED"]="1"
     state_root=pathlib.Path("/tmp/hephaestus-console-state")
     state_root.mkdir(exist_ok=True)
-    demo=subprocess.run([sys.executable,"-m","hephaestus.cli.create_demo_state",
-        "--state-root",str(state_root),"--run-id","boot-"+rid,"--format","json"],env=env,text=True,capture_output=True,timeout=90)
-    require(demo.returncode==0,"Real Hephaestus demo creation failed")
+    from hephaestus.state.run_store import RunStore
+    existing=RunStore(state_root).get("boot-"+rid)
+    if existing is not None:
+        require(existing.get("status")=="completed",
+                "Preexisting demo run exists but is not completed")
+    else:
+        demo=subprocess.run([sys.executable,"-m","hephaestus.cli.create_demo_state",
+            "--state-root",str(state_root),"--run-id","boot-"+rid,"--format","json"],
+            env=env,text=True,capture_output=True,timeout=90)
+        if demo.returncode:
+            # CLI contains only a synthetic public demo; expose the final
+            # traceback line to distinguish a coding error from an interrupted run.
+            tail=(demo.stderr or "").splitlines()[-1:] or ["no stderr"]
+            raise RuntimeError("Demo boot subprocess failed: "+str(tail[0])[:180])
     doctor=subprocess.run([sys.executable,"-m","hephaestus.cli.doctor",
         "--state-root",str(state_root),"--format","json"],env=env,text=True,capture_output=True,timeout=80)
     require(doctor.returncode==0 and json.loads(doctor.stdout).get("status") in {"ok","warning"},"Hephaestus doctor failed")
@@ -86,8 +97,10 @@ def main():
     require(replay.returncode==0,"Hephaestus replay CLI failed")
     # Preserve a cold copy of JSON/inspection state, not active SQLite.
     snapshot_dir=base/"console-state-cold"
-    if snapshot_dir.exists():raise RuntimeError("Existing cold console snapshot directory")
-    shutil.copytree(state_root,snapshot_dir,symlinks=False)
+    if not snapshot_dir.exists():
+        shutil.copytree(state_root,snapshot_dir,symlinks=False)
+    require(snapshot_dir.is_dir() and not snapshot_dir.is_symlink(),
+            "Cold console-state backup is not a directory")
     status("APP_IMPORTS_AND_DEMO_OK",doctor=json.loads(doctor.stdout).get("status"),demo_run="boot-"+rid)
 
     # These five archives are the real originally trained role adapters,
@@ -191,7 +204,7 @@ if __name__=="__main__":
     try:main()
     except Exception as exc:
         # never reveal HF/S3/GitHub secrets in a logged traceback
-        print("HEPHAESTUS_BOOT_FAILED="+type(exc).__name__+": "+str(exc)[:160],flush=True)
+        print("HEPHAESTUS_BOOT_FAILED="+type(exc).__name__+": "+str(exc)[:200],flush=True)
         try:
             import boto3
             run=os.environ.get("BOOT_RUN_ID","")
