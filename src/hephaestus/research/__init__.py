@@ -21,3 +21,14 @@ __all__ = (
     "SourceDescriptor",
     "VerifiedSourceAcquirer",
 )
+
+from .constrained_repair import (
+    BoundedPatchProposer,
+    ConstrainedSelfRepair,
+    GitHubReviewBranchPublisher,
+    OfflineDockerPytestRunner,
+    RepairBoundaryError,
+    RepairScope,
+)
+from .durable_jobs import ResearchObjectiveJobHandler, submit_research_objective
+from .self_repair_controller import AutonomousDiagnosisRepairEpisode, LoopbackOllamaPatchModel
