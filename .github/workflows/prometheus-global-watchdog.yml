@@ -92,3 +92,5 @@ jobs:
           with urllib.request.urlopen(req,timeout=25) as response:
               print("PROMETHEUS_ACTION_RUN_LINK_PUBLISHED="+str(response.status==201))
           PY
+
+# Authorized one-time watchdog arm for Prometheus Unbound 2026-11-14.
