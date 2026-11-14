@@ -1,0 +1,73 @@
+name: Prometheus Unbound live RunPod and S3 read-only admission
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths: [.github/workflows/prometheus-global-readonly-admission.yml]
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: prometheus-global-readonly-admission
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 056a84fcc0b35b822fc98b0dce476503e247d872
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[s3]'
+      - name: Read-only authenticated RunPod, Global and private S3 admission
+        run: |
+          python - <<'PY'
+          import os,urllib.request,json
+          from decimal import Decimal
+          from hephaestus.development.prometheus_global_supervision import (
+            GLOBAL_ID, S3_BUCKET, api, balance, s3_client, matching_pods, campaign_prefix)
+          assert all(os.environ.get(s) for s in (
+            "RUNPOD_API_KEY","RUNPOD_S3_ACCESS_KEY_ID","RUNPOD_S3_SECRET_ACCESS_KEY","HF_TOKEN")), "required credentials absent"
+          volume=api("GET","/global-volumes/"+GLOBAL_ID)
+          volume=volume.get("globalVolume",volume.get("data",volume)) if isinstance(volume,dict) else {}
+          assert volume.get("id")==GLOBAL_ID, "unexpected Global Volume identity"
+          s3=s3_client()
+          s3.head_bucket(Bucket=S3_BUCKET)
+          source=s3.list_objects_v2(Bucket=S3_BUCKET,Prefix="hephaestus/scientific/",MaxKeys=2)
+          assert source.get("Contents"), "scientific S3 source inventory empty"
+          credit,spend=balance()
+          assert credit > Decimal("1.50"),"prepaid balance insufficient"
+          assert spend >= 0
+          prefix=campaign_prefix("prometheus-unbound-global-20261114-01","056a84fcc0b35b822fc98b0dce476503e247d872")
+          existing=matching_pods(prefix)
+          assert not existing,"campaign Pod already exists"
+          print("PROMETHEUS_READ_ONLY_GLOBAL_ID_VERIFIED=true",flush=True)
+          print("PROMETHEUS_READ_ONLY_REGIONAL_S3_VERIFIED=true",flush=True)
+          print("PROMETHEUS_READ_ONLY_PREPAID_ACCOUNT_VERIFIED=true",flush=True)
+          print("PROMETHEUS_READ_ONLY_CAMPAIGN_POD_ABSENT=true",flush=True)
+          PY
+      - name: Return actual run locator to draft PR 206
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMISSION_OUTCOME: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          url="https://github.com/kys928/Hephaestus/actions/runs/"+os.environ["GITHUB_RUN_ID"]
+          payload=json.dumps({"body":"Prometheus Global *read-only authenticated* RunPod/S3 admission "+os.environ["ADMISSION_OUTCOME"]+"; "+url+". No GPU created by this workflow."}).encode()
+          req=urllib.request.Request("https://api.github.com/repos/kys928/Hephaestus/issues/206/comments",data=payload,method="POST",
+             headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Content-Type":"application/json",
+                      "Accept":"application/vnd.github+json"})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              print("PREFLIGHT_RUN_RECORDED="+str(response.status==201))
+          PY
