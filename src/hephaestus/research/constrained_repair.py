@@ -414,13 +414,13 @@ class GitHubReviewBranchPublisher:
         result=self._request("POST",prefix+"/pulls",{
             "title":"Bounded Diagnostician self-repair: "+scope.allowed_file.split("/")[-1],
             "head":branch,"base":"main","draft":True,
-            "body":"Automated sandbox-validated source repair ONLY; not merged or production-certified.\\n\\n"
-                   "Verified failure: "+candidate.evidence_ref+"\\n"
-                   "Sandbox trial: "+str(verified_trial["trial_ref"])+"\\n"
-                   "Original pinned commit: "+scope.base_commit+"\\n"
-                   "Fixed regression: "+scope.fixed_test+"\\n"
+            "body":"Automated sandbox-validated source repair ONLY; not merged or production-certified.\n\n"
+                   "Verified failure: "+candidate.evidence_ref+"\n"
+                   "Sandbox trial: "+str(verified_trial["trial_ref"])+"\n"
+                   "Original pinned commit: "+scope.base_commit+"\n"
+                   "Fixed regression: "+scope.fixed_test+"\n"
                    "Red -> green: true. Manual independent review required before any merge."})
         url=str(result.get("html_url") or "")
-        if not re.fullmatch(r"https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+",url):
+        if not re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+",url):
             raise RepairBoundaryError("GitHub review PR result did not return its canonical URL")
         return url
