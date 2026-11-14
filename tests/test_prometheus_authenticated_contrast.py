@@ -96,3 +96,21 @@ def test_diagnosis_gate_and_original_parent_precommit_are_not_bypassed():
     comparison = _json(ROOT / "docs/evidence/second-controlled-experiment-001-33889959923/second_controlled_semantic_evaluation_verification.json")["comparison"]
     assert comparison["primary_outcome"] == "regressed"
     assert comparison["deterministic_gate_status"] == "failed"
+
+
+
+def test_new_predicate_gold_fixes_actual_observations_but_not_unknown_granite_cause():
+    truth = _json(ROOT / "configs/research/prometheus_source_predicate_contrasts_v1.json")
+    assert truth["status"] == (
+        "FROZEN_RETROSPECTIVE_DEVELOPMENT_PREDICATE_LABELS_NOT_ORIGINAL_GRANITE_GOLD"
+    )
+    by_id = {p["id"]:p for p in truth["predicates"]}
+    assert by_id["P_ORIG_EMBEDDED_PROMPT_TARGET"]["gold"] is False
+    assert by_id["P_LATER_EMBEDDED_PROMPT_TARGET"]["gold"] is True
+    assert by_id["P_PROBE_COUNTS_EMBEDDED_WRAPPERS"]["gold"] is False
+    assert by_id["P_LATER_EMBEDDED_JSON_OBJECT_TARGET"]["gold"] is False
+    assert by_id["P_ORIGINAL_GRANITE_EVAL_BROKEN"]["gold"] is None
+    assert by_id["P_LATER_ALL_STRUCTURED_TASK_COVERAGE_VERIFIED"]["gold"] is None
+    assert truth["control_policy"]["gold_domain_label_adjudication_complete"] is False
+    assert truth["control_policy"]["permitted_for_original_granite_certification"] is False
+    assert truth["control_policy"]["permitted_for_planner"] is False
