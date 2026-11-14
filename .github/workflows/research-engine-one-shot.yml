@@ -11,14 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 3d21a7c4a90fadb4337353636771beacf0f206a4
+          ref: 5625746f05ace6e680eb9839e3bb4ceedaa265a6
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: test "$(git rev-parse HEAD)" = "3d21a7c4a90fadb4337353636771beacf0f206a4"
+      - run: test "$(git rev-parse HEAD)" = "5625746f05ace6e680eb9839e3bb4ceedaa265a6"
       - run: python -m pip install -e '.[test]'
-      - run: python -m pytest -q tests/test_autonomous_evaluation_only_research.py tests/test_targeted_post_failure_probes.py
+      - run: python -m pytest -q tests/test_autonomous_evaluation_only_research.py tests/test_constrained_research_self_repair.py tests/test_targeted_post_failure_probes.py
       - run: python -m pytest -q
   verify-source-catalog:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 3d21a7c4a90fadb4337353636771beacf0f206a4
+          ref: 5625746f05ace6e680eb9839e3bb4ceedaa265a6
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
