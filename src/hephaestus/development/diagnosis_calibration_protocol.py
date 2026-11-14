@@ -235,6 +235,31 @@ def score_contract_fixtures(protocol: dict, labels: dict[str, str],
             "arms":scored}
 
 
+
+
+def frozen_signal_rule(observed_signals: set[str]) -> str:
+    """Precommitted non-LLM control; labels and model answers are never inputs.
+
+    Input signal provenance must be verified by the independent custodian
+    before this control can be used as a *real* baseline. This function
+    does not authenticate observations and does not authorize interventions.
+    """
+    if type(observed_signals) is not set or not all(
+            isinstance(x, str) for x in observed_signals):
+        raise CalibrationProtocolError("deterministic control requires exact signal set")
+    candidates = set()
+    if {"eval_integrity_failed","evaluation_settings_mismatch"} & observed_signals:
+        if "eval_integrity_verified" not in observed_signals:
+            candidates.add("evaluation_integrity")
+    if "tokenizer_mismatch" in observed_signals:
+        if "tokenizer_compatible" not in observed_signals:
+            candidates.add("tokenizer")
+    if "data_coverage_gap" in observed_signals:
+        if "data_coverage_verified" not in observed_signals:
+            candidates.add("data_coverage")
+    return next(iter(candidates)) if len(candidates) == 1 else "inconclusive"
+
+
 def fixed_controls(labels: dict[str,str]) -> dict:
     """Non-learned reference predictions; no labels enter an actual control."""
     if set(labels) != set(SLOTS):
