@@ -172,18 +172,61 @@ def analyze_training_dynamics(
     return evidence, measurements
 
 
+def _structured_json_object(target: object) -> bool:
+    """Count JSON objects, not JSON-looking or malformed target strings."""
+    if isinstance(target, dict):
+        return True
+    if not isinstance(target, str):
+        return False
+    stripped = target.strip()
+    if not (stripped.startswith("{") and stripped.endswith("}")):
+        return False
+    try:
+        return isinstance(json.loads(stripped), dict)
+    except json.JSONDecodeError:
+        return False
+
+
+def _embedded_prompt_target(text: str) -> tuple[str, str] | None:
+    """Accept an unambiguous, complete, nonempty canonical text wrapper.
+
+    Marker presence alone is not supervised coverage: partially chunked,
+    duplicate, out-of-order, or empty examples remain visible as diagnostics,
+    but cannot satisfy the supported-instruction coverage gate.
+    """
+    prompt_marker, target_marker = "<|prompt|>", "<|target|>"
+    if (text.count(prompt_marker) != 1 or text.count(target_marker) != 1
+            or not text.lstrip().startswith(prompt_marker)):
+        return None
+    body = text.lstrip()[len(prompt_marker):]
+    prompt, sep, target = body.partition(target_marker)
+    if sep and prompt.strip() and target.strip():
+        return prompt.strip(), target.strip()
+    return None
+
+
 def analyze_dataset_task_coverage(
     rows: Iterable[Mapping[str, object]],
     eval_pack: Mapping[str, object],
     *,
     source_ref: str,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    """Measure whether training records structurally cover frozen eval task forms."""
+    """Measure structural coverage across explicit fields and embedded wrappers.
+
+    This v2 observation is a new measurement, never an in-place rewrite of
+    immutable v1 historical reports. Counts are format-level observations,
+    not semantic model competence or proof of all required task coverage.
+    """
 
     total = 0
     text_rows = 0
     prompt_target_rows = 0
     structured_target_rows = 0
+    explicit_prompt_target_rows = 0
+    embedded_marker_pair_rows = 0
+    embedded_valid_prompt_target_rows = 0
+    embedded_empty_or_malformed_rows = 0
+    embedded_structured_target_rows = 0
     exact_prompt_hits = 0
     instruction_cue_rows = 0
 
@@ -220,19 +263,32 @@ def analyze_dataset_task_coverage(
                 exact_prompt_hits += 1
             if any(cue in lower for cue in instruction_cues):
                 instruction_cue_rows += 1
-        if row.get("prompt") is not None and row.get("target") is not None:
+        explicit_fields = row.get("prompt") is not None and row.get("target") is not None
+        if explicit_fields:
+            explicit_prompt_target_rows += 1
+        explicit_complete = (
+            explicit_fields and bool(str(row["prompt"]).strip())
+            and (bool(row["target"]) if isinstance(row["target"], dict)
+                 else isinstance(row["target"], str) and bool(row["target"].strip()))
+        )
+
+        marker_pair = "<|prompt|>" in text and "<|target|>" in text
+        embedded = _embedded_prompt_target(text) if marker_pair else None
+        if marker_pair:
+            embedded_marker_pair_rows += 1
+            if embedded is None:
+                embedded_empty_or_malformed_rows += 1
+            else:
+                embedded_valid_prompt_target_rows += 1
+        # Exactly one row contributes to each combined count, even when both
+        # representations occur. Prefer explicit structured target when present.
+        if explicit_complete or embedded is not None:
             prompt_target_rows += 1
-            target = row.get("target")
-            if isinstance(target, dict):
-                structured_target_rows += 1
-            elif isinstance(target, str):
-                stripped = target.strip()
-                if stripped.startswith("{") and stripped.endswith("}"):
-                    try:
-                        if isinstance(json.loads(stripped), dict):
-                            structured_target_rows += 1
-                    except json.JSONDecodeError:
-                        pass
+        if (explicit_complete and _structured_json_object(row["target"])) or (
+                embedded is not None and _structured_json_object(embedded[1])):
+            structured_target_rows += 1
+            if embedded is not None and _structured_json_object(embedded[1]):
+                embedded_structured_target_rows += 1
 
     if total == 0:
         raise ValueError("dataset coverage probe requires at least one record")
@@ -249,10 +305,16 @@ def analyze_dataset_task_coverage(
     )
 
     measurements: dict[str, object] = {
+        "coverage_probe_version": 2,
         "rows_scanned": total,
         "text_rows": text_rows,
         "prompt_target_rows": prompt_target_rows,
         "structured_target_rows": structured_target_rows,
+        "explicit_prompt_target_rows": explicit_prompt_target_rows,
+        "embedded_marker_pair_rows": embedded_marker_pair_rows,
+        "embedded_valid_prompt_target_rows": embedded_valid_prompt_target_rows,
+        "embedded_empty_or_malformed_rows": embedded_empty_or_malformed_rows,
+        "embedded_structured_target_rows": embedded_structured_target_rows,
         "exact_frozen_eval_prompt_hits": exact_prompt_hits,
         "instruction_cue_rows": instruction_cue_rows,
         "requires_instruction_behavior": requires_instruction,
