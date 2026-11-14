@@ -18,14 +18,14 @@ jobs:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: 8038aaa1651b37746838604f4b14e97ee27c77dd
+      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-02
+      PROMETHEUS_SOURCE_SHA: 9d21933ae261a868eebf80743931c5d9ffcc7e86
       PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/watchdog.jsonl
       PROMETHEUS_LOG_LABEL: watchdog
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
