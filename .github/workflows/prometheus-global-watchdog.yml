@@ -5,6 +5,7 @@ on:
     paths: [.github/workflows/prometheus-global-watchdog.yml]
 permissions:
   contents: read
+  issues: write
 concurrency:
   group: prometheus-unbound-global-20261114-watchdog
   cancel-in-progress: false
@@ -20,6 +21,7 @@ jobs:
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
       PROMETHEUS_SOURCE_SHA: 1686293b99b38e3c4abcbaa85623db4351d51fb0
       PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/watchdog.jsonl
+      PROMETHEUS_LOG_LABEL: watchdog
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +30,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Publish start GitHub Actions run locator to Prometheus PR
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_LABEL: start
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request
+          url="https://github.com/kys928/Hephaestus/actions/runs/"+os.environ["GITHUB_RUN_ID"]
+          status=os.environ["STATUS_LABEL"]
+          result=os.environ["JOB_RESULT"] if status=="completion" else "started"
+          label=os.environ.get("PROMETHEUS_LOG_LABEL","prometheus")
+          body=f"Prometheus {label}: {status} ({result}) — {url}. Run ID {os.environ['GITHUB_RUN_ID']}; no scientific result implied."
+          req=urllib.request.Request("https://api.github.com/repos/kys928/Hephaestus/issues/206/comments",
+            data=json.dumps({"body":body}).encode(),method="POST",
+            headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],
+                     "Content-Type":"application/json","Accept":"application/vnd.github+json"})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              print("PROMETHEUS_ACTION_RUN_LINK_PUBLISHED="+str(response.status==201))
+          PY
       - name: Exact source and Python syntax preflight
         run: |
           test "$(git rev-parse HEAD)" = "$PROMETHEUS_SOURCE_SHA"
@@ -47,3 +70,25 @@ jobs:
           path: /tmp/prometheus-logs/watchdog.jsonl
           retention-days: 30
           if-no-files-found: warn
+      - name: Publish completion GitHub Actions run locator to Prometheus PR
+        continue-on-error: true
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_LABEL: completion
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request
+          url="https://github.com/kys928/Hephaestus/actions/runs/"+os.environ["GITHUB_RUN_ID"]
+          status=os.environ["STATUS_LABEL"]
+          result=os.environ["JOB_RESULT"] if status=="completion" else "started"
+          label=os.environ.get("PROMETHEUS_LOG_LABEL","prometheus")
+          body=f"Prometheus {label}: {status} ({result}) — {url}. Run ID {os.environ['GITHUB_RUN_ID']}; no scientific result implied."
+          req=urllib.request.Request("https://api.github.com/repos/kys928/Hephaestus/issues/206/comments",
+            data=json.dumps({"body":body}).encode(),method="POST",
+            headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],
+                     "Content-Type":"application/json","Accept":"application/vnd.github+json"})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              print("PROMETHEUS_ACTION_RUN_LINK_PUBLISHED="+str(response.status==201))
+          PY
