@@ -63,9 +63,16 @@ def event(component: str, phase: str, status: str = "progress",
     local = os.environ.get("PROMETHEUS_ACTION_LOG")
     if local:
         path = Path(local)
-        # Only explicitly configured off-branch local Actions log paths.
-        if not path.is_absolute() or not str(path).startswith("/tmp/"):
-            raise PermissionError("public action log must stay in local temporary storage")
+        # An Actions runner uses $RUNNER_TEMP, commonly outside /tmp.
+        # Enforce a local temporary root and disallow symlink traversal.
+        roots = [Path("/tmp")]
+        if os.environ.get("RUNNER_TEMP"):
+            roots.append(Path(os.environ["RUNNER_TEMP"]))
+        target = path.resolve()
+        if (not path.is_absolute() or path.is_symlink()
+                or not any(root.is_absolute() and target.is_relative_to(root.resolve())
+                           for root in roots)):
+            raise PermissionError("public action log must stay in a local temporary root")
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
