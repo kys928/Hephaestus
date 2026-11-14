@@ -7,7 +7,7 @@ permissions:
   contents: read
   issues: write
 concurrency:
-  group: prometheus-unbound-global-20261114-watchdog
+  group: prometheus-unbound-global-20261114-watchdog-source8038
   cancel-in-progress: false
 jobs:
   independent-watchdog:
@@ -19,13 +19,13 @@ jobs:
       RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: 1686293b99b38e3c4abcbaa85623db4351d51fb0
+      PROMETHEUS_SOURCE_SHA: 8038aaa1651b37746838604f4b14e97ee27c77dd
       PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/watchdog.jsonl
       PROMETHEUS_LOG_LABEL: watchdog
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1686293b99b38e3c4abcbaa85623db4351d51fb0
+          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
