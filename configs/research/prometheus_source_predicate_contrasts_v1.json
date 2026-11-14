@@ -1,0 +1,135 @@
+{
+  "schema": "prometheus-source-linked-predicate-contrast.v1",
+  "status": "FROZEN_RETROSPECTIVE_DEVELOPMENT_PREDICATE_LABELS_NOT_ORIGINAL_GRANITE_GOLD",
+  "scope": "Source-linked predicate truth only: historical first-scientific training vs controlled dataset-mix successor; diagnostic coverage probe on actual candidate. Do not use as certified original-parent failure-domain gold.",
+  "source_verification": {
+    "run": "https://github.com/kys928/Hephaestus/actions/runs/43637529964",
+    "independent_implementation_jobs": [
+      132577519475,
+      132577519642
+    ],
+    "source_commit": "f27882fc08aa6d7c162a4b12c5dc522e9cdb69e2",
+    "followup_target_format_run": "https://github.com/kys928/Hephaestus/actions/runs/43637887299"
+  },
+  "sources": {
+    "original": {
+      "ref": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "rows": 54878,
+      "subject": "first-bounded-scientific-training-001-33866198758"
+    },
+    "later": {
+      "ref": "sha256:bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac",
+      "rows": 171295,
+      "subject": "planned-run-b8e558e54effac85"
+    }
+  },
+  "predicates": [
+    {
+      "id": "P_ORIG_EXPLICIT_PROMPT_TARGET",
+      "source": "original",
+      "predicate": "number of records containing separate prompt and target fields > 0",
+      "gold": false,
+      "count": 0,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_ORIG_EMBEDDED_PROMPT_TARGET",
+      "source": "original",
+      "predicate": "number of text records containing both literal wrapper markers > 0",
+      "gold": false,
+      "count": 0,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_LATER_EXPLICIT_PROMPT_TARGET",
+      "source": "later",
+      "predicate": "number of records containing separate prompt and target fields > 0",
+      "gold": false,
+      "count": 0,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_LATER_EMBEDDED_PROMPT_TARGET",
+      "source": "later",
+      "predicate": "number of text records containing both literal wrapper markers > 0",
+      "gold": true,
+      "count": 35774,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_LATER_EMBEDDED_NONEMPTY_TARGET",
+      "source": "later",
+      "predicate": "number of wrapper rows with nonempty text after final target marker > 0",
+      "gold": true,
+      "count": 35568,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_LATER_EMBEDDED_JSON_OBJECT_TARGET",
+      "source": "later",
+      "predicate": "number of wrapper rows whose target segment parses as a JSON object > 0",
+      "gold": false,
+      "count": 0,
+      "verified_source_measurement": true
+    },
+    {
+      "id": "P_PROBE_COUNTS_EMBEDDED_WRAPPERS",
+      "source": "later",
+      "predicate": "the unmodified existing coverage probe includes text-embedded wrapper occurrences in prompt_target_rows",
+      "gold": false,
+      "legacy_probe_count": 0,
+      "source_wrapper_count": 35774,
+      "verified_actual_probe_execution": true
+    },
+    {
+      "id": "P_LATER_ALL_STRUCTURED_TASK_COVERAGE_VERIFIED",
+      "source": "later",
+      "predicate": "all frozen structured-target task forms established by available evidence",
+      "gold": null,
+      "reason": "not established by wrapper markers; no parser-audited JSON-object target segments",
+      "verified_source_measurement": false
+    },
+    {
+      "id": "P_ORIGINAL_GRANITE_EVAL_BROKEN",
+      "source": null,
+      "predicate": "positively independently verified evaluation-integrity defect in the certified six-state Granite original parent",
+      "gold": null,
+      "reason": "these two dataset sources refer to an entirely different training lineage",
+      "verified_source_measurement": false
+    }
+  ],
+  "pairs": [
+    {
+      "a": "P_ORIG_EMBEDDED_PROMPT_TARGET",
+      "b": "P_LATER_EMBEDDED_PROMPT_TARGET",
+      "kind": "verified_content_change",
+      "correct_source_changed": true,
+      "nuisance": false
+    },
+    {
+      "a": "P_LATER_EXPLICIT_PROMPT_TARGET",
+      "b": "P_LATER_EMBEDDED_PROMPT_TARGET",
+      "kind": "measurement_definition_difference_same_source",
+      "correct_source_changed": false,
+      "nuisance": false
+    },
+    {
+      "a": "P_LATER_EMBEDDED_PROMPT_TARGET",
+      "b": "P_PROBE_COUNTS_EMBEDDED_WRAPPERS",
+      "kind": "actual_probe_semantics_gap_same_source",
+      "correct_source_changed": false,
+      "nuisance": false
+    }
+  ],
+  "control_policy": {
+    "metadata_only_variations_are_counterfactual_not_new_sources": true,
+    "synthetic_corruption_is_control_only": true,
+    "gold_domain_label_adjudication_complete": false,
+    "permitted_for_cpu_contract_tests": true,
+    "permitted_for_original_granite_certification": false,
+    "permitted_for_gpu_training": false,
+    "permitted_for_planner": false,
+    "protected_final_holdout_allowed": false
+  },
+  "independent_human_reviewer_completed": false
+}
