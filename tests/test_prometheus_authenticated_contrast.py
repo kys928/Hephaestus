@@ -67,7 +67,7 @@ def test_checksum_archival_scientific_provenance_is_still_intact():
         assert verified >= 4
 
 
-def test_actual_probe_legacy_field_only_predicate_is_an_explained_measurement_gap():
+def test_new_probe_recognizes_wrapped_supervision_without_rewriting_historical_evidence():
     # Synthetic shape reproduction for implementation correctness only;
     # the actual 171295-row GPU-free S3 audit is in the immutable CI receipt.
     pack = _json(ROOT / "configs/eval_packs/semantic_behavior_v1.yaml")
@@ -75,13 +75,17 @@ def test_actual_probe_legacy_field_only_predicate_is_an_explained_measurement_ga
         [{"text":"<|prompt|>\\nreturn JSON\\n<|target|>\\n{\"ok\":true}"}],
         pack, source_ref="synthetic-fixture-not-an-authentic-source",
     )
-    assert counts["prompt_target_rows"] == 0
-    assert counts["structured_target_rows"] == 0
-    assert evidence["data_coverage_gap"] is True
+    assert counts["coverage_probe_version"] == 2
+    assert counts["embedded_marker_pair_rows"] == 1
+    assert counts["embedded_valid_prompt_target_rows"] == 1
+    assert counts["prompt_target_rows"] == 1
+    assert counts["structured_target_rows"] == 1
+    assert evidence["data_coverage_gap"] is False
     real = _record()["source_inputs"][1]
     assert real["text_prompt_target_wrapped"] > 0
     assert real["structured_target_fields"] == 0
-    # Under-count of wrapper markers does NOT establish overall complete coverage.
+    # This fixture has valid JSON supervision, but the real candidate's sources
+    # still lack proven structured-target coverage and have a separate frozen verdict.
 
 
 def test_diagnosis_gate_and_original_parent_precommit_are_not_bypassed():
