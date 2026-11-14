@@ -1,0 +1,47 @@
+name: Hephaestus read-only recovery Pod log diagnostic
+on:
+  push:
+    branches: [ops/global-volume-recovery-20261112]
+    paths:
+      - .github/workflows/hephaestus-recovery-pod-log-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Inspect container logs for restart cause without printing arbitrary private output
+        run: |
+          python - <<'PY'
+          import os,json,time,re,urllib.request
+          pod='t8zo4kvk8yogpr'
+          url='https://api.runpod.io/v2/pods/'+pod+'/logs?source=container&tail=350'
+          req=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY'],'Accept':'text/event-stream'})
+          deadline=time.monotonic()+14
+          events=[];response=None
+          try:
+              response=urllib.request.urlopen(req,timeout=17)
+              for entry in response:
+                  line=entry.decode('utf-8','replace').strip()
+                  if not line.startswith('data: '):
+                      if time.monotonic()>deadline:break
+                      continue
+                  try:d=json.loads(line[6:])
+                  except ValueError:continue
+                  s=d.get('line','')
+                  if not isinstance(s,str):continue
+                  if re.search(r'S3_EVIDENCE_RESTORE_FAILED|RECOVERY_PROGRESS=|Traceback|Error|Exception|Killed|Restart|BOOTSTRAP',s,re.I):
+                      # Only print event category and a sanitized trailing error class; never raw paths/tokens/lines.
+                      typ='RESTORE_FAILED' if 'S3_EVIDENCE_RESTORE_FAILED' in s else 'PROGRESS' if 'RECOVERY_PROGRESS=' in s else 'ERROR_EVENT'
+                      val=re.search(r'S3_EVIDENCE_RESTORE_FAILED=([A-Za-z_]+)',s)
+                      if val:typ+='_'+val.group(1)
+                      events.append({'type':typ,'ts':str(d.get('ts',''))[:32]})
+                  if len(events)>=200 or time.monotonic()>deadline:break
+          finally:
+              if response:response.close()
+          print('POD_LOG_DIAGNOSTIC_EVENT_COUNTS='+json.dumps({x:sum(y['type']==x for y in events) for x in sorted(set(e['type'] for e in events))},sort_keys=True))
+          print('POD_LOG_DIAGNOSTIC_RECENT='+json.dumps(events[-25:]))
+          PY
