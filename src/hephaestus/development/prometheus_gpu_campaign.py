@@ -50,18 +50,6 @@ def main(argv: list[str] | None = None) -> int:
     prepare(parent, d)  # Source/ontology/authority preflight BEFORE GPU import.
     if args.out.exists() and any(args.out.iterdir()):
         raise FileExistsError("Prometheus GPU campaign output must be a fresh immutable directory")
-    args.out.mkdir(parents=True, exist_ok=True)
-    (args.out/"campaign-precommit.json").write_bytes(canonical_bytes({
-        "schema":"prometheus-real-gpu-campaign-precommit.v1",
-        "parent_evidence_sha256":"sha256:"+PARENT_SHA,
-        "historical_D_evidence_sha256":"sha256:"+D_SHA,
-        "original_parent_unchanged":True,
-        "first_scientific_action_must_come_from_hephaestus":True,
-        "new_gpu_model_inference_completed_at_precommit":False,
-        "training_steps_permitted":0,
-        "production_role_activation_permitted":False,
-        "independent_final_holdout_access_permitted":False,
-    }))
     stack = load_certified_role_model_stack(args.registry)
     if args.global_volume_root is not None:
         if not args.global_volume_id or args.s3_endpoint or args.s3_bucket:
@@ -80,6 +68,18 @@ def main(argv: list[str] | None = None) -> int:
         adapter_client = boto3.client(
             "s3", endpoint_url=args.s3_endpoint, region_name=args.s3_region)
         adapter_bucket = args.s3_bucket
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out/"campaign-precommit.json").write_bytes(canonical_bytes({
+        "schema":"prometheus-real-gpu-campaign-precommit.v1",
+        "parent_evidence_sha256":"sha256:"+PARENT_SHA,
+        "historical_D_evidence_sha256":"sha256:"+D_SHA,
+        "original_parent_unchanged":True,
+        "first_scientific_action_must_come_from_hephaestus":True,
+        "new_gpu_model_inference_completed_at_precommit":False,
+        "training_steps_permitted":0,
+        "production_role_activation_permitted":False,
+        "independent_final_holdout_access_permitted":False,
+    }))
     generator = PinnedTransformersRoleGenerator(
         args.hf_cache, device="cuda:0", allow_remote_pinned_download=True)
     reasoner = CertifiedRoleReasoner(
