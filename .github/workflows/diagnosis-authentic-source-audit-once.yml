@@ -158,3 +158,38 @@ jobs:
           },sort_keys=True),flush=True)
 
           PY
+      - name: Classify actual embedded target formats without revealing dataset text
+        run: |
+          python - <<'PY'
+          import os,boto3,json,hashlib,tempfile
+          c=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+          key="hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/trainable.jsonl"
+          with tempfile.TemporaryFile() as tmp:
+            stream=c.get_object(Bucket="cviwpryzao",Key=key)["Body"];dig=hashlib.sha256()
+            try:
+              for chunk in stream.iter_chunks(chunk_size=512*1024):
+                if chunk:dig.update(chunk);tmp.write(chunk)
+            finally:stream.close()
+            assert dig.hexdigest()=="bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac"
+            tmp.seek(0)
+            count=0;json_objects=0;sql_prefix=0;empty=0
+            for line in tmp:
+              if not line.strip():continue
+              doc=json.loads(line);text=doc.get("text","")
+              if "<|prompt|>" not in text or "<|target|>" not in text:continue
+              count+=1
+              target=text.rsplit("<|target|>",1)[1].strip()
+              if not target:empty+=1;continue
+              if target.lower().lstrip().startswith(("select ","with ","insert ","update ","delete ","create ","alter ")):
+                sql_prefix+=1
+              if target.startswith("{") and target.endswith("}"):
+                try:
+                  if isinstance(json.loads(target),dict):json_objects+=1
+                except json.JSONDecodeError:pass
+            assert count==35774
+            print("VERIFIER_C_ACTUAL_WRAPPED_TARGET_FORMATS="+json.dumps({
+              "source_sha256":dig.hexdigest(),"wrapped_records":count,
+              "structured_json_object_target_records":json_objects,
+              "sql_like_prefix_records":sql_prefix,"empty_target_records":empty
+            },sort_keys=True),flush=True)
+          PY
