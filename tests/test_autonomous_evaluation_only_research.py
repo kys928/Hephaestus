@@ -150,7 +150,7 @@ def test_independently_pinned_catalog_bytes_required(tmp_path):
 def test_source_tamper_fails_before_inference_or_persistence(tmp_path):
     job,reader,observer,_=_job(tmp_path)
     key=next(uri for uri in reader.objects if "/candidate/" in uri)
-    reader.objects[key]+=b'{"text":"forged"}\n'
+    reader.objects[key]=reader.objects[key].replace(b"A planet", b"B planet")
     with pytest.raises(ResearchAdmissionError,match="source bytes differ"):
         job.run("Investigate Diagnostician reliability and evidence coverage",
                 run_id="bad-source",lineage_id="research-lineage")
