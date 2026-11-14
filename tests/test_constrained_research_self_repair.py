@@ -6,7 +6,7 @@ They do not claim that a fake sandbox is independent container execution.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import hashlib
 import json
 import subprocess
@@ -99,7 +99,7 @@ def test_model_can_propose_patch_and_controller_tests_without_mutating_original(
     ref=_fault(artifacts,scope)
     patch=_candidate(source.read_bytes(),scope,ref)
     model=BoundedPatchProposer(DeclaredModelResponseForContractTests(
-        json.dumps(patch.__dict__)))
+        json.dumps(asdict(patch))))
     proposed=model.propose(scope=scope,original=source.read_bytes(),
                            verified_fault={"status":"verified_failed","target_file":scope.allowed_file},
                            evidence_ref=ref)
@@ -143,7 +143,7 @@ def test_model_cannot_choose_its_own_file_or_suite(tmp_path):
     artifacts=FileSystemArtifactStore(tmp_path/"artifacts")
     ref=_fault(artifacts,scope)
     patch=_candidate(source.read_bytes(),scope,ref)
-    candidate={**patch.__dict__,"path":"src/hephaestus/policy/action_registry.py"}
+    candidate={**asdict(patch),"path":"src/hephaestus/policy/action_registry.py"}
     with pytest.raises(RepairBoundaryError,match="outside operator"):
         BoundedPatchProposer(DeclaredModelResponseForContractTests(json.dumps(candidate))).propose(
             scope=scope,original=source.read_bytes(),
