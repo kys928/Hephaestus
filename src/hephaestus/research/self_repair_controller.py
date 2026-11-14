@@ -86,7 +86,7 @@ class AutonomousDiagnosisRepairEpisode:
             capture_output=True,text=True,timeout=10,check=False)
         if head.returncode!=0 or not re.fullmatch(r"[a-f0-9]{40}",head.stdout.strip()):
             raise RepairBoundaryError("repair requires original Git checkout")
-        dirty=subprocess.run(["git","-C",str(root),"status","--porcelain","--untracked-files=no"],
+        dirty=subprocess.run(["git","-C",str(root),"status","--porcelain","--untracked-files=all"],
             capture_output=True,text=True,timeout=10,check=False)
         if dirty.returncode!=0 or dirty.stdout.strip():
             raise RepairBoundaryError("repair requires clean reviewed Git checkout")
