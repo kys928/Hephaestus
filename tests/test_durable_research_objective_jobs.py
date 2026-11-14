@@ -115,3 +115,17 @@ def test_forged_job_envelope_does_not_become_model_spending_authority(tmp_path):
         artifacts,research=study),lease_seconds=20,heartbeat_interval_seconds=1).run_once()
     assert result.status in {JobStatus.FAILED,JobStatus.DEAD_LETTER}
     assert study.calls==[]
+
+
+
+def test_production_worker_rejects_injected_observer_without_real_model_receipts(tmp_path):
+    artifacts,queue=_setup(tmp_path)
+    study=DeclaredStudyTestDouble([])
+    job=submit_research_objective(
+        question="Investigate Diagnostician reliability and coverage",
+        run_id="prod-refusal",lineage_id="lineage",artifacts=artifacts,queue=queue)
+    result=DurableWorker(
+        "research-worker",queue,ResearchObjectiveJobHandler(artifacts,research=study),
+        lease_seconds=20,heartbeat_interval_seconds=1).run_once()
+    assert result.status in {JobStatus.FAILED,JobStatus.DEAD_LETTER}
+    assert study.calls==[]
