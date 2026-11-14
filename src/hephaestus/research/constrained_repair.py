@@ -281,6 +281,11 @@ class ConstrainedSelfRepair:
             changed=stage/"candidate"
             clean.mkdir()
             changed.mkdir()
+            # The unprivileged sandbox user must be able to traverse only this
+            # disposable, secret-free copy, never the parent checkout.
+            stage.chmod(0o755)
+            clean.chmod(0o755)
+            changed.chmod(0o755)
             _prepare_copy(base,clean)
             _prepare_copy(base,changed)
             target=changed/scope.allowed_file
