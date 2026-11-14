@@ -319,8 +319,9 @@ def main() -> int:
     try:
         result = launch(campaign, source_sha)
     except Exception as exc:
+        # Public Actions must never expose provider response bodies or private data.
         event("launcher", "BLOCKED", "fail", reason_code=type(exc).__name__)
-        raise
+        raise SystemExit(1) from None
     event("launcher", "COMPLETE", "pass")
     print("PROMETHEUS_GLOBAL_AUTHENTIC_SCIENCE_COMPLETED=true", flush=True)
     print("PROMETHEUS_GLOBAL_ADMITTED_ACTION=" + str(result.get("scientific_action")), flush=True)
