@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +34,7 @@ jobs:
           python -m py_compile src/hephaestus/development/prometheus_gpu_campaign.py
       - name: Offline only, negative path tests
         run: |
-          pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py tests/test_prometheus_global_observability.py
+          pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py tests/test_prometheus_global_observability.py tests/test_prometheus_exact_source_citations.py
       - name: Publish immutable CI run locator (no scientific claims)
         continue-on-error: true
         if: ${{ always() }}
@@ -60,3 +60,5 @@ jobs:
 # Prepaid-GPU gate: rerun exact pinned source's offline tests before launch 2026-11-14.
 
 # Rerun 2026-11-14 source-pinned CPU suite after corrected archive-size fixture.
+
+# Controlled literal source reference prompt-only ablation CPU gate.
