@@ -72,7 +72,7 @@ def test_new_probe_recognizes_wrapped_supervision_without_rewriting_historical_e
     # the actual 171295-row GPU-free S3 audit is in the immutable CI receipt.
     pack = _json(ROOT / "configs/eval_packs/semantic_behavior_v1.yaml")
     evidence, counts = analyze_dataset_task_coverage(
-        [{"text":"<|prompt|>\\nreturn JSON\\n<|target|>\\n{\"ok\":true}"}],
+        [{"text":"<|prompt|>\nreturn JSON\n<|target|>\n{\"ok\":true}"}],
         pack, source_ref="synthetic-fixture-not-an-authentic-source",
     )
     assert counts["coverage_probe_version"] == 2
