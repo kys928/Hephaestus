@@ -217,6 +217,8 @@ def _prepare_copy(source_root: Path, target: Path) -> None:
             current=Path(walk_root)
             if current.is_symlink():
                 raise RepairBoundaryError("symlink inside repair source checkout")
+            if any((current/item).is_symlink() for item in dirs):
+                raise RepairBoundaryError("symlink inside repair source checkout")
             dirs[:] = [item for item in dirs if item not in _FORBIDDEN and
                       not item.startswith(".") and item != "__pycache__"]
             for name in files:
@@ -260,6 +262,18 @@ class ConstrainedSelfRepair:
         if path.is_symlink() or not path.is_file():
             raise RepairBoundaryError("approved source path unavailable or symlink")
         original = path.read_bytes()
+        # The designated source checkout MUST be the actually reviewed commit,
+        # not just a directory whose one selected file happens to have a hash.
+        head = subprocess.run(
+            ["git", "-C", str(base), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10)
+        if head.returncode != 0 or head.stdout.strip() != scope.base_commit:
+            raise RepairBoundaryError("source checkout does not match authorized Git commit")
+        status = subprocess.run(
+            ["git", "-C", str(base), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True, text=True, check=False, timeout=10)
+        if status.returncode != 0 or status.stdout.strip():
+            raise RepairBoundaryError("source checkout is dirty before repair")
         new_sha,changed_lines = candidate.validate(scope,original)
         with tempfile.TemporaryDirectory(prefix="hephaestus-untrusted-patch-") as folder:
             stage=Path(folder)
