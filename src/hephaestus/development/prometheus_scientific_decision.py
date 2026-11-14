@@ -224,6 +224,43 @@ def _exact_source_citation_guidance(facts: tuple[RoleEvidence, ...]) -> str:
     )
 
 
+
+def _independent_evidence_calibration(diagnosis) -> str:
+    """Expose deterministic *support*, not a preferred model answer.
+
+    This is an interpretation aid for the frozen role model, not a change in
+    its contract, hypotheses, permitted choices or independent admission.
+    Only hypotheses backed by positive source references and without
+    contradictory references count as independently supported domains.
+    """
+    supported = sorted({
+        h.failure_domain for h in diagnosis.hypotheses
+        if h.failure_domain != "inconclusive"
+        and h.supporting_evidence_refs
+        and not h.contradicting_evidence_refs
+    })
+    issue_codes = sorted({issue.code for issue in diagnosis.issues})
+    return (
+        "INDEPENDENT EVIDENCE CALIBRATION (not a required answer): "
+        "The deterministic scientific audit reports status="
+        + json.dumps(diagnosis.status)
+        + ", positively supported non-inconclusive failure domains="
+        + json.dumps(supported, separators=(",", ":"))
+        + ", and outstanding issue codes="
+        + json.dumps(issue_codes, separators=(",", ":"))
+        + ". The issue 'eval_integrity_unverified' means verification evidence "
+          "is MISSING; it is NOT an observation that the evaluation protocol "
+          "failed or must be repaired. A low score for a separate historical "
+          "eight-state adapter is NOT evidence of a defect in the original "
+          "six-state production adapter. Distinguish an observed failure "
+          "from a missing check, and do not claim a positively supported "
+          "failure domain without its actual source-backed evidence. "
+          "Uncertainty or an inconclusive interpretation is permitted. "
+          "The independent admission gate will validate whatever you choose."
+    )
+
+
+
 def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path) -> dict:
     """Execute *real* frozen role inference, then independently admit its result."""
     diagnosis, options, facts = prepare(parent, d)
@@ -243,6 +280,7 @@ def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path)
         "explicit uncertainties, and the evidentiary limits of the historical "
         "nonmatching D result. Do not assert a causal training defect from those "
         "observations alone; select an interpretation permitted by the frozen role contract. "
+        + _independent_evidence_calibration(diagnosis) + " "
         + _exact_source_citation_guidance(facts),
         facts, RUN, LINEAGE, STAGE)
     diagnosis_observation = reasoner.propose(task_d, registry, context=context,
