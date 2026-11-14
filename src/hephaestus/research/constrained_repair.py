@@ -173,8 +173,8 @@ class OfflineDockerPytestRunner:
     def run(self, checkout: Path, *, fixed_test: str) -> SandboxReceipt:
         if fixed_test not in _TESTS:
             raise RepairBoundaryError("test suite changed outside operator-approved scope")
-        if ("@sha256:" not in self.image_digest or
-                not re.fullmatch(r"[A-Za-z0-9_./:-]+@sha256:[0-9a-f]{64}", self.image_digest)):
+        if not (re.fullmatch(r"[A-Za-z0-9_./:-]+@sha256:[0-9a-f]{64}", self.image_digest)
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_digest)):
             raise RepairBoundaryError("sandbox runtime must use a reviewed image digest")
         if not Path(self.docker_executable).is_file():
             raise RepairBoundaryError("reviewed Docker executable not installed")
