@@ -12,7 +12,7 @@ import pytest
 from hephaestus.development.diagnosis_calibration_protocol import (
     ADAPTER_SHA, ARMS, MODEL, REVISION, SEEDS, SLOTS, CalibrationProtocolError,
     canonical, fixed_controls, load_protocol, score_contract_fixtures,
-    source_coverage, verify_raw_trial,
+    source_coverage, verify_raw_trial, frozen_signal_rule,
 )
 from hephaestus.diagnosis.service import EvidenceBasedDiagnosisService
 from hephaestus.schemas.diagnosis_contract import DiagnosisRequest
@@ -205,3 +205,18 @@ def test_observability_limit_counts_as_abstention_not_false_causal_pair():
         # N0 still says inconclusive, so the literal decision changed despite
         # the same admissible evidence: the strict metadata invariance test fails.
         assert scored[arm]["nuisance_invariance"]["rate"] < 1.0
+
+
+
+def test_fixed_heuristic_is_label_blind_and_cautious_about_missingness():
+    assert frozen_signal_rule(set()) == "inconclusive"
+    assert frozen_signal_rule({"eval_pack_unverified", "deterministic_scorecard_missing"}) == "inconclusive"
+    assert frozen_signal_rule({"eval_integrity_failed"}) == "evaluation_integrity"
+    assert frozen_signal_rule({"evaluation_settings_mismatch"}) == "evaluation_integrity"
+    assert frozen_signal_rule({"tokenizer_mismatch"}) == "tokenizer"
+    assert frozen_signal_rule({"data_coverage_gap"}) == "data_coverage"
+    assert frozen_signal_rule({"eval_integrity_failed", "eval_integrity_verified"}) == "inconclusive"
+    assert frozen_signal_rule({"eval_integrity_failed", "tokenizer_mismatch"}) == "inconclusive"
+    assert frozen_signal_rule({"tokenizer_mismatch", "tokenizer_compatible"}) == "inconclusive"
+    with pytest.raises(CalibrationProtocolError, match="signal set"):
+        frozen_signal_rule(["eval_integrity_failed"])
