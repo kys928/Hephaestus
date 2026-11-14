@@ -165,3 +165,5 @@ jobs:
 # Authorized single paid CUDA science attempt, watchdog-gated, one-shot 2026-11-14.
 
 # Paid scientific retry authorized after 53/53 CPU pass; requires live watchdog heartbeat.
+
+# Explicit one-shot paid attempt: prompt-format-only ablation, 56/56 CPU passed.
