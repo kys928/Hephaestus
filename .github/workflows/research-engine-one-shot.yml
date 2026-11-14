@@ -111,9 +111,9 @@ jobs:
             source=workspace/"src"/"hephaestus"/"diagnosis"/"probes.py"
             test=workspace/"tests"/"test_targeted_post_failure_probes.py"
             source.parent.mkdir(parents=True); test.parent.mkdir(parents=True)
-            source.write_text("def diagnostic_value():\\n    return 'wrong'\\n")
-            test.write_text("from hephaestus.diagnosis.probes import diagnostic_value\\n"
-               "def test_diagnosis_value():\\n    assert diagnostic_value() == 'fixed'\\n")
+            source.write_text("def diagnostic_value():\n    return 'wrong'\n")
+            test.write_text("from hephaestus.diagnosis.probes import diagnostic_value\n"
+               "def test_diagnosis_value():\n    assert diagnostic_value() == 'fixed'\n")
             for args in (
                ["git","init","-q",str(workspace)],
                ["git","-C",str(workspace),"config","user.name","offline-test"],
@@ -131,7 +131,7 @@ jobs:
                 "target_file":scope.allowed_file})).artifact_ref
             candidate=PatchCandidate(scope.allowed_file,
                 "sha256:"+sha256(source.read_bytes()).hexdigest(),
-                "def diagnostic_value():\\n    return 'fixed'\\n",
+                "def diagnostic_value():\n    return 'fixed'\n",
                 fault,"A real failing baseline must become green with the exact proposed fix.")
             runner=OfflineDockerPytestRunner(image_digest=image,
                      docker_executable=shutil.which("docker"),timeout_seconds=100)
@@ -139,6 +139,6 @@ jobs:
                  checkout=workspace,scope=scope,candidate=candidate,verified_fault_ref=fault)
             assert report["red_to_green_verified"] is True,report
             assert report["baseline"]["exit_code"]!=0 and report["candidate"]["exit_code"]==0
-            assert source.read_text().endswith("return 'wrong'\\n")
+            assert source.read_text().endswith("return 'wrong'\n")
             print("REAL_ROOTLESS_OFFLINE_DOCKER_RED_TO_GREEN=PASS",flush=True)
           PY
