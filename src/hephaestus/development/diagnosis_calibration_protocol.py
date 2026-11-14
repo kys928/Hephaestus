@@ -197,15 +197,21 @@ def score_contract_fixtures(protocol: dict, labels: dict[str, str],
         appropriate = sum(r.get("decision") in ABSTENTIONS for r in abstain)
         unsupported = sum(r.get("decision") in POSITIVE and r["decision"] != labels[r["case_id"]] for r in all_rows)
         invalid = sum(not r.get("schema_valid") for r in all_rows)
-        citation = sum(r.get("citation_exact") is True and r.get("citation_material") is True for r in all_rows)
+        citation = sum(r.get("schema_valid") is True and
+                       r.get("citation_exact") is True and
+                       r.get("citation_material") is True for r in all_rows)
         by_pair = {"causal_evidence_change":[0,0], "irrelevant_metadata":[0,0]}
         for pair in protocol["paired_tests"]:
             a,b,kind = pair["a"],pair["b"],pair["kind"]
             for seed in SEEDS:
                 first,second=current[(a,seed)],current[(b,seed)]
                 da,db=first.get("decision"),second.get("decision")
+                correct_a = (da in ABSTENTIONS if labels[a] in ABSTENTIONS
+                             else da == labels[a])
+                correct_b = (db in ABSTENTIONS if labels[b] in ABSTENTIONS
+                             else db == labels[b])
                 success = (first.get("schema_valid") is True and second.get("schema_valid") is True
-                    and da==labels[a] and db==labels[b]
+                    and correct_a and correct_b
                     and ((da!=db) if kind=="causal_evidence_change" else (da==db)))
                 by_pair[kind][0] += int(success)
                 by_pair[kind][1] += 1
