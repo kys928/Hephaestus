@@ -88,6 +88,14 @@ target=pathlib.Path('/tmp/prometheus-extracted')
 target.mkdir(mode=0o700,parents=True,exist_ok=True)
 archive=pathlib.Path('/tmp/prometheus-code.tar.gz')
 archive.write_bytes(raw)
+# The off-Pod launcher will display this stage while dependency setup proceeds.
+from datetime import datetime,timezone
+s3.put_object(Bucket='cviwpryzao',Key=prefix+'/status/worker-progress.json',
+    Body=__import__('json').dumps({
+      'schema':'prometheus-global-worker-progress.v1','prefix':prefix,
+      'phase':'BOOT','receipt_count':0,
+      'observed_at':datetime.now(timezone.utc).isoformat()
+    },sort_keys=True).encode())
 with tarfile.open(archive,'r:gz') as tar:
     members=tar.getmembers()
     if len(members)>5000:raise PermissionError('Source archive member limit')
