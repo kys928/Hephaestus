@@ -1,7 +1,7 @@
 name: Prometheus Unbound controlled citation retry forensic audit (read-only)
 on:
   push:
-    branches: [ops/prometheus-unbound-global-20261114]
+    branches: [ops/prometheus-evidence-calibration-gpu-20261114]
     paths: [.github/workflows/prometheus-global-retry-forensic.yml]
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
+          ref: aeca3f49119d2c3cf205cb2cad47f7708657aa22
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -30,8 +30,8 @@ jobs:
           from hephaestus.development.prometheus_global_supervision import (
               campaign_prefix,s3_client,get_bytes,read_json,verify_manifest,
               SOURCE_PARENT,SOURCE_D,GLOBAL_ID)
-          prefix=campaign_prefix("prometheus-unbound-global-20261114-02",
-              "9d21933ae261a868eebf80743931c5d9ffcc7e86")
+          prefix=campaign_prefix("prometheus-unbound-global-20261114-03",
+              "aeca3f49119d2c3cf205cb2cad47f7708657aa22")
           s3=s3_client()
           manifest=verify_manifest(s3,prefix)
           names={item["path"] for item in manifest["files"]}
