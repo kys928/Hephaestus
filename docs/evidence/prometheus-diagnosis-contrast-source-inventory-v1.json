@@ -26,7 +26,7 @@
     {
       "id": "ROLE02",
       "kind": "real_cuda_specialist_output_not_truth_label",
-      "source": "https://github.com/kys928/Hephaestus/actions/runs/43633103128",
+      "source": "https://github.com/kys928/Hephaestus/actions/runs/43626792772",
       "receipt_sha256": "48ed4a869e412d2780778939fcae022cb3033f578734e924c3f904a57ba0a493",
       "observation": "Previously accepted Diagnostician JSON/citations selected unsupported evaluation_integrity at 0.81",
       "is_independent_new_state": false,
