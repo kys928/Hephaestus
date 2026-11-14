@@ -25,6 +25,7 @@ dataset-preparation = ["pyarrow>=18,<24", "boto3>=1.35,<2", "tokenizers>=0.20,<1
 
 [project.scripts]
 hephaestus-infrastructure = "hephaestus.infrastructure.cli:main"
+hephaestus-research = "hephaestus.research.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
