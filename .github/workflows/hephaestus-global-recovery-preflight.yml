@@ -49,3 +49,5 @@ jobs:
               result[prefix]={'count':count,'bytes':total}
           print('SOURCE_INVENTORY='+json.dumps(result,sort_keys=True))
           PY
+
+# Prometheus Unbound 2026-11-14: read-only Global/S3 preflight rerun; no Pod allocation.
