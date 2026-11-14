@@ -26,8 +26,6 @@ _RULES = (
         frozenset(
             {
                 "eval_integrity_failed",
-                "eval_pack_unverified",
-                "deterministic_scorecard_missing",
                 "evaluation_settings_mismatch",
             }
         ),
@@ -37,7 +35,7 @@ _RULES = (
             "rerun deterministic scorecard with recorded settings",
         ),
         ("repair_evaluation", "collect_more_evidence"),
-        "Evaluation evidence may be incomplete, unverified, or inconsistent.",
+        "Verified evaluation failure or settings inconsistency requires investigation.",
     ),
     RuleSpec(
         "launch_or_reproducibility",
