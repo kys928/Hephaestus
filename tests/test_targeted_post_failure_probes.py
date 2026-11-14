@@ -108,12 +108,12 @@ def test_supervised_instruction_and_structured_targets_cover_frozen_task_forms()
 
 def test_embedded_prompt_target_in_text_is_counted_without_inventing_structure() -> None:
     rows = [
-        {"text":"<|prompt|>\\nAnswer briefly\\n<|target|>\\nMars"},
-        {"text":"<|prompt|>\\nReturn JSON\\n<|target|>\\nnot JSON"},
-        {"text":"<|prompt|>\\nMissing response\\n<|target|>\\n"},
-        {"text":"<|prompt|>\\nUnfinished only"},
-        {"text":"<|target|>\\nWrong order\\n<|prompt|>\\nWrong"},
-        {"text":"<|prompt|>\\nRepeated <|prompt|>\\n<|target|>\\nIncomplete"},
+        {"text":"<|prompt|>\nAnswer briefly\n<|target|>\nMars"},
+        {"text":"<|prompt|>\nReturn JSON\n<|target|>\nnot JSON"},
+        {"text":"<|prompt|>\nMissing response\n<|target|>\n"},
+        {"text":"<|prompt|>\nUnfinished only"},
+        {"text":"<|target|>\nWrong order\n<|prompt|>\nWrong"},
+        {"text":"<|prompt|>\nRepeated <|prompt|>\n<|target|>\nIncomplete"},
     ]
     evidence, measurements = analyze_dataset_task_coverage(
         iter(rows), _eval_pack(), source_ref="synthetic-representation-contract-test",
@@ -133,9 +133,9 @@ def test_embedded_prompt_target_in_text_is_counted_without_inventing_structure()
 
 def test_embedded_json_object_targets_count_but_unparseable_json_does_not() -> None:
     rows = [
-        {"text":'<|prompt|>\\nRespond in JSON\\n<|target|>\\n{"answer":"Mars","confidence":1.0}'},
-        {"text":'<|prompt|>\\nRespond in JSON\\n<|target|>\\n{"broken":}'},
-        {"text":'<|prompt|>\\nRespond in JSON\\n<|target|>\\n[1,2]'},
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n{"answer":"Mars","confidence":1.0}'},
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n{"broken":}'},
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n[1,2]'},
     ]
     evidence, measurements = analyze_dataset_task_coverage(
         rows, _eval_pack(), source_ref="synthetic-json-contract-test",
@@ -149,7 +149,7 @@ def test_embedded_json_object_targets_count_but_unparseable_json_does_not() -> N
 def test_duplicate_field_and_embedded_supervision_does_not_double_count_a_row() -> None:
     evidence, measurements = analyze_dataset_task_coverage(
         [{"prompt":"Answer", "target":'{"ok":true}',
-          "text":'<|prompt|>\\nAnswer\\n<|target|>\\n{"ok":true}'}],
+          "text":'<|prompt|>\nAnswer\n<|target|>\n{"ok":true}'}],
         _eval_pack(), source_ref="synthetic-overlap-contract-test",
     )
     assert measurements["explicit_prompt_target_rows"] == 1
@@ -162,8 +162,8 @@ def test_duplicate_field_and_embedded_supervision_does_not_double_count_a_row() 
 def test_marker_presence_is_not_sufficient_if_prompt_or_target_is_empty() -> None:
     evidence, measurements = analyze_dataset_task_coverage(
         [
-            {"text":"<|prompt|>\\n\\n<|target|>\\nanswer"},
-            {"text":"<|prompt|>\\nprompt\\n<|target|>\\n"},
+            {"text":"<|prompt|>\n\n<|target|>\nanswer"},
+            {"text":"<|prompt|>\nprompt\n<|target|>\n"},
             {"prompt":"", "target":"nonempty", "text":"unrelated"},
         ],
         _eval_pack(), source_ref="synthetic-empty-contract-test",
