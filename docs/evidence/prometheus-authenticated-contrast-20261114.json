@@ -13,7 +13,9 @@
     "individual_verifier_provenance": "S3 full-byte SHA256 and separate JSONL parsing; A in-memory read, B streamed into independent temporary file; authentic source hashes match original archived evidence",
     "third_party_independent_human_adjudication": false,
     "protected_final_holdout_accessed": false,
-    "original_artifacts_mutated": false
+    "original_artifacts_mutated": false,
+    "independent_target_format_audit_run_id": 43637887299,
+    "independent_target_format_audit_url": "https://github.com/kys928/Hephaestus/actions/runs/43637887299"
   },
   "subject": "historical Hephaestus first-scientific training lineage and later controlled dataset_mixture intervention (NOT certified original six-state Granite role)",
   "source_inputs": [
@@ -41,7 +43,11 @@
       "prompt_target_fields": 0,
       "text_prompt_target_wrapped": 35774,
       "structured_target_fields": 0,
-      "source_family": "sail_symbolic_instruction_tuning_controlled_dataset_mixture"
+      "source_family": "sail_symbolic_instruction_tuning_controlled_dataset_mixture",
+      "wrapped_empty_targets": 206,
+      "wrapped_structured_json_object_targets": 0,
+      "wrapped_sql_like_prefix_records": 4,
+      "wrapped_nonempty_target_segments": 35568
     }
   ],
   "frozen_archive_hashes_verified": [
@@ -68,7 +74,7 @@
       "source_refs": [
         "D_CHANGED"
       ],
-      "gold_subclaim": "After the controlled dataset mixture change, 35,774 text-embedded prompt/target wrappers exist, despite zero separate prompt/target fields",
+      "gold_subclaim": "Verified change in embedded delimiter occurrence: 0 to 35,774; 206 of later delimiter-containing rows have empty text after the final target marker, zero target segments parse as JSON objects. This is NOT proof of full supervised instruction/structured-task coverage.",
       "domain_hypothesis": "not_precommitted_as_complete_data_coverage_repair",
       "scope": "instruction-format presence only; no claim of complete structured-task coverage",
       "authentic_supported": true,
@@ -80,7 +86,7 @@
       "source_refs": [
         "D_CHANGED"
       ],
-      "gold_subclaim": "Unmodified coverage probe on 171,295 candidate records reports prompt_target_rows=0 and data_coverage_gap=true while wrapper-aware independent auditors observe 35,774 embedded prompt/target pairs",
+      "gold_subclaim": "Unmodified coverage probe reports zero explicit prompt/target fields (correct about field structure) while missing 35,774 real embedded wrapper occurrences (of which 206 have empty target segments). Probe does not distinguish these representations; structured-target requirement can still make data_coverage_gap=true.",
       "failure_boundary": "legacy probe does not count text-embedded wrappers; cannot infer all coverage is repaired because structured targets remain unverified",
       "domain_hypothesis": "diagnostic_probe_semantics_defect_not_original_granite_evaluation_integrity",
       "authentic_supported": true,
@@ -128,7 +134,8 @@
     "Evaluation/measurement discrepancy concerns a diagnostic coverage probe on the later training dataset; it is not a causal finding that Granite evaluator scoring is broken.",
     "No genuine unresolved contradiction between two authoritative source observations of the same target measurement: differing soft and hard metrics can both be correct.",
     "Candidate dataset contains embedded wrappers, but no separate prompt-target fields and no proven structured-target supervision; overall domain coverage still may be incomplete.",
-    "No GPU Diagnostician/Planner comparison executed; no training or promotion."
+    "No GPU Diagnostician/Planner comparison executed; no training or promotion.",
+    "Follow-up independent target format re-audit on the original candidate bytes found 206 empty embedded target segments and zero parseable JSON-object segments. Embedded tags are not proof of valid structured instruction supervision."
   ],
   "science_authorization": {
     "development_contrast_construction": true,
