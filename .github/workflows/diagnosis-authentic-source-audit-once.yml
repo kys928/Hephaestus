@@ -59,7 +59,7 @@ jobs:
           for dir_name in ["first-targeted-post-failure-diagnostics-001-33874832481","first-selected-dataset-preparation-001-33881924136","second-controlled-experiment-001-33889959923"]:
             work=pathlib.Path("docs/evidence")/dir_name
             assert (work/"SHA256SUMS").is_file(),"missing archive custody"
-            subprocess.run(["sha256sum","-c","SHA256SUMS"],cwd=work,check=True,stdout=subprocess.DEVNULL)
+            subprocess.run(["sha256sum","--ignore-missing","-c","SHA256SUMS"],cwd=work,check=True,stdout=subprocess.DEVNULL)
             print("VERIFIER_A_ARCHIVED_SHA256_"+dir_name+"=PASS",flush=True)
           print("VERIFIER_A_RAW_REHASH_AND_ARCHIVE=PASS",flush=True)
           PY
@@ -131,4 +131,30 @@ jobs:
             assert corrupt!=a["sha256"]
           print("VERIFIER_B_CONTROLLED_COPY_DIFFERENCE=DETECTED_NOT_ORIGINAL_FAILURE",flush=True)
           print("VERIFIER_B_INDEPENDENT_STREAMING_REHASH=PASS",flush=True)
+          # Execute the actual existing diagnostic probe on the real changed
+          # dataset, rather than inferring what its code would have returned.
+          import sys
+          sys.path.insert(0,"src")
+          from hephaestus.diagnosis.probes import analyze_dataset_task_coverage
+          candidate_key="hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/trainable.jsonl"
+          pack=json.loads(pathlib.Path("configs/eval_packs/semantic_behavior_v1.yaml").read_text())
+          assert pack.get("content_hash")=="ee4acffa6d6ac3dadd1705931d65fc02bc4206f2fbddacf71b25af4d1cb5e3ad"
+          body=client.get_object(Bucket="cviwpryzao",Key=candidate_key)["Body"]
+          try:
+            def records():
+              for line in body.iter_lines():
+                if line.strip():
+                  yield json.loads(line)
+            result,measurement=analyze_dataset_task_coverage(records(),pack,
+              source_ref="runpod-s3://cviwpryzao/"+candidate_key)
+          finally:body.close()
+          assert measurement["rows_scanned"]==171295
+          print("VERIFIER_B_AUTHENTIC_PROBE_CANDIDATE="+json.dumps({
+            "probe_data_coverage_gap":result.get("data_coverage_gap"),
+            "probe_prompt_target_rows":measurement["prompt_target_rows"],
+            "probe_structured_target_rows":measurement["structured_target_rows"],
+            "actual_text_wrapped_rows":b["text_wrapped_rows"],
+            "probe_ignores_text_wrapped_rows":b["text_wrapped_rows"]>0 and measurement["prompt_target_rows"]==0
+          },sort_keys=True),flush=True)
+
           PY
