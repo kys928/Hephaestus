@@ -21,15 +21,15 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       GH_TOKEN: ${{ github.token }}
-      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: 8038aaa1651b37746838604f4b14e97ee27c77dd
+      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-02
+      PROMETHEUS_SOURCE_SHA: 9d21933ae261a868eebf80743931c5d9ffcc7e86
       PROMETHEUS_GLOBAL_APPROVED: single-bounded-science-20261114
       PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/launcher.jsonl
       PROMETHEUS_LOG_LABEL: GPU-launcher
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -109,13 +109,13 @@ jobs:
     timeout-minutes: 10
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: 8038aaa1651b37746838604f4b14e97ee27c77dd
+      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-02
+      PROMETHEUS_SOURCE_SHA: 9d21933ae261a868eebf80743931c5d9ffcc7e86
       PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/cleanup.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
