@@ -32,7 +32,7 @@ def test_structured_events_stream_stdout_and_persist_local_metadata(tmp_path, mo
     {"token": "secret"},
     {"reason_code": "private response from model"},
     {"reason_code": "token=abc\nPRIVATE"},
-    {"receipt_count": -1.0 / 0.0} if False else {"receipt_count": float("inf")},
+    {"receipt_count": float("inf")},
 ])
 def test_public_event_refuses_unreviewed_or_unsafe_fields(details):
     with pytest.raises(ValueError):
