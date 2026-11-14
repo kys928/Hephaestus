@@ -191,15 +191,15 @@ def test_rejected_trial_cannot_be_published(tmp_path):
     assert publisher.calls==[]
 
 
-def test_review_publisher_cannot_write_if_remote_main_changed(tmp_path):
+def test_review_publisher_cannot_write_if_remote_main_changed(tmp_path,monkeypatch):
     repo,source,scope=_repo(tmp_path)
     patch=_candidate(source.read_bytes(),scope,"sha256:"+"a"*64)
     publisher=GitHubReviewBranchPublisher("example","Hephaestus","dedicated-test-token")
     calls=[]
-    def fake_request(method,route,body=None):
+    def fake_request(self,method,route,body=None):
         calls.append((method,route,body))
         return {"object":{"sha":"1"*40}}
-    publisher._request=fake_request
+    monkeypatch.setattr(GitHubReviewBranchPublisher,"_request",fake_request)
     with pytest.raises(RepairBoundaryError,match="main advanced"):
         publisher.publish(scope=scope,candidate=patch,
             verified_trial={"status":"reviewable_patch","red_to_green_verified":True,
