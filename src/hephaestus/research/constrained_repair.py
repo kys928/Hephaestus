@@ -270,7 +270,7 @@ class ConstrainedSelfRepair:
         if head.returncode != 0 or head.stdout.strip() != scope.base_commit:
             raise RepairBoundaryError("source checkout does not match authorized Git commit")
         status = subprocess.run(
-            ["git", "-C", str(base), "status", "--porcelain", "--untracked-files=no"],
+            ["git", "-C", str(base), "status", "--porcelain", "--untracked-files=all"],
             capture_output=True, text=True, check=False, timeout=10)
         if status.returncode != 0 or status.stdout.strip():
             raise RepairBoundaryError("source checkout is dirty before repair")
