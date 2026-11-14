@@ -1,0 +1,67 @@
+{
+  "schema": "prometheus-diagnosis-real-source-inventory.v1",
+  "prepared_on": "2026-11-14",
+  "status": "INSUFFICIENT_AUTHENTIC_SOURCE_COVERAGE_NO_GPU_LAUNCH",
+  "source_items": [
+    {
+      "id": "PARENT6",
+      "kind": "historical_exposed_development",
+      "model_subject": "ibm-granite/granite-3.3-8b-instruct six-state original production adapter",
+      "ontology": "frozen-role-mastery-evaluator.v1",
+      "sha256": "2d1ffa37a9e14939c5c0e9c3365a5fe0a4220a37b502678a1f72f5def366378f",
+      "observation": "200/200 exposed development; independently original-source authenticated by prior Prometheus audits",
+      "is_independent_new_state": false,
+      "is_positive_parent_failure_evidence": false
+    },
+    {
+      "id": "D8",
+      "kind": "historical_exposed_development_incomparable",
+      "model_subject": "different Granite D eight-state research adapter",
+      "ontology": "historical-semantic-invariance-evaluator.v1",
+      "sha256": "7398eeed835422151678e4e1a79ee4c0d8ead4daf9dba61dd4333aa9acfbf953",
+      "observation": "33/64 exposed development, not comparable to the six-state original parent",
+      "is_independent_new_state": false,
+      "is_positive_parent_failure_evidence": false
+    },
+    {
+      "id": "ROLE02",
+      "kind": "real_cuda_specialist_output_not_truth_label",
+      "source": "https://github.com/kys928/Hephaestus/actions/runs/43626792772",
+      "receipt_sha256": "48ed4a869e412d2780778939fcae022cb3033f578734e924c3f904a57ba0a493",
+      "observation": "Previously accepted Diagnostician JSON/citations selected unsupported evaluation_integrity at 0.81",
+      "is_independent_new_state": false,
+      "is_positive_parent_failure_evidence": false
+    },
+    {
+      "id": "ROLE03",
+      "kind": "real_cuda_specialist_output_not_truth_label",
+      "source": "https://github.com/kys928/Hephaestus/actions/runs/43633103128",
+      "receipt_sha256": "d3f15f2554f0d16264b15c78f71d1a3766459a87602cad9b5e4bda5ca280001b",
+      "observation": "Calibrated Diagnostician selected unsupported evaluation_integrity at 0.375; source-confirmed and rejected",
+      "is_independent_new_state": false,
+      "is_positive_parent_failure_evidence": false
+    },
+    {
+      "id": "OTHERLINEAGE",
+      "kind": "authentic_different_model_lineage_not_eligible_for_parent_gold",
+      "source": "docs/evidence/first-semantic-evaluation-001-33869352751/verification.json",
+      "source_workflow_run": 33869352751,
+      "observation": "Independently verified semantic_behavior_v1 random-init baseline vs trained candidate regression, separate subject and task from original Granite parent",
+      "is_independent_new_state": false,
+      "is_positive_parent_failure_evidence": false
+    }
+  ],
+  "case_slot_status": {
+    "M0": "historical_missingness_context_only",
+    "E1": "BLOCKED_NO_AUTHENTIC_POSITIVE_EVAL_FAILURE",
+    "D1": "BLOCKED_NO_AUTHENTIC_POSITIVE_OTHER_DOMAIN",
+    "C1": "BLOCKED_NO_AUTHENTIC_SAME_SUBJECT_CONTRADICTION",
+    "E2": "BLOCKED_NO_SECOND_AUTHENTIC_EVAL_FAILURE",
+    "D2": "BLOCKED_NO_SECOND_AUTHENTIC_OTHER_DOMAIN",
+    "N0": "CONTROLLED_METADATA_VARIATION_ALLOWED_BUT_NOT_NEW_OBSERVATION",
+    "N1": "BLOCKED_BY_E1"
+  },
+  "actual_paid_gpu_comparison_executed": false,
+  "fixture_contract_tests_are_not_scientific_inference": true,
+  "decision": "KEEP_DRAFT_AND_DO_NOT_LAUNCH_GPU_UNTIL_SOURCE_ATTESTATIONS_VERIFIED"
+}
