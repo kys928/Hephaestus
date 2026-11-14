@@ -333,3 +333,89 @@ class ConstrainedSelfRepair:
         if {key:value for key,value in trial.items() if key!="trial_ref"} != sealed:
             raise RepairBoundaryError("sandbox acceptance receipt changed after verification")
         return publisher.publish(scope=scope,candidate=candidate,verified_trial=trial)
+
+
+@dataclass(slots=True)
+class GitHubReviewBranchPublisher:
+    """Publish a bounded patch as a new review PR, never merge it.
+
+    Connection uses a dedicated, narrowly scoped GitHub token provided by the
+    trusted deployment. The model sees neither token nor arbitrary REST verbs.
+    An immutable main-head comparison prevents publishing against changed
+    source after the sandbox trial.
+    """
+
+    owner: str
+    repository: str
+    token: str
+    timeout_seconds: int = 20
+
+    def _request(self, method: str, route: str, body: dict | None = None) -> dict:
+        if (not re.fullmatch(r"[A-Za-z0-9_.-]+",self.owner)
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+",self.repository)
+                or not self.token or method not in {"GET","POST","PUT"}
+                or not route.startswith("/repos/"+self.owner+"/"+self.repository+"/")
+                or ".." in route):
+            raise RepairBoundaryError("invalid dedicated review repository authority")
+        url="https://api.github.com"+route
+        data=canonical_bytes(body) if body is not None else None
+        headers={
+            "Accept":"application/vnd.github+json",
+            "X-GitHub-Api-Version":"2022-11-28",
+            "User-Agent":"Hephaestus-Bounded-Repair",
+            "Authorization":"Bearer "+self.token,
+        }
+        if data is not None:
+            headers["Content-Type"]="application/json"
+        request=urllib.request.Request(url,data=data,headers=headers,method=method)
+        try:
+            with urllib.request.urlopen(request,timeout=self.timeout_seconds) as response:
+                value=json.loads(response.read(1_000_001))
+        except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+            # The URL, body and credentials never enter the exception message
+            # or public report. The branch may exist after an interrupted POST;
+            # reconciliation is required instead of blind retry.
+            raise RepairBoundaryError(
+                "review-publisher-remote-operation-uncertain:"+type(exc).__name__) from None
+        if not isinstance(value,dict):
+            raise RepairBoundaryError("invalid GitHub reviewer response")
+        return value
+
+    def publish(self, *, scope: RepairScope, candidate: PatchCandidate,
+                verified_trial: Mapping[str, object]) -> str:
+        scope.validate()
+        if (candidate.path != scope.allowed_file or
+                verified_trial.get("status") != "reviewable_patch" or
+                verified_trial.get("red_to_green_verified") is not True):
+            raise RepairBoundaryError("review publisher received an unapproved patch")
+        prefix=f"/repos/{self.owner}/{self.repository}"
+        head=self._request("GET",prefix+"/git/ref/heads/main")
+        current=(head.get("object") or {}).get("sha")
+        if current != scope.base_commit:
+            raise RepairBoundaryError("main advanced after original repair checkout")
+        branch="repair/diagnosis-"+str(verified_trial["replacement_sha256"])[7:23]
+        # Only GitHub can create this branch; no arbitrary git push to main.
+        self._request("POST",prefix+"/git/refs",{
+            "ref":"refs/heads/"+branch,"sha":scope.base_commit})
+        response=self._request("GET",prefix+"/contents/"+scope.allowed_file+"?ref="+branch)
+        source=base64.b64decode(str(response.get("content","")),validate=False)
+        if ("sha256:"+sha256(source).hexdigest()!=candidate.expected_source_sha256
+                or not response.get("sha")):
+            raise RepairBoundaryError("GitHub candidate branch source differed from reviewed source")
+        self._request("PUT",prefix+"/contents/"+scope.allowed_file,{
+            "message":"repair(diagnosis): proposed bounded red-to-green diagnostic fix",
+            "branch":branch,"sha":response["sha"],
+            "content":base64.b64encode(candidate.replacement.encode()).decode("ascii")})
+        result=self._request("POST",prefix+"/pulls",{
+            "title":"Bounded Diagnostician self-repair: "+scope.allowed_file.split("/")[-1],
+            "head":branch,"base":"main","draft":True,
+            "body":"Automated sandbox-validated source repair ONLY; not merged or production-certified.\\n\\n"
+                   "Verified failure: "+candidate.evidence_ref+"\\n"
+                   "Sandbox trial: "+str(verified_trial["trial_ref"])+"\\n"
+                   "Original pinned commit: "+scope.base_commit+"\\n"
+                   "Fixed regression: "+scope.fixed_test+"\\n"
+                   "Red -> green: true. Manual independent review required before any merge."})
+        url=str(result.get("html_url") or "")
+        if not re.fullmatch(r"https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+",url):
+            raise RepairBoundaryError("GitHub review PR result did not return its canonical URL")
+        return url
