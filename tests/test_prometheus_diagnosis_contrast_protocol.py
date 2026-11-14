@@ -148,6 +148,7 @@ def test_invalid_or_incomplete_result_is_not_best_case_imputed():
     trials[0]["citation_exact"] = False
     result = score_contract_fixtures(cfg, _labels(), trials)
     assert result["arms"][ARMS[0]]["invalid_output_rate"]["numerator"] == 1
+    assert result["arms"][ARMS[0]]["exact_and_material_citations"]["numerator"] == 23
     with pytest.raises(CalibrationProtocolError, match="duplicate"):
         score_contract_fixtures(cfg, _labels(), trials + [trials[0]])
 
@@ -188,3 +189,19 @@ def test_forged_gpu_receipt_cannot_pass_sha_or_identity():
     with pytest.raises(CalibrationProtocolError, match="digest"):
         verify_raw_trial(payload,content_sha256="0"*64,
             expected_refs=set(answer["evidence_refs"]),expected_seed=SEEDS[0],contract=contract)
+
+
+
+def test_observability_limit_counts_as_abstention_not_false_causal_pair():
+    cfg, _ = load_protocol(CONFIG)
+    trial = _fixtures()
+    for item in trial:
+        if item["case_id"] == "M0":
+            item["decision"] = "observability_limit"
+    scored = score_contract_fixtures(cfg, _labels(), trial)["arms"]
+    for arm in ARMS:
+        assert scored[arm]["appropriate_abstention"]["rate"] == 1.0
+        assert scored[arm]["evidence_sensitivity"]["rate"] == 1.0
+        # N0 still says inconclusive, so the literal decision changed despite
+        # the same admissible evidence: the strict metadata invariance test fails.
+        assert scored[arm]["nuisance_invariance"]["rate"] < 1.0
