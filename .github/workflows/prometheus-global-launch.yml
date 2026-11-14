@@ -1,0 +1,83 @@
+name: Prometheus Unbound one-shot bounded Global CUDA science
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths: [.github/workflows/prometheus-global-launch.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: prometheus-unbound-global-20261114-single-launch
+  cancel-in-progress: false
+jobs:
+  cuda-science:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
+      PROMETHEUS_SOURCE_SHA: e56372c07600824c983d19459f8ffa513945083d
+      PROMETHEUS_GLOBAL_APPROVED: single-bounded-science-20261114
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e56372c07600824c983d19459f8ffa513945083d
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reject unpinned research source before Python/RunPod
+        run: test "$(git rev-parse HEAD)" = "$PROMETHEUS_SOURCE_SHA"
+      - run: python -m pip install '.[test,s3]' requests
+      - name: Compile all deployment and scientific decision paths before money is spent
+        run: |
+          python -m compileall -q src/hephaestus/development
+          python -m py_compile tests/test_prometheus_global_supervised_launch.py
+          python -m py_compile tests/test_prometheus_global_adapter_source.py
+      - name: Run isolated offline negative-path and scientific admission checks
+        run: |
+          pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py
+      - name: Retrieve immutable historical source reports and execute one supervised original CUDA research decision
+        run: python -u -m hephaestus.development.prometheus_global_launcher
+  cleanup:
+    if: ${{ always() }}
+    needs: cuda-science
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
+      PROMETHEUS_SOURCE_SHA: e56372c07600824c983d19459f8ffa513945083d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e56372c07600824c983d19459f8ffa513945083d
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install .
+      - name: Independent end-of-job exact Pod cleanup (never touch unrelated Pods)
+        run: |
+          python - <<'PY'
+          import os,time
+          from hephaestus.development.prometheus_global_supervision import (
+            campaign_prefix, matching_pods, delete_exact_pod)
+          key=campaign_prefix(os.environ["PROMETHEUS_GLOBAL_CAMPAIGN"],
+                              os.environ["PROMETHEUS_SOURCE_SHA"])
+          for _ in range(4):
+              matches=matching_pods(key)
+              if not matches:
+                  print("PROMETHEUS_GLOBAL_CLEANUP_POD_ABSENT=true",flush=True)
+                  break
+              delete_exact_pod(matches[0],key)
+              time.sleep(4)
+          else:
+              if matching_pods(key):
+                  raise RuntimeError("One-shot Pod remains after exact cleanup attempts")
+          PY
