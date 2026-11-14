@@ -45,3 +45,17 @@ Keep all credential-bearing, one-time workflow definitions on an **isolated oper
 - [ ] Scientific intervention and genuine model improvement independently proven.
 
 A single successful GPU role execution supports **model-backed decision capability**, not causal model-repair improvement. That stronger claim requires counterfactual evidence tests, fixed/heuristic controls and independent measured candidate comparisons.
+
+## Live and postmortem observability (2026-11-14)
+
+The off-Pod launcher and *separate* watchdog emit bounded, timestamped, machine-readable `PROMETHEUS_EVENT={...}` records to GitHub Actions stdout. These records include only reviewed phase labels, elapsed time, optional exact Pod identity, receipt counts, **hashes**, result status, failure class and cleanup outcome. They never contain S3 credentials, model-generated reasoning, source observations or raw receipts. The primary phases are:
+
+- **Launcher:** START → WATCHDOG_READY → STORAGE_CHECK → BUDGET_CHECK → SOURCE_VERIFIED → SOURCE_STAGED → GPU_REQUESTED → GPU_ALLOCATED → INFERENCE_PROGRESS/GPU_POLLING → EVIDENCE_VERIFIED → DECISION_RECORDED → CLEANUP_REQUESTED → CLEANUP_CONFIRMED → COMPLETE.
+- **GPU envelope (through private S3 live status):** BOOT → SOURCE_VERIFIED → SCIENTIFIC_INFERENCE → INFERENCE_PROGRESS (receipt count) → DECISION_RECORDED → EVIDENCE_UPLOAD → COMPLETE/FAILED. A worker thread updates `status/worker-progress.json` roughly every 25 seconds while its CUDA subprocess is active; the off-Pod launcher polls and emits safe phase changes. Absence of progress **does not mean** success or justify extending the lease.
+- **Independent watchdog:** START → WATCHDOG_READY (plus ~120-second heartbeat summaries) → GPU_ALLOCATED (if observed) → EVIDENCE_VERIFIED (if independently rehashed) → CLEANUP_REQUESTED → CLEANUP_CONFIRMED. The independent watchdog also reports NO_ALLOCATION, FAILED or DEADLINE distinctly.
+
+**During execution:** open GitHub repository → Actions → the `Prometheus Unbound one-shot bounded Global CUDA science` and `Prometheus Unbound independent RunPod GPU watchdog` runs. Expand their active jobs and search for `PROMETHEUS_EVENT=`; log lines are flushed immediately. Only a SHA-verified durable worker status can become a success gate.
+
+**After completion or failure:** Actions job summaries present up to 30 recent phase transitions, and `prometheus-global-*-metadata` Actions artifacts retain the full *metadata-only* JSONL event timeline for 30 days. The separate private Czech regional S3 source prefix retains original evidence, raw specialist inference receipts, SHA-verified per-file manifest and immutable exit/cleanup observations. Actions artifacts never contain protected model output.
+
+Every logging change must remain separate from resource authorization: one-shot paid workflows stay on the isolated operations branch and are additionally gated by explicit activation commit messages. Merely editing a workflow to improve logging must **not** allocate a Pod, and no CI artifact or dashboard can certify science.
