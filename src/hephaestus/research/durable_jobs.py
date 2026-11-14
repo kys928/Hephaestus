@@ -18,9 +18,13 @@ from hephaestus.jobs.durable_worker import JobExecutionContext
 from hephaestus.storage.base import ArtifactStore
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
-from .autonomous_study import EvaluationOnlyResearchJob, ResearchObjective
-from .constrained_repair import RepairBoundaryError
-from .self_repair_controller import AutonomousDiagnosisRepairEpisode
+from .autonomous_study import (
+    EvaluationOnlyResearchJob, ResearchObjective, CertifiedDiagnosisObserver,
+)
+from .constrained_repair import (
+    RepairBoundaryError, OfflineDockerPytestRunner, GitHubReviewBranchPublisher,
+)
+from .self_repair_controller import AutonomousDiagnosisRepairEpisode, LoopbackOllamaPatchModel
 
 
 OBJECTIVE_SCHEMA="hephaestus-research-objective-job.v1"
@@ -70,6 +74,7 @@ class ResearchObjectiveJobHandler:
     research: EvaluationOnlyResearchJob | None = None
     repair: AutonomousDiagnosisRepairEpisode | None = None
     trusted_checkout: Path | None = None
+    production_mode: bool = True
 
     def __call__(self, job: JobRecord, context: JobExecutionContext) -> str:
         context.raise_if_cancelled()
@@ -89,10 +94,18 @@ class ResearchObjectiveJobHandler:
         if envelope["kind"]=="diagnosis_evaluation_only":
             if self.research is None:
                 raise RepairBoundaryError("real bounded evaluation capability not configured")
+            if (self.production_mode
+                    and type(self.research.observer) is not CertifiedDiagnosisObserver):
+                raise RepairBoundaryError("production evaluation cannot use injected fake observer")
             result=self.research.run(question,run_id=job.run_id,lineage_id=envelope["lineage_id"])
         elif envelope["kind"]=="diagnosis_code_repair":
             if self.repair is None or self.trusted_checkout is None:
                 raise RepairBoundaryError("real restricted repair capability not configured")
+            if self.production_mode and (
+                    type(self.repair.runner) is not OfflineDockerPytestRunner
+                    or type(self.repair.proposer.model) is not LoopbackOllamaPatchModel
+                    or type(self.repair.publisher) is not GitHubReviewBranchPublisher):
+                raise RepairBoundaryError("production repair requires offline Docker, local coder and review-only GitHub PR provider")
             result=self.repair.run(question,checkout=self.trusted_checkout)
         else:
             raise RepairBoundaryError("unsupported queued research mode")
