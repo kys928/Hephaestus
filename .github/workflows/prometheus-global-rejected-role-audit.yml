@@ -1,0 +1,75 @@
+name: Prometheus Unbound rejected CUDA role output structural audit (read-only)
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths: [.github/workflows/prometheus-global-rejected-role-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[s3]'
+      - name: Classify exact rejected diagnosis response using frozen contract without exposing raw output
+        run: |
+          python - <<'PY'
+          import json,hashlib
+          from hephaestus.development.prometheus_global_supervision import (
+            campaign_prefix,get_bytes,s3_client)
+          from hephaestus.llm.role_contract import RoleMasteryContract
+          prefix=campaign_prefix("prometheus-unbound-global-20261114-01",
+             "8038aaa1651b37746838604f4b14e97ee27c77dd")
+          s3=s3_client()
+          suffix="result/files/output/cycle/decision/inference-receipts/objects/sha256/70/705c6ea69e621caf09b61856c455097be5ac9ca3b6f715a666ef16166d7f9542"
+          blob=get_bytes(s3,prefix+"/"+suffix,3000000)
+          assert hashlib.sha256(blob).hexdigest()=="705c6ea69e621caf09b61856c455097be5ac9ca3b6f715a666ef16166d7f9542","rejected receipt hash changed"
+          record=json.loads(blob)
+          assert record.get("schema")=="role-inference.v1" and record.get("status")=="rejected" and record.get("role")=="diagnosis"
+          raw=record["raw_output"]
+          cfg=RoleMasteryContract.load("configs/models/hephaestus_role_mastery_runtime_v1.json")
+          projected=raw.strip()
+          for stop in cfg.profile("diagnosis").get("reasoning_projection",[]):
+              if stop in projected:
+                  projected=projected.rsplit(stop,1)[-1].strip()
+          parse={}
+          try:
+              parsed=json.loads(projected)
+              parse={"projected_json_type":type(parsed).__name__,
+                     "projected_keys":sorted(parsed.keys()) if isinstance(parsed,dict) else None}
+          except json.JSONDecodeError as e:
+              parse={"projected_json_type":None,"json_failure":"JSONDecodeError",
+                     "json_offset":e.pos,"remaining_chars_after_error":len(projected)-e.pos}
+          first=lambda s:("object" if s.startswith("{") else
+                  "array" if s.startswith("[") else
+                  "code_fence" if s.startswith("```") else
+                  "empty" if not s else "other")
+          result={
+              "schema":"prometheus-rejected-diagnosis-format-audit.v1",
+              "role":record["role"],"error":record.get("error"),
+              "finish_reason":record.get("finish_reason"),
+              "max_new_tokens":record.get("max_new_tokens"),
+              "generated_tokens":len(record.get("execution",{}).get("generated_token_ids",[])),
+              "raw_characters":len(raw),
+              "projected_characters":len(projected),
+              "raw_prefix_class":first(raw.strip()),
+              "projected_prefix_class":first(projected),
+              "has_think_ending":("[/THINK]" in raw or "</think>" in raw),
+              "has_code_fence":("```" in raw),
+              "model_identity_matches":record.get("model_id")=="mistralai/Ministral-3-3B-Reasoning-2512",
+              "adapter_digest_prefix":str(record.get("adapter_sha256",""))[:16],
+              **parse
+          }
+          print("PROMETHEUS_REJECTED_ROLE_FORMAT="+json.dumps(result,sort_keys=True),flush=True)
+          PY
