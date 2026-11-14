@@ -1,7 +1,7 @@
 name: Prometheus Unbound live campaign status snapshot (read-only)
 on:
   push:
-    branches: [ops/prometheus-unbound-global-20261114]
+    branches: [ops/prometheus-evidence-calibration-gpu-20261114]
     paths: [.github/workflows/prometheus-global-live-snapshot.yml]
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
+          ref: aeca3f49119d2c3cf205cb2cad47f7708657aa22
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -33,8 +33,8 @@ jobs:
             verify_manifest, GLOBAL_ID, balance, verify_pod,
           )
           prefix=campaign_prefix(
-              "prometheus-unbound-global-20261114-02",
-              "9d21933ae261a868eebf80743931c5d9ffcc7e86")
+              "prometheus-unbound-global-20261114-03",
+              "aeca3f49119d2c3cf205cb2cad47f7708657aa22")
           s3=s3_client()
           read=lambda key: read_json(s3,prefix+"/"+key)
           ready=read("status/watchdog-ready.json")
