@@ -1,0 +1,25 @@
+name: Prometheus diagnosis contrast CPU-only precommit verification
+on:
+  push:
+    branches: [ops/prometheus-contrast-cpu-preflight-20261114]
+    paths: [.github/workflows/prometheus-contrast-cpu-once.yml]
+permissions:
+  contents: read
+jobs:
+  full-cpu-suite:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7cbc5899952d2e3884cd5cbe644bbc1e67c96a80
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: test "$(git rev-parse HEAD)" = "7cbc5899952d2e3884cd5cbe644bbc1e67c96a80"
+      - run: python -m pip install '.[test]'
+      - run: python -m compileall -q src/hephaestus tests
+      - name: Run complete CPU suite against source-only reviewed layout
+        run: python -m pytest -q
