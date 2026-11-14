@@ -43,7 +43,7 @@ def _setup(tmp_path):
 def test_real_durable_worker_executes_frozen_study_without_training(tmp_path):
     artifacts,queue=_setup(tmp_path)
     study=DeclaredStudyTestDouble([])
-    handler=ResearchObjectiveJobHandler(artifacts,research=study)
+    handler=ResearchObjectiveJobHandler(artifacts,research=study,production_mode=False)
     question="Investigate Diagnostician reliability and evidence coverage"
     first=submit_research_objective(question=question,run_id="study-a",
         lineage_id="science-a",artifacts=artifacts,queue=queue)
@@ -66,7 +66,7 @@ def test_real_durable_worker_routes_registered_code_repair_without_switching_rol
     artifacts,queue=_setup(tmp_path)
     repair=DeclaredRepairTestDouble([])
     handler=ResearchObjectiveJobHandler(artifacts,repair=repair,
-                                        trusted_checkout=tmp_path/"trusted-code")
+                                        trusted_checkout=tmp_path/"trusted-code",production_mode=False)
     question="Investigate and repair Diagnostician probe code regression"
     job=submit_research_objective(question=question,run_id="repair-a",
         lineage_id="science-a",artifacts=artifacts,queue=queue)
