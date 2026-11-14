@@ -13,12 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 69110f617d6fdb264e5356c95663195902b968e4
+          ref: 360e34229f4ac718e5453669c3170e872446372b
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: test "$(git rev-parse HEAD)" = "69110f617d6fdb264e5356c95663195902b968e4"
+      - run: test "$(git rev-parse HEAD)" = "360e34229f4ac718e5453669c3170e872446372b"
       - run: python -m pip install '.[test]'
       - run: python -m pytest -q
   verify-real-s3:
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 69110f617d6fdb264e5356c95663195902b968e4
+          ref: 360e34229f4ac718e5453669c3170e872446372b
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
