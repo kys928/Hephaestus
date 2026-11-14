@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -33,8 +33,8 @@ jobs:
             verify_manifest, GLOBAL_ID, balance, verify_pod,
           )
           prefix=campaign_prefix(
-              "prometheus-unbound-global-20261114-01",
-              "8038aaa1651b37746838604f4b14e97ee27c77dd")
+              "prometheus-unbound-global-20261114-02",
+              "9d21933ae261a868eebf80743931c5d9ffcc7e86")
           s3=s3_client()
           read=lambda key: read_json(s3,prefix+"/"+key)
           ready=read("status/watchdog-ready.json")
@@ -74,3 +74,5 @@ jobs:
           PY
 
 # Safe status refresh: observe campaign while CUDA Pod is active; no paid action.
+
+# Second campaign read-only live status observation.
