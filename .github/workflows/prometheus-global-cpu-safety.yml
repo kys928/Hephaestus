@@ -6,6 +6,7 @@ on:
       - .github/workflows/prometheus-global-cpu-safety.yml
 permissions:
   contents: read
+  issues: write
 concurrency:
   group: prometheus-global-cpu-gates-20261114
   cancel-in-progress: false
@@ -30,3 +31,23 @@ jobs:
       - name: Offline only, negative path tests
         run: |
           pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py
+      - name: Publish immutable CI run locator (no scientific claims)
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_JOB_STATUS: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          link="https://github.com/kys928/Hephaestus/actions/runs/"+os.environ["GITHUB_RUN_ID"]
+          text="Prometheus Global offline CPU safety gate: "+os.environ["CI_JOB_STATUS"]+" — "+link
+          payload=json.dumps({"body":text}).encode()
+          request=urllib.request.Request(
+              "https://api.github.com/repos/kys928/Hephaestus/issues/206/comments",
+              data=payload,method="POST",
+              headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],
+                       "Content-Type":"application/json",
+                       "Accept":"application/vnd.github+json"})
+          with urllib.request.urlopen(request,timeout=30) as response:
+              print("PROMETHEUS_CPU_GATE_LOCATOR_RECORDED="+str(response.status==201))
+          PY
