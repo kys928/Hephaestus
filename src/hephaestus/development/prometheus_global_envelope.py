@@ -137,7 +137,9 @@ def run() -> int:
     for label in ("source", "output", "logs"):
         original = LOCAL / label
         if original.exists():
-            shutil.copytree(original, retained / label, symlinks=False, dirs_exist_ok=True)
+            if any(item.is_symlink() for item in original.rglob("*")):
+                raise PermissionError("scientific output contains forbidden symlink; never follow it")
+            shutil.copytree(original, retained / label, symlinks=True, dirs_exist_ok=True)
     manifest = _persist_tree(s3, prefix, retained, result_code=code,
                              elapsed_seconds=time.monotonic() - started, metadata=status)
     put_once(s3, prefix + "/status/worker-exit.json", canonical({
