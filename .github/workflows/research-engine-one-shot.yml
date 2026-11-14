@@ -11,14 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9ffdfd4985dc87b56881eedcb739a63196d8b6a1
+          ref: 88c51ba30efafa02d07e3a488fcdf2c20a35f16e
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: test "$(git rev-parse HEAD)" = "9ffdfd4985dc87b56881eedcb739a63196d8b6a1"
+      - run: test "$(git rev-parse HEAD)" = "88c51ba30efafa02d07e3a488fcdf2c20a35f16e"
       - run: python -m pip install -e '.[test]'
-      - run: python -m pytest -q tests/test_autonomous_evaluation_only_research.py tests/test_constrained_research_self_repair.py tests/test_autonomous_repair_episode.py tests/test_durable_research_objective_jobs.py tests/test_targeted_post_failure_probes.py
+      - run: python -m pytest -q tests/test_autonomous_evaluation_only_research.py tests/test_constrained_research_self_repair.py tests/test_autonomous_repair_episode.py tests/test_durable_research_objective_jobs.py tests/test_research_objective_cli.py tests/test_targeted_post_failure_probes.py
       - run: python -m pytest -q
   verify-source-catalog:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9ffdfd4985dc87b56881eedcb739a63196d8b6a1
+          ref: 88c51ba30efafa02d07e3a488fcdf2c20a35f16e
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9ffdfd4985dc87b56881eedcb739a63196d8b6a1
+          ref: 88c51ba30efafa02d07e3a488fcdf2c20a35f16e
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
