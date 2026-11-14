@@ -72,3 +72,5 @@ jobs:
               summary["scientific_receipt_files"]=len(manifest["files"])
           print("PROMETHEUS_LIVE_STATUS="+json.dumps(summary,sort_keys=True),flush=True)
           PY
+
+# Safe status refresh: observe campaign while CUDA Pod is active; no paid action.
