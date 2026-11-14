@@ -161,3 +161,5 @@ jobs:
           path: /tmp/prometheus-logs/cleanup.jsonl
           retention-days: 30
           if-no-files-found: warn
+
+# Authorized single paid CUDA science attempt, watchdog-gated, one-shot 2026-11-14.
