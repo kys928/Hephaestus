@@ -202,6 +202,28 @@ def _require_actual_gpu_receipt(reasoner: CertifiedRoleReasoner, ref: str, role:
     return raw
 
 
+def _exact_source_citation_guidance(facts: tuple[RoleEvidence, ...]) -> str:
+    """Format-only interface repair; never choose or transform model evidence.
+
+    On the first authenticated CUDA attempt, the original Diagnosis model
+    returned complete JSON but placed natural-language prose (not an ID) in
+    evidence_refs. Explicitly show the two already admitted immutable IDs.
+    Any non-exact citation STILL fails the unchanged RoleMasteryContract.parse.
+    """
+    references = tuple(sorted(f.ref for f in facts))
+    if len(references) != 2 or set(references) != {REF_PARENT, REF_D}:
+        raise PinnedEvidenceError("Prometheus source citation hint cannot alter evidence identity")
+    return (
+        "CITATION OUTPUT FORMAT ONLY (do not change your scientific assessment): "
+        "Every evidence_refs array element must copy an exact literal EVIDENCE "
+        "source identifier, never a description, title, quotation or invented alias. "
+        "The two source identifiers available in this case are: "
+        + json.dumps(references, separators=(",", ":")) +
+        ". Cite only sources material to your answer. "
+        "These references describe distinct, non-interchangeable development experiments."
+    )
+
+
 def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path) -> dict:
     """Execute *real* frozen role inference, then independently admit its result."""
     diagnosis, options, facts = prepare(parent, d)
@@ -220,7 +242,8 @@ def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path)
         "Assess the measured original Granite Evaluator's scientific reliability, "
         "explicit uncertainties, and the evidentiary limits of the historical "
         "nonmatching D result. Do not assert a causal training defect from those "
-        "observations alone; select an interpretation permitted by the frozen role contract.",
+        "observations alone; select an interpretation permitted by the frozen role contract. "
+        + _exact_source_citation_guidance(facts),
         facts, RUN, LINEAGE, STAGE)
     diagnosis_observation = reasoner.propose(task_d, registry, context=context,
                                              max_new_tokens=768)
@@ -250,7 +273,10 @@ def decide(parent: dict, d: dict, *, reasoner: CertifiedRoleReasoner, out: Path)
         "generalization, decide the next SCIENTIFIC action, including a legitimate "
         "stop or request for more evidence. Only proposals already admitted by the "
         "deterministic scientific service may be executed. Do not choose a training "
-        "recipe from unmatched historical D research.",
+        "recipe from unmatched historical D research. "
+        + _exact_source_citation_guidance(facts)
+        + " The separate admitted-options reference is 'prometheus:admitted-options' "
+          "and may be cited only if relevant.",
         (*facts, options_fact), RUN, LINEAGE, STAGE)
     proposed = reasoner.propose(planner_task, reg, context=context, max_new_tokens=768)
     _require_actual_gpu_receipt(reasoner, proposed.inference_receipt_ref, "planner")
