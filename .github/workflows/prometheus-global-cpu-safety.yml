@@ -55,3 +55,5 @@ jobs:
           with urllib.request.urlopen(request,timeout=30) as response:
               print("PROMETHEUS_CPU_GATE_LOCATOR_RECORDED="+str(response.status==201))
           PY
+
+# Prepaid-GPU gate: rerun exact pinned source's offline tests before launch 2026-11-14.
