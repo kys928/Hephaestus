@@ -127,8 +127,9 @@ def main() -> int:
     try:
         watch(os.environ["PROMETHEUS_GLOBAL_CAMPAIGN"], os.environ["PROMETHEUS_SOURCE_SHA"])
     except Exception as exc:
+        # Show a bounded error category; never expose credentials or private reports.
         event("watchdog", "FAILED", "fail", reason_code=type(exc).__name__)
-        raise
+        raise SystemExit(1) from None
     return 0
 
 
