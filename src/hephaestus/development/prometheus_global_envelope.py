@@ -14,15 +14,52 @@ import re
 import subprocess
 import sys
 import time
+from threading import Event, Thread
 from datetime import datetime, timezone
 
+from .prometheus_global_observability import event
 from .prometheus_global_supervision import (
     GLOBAL_ID, S3_BUCKET, SOURCE_D, SOURCE_PARENT, authenticate_sources,
-    campaign_prefix, canonical, get_bytes, iso_now, put_once, s3_client, sha,
+    campaign_prefix, canonical, get_bytes, iso_now, put_once, put_progress, s3_client, sha,
 )
 
 LOCAL = Path("/tmp/prometheus-global-campaign")
 GLOBAL = Path("/workspace-global")
+
+
+def _inference_progress(s3, prefix: str, output: Path, stop: Event) -> None:
+    """Update a small S3 status marker without uploading private model text.
+
+    The off-Pod launcher polls this marker and prints only allowlisted phases.
+    A telemetry failure is never mistaken for a successful experiment.
+    """
+    last = None
+    while True:
+        try:
+            decision = output / "cycle" / "decision"
+            receipts = decision / "inference-receipts"
+            count = min(1000, sum(1 for x in receipts.rglob("*") if x.is_file())) if receipts.exists() else 0
+            if (output / "cycle" / "campaign-result.json").is_file():
+                phase = "COMPLETE"
+            elif (decision / "scientific-decision.json").is_file():
+                phase = "DECISION_RECORDED"
+            elif count:
+                phase = "INFERENCE_PROGRESS"
+            else:
+                phase = "SCIENTIFIC_INFERENCE"
+            marker = {"schema": "prometheus-global-worker-progress.v1",
+                      "prefix": prefix, "phase": phase, "receipt_count": count,
+                      "observed_at": iso_now()}
+            put_progress(s3, prefix + "/status/worker-progress.json", marker)
+            if (phase, count) != last:
+                event("worker", phase, "progress", receipt_count=count)
+                last = phase, count
+        except Exception as exc:
+            # A lost progress heartbeat must not fabricate an inference success.
+            event("worker", "FAILED", "progress", reason_code=type(exc).__name__)
+        if stop.wait(25):
+            return
+
 
 
 def _read_input(s3, prefix: str, name: str, expected: str) -> bytes:
@@ -87,12 +124,16 @@ def run() -> int:
     s3 = s3_client()
     started = time.monotonic()
     status = {"stage": "worker_preflight", "source_sha": source_sha}
+    event("worker", "BOOT", "start", source_sha=source_sha, volume_id=GLOBAL_ID)
+    stop_reporting = Event()
+    reporter = None
     try:
         # Exact source bytes copied from unmodified GitHub Actions artifacts
         # by the off-pod controller, then reauthenticated inside the GPU Pod.
         parent = _read_input(s3, prefix, "original-parent-dev.json", SOURCE_PARENT)
         historical_d = _read_input(s3, prefix, "historical-d-dev.json", SOURCE_D)
         authenticate_sources(parent, historical_d)
+        event("worker", "SOURCE_VERIFIED", "pass", report="PARENT_AND_D")
         (LOCAL / "source/original-parent-dev.json").write_bytes(parent)
         (LOCAL / "source/historical-d-dev.json").write_bytes(historical_d)
         (LOCAL / "source/source-custody.json").write_bytes(canonical({
@@ -101,6 +142,13 @@ def run() -> int:
             "historical_exposed_not_fresh_holdout": True,
         }))
         status["stage"] = "authenticated_cuda_science"
+        event("worker", "SCIENTIFIC_INFERENCE", "start")
+        # A separate lightweight reporter survives during blocking CUDA
+        # execution. It publishes metadata only, never raw model generations.
+        reporter = Thread(target=_inference_progress,
+                          args=(s3, prefix, LOCAL / "output", stop_reporting),
+                          daemon=True)
+        reporter.start()
         args = [
             sys.executable, "-u", "-m", "hephaestus.development.prometheus_gpu_campaign",
             "--parent-report", str(LOCAL / "source/original-parent-dev.json"),
@@ -124,11 +172,20 @@ def run() -> int:
         code = 1
         status["error_class"] = type(exc).__name__
         status["stage"] = "failed_preflight_or_execution"
+    finally:
+        stop_reporting.set()
+        if reporter is not None:
+            reporter.join(timeout=10)
     # Never log traceback, secrets, user data, or raw model text to public Actions.
     status.update({"worker_exit_code": code, "source_parent_sha256": SOURCE_PARENT,
                    "source_D_sha256": SOURCE_D, "global_volume_id": GLOBAL_ID,
                    "elapsed_seconds": time.monotonic() - started})
     (LOCAL / "logs/worker-status.json").write_bytes(canonical(status))
+    event("worker", "EVIDENCE_UPLOAD", "start", exit_code=code)
+    put_progress(s3, prefix + "/status/worker-progress.json", {
+        "schema": "prometheus-global-worker-progress.v1", "prefix": prefix,
+        "phase": "EVIDENCE_UPLOAD", "receipt_count": 0, "observed_at": iso_now(),
+    })
     # Build a single bounded retained tree with source provenance and full raw
     # reasoning/inference receipts, including the original failed run artifacts.
     retained = LOCAL / "retained"
@@ -147,6 +204,15 @@ def run() -> int:
         "prefix": prefix, "code": code, "manifest_sha256": sha(canonical(manifest)),
         "finished_at": iso_now(),
     }))
+    event("worker", "COMPLETE" if code == 0 else "FAILED",
+          "pass" if code == 0 else "fail", exit_code=code,
+          evidence_files=len(manifest["files"]),
+          manifest_sha256=sha(canonical(manifest)))
+    put_progress(s3, prefix + "/status/worker-progress.json", {
+        "schema": "prometheus-global-worker-progress.v1", "prefix": prefix,
+        "phase": "COMPLETE" if code == 0 else "FAILED",
+        "receipt_count": len(manifest["files"]), "observed_at": iso_now(),
+    })
     print("PROMETHEUS_GLOBAL_EVIDENCE_PERSISTED=true", flush=True)
     print("PROMETHEUS_GLOBAL_WORKER_EXIT=" + str(code), flush=True)
     return code
