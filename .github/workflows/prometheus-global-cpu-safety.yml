@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1686293b99b38e3c4abcbaa85623db4351d51fb0
+          ref: 8038aaa1651b37746838604f4b14e97ee27c77dd
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -36,6 +36,7 @@ jobs:
         run: |
           pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py tests/test_prometheus_global_observability.py
       - name: Publish immutable CI run locator (no scientific claims)
+        continue-on-error: true
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,3 +58,5 @@ jobs:
           PY
 
 # Prepaid-GPU gate: rerun exact pinned source's offline tests before launch 2026-11-14.
+
+# Rerun 2026-11-14 source-pinned CPU suite after corrected archive-size fixture.
