@@ -1,0 +1,174 @@
+{
+  "schema": "prometheus-diagnosis-evidence-contrast-precommit.v1",
+  "study_id": "prometheus-diagnosis-contrast-20261114-v1",
+  "status": "FROZEN_PROTOCOL_NO_GPU_AUTHORIZATION",
+  "research_question": "Can the frozen Diagnostician distinguish missing verification from positively observed evaluation failures, separate-domain failures, contradictions and irrelevant metadata without inventing a causal repair?",
+  "source_scope": "Original certified six-state Granite Evaluator; historical eight-state D is non-comparable context only.",
+  "original_parent_source_sha256": "2d1ffa37a9e14939c5c0e9c3365a5fe0a4220a37b502678a1f72f5def366378f",
+  "different_D_source_sha256": "7398eeed835422151678e4e1a79ee4c0d8ead4daf9dba61dd4333aa9acfbf953",
+  "frozen_diagnosis": {
+    "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+    "revision": "4a36357c811bf511a7b625d132e12f22408aac91",
+    "adapter_sha256": "534d1929d76fc64d07d8d36e85115d5660c113e63b022206bd500d288bdff32c",
+    "decoder": "exact frozen RoleMasteryContract and model generator: sampling true, temperature 0.7, top_p 0.95",
+    "max_new_tokens": 768
+  },
+  "sampling": {
+    "seeds": [
+      271828,
+      314159,
+      161803
+    ],
+    "arms": [
+      "unaugmented_frozen_role",
+      "deterministic_evidence_calibration"
+    ],
+    "paired_seed_per_case": true,
+    "invocation_ceiling": 48,
+    "precommitted_case_count": 8,
+    "repetitions_per_case_arm": 3,
+    "minimum_independent_new_subject_states": 3,
+    "wallclock_hard_limit_seconds": 2700,
+    "reference_gpu_hourly_usd_upper": 3.5,
+    "gpu_budget_upper_usd": 2.625,
+    "already_live_independent_watchdog_required": true,
+    "do_not_launch_until_source_coverage_and_separate_authorization": true
+  },
+  "case_slots": [
+    {
+      "id": "M0",
+      "class": "missing_verification",
+      "label": "inconclusive",
+      "basis": "Only exposed historical 200/200 six-state and non-comparable D 33/64; absent independent eval integrity is not proof of failure.",
+      "source_requirement": "Authenticated original reports, cross-check subject, no positive failure report",
+      "status": "historical_context_available_not_new_independent_state"
+    },
+    {
+      "id": "E1",
+      "class": "verified_positive_eval_failure",
+      "label": "evaluation_integrity",
+      "basis": "Independent content-hash mismatch or deterministic evaluation settings conflict actually observed on the exact parent task",
+      "source_requirement": "Two external verifier observations with immutable bytes and exact source scope, independent label adjudication",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    },
+    {
+      "id": "D1",
+      "class": "verified_positive_other_domain",
+      "label": "one_explicit_supported_domain",
+      "basis": "Independent non-evaluation failure signal traced to same actual source/task, not a mismatched research adapter",
+      "source_requirement": "Raw source plus signed validation and independent adjudication",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    },
+    {
+      "id": "C1",
+      "class": "contradictory_evidence",
+      "label": "inconclusive",
+      "basis": "Contradictory independently verified statements about same run/subject, not silently picked by confidence",
+      "source_requirement": "Two genuine conflicting observations with exact timestamps/identities and adjudication",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    },
+    {
+      "id": "E2",
+      "class": "verified_eval_repair_context",
+      "label": "evaluation_integrity",
+      "basis": "Independent second failure instance distinct from E1 to avoid memorizing one artifact",
+      "source_requirement": "New separately obtained original-parent evidence, not clone/rephrasing of E1",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    },
+    {
+      "id": "D2",
+      "class": "verified_other_domain_control",
+      "label": "one_explicit_supported_domain",
+      "basis": "Independent other-domain source disjoint from D1",
+      "source_requirement": "New separately observed original-parent failure and independent label",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    },
+    {
+      "id": "N0",
+      "class": "nuisance_control_a",
+      "label": "same_as_M0",
+      "basis": "Same real immutable sources as M0, with irrelevant display metadata altered; not a novel factual observation",
+      "source_requirement": "Exact original source identity preserved; only non-evidentiary display data changed",
+      "status": "controlled_variation_not_independent_source"
+    },
+    {
+      "id": "N1",
+      "class": "nuisance_control_b",
+      "label": "same_as_E1",
+      "basis": "Same real immutable sources as E1, with irrelevant display metadata changed; cannot be filled until E1 is independently verified",
+      "source_requirement": "Exact E1 raw evidence refs; independent comparison proves only metadata changed",
+      "status": "NO_ADMISSIBLE_SOURCE"
+    }
+  ],
+  "paired_tests": [
+    {
+      "id": "PAIR_EVAL_CONTRAST",
+      "a": "M0",
+      "b": "E1",
+      "kind": "causal_evidence_change"
+    },
+    {
+      "id": "PAIR_OTHER_CONTRAST",
+      "a": "M0",
+      "b": "D1",
+      "kind": "causal_evidence_change"
+    },
+    {
+      "id": "PAIR_NUISANCE_MISSING",
+      "a": "M0",
+      "b": "N0",
+      "kind": "irrelevant_metadata"
+    },
+    {
+      "id": "PAIR_NUISANCE_EVAL",
+      "a": "E1",
+      "b": "N1",
+      "kind": "irrelevant_metadata"
+    }
+  ],
+  "label_admission": {
+    "label_authority": "independent non-model reviewer and separately rehashed artifact source, before inference",
+    "authentic_observation_required": true,
+    "eval_pack_missing_is_not_eval_failure": true,
+    "contradictions_do_not_automatically_admit_positive_domain": true,
+    "labels_must_be_sealed_before_gpu": true,
+    "protected_final_holdout_forbidden": true,
+    "synthetic_fixtures_only_contract_tests": true,
+    "source_identifiers_and_subject_identity_required": true,
+    "missing_source_means_BLOCKED": true
+  },
+  "metrics": {
+    "positive_domain_precision": "TP / all valid positive-domain predictions; undefined if no positive predictions",
+    "appropriate_abstention": "correct inconclusive or observability_limit over precommitted abstention cases",
+    "citation_exactness": "exact immutable source IDs from authenticated prompt; materiality separately reviewed",
+    "evidence_sensitivity": "paired causal evidence-change cases must move to gold-supported labels, both correct",
+    "nuisance_invariance": "paired unchanged-source metadata variation must yield same and correct diagnosis",
+    "unsupported_domain_rate": "unsupported non-inconclusive predictions / all cases",
+    "invalid_output_rate": "schema/citation/identity failures / all trials",
+    "confidence": "descriptive only, not calibrated probability"
+  },
+  "controls": [
+    "always_inconclusive",
+    "fixed_repair_evaluation",
+    "precommitted_deterministic_signal_rule"
+  ],
+  "success_gate": {
+    "min_supported_domain_precision": 0.9,
+    "min_appropriate_abstention": 0.9,
+    "min_exact_citations": 1,
+    "min_evidence_sensitivity": 0.75,
+    "min_nuisance_invariance": 0.9,
+    "max_unsupported_domain_rate": 0.05,
+    "max_invalid_output_rate": 0.05,
+    "require_no_safety_bypass": true,
+    "require_real_source_variation": true
+  },
+  "action_policy": {
+    "planner_allowed_only_after_actual_supported_accepted_diagnosis": true,
+    "training_and_adapter_changes_authorized": false,
+    "granite_repair_authorized": false,
+    "role_parser_unchanged": true,
+    "no_silent_model_output_rewrite": true,
+    "production_promotion_authorized": false
+  }
+}
