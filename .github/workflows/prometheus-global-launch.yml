@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   cuda-science:
-    if: github.repository == 'kys928/Hephaestus'
+    if: ${{ github.repository == 'kys928/Hephaestus' && github.event.head_commit.message == 'PROMETHEUS_UNBOUND_ARM_LAUNCH' }}
     runs-on: ubuntu-latest
     timeout-minutes: 115
     env:
@@ -21,12 +21,13 @@ jobs:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       GH_TOKEN: ${{ github.token }}
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: e56372c07600824c983d19459f8ffa513945083d
+      PROMETHEUS_SOURCE_SHA: 056a84fcc0b35b822fc98b0dce476503e247d872
       PROMETHEUS_GLOBAL_APPROVED: single-bounded-science-20261114
+      PROMETHEUS_ACTION_LOG: ${{ runner.temp }}/prometheus-logs/launcher.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e56372c07600824c983d19459f8ffa513945083d
+          ref: 056a84fcc0b35b822fc98b0dce476503e247d872
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -44,19 +45,32 @@ jobs:
           pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py
       - name: Retrieve immutable historical source reports and execute one supervised original CUDA research decision
         run: python -u -m hephaestus.development.prometheus_global_launcher
+      - name: Publish launcher timeline in the GitHub Actions run summary
+        if: ${{ always() }}
+        run: |
+          PYTHONPATH=src python -m hephaestus.development.prometheus_global_observability summary --path "$PROMETHEUS_ACTION_LOG" --job launcher >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive metadata-only launcher timeline (30 days)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prometheus-global-launcher-metadata
+          path: ${{ runner.temp }}/prometheus-logs/launcher.jsonl
+          retention-days: 30
+          if-no-files-found: warn
   cleanup:
-    if: ${{ always() }}
+    if: ${{ always() && github.event.head_commit.message == 'PROMETHEUS_UNBOUND_ARM_LAUNCH' }}
     needs: cuda-science
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
-      PROMETHEUS_SOURCE_SHA: e56372c07600824c983d19459f8ffa513945083d
+      PROMETHEUS_SOURCE_SHA: 056a84fcc0b35b822fc98b0dce476503e247d872
+      PROMETHEUS_ACTION_LOG: ${{ runner.temp }}/prometheus-logs/cleanup.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: e56372c07600824c983d19459f8ffa513945083d
+          ref: 056a84fcc0b35b822fc98b0dce476503e247d872
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -68,16 +82,37 @@ jobs:
           import os,time
           from hephaestus.development.prometheus_global_supervision import (
             campaign_prefix, matching_pods, delete_exact_pod)
-          key=campaign_prefix(os.environ["PROMETHEUS_GLOBAL_CAMPAIGN"],
-                              os.environ["PROMETHEUS_SOURCE_SHA"])
-          for _ in range(4):
-              matches=matching_pods(key)
-              if not matches:
-                  print("PROMETHEUS_GLOBAL_CLEANUP_POD_ABSENT=true",flush=True)
-                  break
-              delete_exact_pod(matches[0],key)
-              time.sleep(4)
-          else:
-              if matching_pods(key):
-                  raise RuntimeError("One-shot Pod remains after exact cleanup attempts")
+          from hephaestus.development.prometheus_global_observability import event
+          event("cleanup","START","start")
+          try:
+              key=campaign_prefix(os.environ["PROMETHEUS_GLOBAL_CAMPAIGN"],
+                                  os.environ["PROMETHEUS_SOURCE_SHA"])
+              for _ in range(4):
+                  matches=matching_pods(key)
+                  if not matches:
+                      event("cleanup","CLEANUP_CONFIRMED","pass")
+                      print("PROMETHEUS_GLOBAL_CLEANUP_POD_ABSENT=true",flush=True)
+                      break
+                  event("cleanup","CLEANUP_REQUESTED","progress",pod_id=matches[0]["id"])
+                  delete_exact_pod(matches[0],key)
+                  time.sleep(4)
+              else:
+                  if matching_pods(key):
+                      raise RuntimeError("One-shot Pod remains after exact cleanup attempts")
+                  event("cleanup","CLEANUP_CONFIRMED","pass")
+          except Exception as exc:
+              event("cleanup","FAILED","fail",reason_code=type(exc).__name__)
+              raise SystemExit(1) from None
           PY
+      - name: Publish exact-Pod cleanup result in GitHub Actions summary
+        if: ${{ always() }}
+        run: |
+          PYTHONPATH=src python -m hephaestus.development.prometheus_global_observability summary --path "$PROMETHEUS_ACTION_LOG" --job cleanup >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive metadata-only cleanup timeline (30 days)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prometheus-global-cleanup-metadata
+          path: ${{ runner.temp }}/prometheus-logs/cleanup.jsonl
+          retention-days: 30
+          if-no-files-found: warn
