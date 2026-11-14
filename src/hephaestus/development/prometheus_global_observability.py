@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import sys
 
-COMPONENTS = frozenset({"launcher", "watchdog", "worker"})
+COMPONENTS = frozenset({"launcher", "watchdog", "worker", "cleanup"})
 PHASES = frozenset({
     "START", "PREFLIGHT", "STORAGE_CHECK", "BUDGET_CHECK", "WATCHDOG_READY",
     "SOURCE_VERIFIED", "SOURCE_STAGED", "GPU_REQUESTED", "GPU_ALLOCATED",
@@ -111,7 +111,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("summary",))
     parser.add_argument("--path", type=Path, required=True)
-    parser.add_argument("--job", choices=("launcher", "watchdog"), required=True)
+    parser.add_argument("--job", choices=("launcher", "watchdog", "cleanup"), required=True)
     args = parser.parse_args()
     print(summary_file(args.path, job=args.job))
     return 0
