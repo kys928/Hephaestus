@@ -19,7 +19,7 @@ jobs:
       RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
       PROMETHEUS_SOURCE_SHA: 056a84fcc0b35b822fc98b0dce476503e247d872
-      PROMETHEUS_ACTION_LOG: ${{ runner.temp }}/prometheus-logs/watchdog.jsonl
+      PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/watchdog.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +44,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prometheus-global-watchdog-metadata
-          path: ${{ runner.temp }}/prometheus-logs/watchdog.jsonl
+          path: /tmp/prometheus-logs/watchdog.jsonl
           retention-days: 30
           if-no-files-found: warn
