@@ -96,3 +96,5 @@ jobs:
 # Authorized one-time watchdog arm for Prometheus Unbound 2026-11-14.
 
 # GPU retry watchdog (source-pinned 53-pass code) 2026-11-14.
+
+# Source-pinned prompt-format-only research retry watchdog, exact campaign 02.
