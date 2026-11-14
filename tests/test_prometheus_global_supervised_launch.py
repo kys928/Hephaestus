@@ -96,6 +96,15 @@ def test_exact_global_pod_identity_refuses_wrong_mount_or_model():
         s.verify_pod(wrong, prefix)
     with pytest.raises(PermissionError):
         s.verify_pod({**exact, "gpu": {"id": "different", "count": 1}}, prefix)
+    # Provider may redact the GPU model on GET. Refuse scientific acceptance,
+    # but allow a source-pinned exact Pod cleanup to prevent runaway billing.
+    redacted = {**exact, "gpu": {"count": 1}}
+    with pytest.raises(PermissionError, match="SKU"):
+        s.verify_pod(redacted, prefix)
+    s.verify_pod(redacted, prefix, require_gpu_identity=False)
+    with pytest.raises(PermissionError):
+        s.verify_pod({**redacted, "image": "unrelated/image"}, prefix,
+                     require_gpu_identity=False)
 
 
 def test_verifier_detects_tampered_durable_model_receipt():
