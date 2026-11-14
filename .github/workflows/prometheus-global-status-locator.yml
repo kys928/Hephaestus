@@ -1,0 +1,45 @@
+name: Prometheus Unbound read-only Actions run-status locator
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths: [.github/workflows/prometheus-global-status-locator.yml]
+permissions:
+  contents: read
+  actions: read
+  issues: write
+jobs:
+  query:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish the actual one-shot workflow run IDs to draft PR 206
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          url="https://api.github.com/repos/kys928/Hephaestus/actions/runs?branch=ops/prometheus-unbound-global-20261114&per_page=40"
+          def get(url):
+              req=urllib.request.Request(url,headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],
+                "Accept":"application/vnd.github+json"})
+              with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
+          doc=get(url)
+          target=["Prometheus Unbound independent RunPod GPU watchdog (one-shot)",
+                  "Prometheus Unbound one-shot bounded Global CUDA science",
+                  "Prometheus Unbound global CPU safety gate (one-shot branch)"]
+          lines=[]
+          for run in doc.get("workflow_runs",[]):
+              if run.get("name") in target:
+                  lines.append(str(run.get("name"))+": id="+str(run.get("id"))+
+                      " status="+str(run.get("status"))+" conclusion="+str(run.get("conclusion"))+
+                      " "+str(run.get("html_url")))
+          if not lines:lines=["No matching workflow runs returned by the GitHub Actions API."]
+          payload=json.dumps({"body":"Prometheus Unbound one-shot Actions audit (read-only):\n\n"+"\n".join(lines[:8])}).encode()
+          request=urllib.request.Request(
+              "https://api.github.com/repos/kys928/Hephaestus/issues/206/comments",
+              data=payload,method="POST",headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],
+              "Content-Type":"application/json","Accept":"application/vnd.github+json"})
+          with urllib.request.urlopen(request,timeout=30) as response:
+              print("PROMETHEUS_WORKFLOW_LOCATOR_RECORDED="+str(response.status==201))
+          PY
