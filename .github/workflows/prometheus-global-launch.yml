@@ -23,7 +23,7 @@ jobs:
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
       PROMETHEUS_SOURCE_SHA: 056a84fcc0b35b822fc98b0dce476503e247d872
       PROMETHEUS_GLOBAL_APPROVED: single-bounded-science-20261114
-      PROMETHEUS_ACTION_LOG: ${{ runner.temp }}/prometheus-logs/launcher.jsonl
+      PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/launcher.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prometheus-global-launcher-metadata
-          path: ${{ runner.temp }}/prometheus-logs/launcher.jsonl
+          path: /tmp/prometheus-logs/launcher.jsonl
           retention-days: 30
           if-no-files-found: warn
   cleanup:
@@ -66,7 +66,7 @@ jobs:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       PROMETHEUS_GLOBAL_CAMPAIGN: prometheus-unbound-global-20261114-01
       PROMETHEUS_SOURCE_SHA: 056a84fcc0b35b822fc98b0dce476503e247d872
-      PROMETHEUS_ACTION_LOG: ${{ runner.temp }}/prometheus-logs/cleanup.jsonl
+      PROMETHEUS_ACTION_LOG: /tmp/prometheus-logs/cleanup.jsonl
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,6 +113,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prometheus-global-cleanup-metadata
-          path: ${{ runner.temp }}/prometheus-logs/cleanup.jsonl
+          path: /tmp/prometheus-logs/cleanup.jsonl
           retention-days: 30
           if-no-files-found: warn
