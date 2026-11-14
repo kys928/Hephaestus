@@ -323,6 +323,23 @@ class EvaluationOnlyResearchJob:
                         or output.get("cited_refs") != [observation["observation_ref"]]
                         or not self.artifacts.verify(output["receipt_ref"])):
                     raise ResearchAdmissionError("role inference lacks verified exact-source receipt")
+                if type(self.observer) is CertifiedDiagnosisObserver:
+                    # Independently re-open the exact original role-generation
+                    # receipt; an arbitrary sha256 object is not model proof.
+                    from hephaestus.llm.inference_receipts import verify_inference_receipt
+                    receipt=verify_inference_receipt(
+                        self.artifacts,output["receipt_ref"],self.observer.reasoner.contract)
+                    if (receipt.get("schema")!="role-inference.v1"
+                            or receipt.get("status")!="accepted"
+                            or receipt.get("role")!="diagnosis"
+                            or receipt.get("run_id")!=run_id
+                            or receipt.get("lineage_id")!=lineage_id
+                            or receipt.get("seed")!=seed
+                            or receipt.get("evidence_refs")!=[observation["observation_ref"]]
+                            or receipt.get("model_id")!=output.get("model_id")
+                            or receipt.get("adapter_sha256")!=output.get("adapter_sha256")
+                            or receipt["answer"]["decision"]!=output["decision"]):
+                        raise ResearchAdmissionError("frozen role receipt does not match admitted trial")
                 results.append({
                     "source_id": observation["source_id"], "seed": seed,
                     "decision": output["decision"], "action": output.get("action"),
@@ -353,6 +370,9 @@ class EvaluationOnlyResearchJob:
                 "original_gap": observations[0]["data_coverage_gap"],
                 "candidate_gap": observations[1]["data_coverage_gap"],
             },
+            "role_inference_scope": (
+                "genuine_certified_frozen_role_receipts" if type(self.observer) is CertifiedDiagnosisObserver
+                else "injected_observer_not_frozen_model_verified"),
             "training_performed": False, "model_modified": False,
             "conclusion": "retrospective_development_observation_not_gold_label_validation",
             "independent_scientific_certification": False,
