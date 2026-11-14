@@ -52,7 +52,7 @@ def watch(campaign: str, source_sha: str, *, clock=time) -> str:
                   elapsed_seconds=int(clock.monotonic()-first))
             last_log = clock.monotonic()
         if matches:
-            verify_pod(matches[0], prefix)
+            verify_pod(matches[0], prefix, require_gpu_identity=False)
             if not seen:
                 event("watchdog", "GPU_ALLOCATED", "progress", pod_id=matches[0]["id"])
             seen = True
@@ -101,7 +101,7 @@ def watch(campaign: str, source_sha: str, *, clock=time) -> str:
         clock.sleep(25)
     matches = matching_pods(prefix)
     for pod in matches:
-        verify_pod(pod, prefix)
+        verify_pod(pod, prefix, require_gpu_identity=False)
         event("watchdog", "CLEANUP_REQUESTED", "progress", pod_id=pod["id"])
         delete_exact_pod(pod, prefix)
     for _ in range(8):
