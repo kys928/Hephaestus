@@ -18,6 +18,7 @@ import subprocess
 import time
 from zipfile import ZipFile
 
+from .prometheus_global_observability import event
 from .prometheus_global_supervision import (
     ALLOWED_CENTERS, GLOBAL_ID, GPU_ID, IMAGE, MAX_LEASE_SECONDS,
     MAX_PRICE_HOUR, RESERVE_USD, S3_BUCKET, SOURCE_D, SOURCE_PARENT,
@@ -150,23 +151,29 @@ def _verify_worker_science(s3, prefix: str, manifest: dict) -> dict:
 
 def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
     prefix = campaign_prefix(campaign, source_sha)
+    event("launcher", "START", "start", campaign=campaign, source_sha=source_sha)
     s3 = s3_client()
     check_heartbeat(s3, prefix)
+    event("launcher", "WATCHDOG_READY", "pass")
     _verify_global_volume()
+    event("launcher", "STORAGE_CHECK", "pass", volume_id=GLOBAL_ID)
     if matching_pods(prefix):
         raise PermissionError("campaign Pod already allocated; refuse duplicate")
     if read_json(s3, prefix + "/launch-intent.json") is not None:
         raise PermissionError("one-shot campaign launch intent already consumed")
     lease, credit, spending = _credit_lease()
+    event("launcher", "BUDGET_CHECK", "pass", lease_seconds=lease)
     parent = _download_source_artifact(*PARENT_ARTIFACT)
     historical_d = _download_source_artifact(*D_ARTIFACT)
     authenticate_sources(parent, historical_d)
+    event("launcher", "SOURCE_VERIFIED", "pass", report="PARENT_AND_D")
     code = _source_tarball(source_sha)
     code_hash = sha(code)
     # Immutable staging: preserve each historical report byte-for-byte.
     put_once(s3, prefix + "/source/original-parent-dev.json", parent)
     put_once(s3, prefix + "/source/historical-d-dev.json", historical_d)
     put_once(s3, prefix + "/source/code.tar.gz", code)
+    event("launcher", "SOURCE_STAGED", "pass")
     intent = {"schema": "prometheus-global-launch-intent.v1",
               "source_sha": source_sha, "prefix": prefix, "code_sha256": code_hash,
               "historical_parent_sha256": SOURCE_PARENT, "historical_D_sha256": SOURCE_D,
@@ -200,6 +207,7 @@ def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
     pod = None
     scientific_result = None
     try:
+        event("launcher", "GPU_REQUESTED", "start", gpu="RTX_PRO_6000")
         try:
             pod = api("POST", "/pods", body)
         except Exception:
@@ -224,9 +232,36 @@ def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
             "lease_seconds": lease, "source_sha": source_sha,
             "global_volume_id": GLOBAL_ID, "created_at": iso_now(),
         }))
+        event("launcher", "GPU_ALLOCATED", "pass", pod_id=pod["id"],
+              datacenter=pod["dataCenterId"], gpu="RTX_PRO_6000")
         print("PROMETHEUS_GLOBAL_POD_ALLOCATED=" + pod["id"], flush=True)
         deadline = clock.monotonic() + lease
+        last_progress = None
+        last_alive = clock.monotonic()
         while clock.monotonic() < deadline:
+            # Poll only the trusted, bounded worker-status vocabulary. Raw model
+            # traces and potentially private text NEVER enter public Actions.
+            progress = read_json(s3, prefix + "/status/worker-progress.json")
+            if progress is not None:
+                stage = progress.get("phase")
+                role_count = progress.get("receipt_count", 0)
+                safe_stages = {"BOOT", "SOURCE_VERIFIED", "SCIENTIFIC_INFERENCE",
+                               "INFERENCE_PROGRESS", "DECISION_RECORDED",
+                               "EVIDENCE_UPLOAD", "COMPLETE", "FAILED"}
+                if (progress.get("schema") != "prometheus-global-worker-progress.v1"
+                        or progress.get("prefix") != prefix
+                        or stage not in safe_stages or type(role_count) is not int
+                        or not 0 <= role_count <= 1000):
+                    raise PermissionError("untrusted worker progress record")
+                snapshot = (stage, role_count)
+                if snapshot != last_progress:
+                    event("launcher", "INFERENCE_PROGRESS", "progress",
+                          reason_code=stage, receipt_count=role_count)
+                    last_progress = snapshot
+            if clock.monotonic() - last_alive >= 120:
+                event("launcher", "GPU_POLLING", "progress",
+                      elapsed_seconds=int(lease - max(0, deadline-clock.monotonic())))
+                last_alive = clock.monotonic()
             done = read_json(s3, prefix + "/status/worker-exit.json")
             if done:
                 if done.get("schema") != "prometheus-global-worker-exit.v1" or done.get("prefix") != prefix:
@@ -235,6 +270,9 @@ def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
                 if done.get("manifest_sha256") != sha(canonical(manifest)):
                     raise PermissionError("worker manifest reference mismatch")
                 scientific_result = _verify_worker_science(s3, prefix, manifest)
+                event("launcher", "EVIDENCE_VERIFIED", "pass",
+                      evidence_files=len(manifest["files"]),
+                      manifest_sha256=sha(canonical(manifest)))
                 break
             current = matching_pods(prefix)
             if not current:
@@ -242,9 +280,12 @@ def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
             clock.sleep(30)
         if scientific_result is None:
             raise TimeoutError("no independently verified GPU inference receipt within safe lease")
+        event("launcher", "DECISION_RECORDED", "pass",
+              scientific_action=str(scientific_result["scientific_action"]))
         return scientific_result
     finally:
         if pod is not None:
+            event("launcher", "CLEANUP_REQUESTED", "progress", pod_id=pod["id"])
             # Independent watchdog is also responsible for this exact Pod.
             for attempt in range(4):
                 current = matching_pods(prefix)
@@ -254,6 +295,7 @@ def launch(campaign: str, source_sha: str, *, clock=time) -> dict:
                 clock.sleep(3)
             if matching_pods(prefix):
                 raise RuntimeError("paid Pod termination not independently observed")
+            event("launcher", "CLEANUP_CONFIRMED", "pass", pod_id=pod["id"])
             print("PROMETHEUS_GLOBAL_EXACT_POD_ABSENT=true", flush=True)
 
 
@@ -266,7 +308,12 @@ def main() -> int:
         raise PermissionError("one-shot explicit operator approval missing")
     campaign = os.environ["PROMETHEUS_GLOBAL_CAMPAIGN"]
     source_sha = os.environ["PROMETHEUS_SOURCE_SHA"]
-    result = launch(campaign, source_sha)
+    try:
+        result = launch(campaign, source_sha)
+    except Exception as exc:
+        event("launcher", "BLOCKED", "fail", reason_code=type(exc).__name__)
+        raise
+    event("launcher", "COMPLETE", "pass")
     print("PROMETHEUS_GLOBAL_AUTHENTIC_SCIENCE_COMPLETED=true", flush=True)
     print("PROMETHEUS_GLOBAL_ADMITTED_ACTION=" + str(result.get("scientific_action")), flush=True)
     return 0
