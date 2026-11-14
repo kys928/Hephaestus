@@ -1,0 +1,34 @@
+{
+  "schema": "research-source-catalog.v1",
+  "source_policy": "two-original-authenticated-S3-retrievals_reverified_in_GitHub_Actions_20261114",
+  "original_verification_runs": [
+    "https://github.com/kys928/Hephaestus/actions/runs/43637529964",
+    "https://github.com/kys928/Hephaestus/actions/runs/43640526201"
+  ],
+  "scientific_scope": "retrospective_training_dataset_coverage_only_not_original_certified_Granite_failure_gold",
+  "independent_label_adjudication": false,
+  "sources": [
+    {
+      "source_id": "first-bounded-scientific-training-original-2026",
+      "subject": "first-bounded-scientific-training-001-33866198758",
+      "study_scope": "first-scientific-training-to-controlled-dataset-mixture",
+      "source_uri": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/first-bounded-scientific-training-001-33866198758/dataset/trainable.jsonl",
+      "sha256_ref": "sha256:f7c512199b6a34ce07fabcd4bdbd45a613aad650190c11bd32c0bbb979910b5c",
+      "expected_rows": 54878,
+      "expected_bytes": 15920505,
+      "role": "original",
+      "capability": "diagnosis_coverage_v1"
+    },
+    {
+      "source_id": "controlled-dataset-mixture-candidate-2026",
+      "subject": "planned-run-b8e558e54effac85",
+      "study_scope": "first-scientific-training-to-controlled-dataset-mixture",
+      "source_uri": "runpod-s3://cviwpryzao/hephaestus/scientific/v1/runtime_bindings/planned-run-b8e558e54effac85/dataset/trainable.jsonl",
+      "sha256_ref": "sha256:bac39c4c25394e32e86d0e73fe410123e38fcd0d67064e2e1b59a1e31e822fac",
+      "expected_rows": 171295,
+      "expected_bytes": 157151627,
+      "role": "candidate",
+      "capability": "diagnosis_coverage_v1"
+    }
+  ]
+}
