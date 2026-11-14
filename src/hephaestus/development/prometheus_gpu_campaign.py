@@ -16,6 +16,7 @@ from hephaestus.development.prometheus_scientific_decision import (
     _verify, PARENT_SHA, D_SHA, decide, prepare,
 )
 from hephaestus.development.prometheus_granite_public_measurement import run_public_measurement
+from hephaestus.development.prometheus_global_adapter_source import VerifiedGlobalRoleArchiveSource
 from hephaestus.llm.certified_runtime import (
     CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
 )
@@ -30,9 +31,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--parent-report", type=Path, required=True)
     parser.add_argument("--d-report", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--s3-endpoint", required=True)
-    parser.add_argument("--s3-bucket", required=True)
+    parser.add_argument("--s3-endpoint")
+    parser.add_argument("--s3-bucket")
     parser.add_argument("--s3-region", default="EU-CZ-1")
+    parser.add_argument("--global-volume-root", type=Path,
+                        help="Opt-in read-only mounted Global archive source")
+    parser.add_argument("--global-volume-id",
+                        help="Externally verified exact mounted provider volume ID")
     parser.add_argument("--adapter-cache", type=Path, required=True)
     parser.add_argument("--hf-cache", type=Path, required=True)
     parser.add_argument("--registry", type=Path,
@@ -45,6 +50,24 @@ def main(argv: list[str] | None = None) -> int:
     prepare(parent, d)  # Source/ontology/authority preflight BEFORE GPU import.
     if args.out.exists() and any(args.out.iterdir()):
         raise FileExistsError("Prometheus GPU campaign output must be a fresh immutable directory")
+    stack = load_certified_role_model_stack(args.registry)
+    if args.global_volume_root is not None:
+        if not args.global_volume_id or args.s3_endpoint or args.s3_bucket:
+            raise ValueError("Global mode requires exact volume ID and excludes S3 adapter fallback")
+        root = args.global_volume_root.resolve(strict=True)
+        for write_root in (args.out, args.adapter_cache, args.hf_cache):
+            if write_root.resolve().is_relative_to(root):
+                raise PermissionError("Prometheus mutable output/cache cannot live on Global object storage")
+        adapter_client = VerifiedGlobalRoleArchiveSource(
+            args.global_volume_root, args.global_volume_id, stack)
+        adapter_bucket = args.global_volume_id
+    else:
+        if not args.s3_endpoint or not args.s3_bucket or args.global_volume_id:
+            raise ValueError("Regional mode requires complete S3 endpoint/bucket without Global mount")
+        import boto3
+        adapter_client = boto3.client(
+            "s3", endpoint_url=args.s3_endpoint, region_name=args.s3_region)
+        adapter_bucket = args.s3_bucket
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out/"campaign-precommit.json").write_bytes(canonical_bytes({
         "schema":"prometheus-real-gpu-campaign-precommit.v1",
@@ -57,16 +80,13 @@ def main(argv: list[str] | None = None) -> int:
         "production_role_activation_permitted":False,
         "independent_final_holdout_access_permitted":False,
     }))
-    import boto3
     generator = PinnedTransformersRoleGenerator(
         args.hf_cache, device="cuda:0", allow_remote_pinned_download=True)
     reasoner = CertifiedRoleReasoner(
-        stack=load_certified_role_model_stack(args.registry),
+        stack=stack,
         contract=RoleMasteryContract.load(args.contract),
         adapters=VerifiedRoleAdapters(
-            boto3.client("s3", endpoint_url=args.s3_endpoint,
-                region_name=args.s3_region),
-            args.s3_bucket, args.adapter_cache),
+            adapter_client, adapter_bucket, args.adapter_cache),
         generator=generator,
         artifact_store=FileSystemArtifactStore(args.out/"decision"/"inference-receipts"),
     )
