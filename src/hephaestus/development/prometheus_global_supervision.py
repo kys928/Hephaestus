@@ -167,21 +167,45 @@ def matching_pods(prefix: str) -> list[dict]:
     return matches
 
 
-def verify_pod(pod: dict, prefix: str) -> None:
+def verify_pod(pod: dict, prefix: str, *, require_gpu_identity: bool = True) -> None:
+    """Check exact campaign identity; absent GPU SKU must not prevent cleanup.
+
+    The provider may omit GPU id on GET while still reporting GPU count. Science
+    admission refuses an unknown GPU SKU, but cleanup can terminate the exact
+    source-named/mounted Pod even if that optional field was redacted.
+    """
+    mounts = pod.get("mounts")
+    if not isinstance(mounts, dict):
+        raise PermissionError("Pod mounts absent")
+    global_mounts = mounts.get("global")
+    if (global_mounts != [{"volumeId": GLOBAL_ID, "path": "/workspace-global"}]
+            or mounts.get("network") not in (None, [])
+            or mounts.get("persistent") not in (None, {})):
+        raise PermissionError("Pod Global mount differs from approved science resource")
+    gpu = pod.get("gpu")
     if (pod.get("name") != pod_name(prefix)
             or pod.get("cloud") != "SECURE"
             or pod.get("image") != IMAGE
             or pod.get("dataCenterId") not in ALLOWED_CENTERS
-            or pod.get("mounts") != {"global": [{"volumeId": GLOBAL_ID, "path": "/workspace-global"}]}
-            or not isinstance(pod.get("gpu"), dict)
-            or pod["gpu"].get("id") != GPU_ID or pod["gpu"].get("count") != 1
+            or not isinstance(gpu, dict) or gpu.get("count") != 1
             or not isinstance(pod.get("id"), str)
             or not re.fullmatch(r"[A-Za-z0-9_-]{4,100}", pod["id"])):
-        raise PermissionError("Pod identity/config differs from approved global campaign")
+        raise PermissionError("Pod immutable identity/config differs from approved campaign")
+    observed = gpu.get("id")
+    machine = pod.get("machine")
+    if observed is None and isinstance(machine, dict):
+        gpu_type = machine.get("gpuType")
+        if isinstance(gpu_type, dict):
+            observed = gpu_type.get("id")
+    if observed is not None and observed != GPU_ID:
+        raise PermissionError("Pod actual GPU differs from pinned hardware")
+    if observed is None and require_gpu_identity:
+        raise PermissionError("Pod GPU SKU is not returned by provider; science admission blocked")
 
 
 def delete_exact_pod(pod: dict, prefix: str) -> None:
-    verify_pod(pod, prefix)
+    # Keep cleanup available even if the RunPod read API redacts GPU SKU.
+    verify_pod(pod, prefix, require_gpu_identity=False)
     api("DELETE", "/pods/" + pod["id"])
 
 
