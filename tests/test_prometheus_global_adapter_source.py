@@ -58,7 +58,7 @@ def test_tampered_archive_refused(tmp_path):
     spec = stack.resolve("diagnosis")
     target = (tmp_path / "hephaestus" / "runtime-models" / "role-mastery-v1" /
               "diagnosis" / f"selected-adapter-{spec.adapter.sha256[:24]}.tar.gz")
-    target.write_bytes(b"modified wrong length")
+    target.write_bytes(b"definitely-not-the-original-size")
     with pytest.raises(FileNotFoundError):
         client.get_object(Bucket="global_fixture_01", Key=spec.adapter.s3_key)
     target.write_bytes(b"x" * spec.adapter.bytes)
