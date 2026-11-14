@@ -13,12 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: aa4bfd5f57bc29448209cbf07cf3241caca68703
+          ref: 427d131faa5f9888fb994488f77e8fea2f276bc4
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: test "$(git rev-parse HEAD)" = "aa4bfd5f57bc29448209cbf07cf3241caca68703"
+      - run: test "$(git rev-parse HEAD)" = "427d131faa5f9888fb994488f77e8fea2f276bc4"
       - run: python -m pip install '.[test]'
       - run: python -m compileall -q src/hephaestus tests
       - name: Run complete CPU suite against source-only reviewed layout
