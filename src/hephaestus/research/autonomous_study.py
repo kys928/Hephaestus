@@ -293,6 +293,18 @@ class EvaluationOnlyResearchJob:
         objective.validate()
         if not run_id or not lineage_id:
             raise ResearchAdmissionError("scientific run and lineage identity required")
+        if type(self.observer) is CertifiedDiagnosisObserver:
+            from hephaestus.llm.certified_runtime import (
+                CertifiedRoleReasoner, PinnedTransformersRoleGenerator,
+            )
+            reasoner=self.observer.reasoner
+            if (type(reasoner) is not CertifiedRoleReasoner
+                    or type(reasoner.generator) is not PinnedTransformersRoleGenerator
+                    or reasoner.generator.device != "cuda:0"
+                    or not reasoner.stack.production_certified
+                    or not reasoner.stack.runtime_registry_ready):
+                raise ResearchAdmissionError(
+                    "certified diagnosis observer requires the actual pinned CUDA role runtime")
         sources = self.catalog.select(objective)
         study_id = "research-" + sha256(canonical_bytes({
             "question": objective.question, "run_id": run_id,
