@@ -16,6 +16,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install '.[test]'
+      - name: Test final source layout without one-shot workflow
+        run: rm .github/workflows/prometheus-diagnosis-calibration-cpu-once.yml
       - run: python -m compileall -q src/hephaestus tests
       - name: Evidence-calibration and frozen specialist gate regressions
         run: python -m pytest -q
