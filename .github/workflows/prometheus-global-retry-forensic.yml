@@ -1,0 +1,111 @@
+name: Prometheus Unbound controlled citation retry forensic audit (read-only)
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths: [.github/workflows/prometheus-global-retry-forensic.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9d21933ae261a868eebf80743931c5d9ffcc7e86
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[s3]'
+      - name: Independent SHA verification and safe scientific receipt classification
+        run: |
+          python - <<'PY'
+          import json,hashlib,re
+          from pathlib import PurePosixPath
+          from hephaestus.development.prometheus_global_supervision import (
+              campaign_prefix,s3_client,get_bytes,read_json,verify_manifest,
+              SOURCE_PARENT,SOURCE_D,GLOBAL_ID)
+          prefix=campaign_prefix("prometheus-unbound-global-20261114-02",
+              "9d21933ae261a868eebf80743931c5d9ffcc7e86")
+          s3=s3_client()
+          manifest=verify_manifest(s3,prefix)
+          names={item["path"] for item in manifest["files"]}
+          def obj(rel,maxi=2000000):
+              if rel not in names:return None
+              return get_bytes(s3,prefix+"/result/files/"+rel,maxi)
+          result={
+              "schema":"prometheus-global-retry-forensic-audit.v1",
+              "manifest_sha256":hashlib.sha256(json.dumps(manifest,sort_keys=True,separators=(",",":")).encode()).hexdigest(),
+              "retained_file_count":len(names),
+              "worker_exit_code":manifest.get("worker_exit_code"),
+              "global_volume_valid":manifest.get("global_volume_id")==GLOBAL_ID,
+              "source_parent_valid":manifest.get("source_parent_sha256")==SOURCE_PARENT,
+              "source_D_valid":manifest.get("source_D_sha256")==SOURCE_D,
+              "scientific_decision_present":"output/cycle/decision/scientific-decision.json" in names,
+              "campaign_result_present":"output/cycle/campaign-result.json" in names,
+              "inference_receipts":[],
+              "scientific_failure":None,
+              "trace_frames":[],
+              "trace_classes":[],
+          }
+          failure=obj("output/cycle/failure.json")
+          if failure:
+              d=json.loads(failure)
+              result["scientific_failure"]={"status":d.get("status"),"error_class":d.get("error_class")}
+          for name in sorted(names):
+              if not name.startswith("output/cycle/decision/inference-receipts/objects/sha256/"):
+                  continue
+              raw=obj(name)
+              try:
+                  doc=json.loads(raw)
+              except Exception:
+                  continue
+              if doc.get("schema")!="role-inference.v1":
+                  continue
+              allowed=doc.get("evidence_refs",[])
+              model_raw=doc.get("raw_output","")
+              parsed=None
+              try:
+                  clean=model_raw.strip()
+                  for stop in doc.get("profile",{}).get("reasoning_projection",[]):
+                      if stop in clean:clean=clean.rsplit(stop,1)[-1].strip()
+                  parsed=json.loads(clean)
+              except Exception:pass
+              cited=parsed.get("evidence_refs") if isinstance(parsed,dict) else None
+              result["inference_receipts"].append({
+                  "role":doc.get("role"),"status":doc.get("status"),
+                  "error":doc.get("error"),
+                  "finish_reason":doc.get("finish_reason"),
+                  "generated_tokens":len(doc.get("execution",{}).get("generated_token_ids",[])),
+                  "source_ref_count":len(allowed),
+                  "cited_ref_count":len(cited) if isinstance(cited,list) else None,
+                  "exact_citation_admission":bool(cited and isinstance(cited,list) and all(x in allowed for x in cited)),
+                  "json_seven_keys":isinstance(parsed,dict) and len(parsed)==7,
+                  "model_id":doc.get("model_id"),
+                  "sha256":hashlib.sha256(raw).hexdigest(),
+              })
+          scientific=obj("output/cycle/decision/scientific-decision.json")
+          if scientific:
+              doc=json.loads(scientific)
+              result["admitted_intervention_kind"]=doc.get("independently_admitted_intervention",{}).get("intervention_kind")
+          logfile=obj("logs/scientific-worker.log",4000000)
+          if logfile:
+              lines=logfile.decode(errors="replace").splitlines()
+              result["trace_line_count"]=len(lines)
+              for line in lines:
+                  m=re.match(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Warning)):",line.strip())
+                  if m:result["trace_classes"].append(m.group(1).split(".")[-1])
+                  m=re.match(r'^\s*File "([^"]+)", line ([0-9]+), in ([A-Za-z_][A-Za-z0-9_]*)',line)
+                  if m:
+                      name=PurePosixPath(m.group(1)).name
+                      if re.fullmatch(r"[a-zA-Z0-9_.-]{1,90}",name):
+                          result["trace_frames"].append({"file":name,"line":int(m.group(2)),"function":m.group(3)})
+              result["trace_frames"]=result["trace_frames"][-8:]
+              result["trace_classes"]=result["trace_classes"][-6:]
+          print("PROMETHEUS_RETRY_PRIVATE_FORENSICS="+json.dumps(result,sort_keys=True),flush=True)
+          PY
