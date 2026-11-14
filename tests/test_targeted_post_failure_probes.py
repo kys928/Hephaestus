@@ -103,3 +103,74 @@ def test_supervised_instruction_and_structured_targets_cover_frozen_task_forms()
     assert evidence["data_coverage_verified"] is True
     assert measurements["prompt_target_rows"] == 2
     assert measurements["structured_target_rows"] == 1
+
+
+
+def test_embedded_prompt_target_in_text_is_counted_without_inventing_structure() -> None:
+    rows = [
+        {"text":"<|prompt|>\nAnswer briefly\n<|target|>\nMars"},
+        {"text":"<|prompt|>\nReturn JSON\n<|target|>\nnot JSON"},
+        {"text":"<|prompt|>\nMissing response\n<|target|>\n"},
+        {"text":"<|prompt|>\nUnfinished only"},
+        {"text":"<|target|>\nWrong order\n<|prompt|>\nWrong"},
+        {"text":"<|prompt|>\nRepeated <|prompt|>\n<|target|>\nIncomplete"},
+    ]
+    evidence, measurements = analyze_dataset_task_coverage(
+        iter(rows), _eval_pack(), source_ref="synthetic-representation-contract-test",
+    )
+    assert measurements["coverage_probe_version"] == 2
+    assert measurements["rows_scanned"] == 6
+    assert measurements["explicit_prompt_target_rows"] == 0
+    assert measurements["embedded_marker_pair_rows"] == 5
+    assert measurements["embedded_valid_prompt_target_rows"] == 2
+    assert measurements["embedded_empty_or_malformed_rows"] == 3
+    assert measurements["prompt_target_rows"] == 2
+    assert measurements["structured_target_rows"] == 0
+    assert evidence["data_coverage_gap"] is True
+    assert measurements["supervised_instruction_coverage_present"] is True
+    assert measurements["supervised_structure_coverage_present"] is False
+
+
+def test_embedded_json_object_targets_count_but_unparseable_json_does_not() -> None:
+    rows = [
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n{"answer":"Mars","confidence":1.0}'},
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n{"broken":}'},
+        {"text":'<|prompt|>\nRespond in JSON\n<|target|>\n[1,2]'},
+    ]
+    evidence, measurements = analyze_dataset_task_coverage(
+        rows, _eval_pack(), source_ref="synthetic-json-contract-test",
+    )
+    assert measurements["embedded_valid_prompt_target_rows"] == 3
+    assert measurements["embedded_structured_target_rows"] == 1
+    assert measurements["structured_target_rows"] == 1
+    assert evidence["data_coverage_gap"] is False
+
+
+def test_duplicate_field_and_embedded_supervision_does_not_double_count_a_row() -> None:
+    evidence, measurements = analyze_dataset_task_coverage(
+        [{"prompt":"Answer", "target":'{"ok":true}',
+          "text":'<|prompt|>\nAnswer\n<|target|>\n{"ok":true}'}],
+        _eval_pack(), source_ref="synthetic-overlap-contract-test",
+    )
+    assert measurements["explicit_prompt_target_rows"] == 1
+    assert measurements["embedded_valid_prompt_target_rows"] == 1
+    assert measurements["prompt_target_rows"] == 1
+    assert measurements["structured_target_rows"] == 1
+    assert evidence["data_coverage_gap"] is False
+
+
+def test_marker_presence_is_not_sufficient_if_prompt_or_target_is_empty() -> None:
+    evidence, measurements = analyze_dataset_task_coverage(
+        [
+            {"text":"<|prompt|>\n\n<|target|>\nanswer"},
+            {"text":"<|prompt|>\nprompt\n<|target|>\n"},
+            {"prompt":"", "target":"nonempty", "text":"unrelated"},
+        ],
+        _eval_pack(), source_ref="synthetic-empty-contract-test",
+    )
+    assert measurements["embedded_marker_pair_rows"] == 2
+    assert measurements["embedded_valid_prompt_target_rows"] == 0
+    assert measurements["explicit_prompt_target_rows"] == 1
+    assert measurements["prompt_target_rows"] == 0
+    assert measurements["structured_target_rows"] == 0
+    assert evidence["data_coverage_gap"] is True
