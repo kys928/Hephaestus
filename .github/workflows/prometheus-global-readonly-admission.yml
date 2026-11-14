@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 056a84fcc0b35b822fc98b0dce476503e247d872
+          ref: 1686293b99b38e3c4abcbaa85623db4351d51fb0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +47,7 @@ jobs:
           credit,spend=balance()
           assert credit > Decimal("1.50"),"prepaid balance insufficient"
           assert spend >= 0
-          prefix=campaign_prefix("prometheus-unbound-global-20261114-01","056a84fcc0b35b822fc98b0dce476503e247d872")
+          prefix=campaign_prefix("prometheus-unbound-global-20261114-01","1686293b99b38e3c4abcbaa85623db4351d51fb0")
           existing=matching_pods(prefix)
           assert not existing,"campaign Pod already exists"
           print("PROMETHEUS_READ_ONLY_GLOBAL_ID_VERIFIED=true",flush=True)
