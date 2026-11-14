@@ -205,3 +205,33 @@ def test_review_publisher_cannot_write_if_remote_main_changed(tmp_path,monkeypat
             verified_trial={"status":"reviewable_patch","red_to_green_verified":True,
                             "replacement_sha256":"sha256:"+"b"*64})
     assert len(calls)==1 and calls[0][0]=="GET"
+
+
+
+def test_review_publisher_uses_only_exact_head_branch_content_and_draft_pr(tmp_path,monkeypatch):
+    import base64
+    repo,source,scope=_repo(tmp_path)
+    patch=_candidate(source.read_bytes(),scope,"sha256:"+"a"*64)
+    publisher=GitHubReviewBranchPublisher("example","Hephaestus","test-dedicated-token")
+    calls=[]
+    def fake_request(self,method,route,body=None):
+        calls.append((method,route,body))
+        if route.endswith("/git/ref/heads/main"):
+            return {"object":{"sha":scope.base_commit}}
+        if method=="GET" and "/contents/" in route:
+            return {"content":base64.b64encode(source.read_bytes()).decode("ascii"),
+                    "sha":"git-blob-original"}
+        if route.endswith("/pulls"):
+            return {"html_url":"https://github.com/example/Hephaestus/pull/101"}
+        return {"ok":True}
+    monkeypatch.setattr(GitHubReviewBranchPublisher,"_request",fake_request)
+    url=publisher.publish(scope=scope,candidate=patch,
+            verified_trial={"status":"reviewable_patch","red_to_green_verified":True,
+                            "replacement_sha256":"sha256:"+hashlib.sha256(
+                                patch.replacement.encode()).hexdigest(),
+                            "trial_ref":"sha256:"+"b"*64})
+    assert url=="https://github.com/example/Hephaestus/pull/101"
+    assert [item[0] for item in calls]==["GET","POST","GET","PUT","POST"]
+    assert calls[-1][2]["draft"] is True
+    assert all("/merge" not in route for _,route,_ in calls)
+    assert calls[-2][2]["branch"].startswith("repair/diagnosis-")
