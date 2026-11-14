@@ -18,4 +18,4 @@ jobs:
       - run: python -m pip install '.[test]'
       - run: python -m compileall -q src/hephaestus tests
       - name: Evidence-calibration and frozen specialist gate regressions
-        run: python -m pytest -q tests/test_prometheus_diagnosis_evidence_calibration.py tests/test_prometheus_scientific_decision.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_global_supervised_launch.py
+        run: python -m pytest -q
