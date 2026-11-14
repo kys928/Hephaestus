@@ -1,0 +1,32 @@
+name: Prometheus Unbound global CPU safety gate (one-shot branch)
+on:
+  push:
+    branches: [ops/prometheus-unbound-global-20261114]
+    paths:
+      - .github/workflows/prometheus-global-cpu-safety.yml
+permissions:
+  contents: read
+concurrency:
+  group: prometheus-global-cpu-gates-20261114
+  cancel-in-progress: false
+jobs:
+  test:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[test]' requests
+      - name: Compile all new code and perform source-format checks
+        run: |
+          python -m py_compile src/hephaestus/development/prometheus_global_supervision.py
+          python -m py_compile src/hephaestus/development/prometheus_global_launcher.py
+          python -m py_compile src/hephaestus/development/prometheus_global_watchdog.py
+          python -m py_compile src/hephaestus/development/prometheus_global_envelope.py
+          python -m py_compile src/hephaestus/development/prometheus_gpu_campaign.py
+      - name: Offline only, negative path tests
+        run: |
+          pytest -q tests/test_prometheus_global_supervised_launch.py tests/test_prometheus_global_adapter_source.py tests/test_prometheus_gpu_provider_guard.py tests/test_prometheus_scientific_decision.py
