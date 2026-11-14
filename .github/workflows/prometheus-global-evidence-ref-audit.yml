@@ -52,6 +52,12 @@ jobs:
             "allowed_lengths":[len(x) if isinstance(x,str) else None for x in valid],
             "citation_equals_allowed_after_trim":sum(isinstance(x,str) and x.strip() in valid for x in cited),
             "contains_empty":any(not isinstance(x,str) or not x for x in cited),
+            "full_allowed_digest_occurrence_counts":[sum(ref in text for text in cited if isinstance(text,str)) for ref in valid],
+            "embedded_sha256_reference_count":[len(re.findall(r"sha256:[0-9a-f]{64}",text)) for text in cited if isinstance(text,str)],
+            "sha256_prefix_occurrence_counts":[text.count("sha256:") for text in cited if isinstance(text,str)],
+
           }
           print("PROMETHEUS_EVIDENCE_CITATION_AUDIT="+json.dumps(doc,sort_keys=True),flush=True)
           PY
+
+# Additional hash-only citation repair feasibility probe.
