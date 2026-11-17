@@ -205,3 +205,19 @@ def test_phase_handoff_requires_real_parent_receipt_even_if_development_sandbox_
         checkout=checkout,case=case,run_id="hand-off",lineage_id="dev-lineage")
     with pytest.raises(PermissionError,match="no verified result"):
         qualification.verify_review_handoff(result,require_real_parent=True)
+
+
+def test_temporary_coder_declaration_is_base_only_and_not_certified():
+    declaration=json.loads(
+        Path("configs/models/provisional_ministral_coder_v1.json").read_text())
+    assert declaration["status"]=="temporary_uncertified_not_promoted"
+    assert declaration["role"]=="coder"
+    assert declaration["model_id"]==PARENT_ID
+    assert declaration["parent_revision"]==PARENT_REVISION
+    assert declaration["source_parent_role"]=="planner"
+    assert declaration["adapter"] is None
+    assert declaration["reuse_planner_lora"] is False
+    assert declaration["automatic_role_dispatch_enabled"] is False
+    assert declaration["gates"]["model_inference_verified"] is False
+    assert declaration["gates"]["full_system_certified"] is False
+    assert declaration["repair_scope"]["maximum_attempts_default"]==1
