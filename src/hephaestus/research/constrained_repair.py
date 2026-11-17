@@ -219,8 +219,16 @@ def _prepare_copy(source_root: Path, target: Path) -> None:
                 raise RepairBoundaryError("symlink inside repair source checkout")
             if any((current/item).is_symlink() for item in dirs):
                 raise RepairBoundaryError("symlink inside repair source checkout")
-            dirs[:] = [item for item in dirs if item not in _FORBIDDEN and
-                      not item.startswith(".") and item != "__pycache__"]
+            def admitted_directory(name: str) -> bool:
+                if name.startswith(".") or name=="__pycache__":
+                    return False
+                relative=(current/name).relative_to(source_root).as_posix()
+                # "state" is a trusted first-party *Python package* when
+                # located at src/hephaestus/state. It is not a runtime store.
+                if relative=="src/hephaestus/state":
+                    return True
+                return name not in _FORBIDDEN
+            dirs[:] = [item for item in dirs if admitted_directory(item)]
             for name in files:
                 path=current/name
                 if path.is_symlink():
