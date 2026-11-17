@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Callable, Mapping, Protocol
 import json
 import re
 
@@ -237,6 +237,7 @@ class CertifiedDiagnosisObserver:
 
     reasoner: object
     stage_name: str = "smoke_test"
+    resource_guard: Callable[[], None] | None = None
 
     def observe(self, *, objective: ResearchObjective, observation: Mapping[str, object],
                 seed: int, run_id: str, lineage_id: str) -> Mapping[str, object]:
@@ -263,8 +264,12 @@ class CertifiedDiagnosisObserver:
         registry = EvidenceRegistry({ref: EvidenceRecord(
             ref=ref, kind="research_source_observation", run_id=run_id,
             lineage_id=lineage_id, sha256=ref, observed_sha256=ref)})
+        if self.resource_guard is not None:
+            self.resource_guard()
         result = self.reasoner.propose(task, registry, context=DeterministicRoleContext(
             run_id=run_id, lineage_id=lineage_id, stage_name=self.stage_name), seed=seed)
+        if self.resource_guard is not None:
+            self.resource_guard()
         return {
             "decision": result.answer.decision,
             "action": result.answer.action,
