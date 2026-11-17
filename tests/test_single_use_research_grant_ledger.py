@@ -76,3 +76,15 @@ def test_grant_cross_run_replay_is_blocked_even_when_completed(tmp_path):
         ledger.run_once(grant_signature_sha256="sha256:"+"f"*64,
             run_id="other-run",lineage_id="lineage-a",maximum_calls=6,
             execute=lambda:_valid_report())
+
+
+
+def test_compute_does_not_hold_state_writer_fence_during_long_inference(tmp_path):
+    ledger=_ledger(tmp_path)
+    def running():
+        # A concurrent retry observes the durable reservation immediately;
+        # it does NOT deadlock on a global write lock around GPU inference.
+        with pytest.raises(PermissionError,match="new independent authorization"):
+            _request(ledger,lambda:_valid_report())
+        return _valid_report()
+    assert _request(ledger,running)==_valid_report()
