@@ -7,7 +7,7 @@ a *draft review PR only*. No unrestricted loops or mutation of running code.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import Mapping
@@ -41,6 +41,7 @@ class LoopbackOllamaPatchModel:
     model: str
     endpoint: str = "http://127.0.0.1:11434/api/generate"
     timeout_seconds: int = 120
+    last_receipt: dict[str,object] | None = field(default=None,init=False,repr=False)
 
     def generate_patch_json(self, prompt: str) -> str:
         if (not re.fullmatch(r"[A-Za-z0-9._:/-]{1,128}",self.model)
@@ -49,7 +50,7 @@ class LoopbackOllamaPatchModel:
         request=urllib.request.Request(self.endpoint,
             data=canonical_bytes({
                 "model":self.model,"prompt":prompt,"stream":False,
-                "format":"json","options":{"temperature":0,"num_predict":8192},
+                "format":"json","options":{"temperature":0,"num_predict":1024},
             }),
             headers={"Content-Type":"application/json"},
             method="POST")
@@ -61,8 +62,24 @@ class LoopbackOllamaPatchModel:
         if len(raw)>150_000:
             raise RepairBoundaryError("local coder response too large")
         doc=json.loads(raw)
-        if not isinstance(doc,dict) or not isinstance(doc.get("response"),str):
-            raise RepairBoundaryError("local coder response is not bounded text")
+        if (not isinstance(doc,dict) or doc.get("model")!=self.model
+                or doc.get("done") is not True
+                or not isinstance(doc.get("response"),str)
+                or type(doc.get("eval_count")) is not int
+                or doc["eval_count"]<1
+                or len(doc["response"])>16000):
+            raise RepairBoundaryError("local coder inference receipt lacks matching actual model completion")
+        self.last_receipt={
+            "schema":"real-local-coder-inference.v1",
+            "model":doc["model"],
+            "prompt_sha256":"sha256:"+sha256(prompt.encode()).hexdigest(),
+            "output_sha256":"sha256:"+sha256(doc["response"].encode()).hexdigest(),
+            "generated_token_count":doc["eval_count"],
+            "prompt_eval_count":doc.get("prompt_eval_count"),
+            "total_duration_ns":doc.get("total_duration"),
+            "source":"loopback-ollama-json-generator",
+            "independent_scientific_certification":False,
+        }
         return doc["response"]
 
 
