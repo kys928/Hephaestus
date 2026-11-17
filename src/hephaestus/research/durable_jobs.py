@@ -25,6 +25,7 @@ from .constrained_repair import (
     RepairBoundaryError, OfflineDockerPytestRunner, GitHubReviewBranchPublisher,
 )
 from .self_repair_controller import AutonomousDiagnosisRepairEpisode, LoopbackOllamaPatchModel
+from .live_runtime import AdmittedCudaResearch
 
 
 OBJECTIVE_SCHEMA="hephaestus-research-objective-job.v1"
@@ -71,7 +72,7 @@ class ResearchObjectiveJobHandler:
     """A real DurableWorker handler with explicit externally built capabilities."""
 
     artifacts: ArtifactStore
-    research: EvaluationOnlyResearchJob | None = None
+    research: EvaluationOnlyResearchJob | AdmittedCudaResearch | None = None
     repair: AutonomousDiagnosisRepairEpisode | None = None
     trusted_checkout: Path | None = None
     production_mode: bool = True
@@ -94,9 +95,11 @@ class ResearchObjectiveJobHandler:
         if envelope["kind"]=="diagnosis_evaluation_only":
             if self.research is None:
                 raise RepairBoundaryError("real bounded evaluation capability not configured")
-            if (self.production_mode
-                    and type(self.research.observer) is not CertifiedDiagnosisObserver):
-                raise RepairBoundaryError("production evaluation cannot use injected fake observer")
+            if self.production_mode:
+                if (type(self.research) is not AdmittedCudaResearch
+                        or type(self.research.job.observer) is not CertifiedDiagnosisObserver):
+                    raise RepairBoundaryError(
+                        "production evaluation requires signed live CUDA study and original frozen observer")
             result=self.research.run(question,run_id=job.run_id,lineage_id=envelope["lineage_id"])
         elif envelope["kind"]=="diagnosis_code_repair":
             if self.repair is None or self.trusted_checkout is None:
