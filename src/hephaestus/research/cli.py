@@ -25,13 +25,50 @@ def main(argv: list[str] | None = None) -> int:
     submit.add_argument("--objective",required=True)
     submit.add_argument("--run-id",required=True)
     submit.add_argument("--lineage-id",required=True)
+    discover=child.add_parser("discover",
+        help="read-only deterministic search across independently SHA-pinned source catalogs")
+    discover.add_argument("--objective",required=True)
+    discover.add_argument("--catalog",action="append",nargs=2,
+        metavar=("PATH","INDEPENDENT_SHA256"),required=True)
+    discover.add_argument("--required-scope")
+    serve=child.add_parser("serve-signed-cuda",
+        help="opt-in, actual frozen-role CUDA worker; requires external signed grant")
+    serve.add_argument("--run-id",required=True)
+    serve.add_argument("--lineage-id",required=True)
+    serve.add_argument("--source-catalog",required=True,type=Path)
+    serve.add_argument("--catalog-sha256",required=True)
+    serve.add_argument("--signed-grant",required=True,type=Path)
+    serve.add_argument("--trusted-public-key",required=True,type=Path)
+    serve.add_argument("--public-key-sha256",required=True)
+    serve.add_argument("--role-registry-sha256",required=True)
+    serve.add_argument("--eval-pack",required=True,type=Path)
+    serve.add_argument("--model-cache",required=True,type=Path)
+    serve.add_argument("--adapter-cache",required=True,type=Path)
+    serve.add_argument("--max-idle-polls",type=int,default=None)
     args=parser.parse_args(argv)
     if not args.state_root.is_absolute() or args.state_root.is_symlink():
         parser.error("--state-root must be a non-symlink absolute durable path")
     root=args.state_root
-    artifacts=FileSystemArtifactStore(root/"artifacts")
-    queue=SQLiteJobQueue(root/"state.db")
+    if args.command=="discover":
+        from .reviewed_discovery import ReviewedEvidenceDiscovery
+        index=ReviewedEvidenceDiscovery.open(tuple(
+            (Path(path),sha) for path,sha in args.catalog))
+        selection=index.search(args.objective,required_scope=args.required_scope)
+        print(json.dumps({
+            "status":"reviewed_source_pair_selected",
+            "catalog_sha256":selection.catalog.catalog_sha256,
+            "study_scope":selection.original.study_scope,
+            "source_ids":[selection.original.source_id,selection.candidate.source_id],
+            "source_sha256_refs":[selection.original.sha256_ref,selection.candidate.sha256_ref],
+            "selection_kind":selection.selection_kind,
+            "actual_source_bytes_verified":False,
+            "independent_gold_label_established":False,
+            "compute_authorized":False,
+        },sort_keys=True))
+        return 0
     if args.command=="submit":
+        artifacts=FileSystemArtifactStore(root/"artifacts")
+        queue=SQLiteJobQueue(root/"state.db")
         job=submit_research_objective(
             question=args.objective,run_id=args.run_id,
             lineage_id=args.lineage_id,queue=queue,artifacts=artifacts)
@@ -43,6 +80,26 @@ def main(argv: list[str] | None = None) -> int:
             "training_authorized":False,
             "automatic_merge_authorized":False,
         },sort_keys=True))
+        return 0
+    if args.command=="serve-signed-cuda":
+        from .deploy_worker import DeployedResearchWorkerScope, compose_live_queue_worker
+        if args.max_idle_polls is not None and args.max_idle_polls<1:
+            parser.error("--max-idle-polls must be positive")
+        scope=DeployedResearchWorkerScope(
+            state_root=root,run_id=args.run_id,lineage_id=args.lineage_id,
+            source_catalog_path=args.source_catalog,
+            pinned_source_catalog_sha256=args.catalog_sha256,
+            signed_grant_path=args.signed_grant,
+            trusted_public_key_path=args.trusted_public_key,
+            pinned_public_key_sha256=args.public_key_sha256,
+            trusted_role_registry_sha256=args.role_registry_sha256,
+            eval_pack_path=args.eval_pack,
+            original_model_cache=args.model_cache,
+            original_adapter_cache=args.adapter_cache,
+            s3_endpoint="https://s3api-eu-cz-1.runpod.io/",
+            s3_region="EU-CZ-1")
+        worker=compose_live_queue_worker(scope)
+        worker.run_forever(maximum_idle_polls=args.max_idle_polls)
         return 0
     return 2
 

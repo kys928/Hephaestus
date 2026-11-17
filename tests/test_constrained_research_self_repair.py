@@ -235,3 +235,19 @@ def test_review_publisher_uses_only_exact_head_branch_content_and_draft_pr(tmp_p
     assert calls[-1][2]["draft"] is True
     assert all("/merge" not in route for _,route,_ in calls)
     assert calls[-2][2]["branch"].startswith("repair/diagnosis-")
+
+
+
+def test_sandbox_copy_preserves_first_party_state_python_package_but_not_runtime_state(tmp_path):
+    from hephaestus.research.constrained_repair import _prepare_copy
+    repo,source,scope=_repo(tmp_path)
+    state=repo/"src"/"hephaestus"/"state"
+    state.mkdir(parents=True)
+    (state/"__init__.py").write_text("# legitimate Python code\n")
+    (repo/"state").mkdir()
+    (repo/"state"/"private.json").write_text('{"secret":"never-copy"}')
+    destination=tmp_path/"clean-copy"
+    destination.mkdir()
+    _prepare_copy(repo,destination)
+    assert (destination/"src"/"hephaestus"/"state"/"__init__.py").exists()
+    assert not (destination/"state").exists()

@@ -115,3 +115,77 @@ def test_failed_candidate_does_not_publish_review_pr(tmp_path):
     assert result["status"]=="repair_candidate_rejected"
     assert result["pull_request"] is None
     assert coder.called==1 and not publisher.calls
+
+
+
+def test_autonomous_repair_uses_failed_sandbox_evidence_for_one_bounded_retry(tmp_path):
+    checkout,source,scope=_repo(tmp_path)
+    class FeedbackCoder:
+        def __init__(self):
+            self.called=0
+            self.saw_feedback=False
+        def generate_patch_json(self,prompt):
+            import re
+            self.called+=1
+            path=re.search(r"APPROVED_PATH=([^\n]+)",prompt).group(1)
+            sha=re.search(r"EXPECTED_SHA256=(sha256:[a-f0-9]{64})",prompt).group(1)
+            ref=re.search(r"EVIDENCE_REF=(sha256:[a-f0-9]{64})",prompt).group(1)
+            if self.called==1:
+                replacement="def diagnostic_value():\n    unused = True\n    return 'wrong'\n"
+            else:
+                assert "candidate_test_status" in prompt
+                assert "original regression remains red" in prompt
+                self.saw_feedback=True
+                replacement="def diagnostic_value():\n    return 'fixed'\n"
+            return json.dumps({"path":path,"expected_source_sha256":sha,
+                "replacement":replacement,"evidence_ref":ref,
+                "hypothesis":"An independently failing original test requires the exact observed value."})
+    coder=FeedbackCoder()
+    controller,_,runner,publisher=_controller(tmp_path,coder=coder)
+    controller.maximum_model_attempts=2
+    result=controller.run("Investigate and repair the Diagnostician coverage-probe regression",
+                          checkout=checkout)
+    assert result["model_invocations"]==2
+    assert result["status"]=="draft_review_pr_created"
+    assert len(result["trial_refs"])==2
+    assert coder.saw_feedback
+    assert len(runner.runs)==5
+    assert len(publisher.calls)==1
+    assert source.read_text().endswith("return 'wrong'\n")
+
+
+def test_autonomous_repair_does_not_loop_on_same_failed_patch(tmp_path):
+    checkout,source,scope=_repo(tmp_path)
+    class RepeatingCoder:
+        def __init__(self):
+            self.called=0
+        def generate_patch_json(self,prompt):
+            import re
+            self.called+=1
+            path=re.search(r"APPROVED_PATH=([^\n]+)",prompt).group(1)
+            sha=re.search(r"EXPECTED_SHA256=(sha256:[a-f0-9]{64})",prompt).group(1)
+            ref=re.search(r"EVIDENCE_REF=(sha256:[a-f0-9]{64})",prompt).group(1)
+            return json.dumps({"path":path,"expected_source_sha256":sha,
+                "replacement":"def diagnostic_value():\n    unused = True\n    return 'wrong'\n",
+                "evidence_ref":ref,
+                "hypothesis":"The recorded incorrect value should be replaced with a corrected value."})
+    coder=RepeatingCoder()
+    controller,_,runner,publisher=_controller(tmp_path,coder=coder)
+    controller.maximum_model_attempts=2
+    result=controller.run("Investigate and repair the Diagnostician coverage-probe regression",
+                          checkout=checkout)
+    assert result["status"]=="repair_candidate_rejected"
+    assert result["model_invocations"]==2
+    assert len(result["trial_refs"])==1
+    assert len(runner.runs)==3
+    assert len(publisher.calls)==0
+
+
+def test_autonomous_repair_has_finite_iteration_cap(tmp_path):
+    checkout,source,scope=_repo(tmp_path)
+    controller,_,runner,publisher=_controller(tmp_path)
+    controller.maximum_model_attempts=99
+    with pytest.raises(RepairBoundaryError,match="one or two"):
+        controller.run("Investigate and repair Diagnostician coverage reliability",
+                       checkout=checkout)
+    assert runner.runs==[]
