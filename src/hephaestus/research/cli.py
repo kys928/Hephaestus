@@ -25,6 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     submit.add_argument("--objective",required=True)
     submit.add_argument("--run-id",required=True)
     submit.add_argument("--lineage-id",required=True)
+    discover=child.add_parser("discover",
+        help="read-only deterministic search across independently SHA-pinned source catalogs")
+    discover.add_argument("--objective",required=True)
+    discover.add_argument("--catalog",action="append",nargs=2,
+        metavar=("PATH","INDEPENDENT_SHA256"),required=True)
+    discover.add_argument("--required-scope")
     serve=child.add_parser("serve-signed-cuda",
         help="opt-in, actual frozen-role CUDA worker; requires external signed grant")
     serve.add_argument("--run-id",required=True)
@@ -43,9 +49,26 @@ def main(argv: list[str] | None = None) -> int:
     if not args.state_root.is_absolute() or args.state_root.is_symlink():
         parser.error("--state-root must be a non-symlink absolute durable path")
     root=args.state_root
-    artifacts=FileSystemArtifactStore(root/"artifacts")
-    queue=SQLiteJobQueue(root/"state.db")
+    if args.command=="discover":
+        from .reviewed_discovery import ReviewedEvidenceDiscovery
+        index=ReviewedEvidenceDiscovery.open(tuple(
+            (Path(path),sha) for path,sha in args.catalog))
+        selection=index.search(args.objective,required_scope=args.required_scope)
+        print(json.dumps({
+            "status":"reviewed_source_pair_selected",
+            "catalog_sha256":selection.catalog.catalog_sha256,
+            "study_scope":selection.original.study_scope,
+            "source_ids":[selection.original.source_id,selection.candidate.source_id],
+            "source_sha256_refs":[selection.original.sha256_ref,selection.candidate.sha256_ref],
+            "selection_kind":selection.selection_kind,
+            "actual_source_bytes_verified":False,
+            "independent_gold_label_established":False,
+            "compute_authorized":False,
+        },sort_keys=True))
+        return 0
     if args.command=="submit":
+        artifacts=FileSystemArtifactStore(root/"artifacts")
+        queue=SQLiteJobQueue(root/"state.db")
         job=submit_research_objective(
             question=args.objective,run_id=args.run_id,
             lineage_id=args.lineage_id,queue=queue,artifacts=artifacts)
