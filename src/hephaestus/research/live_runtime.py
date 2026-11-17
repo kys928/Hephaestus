@@ -130,11 +130,30 @@ class AdmittedCudaResearch:
         if not torch.cuda.is_available():
             raise PermissionError("signed CUDA study requires actual CUDA availability")
         from .grant_usage import SingleUseComputeGrantLedger
-        ledger=SingleUseComputeGrantLedger(self.job.repository,self.job.artifacts)
-        return ledger.run_once(
-            grant_signature_sha256=self.grant.signature_sha256,
-            run_id=run_id,lineage_id=lineage_id,maximum_calls=count,
-            execute=lambda:self.job.run(objective,run_id=run_id,lineage_id=lineage_id))
+        from time import monotonic
+        elapsed_start=monotonic()
+        observer=self.job.observer
+        if observer.resource_guard is not None:
+            raise PermissionError("live research observer has an untrusted preexisting resource guard")
+
+        def guard() -> None:
+            self.grant.check(run_id=run_id,lineage_id=lineage_id,calls=count,
+                catalog_sha256=self.job.catalog.catalog_sha256,
+                registry_sha256=self.registry_sha256)
+            if monotonic()-elapsed_start>self.grant.document["maximum_gpu_seconds"]:
+                raise PermissionError("signed research compute wallclock budget exceeded")
+
+        # A watchdog outside the model process must also enforce this deadline;
+        # checks around each inference alone cannot interrupt a hung GPU kernel.
+        observer.resource_guard=guard
+        try:
+            ledger=SingleUseComputeGrantLedger(self.job.repository,self.job.artifacts)
+            return ledger.run_once(
+                grant_signature_sha256=self.grant.signature_sha256,
+                run_id=run_id,lineage_id=lineage_id,maximum_calls=count,
+                execute=lambda:self.job.run(objective,run_id=run_id,lineage_id=lineage_id))
+        finally:
+            observer.resource_guard=None
 
 
 def compose_frozen_diagnosis_research(*, grant: SignedResearchComputeGrant,
