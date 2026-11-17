@@ -44,12 +44,14 @@ class ReviewedRepairCase:
 
     source_commit: str
     source_sha256: str
+    fixed_test_sha256: str
     failing_test_nodeid: str
     regression_entrypoint: str
 
     def validate(self) -> None:
         if (not _COMMIT.fullmatch(self.source_commit)
                 or not _SHA.fullmatch(self.source_sha256)
+                or not _SHA.fullmatch(self.fixed_test_sha256)
                 or not _TEST_NODE.fullmatch(self.failing_test_nodeid)
                 or self.regression_entrypoint!="analyze_dataset_task_coverage"):
             raise RepairBoundaryError("unrecognized reviewed Diagnostician repair case")
@@ -81,6 +83,11 @@ class ProvisionalCoderQualification:
         actual=source.read_bytes()
         if "sha256:"+sha256(actual).hexdigest()!=case.source_sha256:
             raise RepairBoundaryError("source has changed since independent repair review")
+        fixed_test=original_root/_REGRESSION
+        if (not fixed_test.is_file() or fixed_test.is_symlink()
+                or "sha256:"+sha256(fixed_test.read_bytes()).hexdigest()
+                     !=case.fixed_test_sha256):
+            raise RepairBoundaryError("independently reviewed fixed regression test changed")
         head=subprocess.run(["git","-C",str(original_root),"rev-parse","HEAD"],
             capture_output=True,text=True,timeout=10,check=False)
         dirty=subprocess.run(["git","-C",str(original_root),"status","--porcelain",
@@ -94,6 +101,7 @@ class ProvisionalCoderQualification:
         key="qual-"+sha256(canonical_bytes({
             "case":case.__dict__ if hasattr(case,"__dict__") else {
                 "source_commit":case.source_commit,"source_sha256":case.source_sha256,
+                "fixed_test_sha256":case.fixed_test_sha256,
                 "failing_test_nodeid":case.failing_test_nodeid,
                 "regression_entrypoint":case.regression_entrypoint},
             "objective":objective.strip(),"run_id":run_id,"lineage_id":lineage_id,
@@ -144,6 +152,7 @@ class ProvisionalCoderQualification:
                 "status":"verified_failed",
                 "source_commit":case.source_commit,
                 "source_sha256":case.source_sha256,
+                "fixed_test_sha256":case.fixed_test_sha256,
                 "target_file":_SOURCE,"fixed_test":_REGRESSION,
                 "failing_test_nodeid":case.failing_test_nodeid,
                 "regression_entrypoint":case.regression_entrypoint,
@@ -158,6 +167,7 @@ class ProvisionalCoderQualification:
                 "schema":"admitted-repair-strategy.v1",
                 "source_commit":case.source_commit,
                 "source_sha256":case.source_sha256,
+                "fixed_test_sha256":case.fixed_test_sha256,
                 "verified_fault_ref":evidence_ref,
                 "allowed_file":_SOURCE,
                 "fixed_test":_REGRESSION,
@@ -237,6 +247,7 @@ class ProvisionalCoderQualification:
                     "schema":"coder-review-handoff.v1",
                     "source_commit":case.source_commit,
                     "source_sha256":case.source_sha256,
+                    "fixed_test_sha256":case.fixed_test_sha256,
                     "run_id":run_id,"lineage_id":lineage_id,
                     "strategy_ref":strategy_ref,"fault_ref":evidence_ref,
                     "trial_ref":trial["trial_ref"],
@@ -279,7 +290,8 @@ class ProvisionalCoderQualification:
             "status":report["status"]})
         return report
 
-    def verify_review_handoff(self, report: dict[str,object]) -> dict[str,object]:
+    def verify_review_handoff(self, report: dict[str,object], *,
+                              require_real_parent: bool=True) -> dict[str,object]:
         ref=report.get("verified_review_handoff_ref")
         if not isinstance(ref,str) or not _SHA.fullmatch(ref):
             raise PermissionError("no verified result may cross phase boundary")
@@ -291,6 +303,18 @@ class ProvisionalCoderQualification:
                 or handoff["full_stack_certified"] is not False
                 or handoff["automated_merge_authorized"] is not False):
             raise PermissionError("review handoff has changed identity or authority")
+        if require_real_parent:
+            if (handoff.get("authentic_parent_coder_inference") is not True
+                    or not isinstance(handoff.get("coder_inference_receipt_ref"),str)
+                    or not _SHA.fullmatch(handoff["coder_inference_receipt_ref"])):
+                raise PermissionError("temporary Coder parent has no verified original runtime receipt")
+            raw_receipt=read_verified_json(self.artifacts,handoff["coder_inference_receipt_ref"])
+            if (raw_receipt.get("schema")!="provisional-parent-coder-inference.v1"
+                    or raw_receipt.get("model_id")!=PARENT_ID
+                    or raw_receipt.get("revision")!=PARENT_REVISION
+                    or raw_receipt.get("adapter_used") is not False
+                    or raw_receipt.get("certified_coder") is not False):
+                raise PermissionError("provisional original-parent inference receipt not admissible")
         trial=read_verified_json(self.artifacts,str(handoff["trial_ref"]))
         strategy=read_verified_json(self.artifacts,str(handoff["strategy_ref"]))
         fault=read_verified_json(self.artifacts,str(handoff["fault_ref"]))
@@ -299,6 +323,8 @@ class ProvisionalCoderQualification:
                 or trial.get("replacement_sha256")!=handoff["accepted_candidate_sha256"]
                 or trial.get("verified_fault_ref")!=handoff["fault_ref"]
                 or strategy.get("verified_fault_ref")!=handoff["fault_ref"]
+                or strategy.get("fixed_test_sha256")!=handoff["fixed_test_sha256"]
+                or fault.get("fixed_test_sha256")!=handoff["fixed_test_sha256"]
                 or strategy.get("decision")!="minimal_exact_span"
                 or fault.get("failing_test_nodeid")!=handoff["test_nodeid"]):
             raise PermissionError("review handoff lacks original authenticated red-to-green evidence")
