@@ -132,7 +132,8 @@ class ProvisionalCoderQualification:
         bad=(baseline.status!="failed" or baseline.exit_code!=1
              or baseline.worker!="offline-docker-pytest.v1"
              or case.failing_test_nodeid not in output
-             or "AssertionError" not in output
+             or not ("AssertionError" in output
+                     or re.search(r"(?m)^E\\s+assert\\b",output))
              or any(text in output for text in (
                  "ERROR collecting","ImportError","ModuleNotFoundError",
                  "INTERNALERROR","no tests ran","OSError:")))
