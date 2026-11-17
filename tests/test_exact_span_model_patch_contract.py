@@ -66,3 +66,32 @@ def test_diagnostic_scope_cannot_be_broadened_to_control_policy():
     bad=RepairScope(scope.base_commit,"src/hephaestus/control/orchestrator.py",scope.fixed_test)
     with pytest.raises(RepairBoundaryError):
         _proposal(original,bad)
+
+
+
+def test_independently_verified_entrypoint_limits_coder_context_without_editing_other_functions():
+    original=(b"def observed():\n    return str(None)\n"
+              b"def unrelated():\n    return 555\n")
+    scope=RepairScope("a"*40,"src/hephaestus/diagnosis/probes.py",
+                      "tests/test_targeted_post_failure_probes.py")
+    class InspectingCoder:
+        def generate_patch_json(self,prompt):
+            assert "def observed():" in prompt
+            assert "def unrelated():" not in prompt
+            return json.dumps({
+                "old_text":"return str(None)", "new_text":"return ''",
+                "hypothesis":"Absent optional value has been converted into the literal None string.",
+            })
+    candidate=ExactSpanPatchProposer(InspectingCoder()).propose(
+        scope=scope,original=original,
+        verified_fault={"status":"verified_failed","target_file":scope.allowed_file,
+                        "regression_entrypoint":"observed",
+                        "observed_text_rows":1,"expected_text_rows":0},
+        evidence_ref="sha256:"+"b"*64)
+    assert "def unrelated():" in candidate.replacement
+    with pytest.raises(RepairBoundaryError,match="entrypoint"):
+        ExactSpanPatchProposer(InspectingCoder()).propose(
+            scope=scope,original=original,
+            verified_fault={"status":"verified_failed","target_file":scope.allowed_file,
+                            "regression_entrypoint":"not_a_verified_function"},
+            evidence_ref="sha256:"+"b"*64)
