@@ -1,0 +1,119 @@
+name: Provisional Coder real Docker bounded failure feedback
+on:
+  push:
+    branches: [ops/provisional-coder-docker-retry-20261117]
+    paths: [.github/workflows/provisional-coder-docker-acceptance.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = "5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - name: Build independent unprivileged sandbox image
+        run: |
+          docker build -t hephaestus-provisional-coder-check:local - <<'DOCKER'
+          FROM python:3.12-slim
+          RUN pip install --no-cache-dir pytest==8.4.2
+          DOCKER
+      - name: Prove genuine fixed-test red-to-green and forbid fake-model certification
+        run: |
+          python - <<'PY'
+          import hashlib,io,json,shutil,subprocess,tempfile
+          from pathlib import Path
+          from hephaestus.research.provisional_qualification import ReviewedRepairCase,ProvisionalCoderQualification
+          from hephaestus.research.constrained_repair import OfflineDockerPytestRunner
+          from hephaestus.research.exact_span_repair import ExactSpanPatchProposer
+          from hephaestus.storage.filesystem import FileSystemArtifactStore
+          from hephaestus.storage.sqlite import SQLiteStateRepository
+
+          source_rel="src/hephaestus/diagnosis/probes.py"
+          test_rel="tests/test_targeted_post_failure_probes.py"
+          nodeid=test_rel+"::test_null_text_not_counted"
+          bad='text = str(row.get("text", ""))'
+          corrected='text = row.get("text") or ""'
+
+          class DeclaredFakeCoderOnly:
+              def __init__(self):
+                  self.calls=0
+              def generate_patch_json(self,prompt):
+                  self.calls+=1
+                  assert "VERIFIED_FAILING_REGRESSION" in prompt
+                  if self.calls==1:
+                      replacement='text = str(row.get("text", "")) + " "'
+                  else:
+                      assert "previous_failed_patch_tests" in prompt
+                      replacement=corrected
+                  return json.dumps({
+                      "old_text":bad,"new_text":replacement,
+                      "hypothesis":"Missing source text must not be counted as a stringified None value.",
+                  })
+
+          docker=shutil.which("docker")
+          image=subprocess.run([docker,"image","inspect","--format={{.Id}}",
+              "hephaestus-provisional-coder-check:local"],
+              capture_output=True,text=True,check=True).stdout.strip()
+          assert image.startswith("sha256:") and len(image)==71
+          with tempfile.TemporaryDirectory(prefix="provisional-qualification-") as tmp:
+              root=Path(tmp); original=root/"reviewed-source"
+              source=original/source_rel; test=original/test_rel
+              source.parent.mkdir(parents=True); test.parent.mkdir(parents=True)
+              source.write_text('def analyze_dataset_task_coverage(row):\n'
+                  '    text = str(row.get("text", ""))\n'
+                  '    return bool(text)\n')
+              test.write_text('def test_null_text_not_counted():\n'
+                  '    from hephaestus.diagnosis.probes import analyze_dataset_task_coverage\n'
+                  '    assert analyze_dataset_task_coverage({"text":None}) is False\n')
+              for args in (
+                  ["git","init","-q",str(original)],
+                  ["git","-C",str(original),"config","user.email","sandbox@example.invalid"],
+                  ["git","-C",str(original),"config","user.name","sandbox-validation"],
+                  ["git","-C",str(original),"add","."],
+                  ["git","-C",str(original),"commit","-qm","independently pinned known failing code"],
+              ):
+                  subprocess.run(args,check=True,timeout=10)
+              head=subprocess.run(["git","-C",str(original),"rev-parse","HEAD"],
+                  capture_output=True,text=True,check=True).stdout.strip()
+              source_hash="sha256:"+hashlib.sha256(source.read_bytes()).hexdigest()
+              case=ReviewedRepairCase(
+                  head,source_hash,
+                  "sha256:"+hashlib.sha256(test.read_bytes()).hexdigest(),
+                  nodeid,"analyze_dataset_task_coverage")
+              qualification=ProvisionalCoderQualification(
+                  artifacts=FileSystemArtifactStore(root/"immutable"),
+                  repository=SQLiteStateRepository(root/"state.db"),
+                  runner=OfflineDockerPytestRunner(image,docker_executable=docker,timeout_seconds=90),
+                  proposer=ExactSpanPatchProposer(DeclaredFakeCoderOnly()),
+                  maximum_attempts=2)
+              result=qualification.run(
+                  objective="Investigate and repair Diagnostician missing text measurement",
+                  checkout=original,case=case,run_id="real-docker-dev",
+                  lineage_id="controlled-dev")
+              assert result["status"]=="verified_review_handoff",result
+              assert result["actual_offline_docker_verified"] is True
+              assert result["real_parent_inference_proven"] is False
+              assert result["stack_certified"] is False
+              assert len(result["trial_attempts"])==2
+              assert [x["red_to_green_verified"] for x in result["trial_attempts"]]==[False,True]
+              assert result["first_attempt_correct"] is False
+              assert result["repaired_after_feedback"] is True
+              assert hashlib.sha256(source.read_bytes()).hexdigest()==source_hash.split(":")[1]
+              handoff=qualification.verify_review_handoff(result,require_real_parent=False)
+              assert handoff["automated_merge_authorized"] is False
+              blocked=False
+              try:
+                  qualification.verify_review_handoff(result,require_real_parent=True)
+              except PermissionError:
+                  blocked=True
+              assert blocked,"fake coder must never pass original-parent model certification"
+              print("REAL_DOCKER_PROVISIONAL_GATE=PASS",flush=True)
+              print("REAL_DOCKER_LOCAL_FAILURE_CONTAINMENT_AND_CORRECTION=PASS",flush=True)
+              print("REAL_DOCKER_ORIGINAL_SOURCE_UNCHANGED=PASS",flush=True)
+              print("FAKE_MODEL_REAL_PARENT_CERTIFICATION=BLOCKED",flush=True)
+              print("REVIEW_HANDOFF_SHA256="+result["verified_review_handoff_ref"],flush=True)
+          PY
