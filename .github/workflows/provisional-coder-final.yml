@@ -1,0 +1,29 @@
+name: Final temporary parent Ministral Coder qualification
+on:
+  push:
+    branches: [ops/provisional-coder-final-ci-20261117]
+    paths: [.github/workflows/provisional-coder-final.yml]
+permissions: {contents: read}
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = "5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: python -m pytest -q tests/test_provisional_ministral_coder_qualification.py tests/test_exact_span_model_patch_contract.py tests/test_autonomous_repair_episode.py tests/test_constrained_research_self_repair.py tests/test_governed_next_experiment_handoffs.py
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = "5787e6db2c8a1423cf4b25f3ecc7121d64eb2e3a"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: python -m pytest -q
