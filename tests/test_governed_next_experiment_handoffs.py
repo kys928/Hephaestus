@@ -139,3 +139,48 @@ def test_runner_cannot_commit_unmaterialized_high_impact_transition(tmp_path):
     assert final.status=="blocked"
     assert final.stop_reason=="governed_next_experiment_not_configured"
     assert runtime.state_repository.all("production_action_executions")==[]
+
+
+
+@pytest.mark.parametrize("action",[
+    "branch_new_experiment","rollback_to_checkpoint","restart_lineage",
+])
+def test_full_persistent_loop_executes_next_cycle_with_real_governed_lineage(action,tmp_path):
+    runtime,initial,result,manifest=_eligible(tmp_path,action)
+    from hephaestus.control.spine import SPINE_ORDER
+    phases={phase.value:["test-only-phase-receipt"] for phase in SPINE_ORDER}
+    result.phase_evidence=phases
+    class Driver:
+        second_seen=None
+        def execute_cycle(self,*,runtime,state,cycle_index):
+            if cycle_index==1:
+                return result
+            assert cycle_index==2
+            self.second_seen=(state.lineage_id,dict(state.metadata["next_cycle"]))
+            assert state.metadata["next_cycle"]["baseline_manifest_sha256"]==manifest
+            return ProductionCycleResult(
+                cycle_id="cycle-2",run_id=state.metadata["next_cycle"]["run_id"],
+                experiment_id="experiment-2",status="completed",
+                judge_action="reject_candidate",phase_evidence=phases,
+                comparison_ref="comparison-2")
+    driver=Driver()
+    runner=ProductionLoopRunner(runtime,driver,maximum_cycles=2,
+                               governed_next_experiments=GovernedNextExperiment())
+    final=runner.run(program_id="program",lineage_id="original-lineage",
+                     stage_name="smoke_test")
+    assert final.status=="stopped" and final.stop_reason=="maximum_cycles_reached"
+    assert final.cycle_index==2
+    assert driver.second_seen is not None
+    child,plan=driver.second_seen
+    assert plan["source_run_id"]=="source-run"
+    if action=="branch_new_experiment":
+        assert child!="original-lineage"
+        assert LineageStore(runtime.settings.state_root).get_parent(child)=="original-lineage"
+    else:
+        assert child=="original-lineage"
+    assert runtime.loop_state.get("program").lineage_id==child
+    assert runner.run(program_id="program",lineage_id="original-lineage",
+                      stage_name="smoke_test").cycle_index==2
+    applied=[x for x in runtime.state_repository.all("production_action_executions")
+             if x["status"]=="applied"]
+    assert len(applied)==2
