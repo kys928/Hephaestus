@@ -29,8 +29,11 @@ from hephaestus.state.staged_retry_store import StagedRetryStore
 from .staged_retry import prepare_staged_retry, RetryInvariantTrainingService, finish_staged_retry
 
 
+@dataclass(slots=True)
 class StagedActionIntentService:
     """Complete staged Judge validation; defer *all* lineage mutation to loop."""
+
+    governed_next_experiments: bool = False
 
     def execute(self, request: StagedOperationRequest) -> StagedOperationResult:
         if request.substep != "action_application":
@@ -39,8 +42,10 @@ class StagedActionIntentService:
         approval = request.prior_outputs.get("judge_exit.action_approval_gate", {})
         promotion = request.prior_outputs.get("judge_exit.promotion_gate", {})
         action = str(intent.get("proposed_action", ""))
-        if action in {"branch_new_experiment","restart_lineage","rollback_to_checkpoint","change_stage",
-                      "modify_data_policy","modify_training_recipe","modify_eval_policy"}:
+        transitions={"branch_new_experiment","restart_lineage","rollback_to_checkpoint"}
+        unavailable={"change_stage","modify_data_policy",
+                     "modify_training_recipe","modify_eval_policy"}
+        if action in unavailable or (action in transitions and not self.governed_next_experiments):
             return StagedOperationResult(status="blocked",resumable=False,
                 blocking_issues=("next_experiment_transition_not_implemented:"+action,))
         approval_status = str(approval.get("approval_status", "not_required"))
@@ -92,6 +97,7 @@ class StagedProductionCycleDriver:
 
     dependencies_for_cycle: CycleDependenciesFactory
     maximum_training_attempts: int = 2
+    governed_next_experiments: bool = False
 
     def execute_cycle(
         self,
@@ -105,9 +111,21 @@ class StagedProductionCycleDriver:
         cycle_key = f"{state.program_id}:cycle:{cycle_index}"
         attempts = StagedRetryStore(runtime.state_repository)
         current = attempts.current(cycle_key)
+        next_handoff=state.metadata.get("next_cycle")
+        if isinstance(next_handoff,dict) and next_handoff.get("schema")=="governed-next-experiment-handoff.v1":
+            if not self.governed_next_experiments:
+                raise PermissionError("governed next-run handoff is disabled")
+            from .governed_next_experiment import GovernedNextExperiment
+            GovernedNextExperiment().verify_resume(
+                runtime,state,next_handoff,cycle_index=cycle_index)
+            expected_run=str(next_handoff["run_id"])
+        else:
+            expected_run=f"{state.program_id}-cycle-{cycle_index}"
         if current is None:
-            current = StagedRetry(cycle_key, 1, f"{state.program_id}-cycle-{cycle_index}", self.maximum_training_attempts)
+            current = StagedRetry(cycle_key, 1, expected_run, self.maximum_training_attempts)
             attempts.save(current)
+        elif current.attempt==1 and current.run_id!=expected_run:
+            raise PermissionError("staged run changed identity after next-run handoff")
         if current.maximum_attempts != self.maximum_training_attempts:
             raise ValueError("staged training attempt budget changed across restart")
         run_id = current.run_id
@@ -123,7 +141,8 @@ class StagedProductionCycleDriver:
             deps.services.action_executor, StagedActionIntentService
         ):
             raise ValueError("staged action executor would duplicate the production loop action")
-        deps.services.action_executor = StagedActionIntentService()
+        deps.services.action_executor = StagedActionIntentService(
+            governed_next_experiments=self.governed_next_experiments)
         if current.scientific_fingerprint is not None:
             deps.services.training_lifecycle = RetryInvariantTrainingService(
                 deps.services.training_lifecycle, runtime, current.scientific_fingerprint, current.cycle_key)
