@@ -92,12 +92,15 @@ class AutonomousDiagnosisRepairEpisode:
     runner: SandboxRunner
     proposer: BoundedPatchProposer
     publisher: GitHubPatchPublisher
+    maximum_model_attempts: int = 1
 
     def run(self, objective: str, *, checkout: Path) -> dict[str, object]:
         if (not isinstance(objective,str) or not 16<=len(objective.strip())<=800
                 or "diagnos" not in objective.casefold()
                 or not any(word in objective.casefold() for word in ("repair","fix","investigat"))):
             raise RepairBoundaryError("unsupported autonomous self-repair research objective")
+        if type(self.maximum_model_attempts) is not int or not 1<=self.maximum_model_attempts<=2:
+            raise RepairBoundaryError("bounded self-repair permits one or two model attempts only")
         root=Path(checkout)
         head=subprocess.run(["git","-C",str(root),"rev-parse","HEAD"],
             capture_output=True,text=True,timeout=10,check=False)
@@ -117,6 +120,7 @@ class AutonomousDiagnosisRepairEpisode:
         episode_id="repair-"+sha256(canonical_bytes({
             "goal":objective.strip(),"commit":scope.base_commit,
             "source_sha256":sha256(original).hexdigest(),"target":target,
+            "maximum_model_attempts":self.maximum_model_attempts,
         })).hexdigest()[:24]
         prior=self.repository.get_latest(_REPAIR_EPISODES,"episode_id",episode_id)
         if prior is not None:
@@ -156,15 +160,48 @@ class AutonomousDiagnosisRepairEpisode:
                 "baseline_test_receipt_sha256":baseline.output_sha256,
                 "independent_scientific_certification":False,
             }
+            # Model text may improve after receiving its OWN failed sandbox
+            # result, but cannot modify fault authority or the unchanged test.
             failure_ref=self.artifacts.put_bytes(canonical_bytes(fault),media_type="application/json").artifact_ref
-            candidate=self.proposer.propose(
-                scope=scope,original=original,verified_fault=fault,evidence_ref=failure_ref)
-            trial=ConstrainedSelfRepair(self.artifacts,self.runner).trial(
-                checkout=root,scope=scope,candidate=candidate,
-                verified_fault_ref=failure_ref)
+            repair_engine=ConstrainedSelfRepair(self.artifacts,self.runner)
+            trials=[]
+            seen_replacements=set()
+            feedback=[]
+            accepted=None
+            attempt_count=0
+            for attempt in range(1,self.maximum_model_attempts+1):
+                attempt_count=attempt
+                contextual_fault={**fault,
+                    "original_regression_output_excerpt":baseline.output_excerpt[-1400:],
+                    "prior_failed_model_attempts":feedback}
+                candidate=self.proposer.propose(
+                    scope=scope,original=original,
+                    verified_fault=contextual_fault,evidence_ref=failure_ref)
+                replacement_digest="sha256:"+sha256(candidate.replacement.encode()).hexdigest()
+                if replacement_digest in seen_replacements:
+                    # Another copy of a failed patch is not a new experiment.
+                    break
+                seen_replacements.add(replacement_digest)
+                trial=repair_engine.trial(
+                    checkout=root,scope=scope,candidate=candidate,
+                    verified_fault_ref=failure_ref)
+                trials.append(trial["trial_ref"])
+                if trial["red_to_green_verified"]:
+                    accepted=(candidate,trial)
+                    break
+                feedback.append({
+                    "attempt":attempt,
+                    "model_hypothesis":candidate.hypothesis,
+                    "candidate_replacement_sha256":replacement_digest,
+                    "candidate_test_status":trial["candidate"]["status"],
+                    "candidate_failure_output_excerpt":
+                        trial["candidate"]["output_excerpt"][-1400:],
+                    "instruction":"Do not repeat the failed patch. The original regression remains red.",
+                })
             url=None
-            if trial["red_to_green_verified"]:
-                url=ConstrainedSelfRepair(self.artifacts,self.runner).submit_for_review(
+            if accepted is not None:
+                candidate,trial=accepted
+                url=repair_engine.submit_for_review(
                     scope=scope,candidate=candidate,trial=trial,publisher=self.publisher)
             report={
                 "schema":"autonomous-diagnosis-repair-episode.v1",
@@ -172,9 +209,12 @@ class AutonomousDiagnosisRepairEpisode:
                 "status":"draft_review_pr_created" if url else "repair_candidate_rejected",
                 "objective":objective.strip(),"target":target,"source_commit":scope.base_commit,
                 "verified_fault_ref":failure_ref,
-                "trial_ref":trial["trial_ref"],
+                "trial_ref":trials[-1] if trials else None,
+                "trial_refs":trials,
                 "baseline_test_receipt_sha256":baseline.output_sha256,
-                "model_invocations":1,"production_mutated":False,
+                "model_invocations":attempt_count,
+                "maximum_model_attempts":self.maximum_model_attempts,
+                "production_mutated":False,
                 "pull_request":url,"independent_scientific_certification":False,
             }
         evidence=self.artifacts.put_bytes(canonical_bytes(report),media_type="application/json")
