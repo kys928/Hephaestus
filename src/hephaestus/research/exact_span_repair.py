@@ -8,6 +8,7 @@ ceiling, sandbox and PR governance remain controller-owned.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ast
 from hashlib import sha256
 import json
 
@@ -28,6 +29,22 @@ class ExactSpanPatchProposer:
         if len(original)>64_000:
             raise RepairBoundaryError("single-span model source context too large")
         source=original.decode("utf-8")
+        # Only a verified traceback may nominate a function to focus on.
+        # It cannot broaden the code path or modify the original test.
+        entrypoint=verified_fault.get("regression_entrypoint")
+        if entrypoint is not None:
+            if not isinstance(entrypoint,str) or not entrypoint.isidentifier():
+                raise RepairBoundaryError("untrusted code entrypoint in failure evidence")
+            tree=ast.parse(source)
+            matching=[node for node in tree.body if isinstance(node,
+                (ast.FunctionDef,ast.AsyncFunctionDef)) and node.name==entrypoint]
+            if len(matching)!=1 or matching[0].end_lineno is None:
+                raise RepairBoundaryError("verified regression entrypoint is ambiguous")
+            function=matching[0]
+            context="".join(source.splitlines(keepends=True)[
+                function.lineno-1:function.end_lineno])
+        else:
+            context=source
         prompt=(
             "You are a Python source repair model. Find and fix the REAL observed defect. "
             "Do not add or edit tests. Respond with ONLY one JSON object with exactly "
@@ -39,7 +56,7 @@ class ExactSpanPatchProposer:
             "VERIFIED_FAILING_REGRESSION: "+
             json.dumps(verified_fault,sort_keys=True)+"\n"
             "SOURCE_FILE: "+scope.allowed_file+"\n"
-            "SOURCE_BEGIN\n"+source+"\nSOURCE_END"
+            "SOURCE_BEGIN\n"+context+"\nSOURCE_END"
         )
         raw=self.model.generate_patch_json(prompt)
         if not isinstance(raw,str) or len(raw)>16_000:
