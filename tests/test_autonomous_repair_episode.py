@@ -131,7 +131,7 @@ def test_autonomous_repair_uses_failed_sandbox_evidence_for_one_bounded_retry(tm
             sha=re.search(r"EXPECTED_SHA256=(sha256:[a-f0-9]{64})",prompt).group(1)
             ref=re.search(r"EVIDENCE_REF=(sha256:[a-f0-9]{64})",prompt).group(1)
             if self.called==1:
-                replacement="def diagnostic_value():\n    return 'still-wrong'\n"
+                replacement="def diagnostic_value():\n    unused = True\n    return 'wrong'\n"
             else:
                 assert "candidate_test_status" in prompt
                 assert "still red" in prompt
@@ -166,7 +166,7 @@ def test_autonomous_repair_does_not_loop_on_same_failed_patch(tmp_path):
             sha=re.search(r"EXPECTED_SHA256=(sha256:[a-f0-9]{64})",prompt).group(1)
             ref=re.search(r"EVIDENCE_REF=(sha256:[a-f0-9]{64})",prompt).group(1)
             return json.dumps({"path":path,"expected_source_sha256":sha,
-                "replacement":"def diagnostic_value():\n    return 'still-wrong'\n",
+                "replacement":"def diagnostic_value():\n    unused = True\n    return 'wrong'\n",
                 "evidence_ref":ref,
                 "hypothesis":"The recorded incorrect value should be replaced with a corrected value."})
     coder=RepeatingCoder()
