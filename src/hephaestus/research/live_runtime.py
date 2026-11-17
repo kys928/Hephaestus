@@ -129,7 +129,12 @@ class AdmittedCudaResearch:
         import torch
         if not torch.cuda.is_available():
             raise PermissionError("signed CUDA study requires actual CUDA availability")
-        return self.job.run(objective,run_id=run_id,lineage_id=lineage_id)
+        from .grant_usage import SingleUseComputeGrantLedger
+        ledger=SingleUseComputeGrantLedger(self.job.repository,self.job.artifacts)
+        return ledger.run_once(
+            grant_signature_sha256=self.grant.signature_sha256,
+            run_id=run_id,lineage_id=lineage_id,maximum_calls=count,
+            execute=lambda:self.job.run(objective,run_id=run_id,lineage_id=lineage_id))
 
 
 def compose_frozen_diagnosis_research(*, grant: SignedResearchComputeGrant,
