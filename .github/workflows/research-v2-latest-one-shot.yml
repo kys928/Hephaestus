@@ -1,0 +1,33 @@
+name: Research autonomy v2 latest exact-source regression
+on:
+  push:
+    branches: [ops/research-v2-latest-verify-20261117]
+    paths: [.github/workflows/research-v2-latest-one-shot.yml]
+permissions: {contents: read}
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c09d500d4f16cdff9fd0e84b52ed5c571a6ead7
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = "6c09d500d4f16cdff9fd0e84b52ed5c571a6ead7"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: python -m pytest -q tests/test_autonomous_repair_episode.py tests/test_exact_span_model_patch_contract.py tests/test_reviewed_multi_source_discovery.py tests/test_signed_research_live_runtime.py tests/test_single_use_research_grant_ledger.py tests/test_deployed_research_worker_admission.py tests/test_governed_next_experiment_handoffs.py tests/test_durable_research_objective_jobs.py tests/test_research_objective_cli.py tests/test_production_loop_v1.py tests/test_production_staged_integration.py
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c09d500d4f16cdff9fd0e84b52ed5c571a6ead7
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = "6c09d500d4f16cdff9fd0e84b52ed5c571a6ead7"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: python -m pytest -q
