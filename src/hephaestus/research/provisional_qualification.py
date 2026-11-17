@@ -120,8 +120,12 @@ class ProvisionalCoderQualification:
             execution_scope="offline_rootless_docker"
 
         with tempfile.TemporaryDirectory(prefix="hephaestus-reviewed-fault-") as directory:
+            # Rootless offline sandbox must traverse this disposable code-only
+            # tree; the actual user checkout is never mounted into the model.
+            Path(directory).chmod(0o755)
             copied=Path(directory)/"unchanged"
             copied.mkdir()
+            copied.chmod(0o755)
             _prepare_copy(original_root,copied)
             baseline=self.runner.run(copied,fixed_test=_REGRESSION)
         output=baseline.output_excerpt
