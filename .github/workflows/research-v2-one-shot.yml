@@ -1,0 +1,40 @@
+name: Bounded research runtime and governed transitions one-shot
+on:
+  push:
+    branches: [ops/research-v2-verify-20261117]
+    paths: [.github/workflows/research-v2-one-shot.yml]
+permissions: {contents: read}
+jobs:
+  scientific-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e0ac0ed0ce3a81aa9cb66d80fafa43c5fef4b00e
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: test "$(git rev-parse HEAD)" = "e0ac0ed0ce3a81aa9cb66d80fafa43c5fef4b00e"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - name: Run new research, signed grant and governed transitions
+        run: |
+          python -m pytest -q tests/test_signed_research_live_runtime.py tests/test_reviewed_multi_source_discovery.py tests/test_governed_next_experiment_handoffs.py
+      - name: Existing research repair and original production boundary regressions
+        run: |
+          python -m pytest -q tests/test_autonomous_evaluation_only_research.py tests/test_autonomous_repair_episode.py tests/test_constrained_research_self_repair.py tests/test_durable_research_objective_jobs.py tests/test_research_objective_cli.py tests/test_production_loop_v1.py tests/test_production_staged_integration.py
+  full-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e0ac0ed0ce3a81aa9cb66d80fafa43c5fef4b00e
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: test "$(git rev-parse HEAD)" = "e0ac0ed0ce3a81aa9cb66d80fafa43c5fef4b00e"
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: python -m pytest -q
