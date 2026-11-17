@@ -74,3 +74,25 @@ def test_only_reviewed_pairs_and_content_hashes_are_returned(tmp_path):
     assert source.original.role=="original"
     assert source.candidate.role=="candidate"
     assert source.original.sha256_ref.startswith("sha256:")
+
+
+
+def test_readonly_multi_catalog_cli_discovers_reviewed_pair_without_queue_or_s3(tmp_path,capsys):
+    import json
+    from hephaestus.research.cli import main
+    first=_catalog(tmp_path,"geometry")
+    second=_catalog(tmp_path,"tokenizer")
+    root=tmp_path/"untouched-production-state"
+    assert main([
+        "--state-root",str(root),
+        "discover","--objective","Investigate Diagnostician reliability of tokenizer coverage",
+        "--catalog",str(first[0]),first[1],
+        "--catalog",str(second[0]),second[1],
+    ])==0
+    output=json.loads(capsys.readouterr().out)
+    assert output["study_scope"].startswith("tokenizer-")
+    assert output["catalog_sha256"]==second[1]
+    assert output["actual_source_bytes_verified"] is False
+    assert output["independent_gold_label_established"] is False
+    assert output["compute_authorized"] is False
+    assert not root.exists()
