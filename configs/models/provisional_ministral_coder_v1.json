@@ -1,0 +1,40 @@
+{
+  "schema": "hephaestus-provisional-coder-parent.v1",
+  "status": "temporary_uncertified_not_promoted",
+  "role": "coder",
+  "selection_policy": "temporary_parent_only_defer_comparative_search_until_full_stack_certification",
+  "source_registry": "configs/models/hephaestus_role_model_stack_v1.json",
+  "source_parent_role": "planner",
+  "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+  "parent_revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+  "adapter": null,
+  "reuse_planner_lora": false,
+  "automatic_role_dispatch_enabled": false,
+  "operator_compute_approval_required": true,
+  "local_snapshot_only": true,
+  "device": "cuda:0",
+  "decoding": {
+    "do_sample": false,
+    "seed": 271828,
+    "max_new_tokens": 768
+  },
+  "repair_scope": {
+    "mode": "verified_exact_single_span_proposal",
+    "target_file": "src/hephaestus/diagnosis/probes.py",
+    "fixed_test": "tests/test_targeted_post_failure_probes.py",
+    "maximum_attempts_default": 1,
+    "maximum_attempts_permitted": 2,
+    "merge_authority": false,
+    "test_edit_authority": false
+  },
+  "gates": {
+    "independently_pinned_source_and_fixed_test": true,
+    "semantic_red_baseline_required": true,
+    "independent_offline_docker_red_to_green_required": true,
+    "verified_handoff_only": true,
+    "frozen_five_role_registry_unmodified": true,
+    "model_inference_verified": false,
+    "full_system_certified": false
+  },
+  "future_model_selection_issue": "https://github.com/kys928/Hephaestus/issues/215"
+}
