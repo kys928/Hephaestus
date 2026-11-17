@@ -85,7 +85,7 @@ class SignedResearchComputeGrant:
                 or type(doc["maximum_inference_calls"]) is not int
                 or doc["maximum_inference_calls"]!=6
                 or type(doc["maximum_new_tokens"]) is not int
-                or not 1<=doc["maximum_new_tokens"]<=384
+                or doc["maximum_new_tokens"]!=384
                 or type(doc["maximum_gpu_seconds"]) is not int
                 or not 1<=doc["maximum_gpu_seconds"]<=3600
                 or until.tzinfo is None or until<=datetime.now(timezone.utc)
