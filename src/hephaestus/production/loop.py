@@ -61,6 +61,10 @@ _STOP_ACTIONS = {
     "archive_lineage",
     "mark_lineage_poisoned",
 }
+_GOVERNED_NEXT_ACTIONS = frozenset({
+    "branch_new_experiment", "rollback_to_checkpoint", "restart_lineage",
+})
+
 _CONTINUE_ACTIONS = {
     "reject_checkpoint",
     "reject_candidate",
@@ -80,6 +84,7 @@ class ProductionLoopRunner:
     driver: ProductionCycleDriver
     maximum_cycles: int = 8
     stop_on_promotion: bool = True
+    governed_next_experiments: object | None = None
 
     def run(
         self, *, program_id: str, lineage_id: str, stage_name: str, resume: bool = True,
@@ -116,7 +121,8 @@ class ProductionLoopRunner:
             )
             store.save(state)
         else:
-            if (state.lineage_id != lineage_id or state.stage_name != stage_name):
+            original_lineage=state.metadata.get("root_lineage_id",state.lineage_id)
+            if (original_lineage != lineage_id or state.stage_name != stage_name):
                 raise ValueError("campaign identity changed across resume")
             if (state.cycle_index != len(state.completed_cycles)
                     or len(state.completed_cycles) != len(set(state.completed_cycles))
@@ -222,6 +228,34 @@ class ProductionLoopRunner:
                 return state
 
             self._validate_cycle(result)
+            # For high-impact transitions, authenticate the retained producer
+            # checkpoint BEFORE the mutating action executor touches lineage.
+            high_impact=result.judge_action in _GOVERNED_NEXT_ACTIONS
+            if high_impact:
+                if self.governed_next_experiments is None or result.next_cycle is not None:
+                    state.status="blocked"
+                    state.stop_reason="governed_next_experiment_not_configured"
+                    store.event(program_id,"transition_blocked",{
+                        "run_id":result.run_id,"action":result.judge_action,
+                        "reason":"missing_trusted_handoff_materializer"})
+                    store.save(state)
+                    return state
+                try:
+                    from .governed_next_experiment import GovernedNextExperiment
+                    if type(self.governed_next_experiments) is not GovernedNextExperiment:
+                        raise PermissionError("untrusted next-experiment materializer")
+                    checkpoint_manifest=self.governed_next_experiments.preflight(
+                        self.runtime,state,result)
+                except (PermissionError, ValueError, OSError) as exc:
+                    state.status="blocked"
+                    state.stop_reason="next_experiment_checkpoint_preflight_failed"
+                    store.event(program_id,"transition_blocked",{
+                        "run_id":result.run_id,"action":result.judge_action,
+                        "reason_type":type(exc).__name__})
+                    store.save(state)
+                    return state
+            else:
+                checkpoint_manifest=None
             state.metadata.pop("pending_cycle", None)
             state.cycle_index = cycle_index
             state.latest_run_id = result.run_id
@@ -262,7 +296,17 @@ class ProductionLoopRunner:
                 store.save(state)
                 return state
 
-            if result.next_cycle is not None:
+            if high_impact:
+                # The action MUST already have been applied by the original
+                # independently governed executor. Only now can a child/rolled-
+                # back baseline be used as the next run's source.
+                plan=self.governed_next_experiments.after_action(
+                    self.runtime,state,result,action_record,
+                    checkpoint_manifest_sha256=checkpoint_manifest)
+                state.metadata.setdefault("root_lineage_id",lineage_id)
+                state.metadata["next_cycle"]=plan
+                state.lineage_id=str(plan["target_lineage_id"])
+            elif result.next_cycle is not None:
                 state.metadata["next_cycle"] = dict(result.next_cycle)
             else:
                 state.metadata["next_cycle"] = {
