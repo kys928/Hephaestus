@@ -134,7 +134,7 @@ def test_autonomous_repair_uses_failed_sandbox_evidence_for_one_bounded_retry(tm
                 replacement="def diagnostic_value():\n    unused = True\n    return 'wrong'\n"
             else:
                 assert "candidate_test_status" in prompt
-                assert "still red" in prompt
+                assert "original regression remains red" in prompt
                 self.saw_feedback=True
                 replacement="def diagnostic_value():\n    return 'fixed'\n"
             return json.dumps({"path":path,"expected_source_sha256":sha,
