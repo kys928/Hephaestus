@@ -60,7 +60,8 @@ class SignedResearchComputeGrant:
             "catalog_sha256","role_registry_sha256","role",
             "provider","region","gpu_sku","device",
             "maximum_inference_calls","maximum_new_tokens",
-            "maximum_gpu_seconds","expires_at","approval_scope",
+            "maximum_gpu_seconds","maximum_cost_usd_cents",
+            "maximum_hourly_price_usd_cents","expires_at","approval_scope",
             "training_authorized","code_edit_authorized","model_promotion_authorized",
         }
         if set(doc)!=required:
@@ -88,6 +89,12 @@ class SignedResearchComputeGrant:
                 or doc["maximum_new_tokens"]!=384
                 or type(doc["maximum_gpu_seconds"]) is not int
                 or not 1<=doc["maximum_gpu_seconds"]<=3600
+                or type(doc["maximum_cost_usd_cents"]) is not int
+                or not 1<=doc["maximum_cost_usd_cents"]<=10_000
+                or type(doc["maximum_hourly_price_usd_cents"]) is not int
+                or not 1<=doc["maximum_hourly_price_usd_cents"]<=10_000
+                or (doc["maximum_gpu_seconds"]*doc["maximum_hourly_price_usd_cents"]+3599)//3600
+                       > doc["maximum_cost_usd_cents"]
                 or until.tzinfo is None or until<=datetime.now(timezone.utc)
                 or any(doc[k] is not False for k in (
                     "training_authorized","code_edit_authorized",
