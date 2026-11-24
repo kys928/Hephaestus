@@ -52,13 +52,29 @@ The V2 directive was reconciled against integration parent `5af1e286c2086cec03e2
 
 | Workstream | Checkpoint | Remaining gate |
 | --- | --- | --- |
-| A — Infrastructure and custody | The retained Czech inventory, disposition review and migration CSV agree on all 51,515 paths and 46,003,033,185 bytes. The Planner candidate contains 35 objects totaling 17,870,398,371 bytes. All four shard blob-key names match the registered upstream revision's LFS SHA-256 and byte lengths. Their total is 17,836,123,192 bytes. The cache layout also includes the pinned snapshot aliases and tokenizer/config candidates. | Blob filenames, reported lengths and aliases cannot establish present bytes, readable targets or offline load. Obtain the scoped large-read and transfer authorization, rehash the four originals against upstream metadata, verify the alias mapping and auxiliary assets, then admit only the qualified destinations. Determine the other four bases, independent backup coverage, original receipt trust and a retained operational-state deployment. |
+| A — Infrastructure and custody | The retained Czech inventory, disposition review and migration CSV agree on all 51,515 paths and 46,003,033,185 bytes. The Planner candidate contains 35 objects totaling 17,870,398,371 bytes. All four shard blob-key names match the registered upstream revision's LFS SHA-256 and byte lengths. Their total is 17,836,123,192 bytes. The cache layout also includes the pinned snapshot aliases and tokenizer/config candidates. | Blob filenames, reported lengths and aliases cannot establish present bytes, readable targets or offline load. Obtain the scoped large-read and transfer authorization, rehash the four originals against upstream metadata, verify the alias mapping and auxiliary assets, then admit only the qualified destinations. Qualify the remaining base sources, independent backup coverage, original receipt trust and a retained operational-state deployment. |
 | B — Backend | The existing SQLite queue now routes each durable type to its worker. The default route remains available. A duplicate submission cannot change route. Reviewed CPU-only source jobs use the existing production repository, content-addressed intake, verified source reviewer, cancellation and fenced durable worker. | Production route activation requires the state gate, migration on a backed-up, quiescent deployment, and worker/admission configuration. Signed inference execution, authorized transition integration, canonical live RunPod lifecycle and independent Coder sandbox verification remain open. |
 | C — Blackboard | V2 typed advisory envelopes, linked committed history, bounded queries, replay, and checkpoint/restore use the existing host-local SQLite and writer fence. The runtime exposes an explicit rehearsal binding. Four competing OS producers, a duplicate submission, and process exits on both sides of commit preserved the exact accepted frontier on ext4. | Add trusted objective and verified evidence/result admission, actual model/receipt binding, and a bounded context selector. Keep all rehearsal entry points off the live scheduler until qualification. |
 | D — Persistence and S3 | The direct concurrent LanceDB failure is confirmed by the [provider fault control](https://github.com/kys928/Hephaestus/actions/runs/45438759956). The generic immutable S3 artifact adapter now denies publication and multipart cleanup on known RunPod endpoints. It verifies object bytes for existing and new receipts and detects source changes before final multipart publication. | The active and sampled #203/#206/#214 historical references to conditional S3 writes are in the shared S3 adapter. Standalone legacy scripts with direct writes require separate caller/custody review before reuse. No replacement-precondition or multipart immutability claims for RunPod. Probe those only if an actually needed authority depends on them. |
 | E — Scientific collaboration | The frozen V1 parser and compatibility view replay both retained JSON excerpts exactly. Their decisions still fail the historical Coder condition. | Verify full receipt custody before making a stronger replay claim, then preregister paired A–E model-backed cases and independent adjudication. |
 
 Custody references: `Anvil_Czech_Disposition_Review.json.gz` SHA-256 `bb3598f848052e68fcdb33caa49653712c84d54e9c4685b9faabbaf1baf11eac`; `Anvil_Czech_Migration_Selection.zip` SHA-256 `cce676c013197f4c2f1f371e8688a7dc08066129d9011548856bbaa1203c8e2c`. These classifications remain proposed and authorize no deletion.
+
+### Pinned Czech base-cache review
+
+Matched the five pinned upstream revisions' canonical SafeTensors LFS SHA-256 names and lengths against the retained Czech inventory. Matches here identify candidates for streaming verification.
+
+| Role | Expected shards | Matching Czech blob keys | Snapshot aliases at pinned revision |
+| --- | ---: | ---: | ---: |
+| Controller | 3 | 0 | 20 |
+| Diagnostician | 2 | 0 | 0 |
+| Planner | 4 | 4 | 17 |
+| Evaluator | 4 | 0 | 0 |
+| Judge | 2 | 0 | 0 |
+
+The canonical shard total is 57,593,183,848 bytes. If the Planner blobs pass full rehash and the other four remain unavailable after resolving possible aliases and alternate custody, the minimum remaining canonical payload is 39,757,060,656 bytes plus configs, tokenizer assets and packaging overhead. This metadata audit read no weight payloads.
+
+Use a reviewed per-file manifest and a CPU reader with a finite byte, time and cost ceiling for acquisition. Check pinned config/tokenizer files, exact canonical shard layouts and independent byte readback. Resolve Controller aliases before acquiring replacement bytes and stream-verify the Planner candidates before authorizing a transfer. The final writer requires independently qualified immutable publication and backup custody. Offline loading is a separate check after file completeness, and genuine GPU inference is a separate approved experiment.
 
 ### Qualification and rollback
 
