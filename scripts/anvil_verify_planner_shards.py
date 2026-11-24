@@ -1,5 +1,6 @@
 """Read and attest the four Planner blobs on a read-only cache mount."""
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -26,6 +27,12 @@ def validated_shards(manifest: dict) -> list[dict]:
 
 def verify_stream(stream, size: int, digest: str) -> None:
     hasher = hashlib.sha256()
+    update_from_stream(stream, size, digest, hasher)
+    if hasher.hexdigest() != digest:
+        raise ValueError(f"incorrect stream SHA-256 for {digest}")
+
+
+def update_from_stream(stream, size: int, digest: str, hasher) -> None:
     remaining = size
     while remaining:
         chunk = stream.read(min(8 * 1024 * 1024, remaining))
@@ -33,8 +40,6 @@ def verify_stream(stream, size: int, digest: str) -> None:
             raise ValueError(f"incorrect stream length for {digest}")
         hasher.update(chunk)
         remaining -= len(chunk)
-    if hasher.hexdigest() != digest:
-        raise ValueError(f"incorrect stream SHA-256 for {digest}")
 
 
 def verify(root: Path, manifest: dict) -> list[dict]:
@@ -59,9 +64,23 @@ def verify(root: Path, manifest: dict) -> list[dict]:
     return shards
 
 
-def verify_s3(client, manifest: dict, *, metadata_only: bool) -> list[dict]:
-    from contextlib import closing
+def verify_s3_ranges(client, address: dict, size: int, digest: str, range_bytes: int) -> None:
+    hasher = hashlib.sha256()
+    for first in range(0, size, range_bytes):
+        last = min(first + range_bytes, size) - 1
+        response = client.get_object(**address, Range=f"bytes={first}-{last}")
+        length = last - first + 1
+        with closing(response["Body"]) as stream:
+            if (response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 206
+                    or response.get("ContentRange") != f"bytes {first}-{last}/{size}"
+                    or response.get("ContentLength") != length):
+                raise ValueError(f"incorrect bounded range for {digest}")
+            update_from_stream(stream, length, digest, hasher)
+    if hasher.hexdigest() != digest:
+        raise ValueError(f"incorrect stream SHA-256 for {digest}")
 
+
+def verify_s3(client, manifest: dict, *, metadata_only: bool, chunked: bool = False) -> list[dict]:
     shards = validated_shards(manifest)
     for row in shards:
         digest, size = row["sha256"], row["bytes"]
@@ -71,13 +90,7 @@ def verify_s3(client, manifest: dict, *, metadata_only: bool) -> list[dict]:
             raise ValueError(f"unexpected object length for {digest}")
         if metadata_only:
             continue
-        response = client.get_object(**address, Range=f"bytes=0-{size - 1}")
-        with closing(response["Body"]) as stream:
-            if (response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 206
-                    or response.get("ContentRange") != f"bytes 0-{size - 1}/{size}"
-                    or response.get("ContentLength") != size):
-                raise ValueError(f"incorrect bounded range for {digest}")
-            verify_stream(stream, size, digest)
+        verify_s3_ranges(client, address, size, digest, 64 * 1024 * 1024 if chunked else size)
     return shards
 
 
@@ -96,7 +109,7 @@ def czech_s3_client():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("blobs", help="local directory, czech-s3-head, or czech-s3-stream")
+    parser.add_argument("blobs", help="local directory, czech-s3-head, czech-s3-stream, or czech-s3-chunked")
     parser.add_argument("manifest", type=Path)
     parser.add_argument("manifest_sha256")
     args = parser.parse_args()
@@ -106,8 +119,9 @@ def main():
         raise ValueError("reviewed manifest digest does not match")
     manifest = json.loads(raw)
     metadata_only = args.blobs == "czech-s3-head"
-    if metadata_only or args.blobs == "czech-s3-stream":
-        checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only)
+    chunked = args.blobs == "czech-s3-chunked"
+    if metadata_only or chunked or args.blobs == "czech-s3-stream":
+        checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only, chunked=chunked)
     else:
         checked = verify(Path(args.blobs), manifest)
     field = "metadata_checked" if metadata_only else "verified"
