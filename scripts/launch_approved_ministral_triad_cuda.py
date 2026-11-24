@@ -11,7 +11,7 @@ from decimal import Decimal,ROUND_FLOOR
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-import argparse,json,os,re,shutil,subprocess,tempfile,time,urllib.request,urllib.error,zipfile,tarfile
+import argparse,json,os,re,shutil,subprocess,tempfile,time,urllib.request,urllib.error,zipfile,tarfile,base64
 
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.config import RunPodConfig
@@ -264,7 +264,9 @@ sys.exit(code)
          "RUNPOD_GLOBAL_VOLUME_ID":GLOBAL_ID,"TRIAD_RUN_TAG":run_tag,
          "TRIAD_SOURCE_COMMIT":source_commit,"TRIAD_CODE_SHA256":code_digest,
          "TRIAD_CASE_SHA256":case_digest,**storage}
-    return ["python","-u","-c",bootstrap],env
+    encoded=base64.b64encode(bootstrap.encode()).decode("ascii")
+    # Match the actual successful Global Volume boot: bash -lc, no entrypoint override.
+    return ["bash","-lc","exec python -u -c \"import base64;exec(base64.b64decode('"+encoded+"'))\""],env
 
 
 class BundleReader:
@@ -421,7 +423,9 @@ def main():
         except RuntimeError:continue
         if q.gpu_memory_gb>=32 and q.price_usd_per_hour<=MAX_QUOTED_GPU_USD_PER_HOUR:
             quotes.append(q)
-    quotes.sort(key=lambda q:(q.price_usd_per_hour,-q.gpu_memory_gb))
+    preferred=("NVIDIA RTX PRO 6000 Blackwell Server Edition","NVIDIA GeForce RTX 5090","NVIDIA RTX PRO 4500 Blackwell","NVIDIA RTX 6000 Ada Generation","NVIDIA L40S","NVIDIA RTX A6000")
+    quotes=[q for q in quotes if q.gpu_id in preferred]
+    quotes.sort(key=lambda q:preferred.index(q.gpu_id))
     if not quotes:raise RuntimeError("no globally quoted GPU fits the fixed envelope")
     print("TRIAD_GLOBAL_ELIGIBLE_QUOTES="+str(len(quotes)),flush=True)
     docker="/usr/bin/docker"
@@ -461,7 +465,7 @@ def main():
                 body={"name":name,"gpu":{"id":quoted.gpu_id,"count":1},"cloud":"SECURE",
                       "image":IMAGE,"disk":110,
                       "mounts":{"global":[{"volumeId":GLOBAL_ID,"path":"/workspace-global"}]},
-                      "entrypoint":[],"cmd":cmd,"env":env}
+                      "cmd":cmd,"env":env}
                 print("TRIAD_GLOBAL_ALLOCATION_TRY="+quoted.gpu_id+" quote="+str(quoted.price_usd_per_hour),flush=True)
                 try:
                     status,candidate=adapter._request("POST","pods",body)
@@ -470,7 +474,13 @@ def main():
                     detail=""
                     try:detail=exc.__cause__.read(4096).decode(errors="replace").lower()
                     except Exception:pass
-                    if exc.status_code in (400,409,503) and any(x in detail for x in ("capacity","unavailable","no available","not enough","no machines")) and not owned():
+                    print("TRIAD_GLOBAL_PROVIDER_HTTP_STATUS="+str(exc.status_code),flush=True)
+                    categories={"capacity":("capacity","unavailable","no available","no machines","stock","no gpu","not enough resources"),"funds":("balance","insufficient funds","payment","credit"),"invalid":("validation","invalid","required field","unsupported","not supported"),"global_mount":("global volume","global storage","mount")}
+                    matched=[k for k,terms in categories.items() if any(x in detail for x in terms)]
+                    print("TRIAD_GLOBAL_PROVIDER_CATEGORY="+(",".join(matched) if matched else "unclassified"),flush=True)
+                    # A definite HTTP 400 capacity rejection plus independent zero-Pod listing
+                    # permits the next distinct allowed SKU; no repeat of an ambiguous POST.
+                    if exc.status_code in (400,409,503) and "capacity" in matched and "funds" not in matched and "invalid" not in matched and not owned():
                         print("TRIAD_GLOBAL_SKU_CAPACITY_REFUSED",flush=True)
                         continue
                     raise RuntimeError("ambiguous or invalid Global allocation; no retry") from None
