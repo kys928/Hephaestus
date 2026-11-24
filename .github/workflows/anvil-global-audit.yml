@@ -1,0 +1,26 @@
+name: Anvil Global CPU readback
+on:
+  push:
+    branches: [feature/anvil-integration]
+    paths: [.github/workflows/anvil-global-audit.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: anvil-single-global-cpu-audit
+  cancel-in-progress: false
+jobs:
+  readback:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify current rate and watchdog, then read exact mounts on one CPU Pod
+        run: PYTHONPATH=src python -u scripts/anvil_global_audit_control.py audit
