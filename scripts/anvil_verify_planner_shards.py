@@ -8,7 +8,11 @@ import re
 import stat
 
 
-def verify(root: Path, manifest: dict) -> list[dict]:
+CZECH_VOLUME = "cviwpryzao"
+PLANNER_PREFIX = "hephaestus-cache/huggingface/hub/models--mistralai--Ministral-3-8B-Reasoning-2512/blobs/"
+
+
+def validated_shards(manifest: dict) -> list[dict]:
     if manifest["revision"] != "81eaece1948f3875421d9a45bc55487d10e2d894":
         raise ValueError("Planner revision differs from certified registry")
     shards = manifest["shards"]
@@ -17,6 +21,24 @@ def verify(root: Path, manifest: dict) -> list[dict]:
         or type(row["bytes"]) is not int or row["bytes"] <= 0 for row in shards
     ) or sum(row["bytes"] for row in shards) != 17_836_123_192:
         raise ValueError("expected four distinct pinned Planner shards and exact byte ceiling")
+    return shards
+
+
+def verify_stream(stream, size: int, digest: str) -> None:
+    hasher = hashlib.sha256()
+    remaining = size
+    while remaining:
+        chunk = stream.read(min(8 * 1024 * 1024, remaining))
+        if not chunk or len(chunk) > remaining:
+            raise ValueError(f"incorrect stream length for {digest}")
+        hasher.update(chunk)
+        remaining -= len(chunk)
+    if hasher.hexdigest() != digest:
+        raise ValueError(f"incorrect stream SHA-256 for {digest}")
+
+
+def verify(root: Path, manifest: dict) -> list[dict]:
+    shards = validated_shards(manifest)
     root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         for row in shards:
@@ -26,27 +48,55 @@ def verify(root: Path, manifest: dict) -> list[dict]:
                 before = os.fstat(stream.fileno())
                 if not stat.S_ISREG(before.st_mode) or before.st_size != size:
                     raise ValueError(f"unexpected blob type or length for {digest}")
-                hasher = hashlib.sha256()
-                remaining = size
-                while remaining:
-                    chunk = stream.read(min(8 * 1024 * 1024, remaining))
-                    if not chunk:
-                        raise ValueError(f"truncated blob {digest}")
-                    hasher.update(chunk)
-                    remaining -= len(chunk)
+                verify_stream(stream, size, digest)
                 after = os.fstat(stream.fileno())
                 if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
                     after.st_size, after.st_mtime_ns, after.st_ctime_ns
-                ) or hasher.hexdigest() != digest:
+                ):
                     raise ValueError(f"blob changed or failed SHA-256 verification: {digest}")
     finally:
         os.close(root_fd)
     return shards
 
 
+def verify_s3(client, manifest: dict, *, metadata_only: bool) -> list[dict]:
+    from contextlib import closing
+
+    shards = validated_shards(manifest)
+    for row in shards:
+        digest, size = row["sha256"], row["bytes"]
+        address = {"Bucket": CZECH_VOLUME, "Key": PLANNER_PREFIX + digest}
+        head = client.head_object(**address)
+        if head["ContentLength"] != size:
+            raise ValueError(f"unexpected object length for {digest}")
+        if metadata_only:
+            continue
+        response = client.get_object(**address, Range=f"bytes=0-{size - 1}")
+        with closing(response["Body"]) as stream:
+            if (response.get("ResponseMetadata", {}).get("HTTPStatusCode") != 206
+                    or response.get("ContentRange") != f"bytes 0-{size - 1}/{size}"
+                    or response.get("ContentLength") != size):
+                raise ValueError(f"incorrect bounded range for {digest}")
+            verify_stream(stream, size, digest)
+    return shards
+
+
+def czech_s3_client():
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3", endpoint_url="https://s3api-eu-cz-1.runpod.io", region_name="EU-CZ-1",
+        aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+        config=Config(connect_timeout=10, read_timeout=30, retries={"total_max_attempts": 1},
+                      s3={"addressing_style": "path"}),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("blobs", type=Path)
+    parser.add_argument("blobs", help="local directory, czech-s3-head, or czech-s3-stream")
     parser.add_argument("manifest", type=Path)
     parser.add_argument("manifest_sha256")
     args = parser.parse_args()
@@ -55,9 +105,14 @@ def main():
     if len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != args.manifest_sha256:
         raise ValueError("reviewed manifest digest does not match")
     manifest = json.loads(raw)
-    verified = verify(args.blobs, manifest)
+    metadata_only = args.blobs == "czech-s3-head"
+    if metadata_only or args.blobs == "czech-s3-stream":
+        checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only)
+    else:
+        checked = verify(Path(args.blobs), manifest)
+    field = "metadata_checked" if metadata_only else "verified"
     print(json.dumps({"revision": manifest["revision"], "manifest_sha256": args.manifest_sha256,
-                      "verified": verified}, sort_keys=True))
+                      field: checked}, sort_keys=True))
 
 
 if __name__ == "__main__":

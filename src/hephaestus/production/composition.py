@@ -166,13 +166,18 @@ class ProductionRuntime:
         trusted_receipts: frozenset[str],
     ):
         """Bind independently reviewed artifacts to the bounded blackboard."""
-        from hephaestus.control.anvil_context import AnvilAdmission
+        from hephaestus.control.anvil_context import AnvilAdmission, material_collection
 
         board = self.anvil_rehearsal(
             verify_origin=lambda origin: origin.inference_ref in trusted_receipts,
-            verify_evidence=lambda _origin, ref: ref in trusted_material,
+            verify_evidence=lambda origin, ref: any(
+                row.get("ref") == ref for row in self.state_repository.all(material_collection(origin))
+            ),
         )
-        return AnvilAdmission(board, self.artifact_store, registry_ref, trusted_material, trusted_receipts)
+        return AnvilAdmission(
+            board, self.artifact_store, registry_ref, trusted_material, trusted_receipts,
+            self.state_repository,
+        )
 
     def reviewed_source_jobs(
         self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,

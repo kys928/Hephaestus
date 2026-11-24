@@ -10,6 +10,7 @@ import re
 class ContributionKind(StrEnum):
     OBJECTIVE = "objective"
     OBSERVATION = "observation"
+    MODEL_CLAIM = "model_claim"
     EVIDENCE = "evidence"
     HYPOTHESIS = "hypothesis"
     QUESTION = "question"
@@ -42,6 +43,18 @@ def require_digest(value: object) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class V1Position:
+    decision: str
+    action: str
+    primary_variable: str
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value.strip() or len(value) > 128
+               for value in (self.decision, self.action, self.primary_variable)):
+            raise ValueError("invalid frozen v1 position")
+
+
+@dataclass(frozen=True, slots=True)
 class Contribution:
     kind: ContributionKind
     text: str
@@ -50,11 +63,12 @@ class Contribution:
     capability: str | None = None
     confidence: float | None = None
     uncertainties: tuple[str, ...] = ()
+    v1_position: V1Position | None = None
 
     @classmethod
     def from_model(cls, payload: dict) -> Contribution:
         if not isinstance(payload, dict) or set(payload) - {
-            "kind", "text", "links", "evidence_refs", "capability", "confidence", "uncertainties",
+            "kind", "text", "links", "evidence_refs", "capability", "confidence", "uncertainties", "v1_position",
         }:
             raise ValueError("contribution contains unsupported or runtime-owned fields")
         kind = ContributionKind(payload.get("kind"))
@@ -104,7 +118,14 @@ class Contribution:
             not isinstance(item, str) or len(item) > 300 for item in uncertainties
         ):
             raise ValueError("expected bounded uncertainty statements")
-        return cls(kind, text, tuple(links), tuple(evidence), capability, confidence, tuple(uncertainties))
+        position = payload.get("v1_position")
+        if kind == ContributionKind.MODEL_CLAIM:
+            if not isinstance(position, dict) or set(position) != {"decision", "action", "primary_variable"}:
+                raise ValueError("model claim requires a complete frozen v1 position")
+            position = V1Position(**position)
+        elif position is not None:
+            raise ValueError("only model claims can carry a frozen v1 position")
+        return cls(kind, text, tuple(links), tuple(evidence), capability, confidence, tuple(uncertainties), position)
 
     def to_dict(self) -> dict:
         document = {"kind": self.kind.value, "text": self.text,
@@ -114,6 +135,12 @@ class Contribution:
             document["confidence"] = self.confidence
         if self.uncertainties:
             document["uncertainties"] = list(self.uncertainties)
+        if self.v1_position is not None:
+            document["v1_position"] = {
+                "decision": self.v1_position.decision,
+                "action": self.v1_position.action,
+                "primary_variable": self.v1_position.primary_variable,
+            }
         return document
 
 

@@ -268,13 +268,20 @@ def test_cold_admission_rebinds_fixture_receipt_to_exact_context(tmp_path):
     objective = publish(dict(scope, schema="anvil.material.v1", kind="objective", text="Compare two hypotheses."))
     evidence = publish(dict(scope, schema="anvil.material.v1", kind="evidence", text="Fixture measurement."))
     materials = frozenset((objective, evidence))
-    board = AnvilState(SQLiteStateRepository(tmp_path / "board.sqlite"), lambda _: True,
+    repository = SQLiteStateRepository(tmp_path / "board.sqlite")
+    board = AnvilState(repository, lambda _: True,
                        lambda _, ref: ref in materials)
-    admission = AnvilAdmission(board, artifacts, registry, materials, frozenset())
+    admission = AnvilAdmission(board, artifacts, registry, materials, frozenset(), repository)
     origin = ContributionOrigin(**scope, role=role, inference_ref=objective,
                                 context_frontier=board.read_snapshot("study").frontier,
                                 idempotency_key="first", model_id=model.model_id, model_revision=model.revision,
                                 adapter_ref="sha256:" + model.adapter.sha256)
+    with pytest.raises(PermissionError, match="independent admission"):
+        admission.prepare(origin, 0, (objective, evidence))
+    for ref in materials:
+        admission.admit_material(origin, ref)
+        admission.admit_material(origin, ref)
+    admission = replace(admission, trusted_material=frozenset())
     task = admission.prepare(origin, 0, (objective, evidence))
     assert task == admission.prepare(origin, 0, (evidence, objective))
     with pytest.raises(PermissionError, match="independent admission"):
@@ -300,6 +307,10 @@ def test_cold_admission_rebinds_fixture_receipt_to_exact_context(tmp_path):
     with pytest.raises(PermissionError, match="exact context"):
         admission.accept(origin, 0, (objective,))
     admitted = admission.accept(origin, 0, (objective, evidence))
+    assert admitted.payload.kind == ContributionKind.MODEL_CLAIM
+    assert admitted.payload.v1_position.action == answer["action"]
+    next_task = admission.prepare(replace(origin, context_frontier=admitted.frontier), 1, (objective, evidence))
+    assert '"primary_variable"' in next_task.situation and '"model_claim"' in next_task.situation
     assert admitted.payload.confidence == 0.6
     assert admitted.payload.uncertainties == ("One fixture",)
     assert board.replay("study").contributions == (admitted,)
