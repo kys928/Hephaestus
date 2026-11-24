@@ -1,0 +1,74 @@
+name: REAL Global triad recovery with restart and cleanup regression gates
+on:
+  push:
+    branches: [ops/ministral-triad-recovery-20261124]
+    paths: [.github/workflows/ministral-triad-recovery-once.yml]
+permissions: {contents: read}
+concurrency: {group: hephaestus-real-original-global-triad-recovery-20261124, cancel-in-progress: false}
+jobs:
+  independent-watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 112
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 6cc805b6ed91d991d1ed9dbc2a078c813d721434, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = 6cc805b6ed91d991d1ed9dbc2a078c813d721434
+      - run: python -m pip install -e '.[s3,test,independent-certification]'
+      - run: python -u scripts/watchdog_approved_ministral_triad_cuda.py --run-tag "$GITHUB_RUN_ID"
+  real-global-gpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 6cc805b6ed91d991d1ed9dbc2a078c813d721434, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = 6cc805b6ed91d991d1ed9dbc2a078c813d721434
+      - run: python -m pip install -e '.[s3,test,independent-certification]'
+      - name: Compile exact scripts and verify existing repair contracts before allocation
+        run: |
+          python -m py_compile scripts/run_provisional_ministral_triad_cuda_worker.py scripts/launch_approved_ministral_triad_cuda.py scripts/watchdog_approved_ministral_triad_cuda.py src/hephaestus/research/global_role_archive_source.py
+          python -m pytest -q tests/test_global_triad_lifecycle_recovery.py tests/test_provisional_ministral_coder_qualification.py tests/test_signed_research_live_runtime.py tests/test_constrained_research_self_repair.py
+      - name: Build independent offline patch verifier before allocation
+        run: |
+          docker build -t hephaestus-triad-review-sandbox:local - <<'DOCKER'
+          FROM python:3.12-slim
+          RUN pip install --no-cache-dir pytest==8.4.2
+          DOCKER
+      - name: Reconcile previous pre-allocation failure
+        run: |
+          python - <<'PY'
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
+          from pathlib import Path
+          import json,os
+          cfg=RunPodConfig.from_env()
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"reconcile-global-old")
+          tag="45372244159"
+          assert not any(str(p.get("name","")).startswith("hephaestus-ministral-triad-"+tag+"-") for p in adapter.list_pods()),"Previous campaign Pod must be reconciled first"
+          client=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
+          client.put_object(Bucket=cfg.network_volume_id,Key="hephaestus/operations/ministral-triad/"+tag+"/controller-finished.json",Body=json.dumps({"run_tag":tag,"accepted":False,"preallocation_failure":True}).encode())
+          print("PREVIOUS_GLOBAL_CAMPAIGN_NO_PODS=true",flush=True)
+          PY
+      - name: Launch original models on one Global-mounted GPU, independent verification, cleanup
+        run: python -u scripts/launch_approved_ministral_triad_cuda.py --source-commit 6cc805b6ed91d991d1ed9dbc2a078c813d721434 --run-tag "$GITHUB_RUN_ID"
