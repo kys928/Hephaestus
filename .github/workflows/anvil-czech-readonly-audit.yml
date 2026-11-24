@@ -1,86 +1,76 @@
-name: Anvil Czech read-only inventory
+name: Anvil Czech certified adapter readback
 on:
   pull_request:
     branches: [main]
     paths: [.github/workflows/anvil-czech-readonly-audit.yml]
-permissions: {}
+permissions:
+  contents: read
 jobs:
-  inventory:
+  verify:
     if: github.repository == 'kys928/Hephaestus' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/anvil-czech-volume-readonly-audit'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - run: python -m pip install 'boto3>=1.35,<2' 'cryptography>=44,<47'
-      - name: List the admitted regional volume and encrypt inventory metadata
+      - uses: actions/checkout@v4
+        with:
+          ref: cf31eb4eddfc67983110ce5570a852d48ca2bf7e
+          persist-credentials: false
+      - run: python -m pip install 'boto3>=1.35,<2'
+      - name: Independently rehash the five original registered role adapter archives
         env:
           RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
           RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
-          RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
         shell: bash
         run: |
           python - <<'PY'
-          import gzip
+          from concurrent.futures import ThreadPoolExecutor
+          from hashlib import sha256
           import json
           import os
           from pathlib import Path
 
           import boto3
           from botocore.config import Config
-          from botocore.exceptions import ClientError
-          from cryptography.hazmat.primitives import hashes, serialization
-          from cryptography.hazmat.primitives.asymmetric import padding
-          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
           key_id = os.environ.get("RUNPOD_S3_ACCESS_KEY_ID")
           secret = os.environ.get("RUNPOD_S3_SECRET_ACCESS_KEY")
           if not key_id or not secret:
-              raise SystemExit("Inventory skipped because RunPod S3 references are unavailable.")
-          volume = os.environ.get("RUNPOD_NETWORK_VOLUME_ID") or "cviwpryzao"
-          if volume != "cviwpryzao":
-              raise SystemExit("Configured volume differs from the admitted Czech source.")
+              raise SystemExit("RunPod S3 references are unavailable.")
+          roles = json.loads(Path("configs/models/hephaestus_role_model_stack_v1.json").read_text())["roles"]
+          expected_roles = {"controller", "diagnosis", "planner", "evaluator", "judge"}
+          if set(roles) != expected_roles:
+              raise SystemExit("The source registry differs from the exact five-role scope.")
           client = boto3.client(
               "s3",
               region_name="EU-CZ-1",
               endpoint_url="https://s3api-eu-cz-1.runpod.io/",
               aws_access_key_id=key_id,
               aws_secret_access_key=secret,
-              config=Config(connect_timeout=10, read_timeout=30, retries={"total_max_attempts": 3}),
+              config=Config(connect_timeout=10, read_timeout=35, retries={"total_max_attempts": 3}),
           )
-          rows = {}
-          try:
-              pages = client.get_paginator("list_objects_v2").paginate(Bucket=volume)
-              for page in pages:
-                  for obj in page.get("Contents", ()):
-                      path = obj["Key"]
-                      if path in rows:
-                          raise SystemExit("Listing returned a duplicate object key.")
-                      rows[path] = {
-                          "key": path,
-                          "bytes": obj["Size"],
-                          "modified_utc": obj["LastModified"].isoformat(),
-                          "etag": obj.get("ETag"),
-                      }
-          except ClientError as exc:
-              status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-              raise SystemExit(f"Regional listing failed with HTTP status {status}.") from None
 
-          if not rows:
-              raise SystemExit("The regional listing returned no objects.")
-          payload = gzip.compress(json.dumps([rows[key] for key in sorted(rows)]).encode())
-          public_key = serialization.load_pem_public_key(b"""-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1eKBZxsr+fLM4xaQBrgx\nzny7IqXVDLjcmovHP7ij/YUGGUOj3zhYSvjTSPGRm9T8giXgRgn1fx4uR5I1NsD8\nQRxnCUDHLkrpBXgIT9Wux8bg3OkkC9aPf9dLW+ETXZkFNWeAeaB3Vn1XfLpDyO09\ndj0RfNLQQIUNyz350b6W/5YxqL9iR2Nut+PceXLOxSiLpJteLIy5Ek7fLG07QgIf\n/yDgB7fZlHApGK5atSLp5kOuz5zNBCXx14/6cq3eUrEIGyNWm4pxNOAVpvIbVjDk\nrqDRGaZKgV23ZZdDIpgo8YC7ZW8LIJUL5rpC/FPP6YNaJhgyADXr45WuJQscN47f\nuYQRo9UP9StpvCRpxXofn2P6lKRYFkjM6vs3UdpD+S95qCnVZw0RgH72Ov4gARce\nXvYqA5tD2M8piSkJKbLWuh8u0BgCVFSNFSpDlNYPXzYleinDl7q1WgIBzhl2hopW\n4wgUZhtId2KUiqODW8wqYwnzYAXSAakdNBMQhVOLxrVnAgMBAAE=\n-----END PUBLIC KEY-----\n""")
-          data_key = AESGCM.generate_key(bit_length=256)
-          nonce = os.urandom(12)
-          encrypted_key = public_key.encrypt(
-              data_key,
-              padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
-          )
-          ciphertext = AESGCM(data_key).encrypt(nonce, payload, b"hephaestus-anvil-czech-v1")
-          Path("anvil-czech-inventory.encrypted").write_bytes(encrypted_key + nonce + ciphertext)
-          print(f"Read-only inventory complete. Listed objects: {len(rows)}.")
+          def verify(role):
+              expected = roles[role]["adapter"]
+              try:
+                  response = client.get_object(Bucket="cviwpryzao", Key=expected["s3_key"])
+                  with response["Body"] as body:
+                      if response["ContentLength"] != expected["bytes"]:
+                          return role, False
+                      digest = sha256()
+                      size = 0
+                      for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+                          size += len(chunk)
+                          if size > expected["bytes"]:
+                              return role, False
+                          digest.update(chunk)
+                  return role, size == expected["bytes"] and digest.hexdigest() == expected["sha256"]
+              except Exception:
+                  return role, False
+
+          with ThreadPoolExecutor(max_workers=3) as pool:
+              checks = dict(pool.map(verify, sorted(roles)))
+          for role, passed in checks.items():
+              print(f"Verified role archive {role}: {str(passed).lower()}")
+          if not all(checks.values()):
+              raise SystemExit("One or more scoped archive readbacks could not be verified.")
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: anvil-czech-inventory-encrypted
-          path: anvil-czech-inventory.encrypted
-          retention-days: 1
-          if-no-files-found: error
