@@ -1,0 +1,40 @@
+name: Real RTX 3090 fallback source-pinned pre-spend acceptance
+on:
+  push:
+    branches: [ops/ministral-triad-3090-gpu-20261124]
+    paths: [.github/workflows/ministral-triad-3090-safety.yml]
+permissions: {contents: read}
+jobs:
+  frozen-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 8c2c3682b2dcdd66426ee1b5bfb3aceff444c6e2, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = 8c2c3682b2dcdd66426ee1b5bfb3aceff444c6e2
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - name: No prepay if modified 3090 exact source does not compile or reprove genuine fault
+        run: |
+          python -m py_compile scripts/run_provisional_ministral_triad_cuda_worker.py scripts/launch_approved_ministral_triad_cuda.py scripts/watchdog_approved_ministral_triad_cuda.py
+          python -m pytest -q tests/test_provisional_ministral_coder_qualification.py
+          docker build -t hephaestus-triad-review-sandbox:local - <<'DOCKER'
+          FROM python:3.12-slim
+          RUN pip install --no-cache-dir pytest==8.4.2
+          DOCKER
+          PYTHONPATH=scripts python - <<'PY'
+          from pathlib import Path
+          import tempfile,shutil
+          from launch_approved_ministral_triad_cuda import (
+              independent_failure_preflight,SKU,MAX_TOTAL_USD,MAX_QUOTED_GPU_USD_PER_HOUR)
+          assert SKU=="NVIDIA GeForce RTX 3090"
+          assert str(MAX_TOTAL_USD)=="2.00"
+          assert str(MAX_QUOTED_GPU_USD_PER_HOUR)=="0.75"
+          with tempfile.TemporaryDirectory(prefix="review-original-") as root:
+              trial,head,image,case=independent_failure_preflight(
+                  Path(root),docker=shutil.which("docker"),code_root=Path.cwd())
+              assert case["baseline_output_sha256"].startswith("sha256:")
+              assert case["fixed_test_sha256"].startswith("sha256:")
+          print("TRIAD_RTX3090_SOURCE_PRESPEND_ADMISSION=PASS")
+          PY
