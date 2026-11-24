@@ -91,10 +91,28 @@ Five workflow files are present in pinned main. Their trigger definitions cover 
 
 | Evidence | What is verified | Outstanding |
 | --- | --- | --- |
-| Czech volume [inventory run](https://github.com/kys928/Hephaestus/actions/runs/43256848721) | Historical list-only audit job passed. | Fresh listing, approved custody for names, required hashes and associations. S3 ETags are metadata and can differ from SHA-256. |
+| Czech volume [inventory run](https://github.com/kys928/Hephaestus/actions/runs/43256848721) | Historical list-only audit job passed. The fresh [regional audit](https://github.com/kys928/Hephaestus/actions/runs/45392348582) listed 51,515 objects totaling 46,003,033,185 bytes. | Confirm identity-critical content hashes, custody and lineage associations beyond the metadata listing. S3 ETags are metadata and can differ from SHA-256. |
 | Global recovery [#204](https://github.com/kys928/Hephaestus/pull/204) | The verifier source requires 8,224 source candidates to reconcile exactly as readable files plus accounted exclusions. Initial independent verification run #43257715054 did not enter its rehash job. The receipt-only run #43305182543 reached 8,113 files, failed before a clean seal and passed cleanup. PR #204 records 111 broken or unavailable source symlink aliases. The patched retry #43402079574 failed its prepaid-credit check before allocating a Pod. | Verify a successful seal and independent readback. Confirm whether the 111 alias targets remain unavailable and compare exact path, size and hash against the HF manifest. Count equality alone cannot establish parity. |
 | Frozen triad [GPU job](https://github.com/kys928/Hephaestus/actions/runs/45375181356), [independent observation](https://github.com/kys928/Hephaestus/actions/runs/45376969755) | The CUDA job failed at campaign completion. The independent observer recovered two CUDA role receipts and confirmed exact Pod absence. Semantic disagreement prevented Coder inference. | Replay raw role outputs through protocol v2 once available. Offline identities of all five full base-model snapshots and original adapter archives still require independent verification. |
 | Backup and authoritative state | Historical receipts and archives provide scoped evidence. The storage policy requires identified Linux mount semantics, and a source recovery controller exposed a Global/SQLite incompatibility. | Verify regional transaction, WAL, crash recovery and backup procedures. Keep Global artifacts immutable. |
+
+### Czech metadata snapshot
+
+The audit read only object metadata from the admitted regional volume. The exact listing is retained privately. The decrypted raw metadata digest is `ee7e7b3b4aeadc79da34e5212337c40d0890125c08f70d59d9e7ff013efcf0b9`. Categories below are path and extension heuristics.
+
+| Category | Objects | Bytes |
+| --- | ---: | ---: |
+| Reproducible upstream cache candidates | 36,180 | 18,995,970,957 |
+| Model or adapter candidates | 2,800 | 20,022,723,520 |
+| Research evidence or unclassified | 6,900 | 551,861,124 |
+| Archives requiring separate validation | 88 | 4,198,467,901 |
+| Mutable or operational state | 900 | 1,839,283,828 |
+| Protected evaluation or custody | 2,369 | 31,903,667 |
+| Dataset candidates | 248 | 215,499,371 |
+| Code or development | 1,108 | 3,059,144 |
+| Miscellaneous unclassified | 922 | 144,263,673 |
+
+An independent [Czech archive readback](https://github.com/kys928/Hephaestus/actions/runs/45394744697) verified stream length and the registered SHA-256 for all five original role adapters. The earlier readback attempts failed in the verifier before comparing the digests. The successful run uses the pinned main registry and the corrected streaming response handling. Only the Controller and Planner base revisions had matches under an exact `snapshots/<revision>/` path in the Czech metadata. Snapshot files can exist elsewhere, and path presence establishes neither completeness nor byte identity. Keep all assets pending identity and custody verification.
 
 The registry pins the following base revisions at the source snapshot.
 
