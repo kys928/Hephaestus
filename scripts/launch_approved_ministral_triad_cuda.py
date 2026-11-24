@@ -23,6 +23,7 @@ from hephaestus.research.constrained_repair import (
     RepairScope,PatchCandidate,ConstrainedSelfRepair,OfflineDockerPytestRunner)
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.verified import canonical_bytes
+from ministral_global_cleanup import terminate_campaign_pods
 
 BASE="hephaestus/operations/ministral-triad"
 SKU="NVIDIA RTX PRO 4500 Blackwell"
@@ -168,6 +169,10 @@ from io import BytesIO
 tag=os.environ["TRIAD_RUN_TAG"]
 root=pathlib.Path("/tmp/hephaestus-triad-pinned-code")
 work=pathlib.Path("/tmp/hephaestus-triad-local")/tag
+# Never replay a paid worker after a container restart. Keep evidence intact.
+if root.exists() or work.exists():
+    print("TRIAD_RESTART_REFUSED_EXISTING_WORKSPACE",flush=True)
+    sys.exit(73)
 root.mkdir(exist_ok=False)
 work.mkdir(parents=True,exist_ok=False)
 access=os.environ.pop("TRIAD_BRIDGE_ACCESS")
@@ -266,7 +271,9 @@ sys.exit(code)
          "TRIAD_CASE_SHA256":case_digest,**storage}
     encoded=base64.b64encode(bootstrap.encode()).decode("ascii")
     # Match the actual successful Global Volume boot: bash -lc, no entrypoint override.
-    return ["bash","-lc","exec python -u -c \"import base64;exec(base64.b64decode('"+encoded+"'))\""],env
+    # A terminal worker is not a reason for the container runtime to restart.
+    # Hold the container until the independent off-Pod controller deletes it.
+    return ["bash","-lc","python -u -c \"import base64;exec(base64.b64decode('"+encoded+"'))\"; rc=$?; echo TRIAD_BOOTSTRAP_TERMINAL_CODE=$rc; exec sleep infinity"],env
 
 
 class BundleReader:
@@ -527,7 +534,9 @@ def main():
                         attempt=3 if accepted else attempt+1
                 exit_raw=optional_read(s3,bucket,prefix+"/worker-exit.txt",500)
                 if exit_raw is not None:
-                    if exit_raw.strip()!=b"0":raise RuntimeError("GPU worker failed; final scoped evidence retained")
+                    if exit_raw.strip()!=b"0":
+                        print("TRIAD_WORKER_EXIT_NONZERO="+exit_raw.decode(errors="replace")[:20],flush=True)
+                        raise RuntimeError("GPU worker failed; final scoped evidence retained")
                     if not accepted:raise RuntimeError("no independent accepted three-model repair")
                     print("TRIAD_GENUINE_THREE_MODEL_GLOBAL_REPAIR=PASS",flush=True)
                     return
@@ -535,9 +544,8 @@ def main():
             raise TimeoutError("independently bounded global experiment deadline")
         finally:
             # Reconcile even on ambiguous POST, never create another Pod.
-            for item in owned():
-                adapter.delete_pod(str(item["id"]))
-                print("TRIAD_REAL_RUNPOD_POD_DELETED=true",flush=True)
+            terminate_campaign_pods(adapter,args.run_tag)
+            print("TRIAD_PROVIDER_CAMPAIGN_ABSENT=true",flush=True)
             if owned():raise PermissionError("exact campaign Pod remains; watchdog continues")
             s3.put_object(Bucket=bucket,Key=prefix+"/controller-finished.json",Body=canonical_bytes({"run_tag":args.run_tag,"accepted":accepted}))
 
