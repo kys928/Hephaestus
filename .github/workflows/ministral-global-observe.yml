@@ -1,4 +1,4 @@
-name: Emergency exact failed triad Pod cleanup and evidence audit
+name: Recover original triad failure evidence and reconcile watchdog
 on:
   push:
     branches: [ops/ministral-global-allocation-observe-20261124]
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install -e '.[s3]'
-      - name: Terminate exact failed triad Pod only and verify absence
+      - name: Inspect preserved first-start evidence and close reconciled watchdog
         run: |
           python - <<'PY'
           from hephaestus.providers.runpod.config import RunPodConfig
@@ -56,6 +56,29 @@ jobs:
               print("GLOBAL_TRIAD_PROVIDER="+json.dumps({"id":p.get("id"),"status":p.get("status"),"datacenter":p.get("dataCenterId"),"gpu":p.get("gpu"),"rate":p.get("costPerHr",p.get("cost")),"mounts":p.get("mounts")},sort_keys=True),flush=True)
           s3=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
           prefix="hephaestus/operations/ministral-triad/"+tag+"/"
+          import io,zipfile,re
+          for name in ("worker-phase.json","worker-exit.txt","final-evidence.zip"):
+              try:
+                  stream=s3.get_object(Bucket=cfg.network_volume_id,Key=prefix+name)["Body"]
+                  try:raw=stream.read(8_000_001)
+                  finally:stream.close()
+              except Exception as exc:
+                  if str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in ("404","NoSuchKey","NotFound"):continue
+                  raise
+              if name=="final-evidence.zip":
+                  with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                      print("RECOVERED_EVIDENCE_MEMBERS="+json.dumps(z.namelist()),flush=True)
+                      for entry in z.namelist():
+                          if entry.endswith("worker-result.json") or entry.endswith("observation.json"):
+                              doc=json.loads(z.read(entry))
+                              print("RECOVERED_STAGE="+json.dumps({"entry":entry,"status":doc.get("status"),"error_class":doc.get("error_class"),"role":doc.get("role"),"steps":len(doc.get("steps",[])),"model_success_count":doc.get("model_success_count"),"model_id":doc.get("model_id"),"elapsed_seconds":doc.get("elapsed_seconds")}),flush=True)
+                          elif entry.endswith(".json"):
+                              doc=json.loads(z.read(entry))
+                              if isinstance(doc,dict) and ("status" in doc or "error" in doc):
+                                  print("RECOVERED_RECEIPT="+json.dumps({"entry":entry,"status":doc.get("status"),"error":str(doc.get("error",""))[:200],"role":doc.get("role"),"reason":str(doc.get("reason",""))[:200]}),flush=True)
+              else:print("RECOVERED_"+name+"="+raw.decode()[:300],flush=True)
+          assert not own
+          s3.put_object(Bucket=cfg.network_volume_id,Key=prefix+"controller-finished.json",Body=json.dumps({"run_tag":tag,"accepted":False,"emergency_cleanup_confirmed":True}).encode())
           for name in ("transport-probe.bin","active-lease.json","attempt-1.zip","attempt-2.zip","worker-exit.txt","final-evidence.zip","controller-finished.json","watchdog-heartbeat.json","worker-phase.json"):
               try:
                   h=s3.head_object(Bucket=cfg.network_volume_id,Key=prefix+name)
