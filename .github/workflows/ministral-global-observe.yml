@@ -72,10 +72,10 @@ jobs:
                           if entry.endswith("worker-result.json") or entry.endswith("observation.json"):
                               doc=json.loads(z.read(entry))
                               print("RECOVERED_STAGE="+json.dumps({"entry":entry,"status":doc.get("status"),"error_class":doc.get("error_class"),"role":doc.get("role"),"steps":len(doc.get("steps",[])),"model_success_count":doc.get("model_success_count"),"model_id":doc.get("model_id"),"elapsed_seconds":doc.get("elapsed_seconds")}),flush=True)
-                          elif entry.endswith(".json"):
+                          elif entry.startswith("model-artifacts/objects/sha256/"):
                               doc=json.loads(z.read(entry))
                               if isinstance(doc,dict) and ("status" in doc or "error" in doc):
-                                  print("RECOVERED_RECEIPT="+json.dumps({"entry":entry,"status":doc.get("status"),"error":str(doc.get("error",""))[:200],"role":doc.get("role"),"reason":str(doc.get("reason",""))[:200]}),flush=True)
+                                  print("RECOVERED_RECEIPT="+json.dumps({"entry":entry,"status":doc.get("status"),"error":str(doc.get("error",""))[:200],"role":doc.get("role"),"model":doc.get("model_id"),"finish_reason":doc.get("finish_reason"),"tokens":len(doc.get("execution",{}).get("generated_token_ids",[])),"output_tail":str(doc.get("raw_output",""))[-1200:],"device":doc.get("execution",{}).get("device")}),flush=True)
               else:print("RECOVERED_"+name+"="+raw.decode()[:300],flush=True)
           assert not own
           s3.put_object(Bucket=cfg.network_volume_id,Key=prefix+"controller-finished.json",Body=json.dumps({"run_tag":tag,"accepted":False,"emergency_cleanup_confirmed":True}).encode())
