@@ -255,10 +255,18 @@ def scoped_urls(s3,bucket,prefix):
     # Real two-way presigned transport probe before any paid allocation.
     sample=b"hephaestus-global-triad-transport-v1"
     p=sign("put_object","transport-probe.bin")
-    with urllib.request.urlopen(urllib.request.Request(p,data=sample,method="PUT"),timeout=35) as r:
-        if r.status not in (200,201,204):raise RuntimeError("scoped PUT rejected")
-    with urllib.request.urlopen(sign("get_object","transport-probe.bin"),timeout=35) as r:
-        if r.read(200)!=sample:raise RuntimeError("scoped GET readback mismatch")
+    try:
+        with urllib.request.urlopen(urllib.request.Request(p,data=sample,method="PUT"),timeout=35) as r:
+            if r.status not in (200,201,204):raise RuntimeError("scoped PUT rejected")
+        with urllib.request.urlopen(sign("get_object","transport-probe.bin"),timeout=35) as r:
+            if r.read(200)!=sample:raise RuntimeError("scoped GET readback mismatch")
+    except urllib.error.HTTPError as exc:
+        import xml.etree.ElementTree as ET
+        try: err=ET.fromstring(exc.read(4096)).findtext("Code")
+        except Exception: err=None
+        print("TRIAD_SCOPED_TRANSPORT_HTTP_STATUS="+str(exc.code),flush=True)
+        print("TRIAD_SCOPED_TRANSPORT_ERROR_CODE="+str(err if err and re.fullmatch(r"[A-Za-z0-9]{1,64}",err) else "unknown"),flush=True)
+        raise RuntimeError("scoped SigV4 transport refused before allocation") from None
     if read_limited(s3,bucket,prefix+"/transport-probe.bin",200)!=sample:
         raise RuntimeError("independent signed transport mismatch")
     print("TRIAD_SCOPED_S3_TRANSPORT=PASS",flush=True)
@@ -369,7 +377,14 @@ def main():
     provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
     adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),
         state_root=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"global-triad-operations")
-    s3=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
+    import boto3
+    from botocore.config import Config
+    # RunPod requires SigV4; boto3 presigning can otherwise default to SigV2.
+    s3=boto3.client("s3",endpoint_url=cfg.s3_endpoint_url,region_name=cfg.datacenter_id,
+        aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+        config=Config(signature_version="s3v4",s3={"addressing_style":"path"},
+                      retries={"mode":"standard","max_attempts":3}))
     bucket=cfg.network_volume_id
     prefix=BASE+"/"+args.run_tag
     own="hephaestus-ministral-triad-"+args.run_tag+"-"
