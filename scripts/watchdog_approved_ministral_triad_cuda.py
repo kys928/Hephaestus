@@ -40,7 +40,15 @@ def main():
     marker=BASE+"/"+a.run_tag+"/watchdog-heartbeat.json"
     started=time.monotonic()
     first_seen=None
-    missing_after_seen=False
+    prefix=BASE+"/"+a.run_tag
+    def read_object(name):
+        try:
+            stream=s3.get_object(Bucket=cfg.network_volume_id,Key=prefix+"/"+name)["Body"]
+            try: return json.loads(stream.read(20_000))
+            finally: stream.close()
+        except Exception as exc:
+            if str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in {"404","NoSuchKey","NotFound"}: return None
+            raise
     while time.monotonic()-started < MAX_FIRST_POD_WAIT+MAX_LIVE+360:
         remaining=time.monotonic()-started
         if first_seen is None and remaining>MAX_FIRST_POD_WAIT:
@@ -62,12 +70,22 @@ def main():
             for pod in own:
                 adapter.delete_pod(pod["id"])
             raise RuntimeError("duplicate single-campaign Pod forbidden; both terminated")
+        if not own and read_object("controller-finished.json") is not None:
+            print("TRIAD_WATCHDOG_CONFIRMED_NO_CAMPAIGN_POD=true",flush=True)
+            return
         if own:
             if first_seen is None:
                 first_seen=time.monotonic()
                 print("TRIAD_WATCHDOG_REAL_GPU_POD_SEEN=true",flush=True)
+            lease=read_object("active-lease.json")
+            lease_ok=(isinstance(lease,dict) and lease.get("schema")=="global-triad-offpod-lease.v1"
+                and lease.get("run_tag")==a.run_tag and lease.get("name")==own[0].get("name")
+                and lease.get("global_volume")=="cmw51pjsk000007l9a0mv1jga"
+                and type(lease.get("deadline_epoch")) is int
+                and time.time()<lease["deadline_epoch"])
             account=provider.account()
-            expired=(time.monotonic()-first_seen >= MAX_LIVE
+            expired=(not lease_ok or
+                      time.monotonic()-first_seen >= MAX_LIVE
                      or time.monotonic()-started >= MAX_FIRST_POD_WAIT+MAX_LIVE
                      or account.autopay_enabled
                      or account.credit_balance_usd <= RESERVE)
