@@ -1,4 +1,4 @@
-name: Anvil Global CPU readback retry
+name: Anvil Global CPU readback through provider logs
 on:
   push:
     branches: [feature/anvil-integration]
@@ -13,7 +13,7 @@ jobs:
   readback:
     if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 19
+    timeout-minutes: 17
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
       GITHUB_TOKEN: ${{ github.token }}

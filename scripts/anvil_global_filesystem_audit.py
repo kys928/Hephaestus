@@ -3,10 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
-from hmac import compare_digest
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
-from threading import Thread
 import hashlib
 import json
 import os
@@ -231,25 +228,10 @@ def _evidence():
 
 def run():
     report = {"status": "running", "schema": "hephaestus.anvil-global-readback.v1"}
-    token = os.environ["ANVIL_AUDIT_TOKEN"]
+    def publish():
+        print("GLOBAL_AUDIT_REPORT=" + json.dumps(report, sort_keys=True), flush=True)
 
-    class ReportHandler(BaseHTTPRequestHandler):
-        def log_message(self, *args):
-            return
-
-        def do_GET(self):
-            if not compare_digest(self.path, "/report/" + token):
-                self.send_error(404)
-                return
-            body = json.dumps(report.copy(), sort_keys=True).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-    server = ThreadingHTTPServer(("0.0.0.0", 8787), ReportHandler)
-    Thread(target=server.serve_forever, daemon=True).start()
+    publish()
     try:
         if not (GLOBAL.is_mount() and SOURCE.is_mount()) or GLOBAL.is_symlink() or SOURCE.is_symlink():
             raise RuntimeError("expected two independent provider mounts")
@@ -261,8 +243,10 @@ def run():
             "symlinks": sum(t == stat.S_IFLNK for _, _, t in rows),
             "manifest_sha256": _hash_rows(rows),
         }
+        publish()
         report["phase"] = "specialists"
         report["specialists"] = _models(rows, json.loads(os.environ["ANVIL_ROLE_REGISTRY"]))
+        publish()
         report["phase"] = "migration"
         try:
             report["migration"] = _evidence()
@@ -271,6 +255,7 @@ def run():
         report["status"] = "complete"
     except Exception as exc:
         report.update(status="failed", error=type(exc).__name__)
+    publish()
     # The controller independently terminates the exact Pod. Keep evidence available until then.
     import time
     time.sleep(1800)

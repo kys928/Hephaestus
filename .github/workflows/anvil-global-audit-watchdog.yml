@@ -12,7 +12,7 @@ jobs:
   watchdog:
     if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 21
+    timeout-minutes: 19
     env:
       RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
     steps:
