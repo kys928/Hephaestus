@@ -40,3 +40,25 @@ def verified_original_roles(expected_registry_digest):
     if len({(m.model_id,m.revision,m.adapter.sha256) for m in stack.roles.values()}) != 5:
         raise PermissionError("five distinct original CUDA model identities required")
     return stack, contract
+
+
+def build_original_role_reasoner(
+    *, expected_registry_digest, archive_source, bucket, model_cache,
+    adapter_cache, artifact_store, allow_remote_pinned_download=False,
+):
+    """Bind the verified original stack to the shared certified inference runtime."""
+    from hephaestus.llm.certified_runtime import (
+        CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
+    )
+
+    stack, contract = verified_original_roles(expected_registry_digest)
+    return CertifiedRoleReasoner(
+        stack=stack,
+        contract=contract,
+        adapters=VerifiedRoleAdapters(archive_source, bucket, Path(adapter_cache)),
+        generator=PinnedTransformersRoleGenerator(
+            Path(model_cache), device="cuda:0",
+            allow_remote_pinned_download=allow_remote_pinned_download,
+        ),
+        artifact_store=artifact_store,
+    )
