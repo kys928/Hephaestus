@@ -15,6 +15,8 @@ from typing import Any, Protocol
 from hephaestus.infrastructure.secrets import SecretsProvider
 
 from .config import RunPodConfig
+from .global_placement import ApprovedGpuLease, build_global_gpu_request
+from .global_volume import GlobalVolumeConfig
 from hephaestus.schemas.external_operation import ExternalOperation, ExternalOperationPending
 from hephaestus.state.external_operation_store import ExternalOperationStore
 from hephaestus.state.single_writer import single_writer
@@ -98,6 +100,18 @@ class RunPodExecutionAdapter:
             headers=headers,
             json_body=body,
         )
+
+    def plan_global_gpu_pod(
+        self, volume: GlobalVolumeConfig, lease: ApprovedGpuLease, **observations,
+    ) -> dict[str, object]:
+        """Plan exact Global placement using the configured provider datacenter.
+
+        Submission remains separate until Global custody and independent
+        worker cleanup pass operational acceptance.
+        """
+        if lease.datacenter_id != self.config.datacenter_id:
+            raise PermissionError("Global lease datacenter differs from provider configuration")
+        return build_global_gpu_request(volume, lease, **observations)
 
     def create_disposable_cpu_pod(
         self,

@@ -61,8 +61,9 @@ jobs:
           volume = read_provider("v2/global-volumes/" + global_id)
           if volume.get("id") != global_id:
               raise SystemExit("Global Volume API identity did not match")
-          volume_summary = {key: volume[key] for key in ("objectCount", "fileCount", "sizeBytes", "usedBytes")
+          volume_summary = {key: volume[key] for key in ("objectCount", "fileCount", "sizeBytes", "usedBytes", "bytesUsed", "storageBytes")
                             if type(volume.get(key)) is int}
+          print("GLOBAL_VOLUME_FIELD_NAMES=" + json.dumps(sorted(volume)), flush=True)
           print("GLOBAL_VOLUME_METADATA=" + json.dumps(volume_summary, sort_keys=True), flush=True)
           try:
               catalog = read_provider("v2/catalog/cpus?include=AVAILABILITY&product=POD")
@@ -71,7 +72,10 @@ jobs:
                   if row.get("id") == "cpu3c":
                       print("CPU_PRICE_FIELD_NAMES=" + json.dumps(sorted(row)), flush=True)
                       prices = row.get("price", row.get("prices", {}))
-                      for key, value in prices.items() if isinstance(prices, dict) else ():
+                      if not isinstance(prices, dict):
+                          prices = {"hourly": prices}
+                      print("CPU_PRICE_FIELD_SHAPE=" + json.dumps({key: type(val).__name__ for key, val in prices.items()}), flush=True)
+                      for key, value in prices.items():
                           try:
                               quoted = Decimal(str(value))
                           except InvalidOperation:
@@ -98,7 +102,7 @@ jobs:
                   raise ValueError("Migration evidence exceeds allowed read size")
               return raw
 
-          raw = read_regional("hephaestus/recovery-audit/source-inventory-43256848721.json", 12 * 1024 * 1024)
+          raw = read_regional("hephaestus/recovery-audit/source-inventory-43256848721.json", 64 * 1024 * 1024)
           expected = "046dde9ebe9a712665081794586d502de5722f7f815a61567377414b680f5fb8"
           if sha256(raw).hexdigest() != expected:
               raise SystemExit("Historical regional inventory digest differs")

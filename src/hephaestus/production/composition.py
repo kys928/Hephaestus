@@ -40,6 +40,10 @@ from hephaestus.providers.models.selection import DeterministicModelSelectionSer
 from hephaestus.recovery.service import BoundedRecoveryService
 from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.storage.filesystem import FileSystemArtifactStore
+from hephaestus.storage.verified import canonical_bytes
+from hephaestus.research.reviewed_discovery import ReviewedEvidenceDiscovery
+from hephaestus.state.research_grant_usage import SingleUseComputeGrantLedger
+from hephaestus.schemas.research_objective import ResearchObjective
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
 from hephaestus.schemas.storage_admission import LocalStorageProfile
@@ -109,6 +113,37 @@ class ProductionRuntime:
     action_executor: GovernedActionExecutor
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
+
+    def intake_research_objective(
+        self, question: str, *, run_id: str, lineage_id: str,
+        reviewed_catalogs: tuple[tuple[Path, str], ...], required_scope: str | None = None,
+    ) -> str:
+        """Anchor a reviewed evaluation-only objective in the production evidence store."""
+        if not run_id.strip() or not lineage_id.strip():
+            raise ValueError("research objective requires a run and lineage identity")
+        objective = ResearchObjective.from_text(question)
+        selection = ReviewedEvidenceDiscovery.open(reviewed_catalogs).search(
+            objective.question, required_scope=required_scope,
+        )
+        envelope = {
+            "schema": "hephaestus-research-objective-intake.v1",
+            "run_id": run_id,
+            "lineage_id": lineage_id,
+            "question": objective.question,
+            "capability": objective.capability,
+            "seeds": objective.seeds,
+            "reviewed_catalog_ref": selection.catalog.catalog_sha256,
+            "study_scope": selection.original.study_scope,
+            "source_refs": [selection.original.sha256_ref, selection.candidate.sha256_ref],
+            "selection_kind": selection.selection_kind,
+            "execution_authorized": False,
+        }
+        return self.artifact_store.put_bytes(
+            canonical_bytes(envelope), media_type="application/json",
+        ).artifact_ref
+
+    def research_compute_ledger(self) -> SingleUseComputeGrantLedger:
+        return SingleUseComputeGrantLedger(self.state_repository, self.artifact_store)
 
     def with_local_data_factory(self, services, *, acquisition_enabled: bool = False):
         """Use real bounded preprocessing only after verified local acquisition."""
