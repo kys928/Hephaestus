@@ -33,7 +33,7 @@ jobs:
           import os,json,time
           cfg=RunPodConfig.from_env()
           a=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"global-readonly")
-          tag="45371941684"
+          tag="45372244159"
           own=[p for p in a.list_pods() if str(p.get("name","")).startswith("hephaestus-ministral-triad-"+tag+"-")]
           print("GLOBAL_TRIAD_LIVE_POD_COUNT="+str(len(own)),flush=True)
           for pod in own:
