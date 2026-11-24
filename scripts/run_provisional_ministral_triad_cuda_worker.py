@@ -32,12 +32,15 @@ from hephaestus.research.exact_span_repair import ExactSpanPatchProposer
 from hephaestus.research.provisional_coder import ProvisionalMinistralCoder
 from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.verified import canonical_bytes
+from hephaestus.research.global_role_archive_source import VerifiedGlobalRoleArchiveSource
 
 
 SOURCE="src/hephaestus/diagnosis/probes.py"
 MODEL_CACHE=Path("/tmp/hephaestus-triad-hf-model-cache")
 ADAPTER_CACHE=Path("/tmp/hephaestus-triad-role-adapters")
-_ALLOWED_ROOT=Path("/workspace/hephaestus/operations/ministral-triad")
+_ALLOWED_ROOT=Path("/tmp/hephaestus-triad-local")
+GLOBAL_ROOT=Path("/workspace-global")
+GLOBAL_ID="cmw51pjsk000007l9a0mv1jga"
 
 
 class MountedOriginalVolumeGet:
@@ -114,6 +117,9 @@ def main():
         result["gpu_model"]=torch.cuda.get_device_name(0)
         result["gpu_compute_capability"]=list(torch.cuda.get_device_capability(0))
         stack,contract=verified_original_roles(registry_digest())
+        if os.environ.get("RUNPOD_GLOBAL_VOLUME_ID")!=GLOBAL_ID or not GLOBAL_ROOT.is_mount():
+            raise PermissionError("verified Global Volume not actually mounted")
+        result["global_volume_id"]=GLOBAL_ID
         ref="sha256:"+sha256(canonical_bytes(case)).hexdigest()
         evidence=EvidenceRecord(
             ref=ref,kind="artifact",
@@ -124,19 +130,18 @@ def main():
         reg=EvidenceRegistry({ref:evidence})
         scene=(
             "Actual reviewed production defect in analyze_dataset_task_coverage: "
-            "for the original source line text = str(row.get('text', '')), a "
-            "record with text=None is incorrectly counted as containing supervised "
+            "a record with text=None is incorrectly counted as containing supervised "
             "text. An independent frozen pytest regression reproduces the incorrect "
             "text_rows=1 rather than expected text_rows=0. This is a bounded "
             "evidence-based code repair investigation; do not invent a successful "
             "fix or select new data. Diagnose source semantics. "
-            f"Source SHA256: {case['source_sha256']}; reviewed failure node: {case['issue_nodeid']}."
+            f"Source SHA256: {case['source_sha256']}; reviewed failure node: {case['issue_nodeid']}."\n            + "\nRelevant source: " + source.decode().split("def analyze_dataset_task_coverage(",1)[1].split("\ndef ",1)[0][:3000]
         )
         generator=PinnedTransformersRoleGenerator(
             MODEL_CACHE,device="cuda:0",allow_remote_pinned_download=True)
         reasoner=CertifiedRoleReasoner(
             stack=stack,contract=contract,
-            adapters=VerifiedRoleAdapters(MountedOriginalVolumeGet(),"cviwpryzao",ADAPTER_CACHE),
+            adapters=VerifiedRoleAdapters(VerifiedGlobalRoleArchiveSource(GLOBAL_ROOT,GLOBAL_ID,stack),GLOBAL_ID,ADAPTER_CACHE),
             generator=generator,artifact_store=artifacts)
         previous=None
         for role in ("diagnosis","planner"):
