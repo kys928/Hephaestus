@@ -5,8 +5,8 @@
 | Current phase | 0, source baseline and physical audit open |
 | Baseline parent | `cf31eb4eddfc67983110ce5570a852d48ca2bf7e` |
 | Integration ref | `feature/anvil-integration` with the Phase 0 audit and this ledger |
-| Completed | Pinned main and draft heads, mapped source entry points, recorded the local test baseline attempt, verified historical triad receipts and observer outcome |
-| In progress | Czech read-only S3 list from an isolated ops branch, with encrypted per-object output |
+| Completed | Pinned main and draft heads, mapped source entry points, recorded the local test baseline attempt, verified historical triad receipts and observer outcome, ran the core CI suite with 1,205 passed and 147 skipped on both supported Python versions |
+| In progress | Czech read-only S3 list from [the isolated read-only workflow](https://github.com/kys928/Hephaestus/actions/runs/45392348582), with encrypted per-object output |
 | Blocked | Fresh Global volume audit requires an approved already-mounted reader or a new bounded CPU allocation. A mounted reader must stay within the admitted Global volume and approved custody. |
 | Financial state | This audit started no RunPod resources. Historical run cleanup applies to its exact Pod. |
 | Scientific artifacts | Original R10, Prometheus and CUDA triad source and evidence references are in the [baseline audit](../reviews/anvil-baseline-audit.md). Hold all candidate adapters and evidence at their current custody locations. |
