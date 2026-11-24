@@ -33,7 +33,7 @@ jobs:
           RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID || 'cviwpryzao' }}
           AWS_EC2_METADATA_DISABLED: 'true'
           RUST_LOG: 'error'
-        run: python -u scripts/anvil_lancedb_s3_qualification.py
+        run: python -u scripts/anvil_lancedb_s3_fault_controls.py
       - name: Preserve sanitized synthetic evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,7 +71,7 @@ jobs:
           RUST_LOG: 'error'
         run: |
           test -s anvil-expected.json
-          python -u scripts/anvil_lancedb_s3_qualification.py verify
+          python -u scripts/anvil_lancedb_s3_fault_controls.py verify
       - name: Preserve independent readback
         if: always()
         uses: actions/upload-artifact@v4
