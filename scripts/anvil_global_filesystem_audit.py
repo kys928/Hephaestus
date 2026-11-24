@@ -1,9 +1,11 @@
 """Read-only mounted audit. Publish only aggregates and independent hashes."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
+from hmac import compare_digest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
+from threading import Thread
 import hashlib
 import json
 import os
@@ -194,29 +196,24 @@ def _evidence():
         raise ValueError("candidate row identities differ from historical inventory")
     totals = {"verified": 0, "unresolved_alias": 0, "missing_source": 0, "missing_or_different_global": 0}
     parity = []
-
-    def compare(row):
-        relative, key, size = row
+    for relative, key, size in sorted(rows):
         source = SOURCE / key
         try:
             original = safe_file(SOURCE, source, size)
         except RuntimeError:
             aliases = [source, *(parent for parent in source.parents if parent.is_relative_to(SOURCE))]
-            return "unresolved_alias" if any(path.is_symlink() for path in aliases) else "missing_source", None
+            totals["unresolved_alias" if any(path.is_symlink() for path in aliases) else "missing_source"] += 1
+            continue
         try:
             target = _sealed_file(GLOBAL, EVIDENCE / relative)
             original_hash, original_size = sha(original)
             if (original_hash, original_size) != sha(target) or original_size != size:
                 raise ValueError("source and Global bytes differ")
         except (OSError, ValueError):
-            return "missing_or_different_global", None
-        return "verified", (relative, size, original_hash)
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for state, record in pool.map(compare, sorted(rows)):
-            totals[state] += 1
-            if record is not None:
-                parity.append(record)
+            totals["missing_or_different_global"] += 1
+            continue
+        totals["verified"] += 1
+        parity.append((relative, size, original_hash))
     receipt = DEST / "S3_EVIDENCE_RECEIPT.json"
     try:
         receipt_digest, receipt_size = sha(_sealed_file(GLOBAL, receipt))
@@ -228,13 +225,29 @@ def _evidence():
 
 def run():
     report = {"status": "running", "schema": "hephaestus.anvil-global-readback.v1"}
-    def publish():
-        print("GLOBAL_AUDIT_REPORT=" + json.dumps(report, sort_keys=True), flush=True)
+    token = os.environ["ANVIL_AUDIT_TOKEN"]
 
-    publish()
+    class ReportHandler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return
+
+        def do_GET(self):
+            if self.path != "/report" or not compare_digest(self.headers.get("Authorization", ""), "Bearer " + token):
+                self.send_error(404)
+                return
+            body = json.dumps(report.copy(), sort_keys=True).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("0.0.0.0", 8787), ReportHandler)
+    Thread(target=server.serve_forever, daemon=True).start()
     try:
         if not (GLOBAL.is_mount() and SOURCE.is_mount()) or GLOBAL.is_symlink() or SOURCE.is_symlink():
             raise RuntimeError("expected two independent provider mounts")
+        _sealed_file(GLOBAL, ARCHIVE)
         rows = _files(GLOBAL)
         report["phase"] = "inventory"
         report["inventory"] = {
@@ -243,19 +256,13 @@ def run():
             "symlinks": sum(t == stat.S_IFLNK for _, _, t in rows),
             "manifest_sha256": _hash_rows(rows),
         }
-        publish()
         report["phase"] = "specialists"
         report["specialists"] = _models(rows, json.loads(os.environ["ANVIL_ROLE_REGISTRY"]))
-        publish()
         report["phase"] = "migration"
-        try:
-            report["migration"] = _evidence()
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            report["migration"] = {"error": type(exc).__name__}
+        report["migration"] = _evidence()
         report["status"] = "complete"
     except Exception as exc:
         report.update(status="failed", error=type(exc).__name__)
-    publish()
     # The controller independently terminates the exact Pod. Keep evidence available until then.
     import time
     time.sleep(1800)

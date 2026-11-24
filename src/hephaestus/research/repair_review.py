@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from hashlib import sha256
 
-from hephaestus.policy.code_edit_policy import evaluate_code_edit_proposal
+from hephaestus.control.code_edit_workflow import CodeEditProposalWorkflow
 from hephaestus.research.exact_span_repair import ExactSpanPatchProposer
 from hephaestus.schemas.code_edit_proposal import CodeEditProposal
 from hephaestus.schemas.research_repair import PatchModel, RepairBoundaryError, RepairScope
@@ -47,17 +47,19 @@ def propose_reviewed_repair(
         "independent_verification": "pending",
     })
     reference = "sha256:" + sha256(raw).hexdigest()
-    proposal = evaluate_code_edit_proposal({
-        "proposal_id": "research-repair-" + reference[7:],
-        "run_id": run_id, "lineage_id": lineage_id, "requested_by": "research-coder",
-        "purpose": "Review a bounded repair for an independently observed code regression",
-        "target_files": [scope.allowed_file], "proposed_diff_ref": reference,
-        "test_plan": [scope.fixed_test], "evidence_refs": [verified_fault_ref, source_ref],
-        "rollback_plan": "Revert the exact reviewed commit if approved and merged.",
-        "metadata": {"requires_independent_red_green_verification": True},
-    })
-    if proposal.status != "approval_required":
-        raise RepairBoundaryError("code-edit governance rejected the bounded proposal")
     artifacts.put_bytes(raw, expected_hash=reference, media_type="application/json")
-    proposals.append(proposal)
+    proposal = CodeEditProposalWorkflow(proposals).create_proposal(
+        run_id=run_id,
+        lineage_id=lineage_id,
+        requested_by="research-coder",
+        purpose="Review a bounded repair for an independently observed code regression",
+        target_files=[scope.allowed_file],
+        proposed_diff_ref=reference,
+        test_plan=[scope.fixed_test],
+        evidence_refs=(verified_fault_ref, source_ref),
+        rollback_plan="Revert the exact reviewed commit if approved and merged.",
+        metadata={"requires_independent_red_green_verification": True},
+    )
+    if proposal.status == "blocked":
+        raise RepairBoundaryError("code-edit governance rejected the bounded proposal")
     return proposal

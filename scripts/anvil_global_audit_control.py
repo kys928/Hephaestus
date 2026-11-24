@@ -10,8 +10,9 @@ import json
 import os
 from pathlib import Path
 import re
+from secrets import token_hex
 from time import monotonic, sleep
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 import zlib
 
@@ -28,7 +29,7 @@ SKU = "cpu3c"
 VCPUS = 2
 MAX_RATE = Decimal("0.15")
 RESERVE = Decimal("2")
-LEASE_MINUTES = 12
+LEASE_MINUTES = 20
 WATCHDOG_FILE = "anvil-global-audit-watchdog.yml"
 MOUNTS = {
     "global": [{"volumeId": GLOBAL, "path": "/workspace-global"}],
@@ -49,7 +50,7 @@ def adapter():
 
 
 def read_json(url, token, limit=65536):
-    req = Request(url, headers={"Authorization": "Bearer " + token} if token else {})
+    req = Request(url, headers={"Authorization": "Bearer " + token})
     with urlopen(req, timeout=15) as response:
         raw = response.read(limit + 1)
         if len(raw) > limit:
@@ -169,26 +170,6 @@ def audited_cpu_price(provider):
     print(f"CPU_QUOTED_USD_HOUR={hour} MAX_AUDIT_USD_HOUR={MAX_RATE} MAX_MINUTES={LEASE_MINUTES}", flush=True)
 
 
-def stream_report(pod_id, deadline):
-    url = f"https://api.runpod.io/v2/pods/{pod_id}/logs?source=container&tail=40"
-    request = Request(url, headers={
-        "Authorization": "Bearer " + os.environ["RUNPOD_API_KEY"],
-        "Accept": "text/event-stream",
-    })
-    with urlopen(request, timeout=18) as response:
-        while monotonic() < deadline:
-            raw = response.readline(65_537)
-            if not raw:
-                return
-            if len(raw) > 65_536 or not raw.startswith(b"data:"):
-                continue
-            entry = json.loads(raw[5:])
-            line = entry.get("line", "")
-            if entry.get("source") != "container" or not line.startswith("GLOBAL_AUDIT_REPORT="):
-                continue
-            yield json.loads(line.removeprefix("GLOBAL_AUDIT_REPORT="))
-
-
 def audit(provider, name, marker, base_name):
     deadline = active_watchdog(marker)
     audited_cpu_price(provider)
@@ -198,6 +179,8 @@ def audit(provider, name, marker, base_name):
         raise RuntimeError("independent watchdog lease too close to expiry")
     worker = Path(__file__).with_name("anvil_global_filesystem_audit.py").read_bytes()
     code = b64encode(zlib.compress(worker, level=9)).decode()
+    token = token_hex(32)
+    print("::add-mask::" + token, flush=True)
     registry_raw = json.loads(Path("configs/models/hephaestus_role_model_stack_v1.json").read_bytes())
     registry = {"roles": {
         role: {k: spec[k] for k in ("model_id", "revision", "adapter")}
@@ -206,9 +189,9 @@ def audit(provider, name, marker, base_name):
     body = {
         "name": base_name, "cpu": {"id": SKU, "vcpuCount": VCPUS}, "cloud": "SECURE",
         "dataCenterIds": [DC], "image": "python:3.12-slim", "disk": 5,
-        "mounts": MOUNTS, "entrypoint": [],
+        "mounts": MOUNTS, "ports": ["8787/http"], "entrypoint": [],
         "cmd": ["python", "-c", f"import base64,zlib;exec(zlib.decompress(base64.b64decode('{code}')))"],
-        "env": {"ANVIL_AUDIT_SHA": marker,
+        "env": {"ANVIL_AUDIT_SHA": marker, "ANVIL_AUDIT_TOKEN": token,
                 "ANVIL_ROLE_REGISTRY": json.dumps(registry, separators=(",", ":"))},
     }
     try:
@@ -224,28 +207,21 @@ def audit(provider, name, marker, base_name):
         ):
             raise RuntimeError("accepted CPU price or placement differs from scope")
         print("AUDIT_ACCEPTED_USD_HOUR=" + str(reported_rate), flush=True)
-        report_seen = False
-        previous = None
-        transport_deadline = monotonic() + 150
         while datetime.now(timezone.utc) < deadline:
             try:
-                for result in stream_report(created["id"], monotonic() + 22):
-                    if result.get("schema") != "hephaestus.anvil-global-readback.v1":
-                        raise RuntimeError("wrong worker report schema")
-                    report_seen = True
-                    if result != previous:
-                        print("GLOBAL_AUDIT_REPORT=" + json.dumps(result, sort_keys=True), flush=True)
-                        previous = result
-                    if result["status"] == "complete":
-                        return
-                    if result["status"] == "failed":
-                        raise RuntimeError("mounted audit failed")
-            except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-                code = getattr(exc, "code", None)
-                print(f"AUDIT_REPORT_TRANSPORT={type(exc).__name__},status={code}", flush=True)
-            if not report_seen and monotonic() >= transport_deadline:
-                raise RuntimeError("paid audit stopped after the authenticated log stream failed to start")
-            sleep(10)
+                url = f"https://{created['id']}-8787.proxy.runpod.net/report"
+                result = read_json(url, token, limit=32_768)
+            except (URLError, TimeoutError, json.JSONDecodeError):
+                sleep(12)
+                continue
+            if result.get("schema") != "hephaestus.anvil-global-readback.v1":
+                raise RuntimeError("wrong worker report schema")
+            print("GLOBAL_AUDIT_REPORT=" + json.dumps(result, sort_keys=True), flush=True)
+            if result["status"] == "complete":
+                return
+            if result["status"] == "failed":
+                raise RuntimeError("mounted audit failed")
+            sleep(18)
         raise TimeoutError("CPU audit reached watchdog deadline")
     finally:
         cleanup(provider, name, marker)

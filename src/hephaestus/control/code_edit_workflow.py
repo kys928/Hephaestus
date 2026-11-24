@@ -36,6 +36,8 @@ class CodeEditProposalWorkflow:
         rollback_plan: str,
         test_plan: list[str],
         metadata: dict[str, object] | None = None,
+        proposed_diff_ref: str | None = None,
+        evidence_refs: tuple[str, ...] = (),
     ) -> CodeEditProposal:
         payload: dict[str, object] = {
             "run_id": run_id,
@@ -47,6 +49,10 @@ class CodeEditProposalWorkflow:
             "test_plan": list(test_plan),
             "metadata": dict(metadata or {}),
         }
+        if proposed_diff_ref is not None:
+            payload["proposed_diff_ref"] = proposed_diff_ref
+        if evidence_refs:
+            payload["evidence_refs"] = list(evidence_refs)
         payload["proposal_id"] = _stable_proposal_id(payload)
         proposal = evaluate_code_edit_proposal(payload)
         self.store.append(proposal)
