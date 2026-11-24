@@ -18,6 +18,9 @@ import os
 import re
 import time
 import traceback
+import urllib.request
+import urllib.error
+import zipfile
 
 from hephaestus.control.deterministic_role_boundary import (
     DeterministicRoleContext, EvidenceRecord, EvidenceRegistry,
@@ -43,20 +46,6 @@ GLOBAL_ROOT=Path("/workspace-global")
 GLOBAL_ID="cmw51pjsk000007l9a0mv1jga"
 
 
-class MountedOriginalVolumeGet:
-    """Read-only S3-get-shaped accessor, constrained to one mounted original volume."""
-
-    def get_object(self, *, Bucket: str, Key: str):
-        if (Bucket!="cviwpryzao" or not isinstance(Key,str)
-                or not Key.startswith("hephaestus/scientific/v1/role_mastery/")
-                or ".." in Key.split("/") or Key.startswith("/")):
-            raise PermissionError("worker cannot read arbitrary mounted source")
-        path=Path("/workspace")/Key
-        if not path.is_file() or path.is_symlink():
-            raise FileNotFoundError("trusted role adapter volume object missing")
-        return {"Body":BytesIO(path.read_bytes())}
-
-
 def put_json(root: Path, name: str, obj: dict):
     target=root/name
     if target.exists() or not re.fullmatch(r"[a-z0-9._-]+\.json",name):
@@ -69,6 +58,44 @@ def put_json(root: Path, name: str, obj: dict):
         os.fsync(out.fileno())
     os.replace(temporary,target)
     return "sha256:"+sha256(encoded).hexdigest()
+
+
+
+def publish_bundle(work,attempt_dir,url_key):
+    """Send only receipts and candidate data through one object-scoped signed PUT."""
+    data=BytesIO()
+    with zipfile.ZipFile(data,"w",compression=zipfile.ZIP_DEFLATED) as z:
+        for name in ("diagnosis-observation.json","planner-observation.json"):
+            p=work/name
+            if p.is_file():z.write(p,name)
+        for p in (work/"model-artifacts").rglob("*"):
+            if p.is_file() and not p.is_symlink():
+                z.write(p,str(p.relative_to(work)))
+        for p in attempt_dir.glob("*.json"):
+            if p.is_file() and not p.is_symlink():z.write(p,p.name)
+    if len(data.getvalue())>5_000_000:
+        raise RuntimeError("research bundle exceeded hard size limit")
+    req=urllib.request.Request(os.environ[url_key],data=data.getvalue(),method="PUT")
+    with urllib.request.urlopen(req,timeout=90) as response:
+        if response.status not in (200,201,204):raise RuntimeError("receipt upload rejected")
+
+
+def read_feedback(run_tag,attempt):
+    deadline=time.monotonic()+480
+    while time.monotonic()<deadline:
+        try:
+            with urllib.request.urlopen(os.environ["TRIAD_GET_FEEDBACK_"+str(attempt)],timeout=30) as r:
+                raw=r.read(8001)
+            if len(raw)>8000:raise ValueError("oversize independent feedback")
+            doc=json.loads(raw)
+            if (doc.get("run_tag")!=run_tag or doc.get("attempt")!=attempt
+                    or doc.get("verdict") not in ("accepted","rejected","retry")):
+                raise ValueError("feedback identity/decision mismatch")
+            return doc
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (403,404):raise RuntimeError("feedback unavailable") from None
+        time.sleep(5)
+    raise TimeoutError("independent off-Pod verification deadline")
 
 
 def main():
@@ -135,7 +162,8 @@ def main():
             "text_rows=1 rather than expected text_rows=0. This is a bounded "
             "evidence-based code repair investigation; do not invent a successful "
             "fix or select new data. Diagnose source semantics. "
-            f"Source SHA256: {case['source_sha256']}; reviewed failure node: {case['issue_nodeid']}."\n            + "\nRelevant source: " + source.decode().split("def analyze_dataset_task_coverage(",1)[1].split("\ndef ",1)[0][:3000]
+            f"Source SHA256: {case['source_sha256']}; reviewed failure node: {case['issue_nodeid']}."
+            + "\nRelevant source: " + source.decode().split("def analyze_dataset_task_coverage(",1)[1].split("\ndef ",1)[0][:3000]
         )
         generator=PinnedTransformersRoleGenerator(
             MODEL_CACHE,device="cuda:0",allow_remote_pinned_download=True)
@@ -154,8 +182,10 @@ def main():
                     "the in-scope diagnosis Python function, with unchanged tests and "
                     "external independent red-to-green Docker verification. "
                     "Choose an appropriate bounded intervention consistent with the "
-                    "frozen Planner action vocabulary. Your answer is advisory; "
-                    "the original finite control policy decides admission."
+                    "frozen Planner action vocabulary. For a request to collect evidence "
+                    "by testing a minimal diagnostic code repair, the permitted mapping is "
+                    "collect_more_evidence/request_recheck/diagnostic_measurement. "
+                    "You may reject this investigation. Your output is advisory."
                 )
             task=RoleTask(
                 role=role,situation=situation,
@@ -183,6 +213,9 @@ def main():
             })
             put_json(work,role+"-observation.json",result["steps"][-1])
         generator.close()
+        if (previous.get("decision"), previous.get("action"), previous.get("primary_variable")) != ("collect_more_evidence","request_recheck","diagnostic_measurement"):
+            result["status"]="planner_did_not_admit_review_experiment"
+            return
         del generator,reasoner
         import gc
         gc.collect()
@@ -203,43 +236,62 @@ def main():
             "reviewed_strategy":"minimal_exact_span",
             "independent_test_mutation_authorized":False,
         }
-        # This SHA is operator-admitted evidence, not a model-authored action.
-        fault_ref="sha256:"+sha256(canonical_bytes(verified_fault)).hexdigest()
-        put_json(work,"verified-fault.json",verified_fault)
-        patch=proposer.propose(
-            scope=RepairScope(a.source_commit,SOURCE,
-                "tests/test_targeted_post_failure_probes.py"),
-            original=source,verified_fault=verified_fault,evidence_ref=fault_ref)
-        inference=coder.last_receipt
-        if (not isinstance(inference,dict)
-                or inference.get("model_id")!="mistralai/Ministral-3-8B-Reasoning-2512"
-                or inference.get("adapter_used") is not False):
-            raise PermissionError("real coder inference receipt invalid")
-        put_json(work,"coder-observation.json",{
-            "model_id":inference["model_id"],
-            "revision":inference["revision"],
-            "receipt":inference,
-            "patch_hypothesis":patch.hypothesis,
-            "patch_source_sha256":patch.expected_source_sha256,
-            "patched_sha256":"sha256:"+sha256(patch.replacement.encode()).hexdigest(),
-        })
-        put_json(work,"candidate.json",{
-            "path":patch.path,
-            "expected_source_sha256":patch.expected_source_sha256,
-            "replacement":patch.replacement,
-            "hypothesis":patch.hypothesis,
-            "evidence_ref":patch.evidence_ref,
-        })
-        result["steps"].append({
-            "role":"coder","model_id":inference["model_id"],
-            "revision":inference["revision"],
-            "adapter_used":False,
-            "prompt_sha256":inference["prompt_sha256"],
-            "output_sha256":inference["output_sha256"],
-            "real_inference":True,
-            "independently_verified":False,
-        })
-        result["status"]="candidate_proposed_pending_offpod_verification"
+        # Independent verifier controls retry, never the model. Local workspace
+        # is reused only for trusted source; no model-authored code executes here.
+        for attempt in (1,2):
+            attempt_dir=work/("attempt-"+str(attempt))
+            attempt_dir.mkdir()
+            fault_ref="sha256:"+sha256(canonical_bytes(verified_fault)).hexdigest()
+            put_json(attempt_dir,"verified-fault.json",verified_fault)
+            patch=None
+            error_type=None
+            try:
+                patch=proposer.propose(
+                    scope=RepairScope(a.source_commit,SOURCE,
+                        "tests/test_targeted_post_failure_probes.py"),
+                    original=source,verified_fault=verified_fault,evidence_ref=fault_ref)
+            except Exception as exc:
+                error_type=type(exc).__name__
+            inference=coder.last_receipt
+            if (not isinstance(inference,dict)
+                    or inference.get("model_id")!="mistralai/Ministral-3-8B-Reasoning-2512"
+                    or inference.get("adapter_used") is not False):
+                raise PermissionError("actual parent Coder inference receipt missing")
+            put_json(attempt_dir,"coder-observation.json",{
+                "model_id":inference["model_id"],"revision":inference["revision"],
+                "receipt":inference,"proposal_error":error_type,
+                "patch_hypothesis":None if patch is None else patch.hypothesis,
+                "patch_source_sha256":None if patch is None else patch.expected_source_sha256,
+                "patched_sha256":None if patch is None else "sha256:"+sha256(patch.replacement.encode()).hexdigest(),
+            })
+            if patch is not None:
+                put_json(attempt_dir,"candidate.json",{
+                    "path":patch.path,"expected_source_sha256":patch.expected_source_sha256,
+                    "replacement":patch.replacement,"hypothesis":patch.hypothesis,
+                    "evidence_ref":patch.evidence_ref})
+            attempt_result=dict(result)
+            attempt_result["steps"]=list(result["steps"])+[{
+                "role":"coder","model_id":inference["model_id"],
+                "revision":inference["revision"],"adapter_used":False,
+                "prompt_sha256":inference["prompt_sha256"],
+                "output_sha256":inference["output_sha256"],"real_inference":True,
+                "independently_verified":False}]
+            attempt_result["status"]=("candidate_proposed_pending_offpod_verification"
+                                      if patch is not None else "invalid_candidate")
+            attempt_result["attempt"]=attempt
+            put_json(attempt_dir,"worker-result.json",attempt_result)
+            publish_bundle(work,attempt_dir,"TRIAD_PUT_ATTEMPT_"+str(attempt))
+            feedback=read_feedback(a.run_tag,attempt)
+            if feedback["verdict"]=="accepted":
+                result.update(status="independent_verifier_accepted",steps=attempt_result["steps"],
+                              accepted_attempt=attempt,verification_ref=feedback["trial_ref"])
+                break
+            if feedback["verdict"]!="retry" or attempt!=1:
+                result.update(status="independent_verifier_rejected",steps=attempt_result["steps"])
+                break
+            verified_fault={**verified_fault,"previous_failed_patch_tests":
+                [feedback["failure_excerpt"][:1200]],
+                "prior_candidate_output_sha256":inference["output_sha256"]}
         coder.close()
     except Exception as exc:
         result["status"]="inconclusive_failure"
