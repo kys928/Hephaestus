@@ -1,0 +1,82 @@
+name: Anvil isolated LanceDB S3 qualification
+on:
+  push:
+    branches: [ops/anvil-lancedb-s3-qualification]
+    paths: [.github/workflows/anvil-lancedb-s3-qualification.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: anvil-lancedb-s3-qualification
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.repository == 'kys928/Hephaestus' && github.ref == 'refs/heads/ops/anvil-lancedb-s3-qualification'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned experimental dependencies
+        run: |
+          python -m pip install 'lancedb==0.25.3' 'pyarrow==20.0.0' 'boto3==1.40.76'
+          python -m pip check
+          python -m pip freeze > anvil-dependencies.txt
+      - name: Run isolated synthetic database qualification
+        env:
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+          RUST_LOG: 'error'
+        run: python -u scripts/anvil_lancedb_s3_qualification.py
+      - name: Preserve sanitized synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anvil-lancedb-${{ github.run_attempt }}
+          path: |
+            anvil-lancedb-report.json
+            anvil-expected.json
+            anvil-dependencies.txt
+          if-no-files-found: warn
+          retention-days: 14
+  independent:
+    if: always() && github.repository == 'kys928/Hephaestus' && github.ref == 'refs/heads/ops/anvil-lancedb-s3-qualification'
+    needs: qualify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned experimental dependencies
+        run: python -m pip install 'lancedb==0.25.3' 'pyarrow==20.0.0' 'boto3==1.40.76'
+      - uses: actions/download-artifact@v4
+        with:
+          name: anvil-lancedb-${{ github.run_attempt }}
+      - name: Verify persisted state from a separate runner
+        env:
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+          RUST_LOG: 'error'
+        run: |
+          test -s anvil-expected.json
+          python -u scripts/anvil_lancedb_s3_qualification.py verify
+      - name: Preserve independent readback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anvil-lancedb-independent-${{ github.run_attempt }}
+          path: anvil-lancedb-report.json
+          if-no-files-found: warn
+          retention-days: 14
