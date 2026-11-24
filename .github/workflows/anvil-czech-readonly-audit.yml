@@ -1,12 +1,12 @@
 name: Anvil Czech read-only inventory
 on:
-  push:
-    branches: [ops/anvil-czech-volume-readonly-audit]
+  pull_request:
+    branches: [main]
     paths: [.github/workflows/anvil-czech-readonly-audit.yml]
 permissions: {}
 jobs:
   inventory:
-    if: github.repository == 'kys928/Hephaestus'
+    if: github.repository == 'kys928/Hephaestus' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/anvil-czech-volume-readonly-audit'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
