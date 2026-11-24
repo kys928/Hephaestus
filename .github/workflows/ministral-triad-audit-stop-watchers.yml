@@ -1,0 +1,58 @@
+name: Verify no RunPod triad pods then cancel idle external watchers
+on:
+  push:
+    branches: [ops/ministral-triad-orphan-audit-stop-watchdogs-20261124]
+    paths: [.github/workflows/ministral-triad-audit-stop-watchers.yml]
+permissions: {contents: read, actions: write}
+jobs:
+  provider-custody-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: b60fdb6591fd1f62e969d97db24acc33f4ce0983, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e .
+      - name: Refuse watcher cancellation unless provider confirms all three Pods absent
+        run: |
+          python - <<'PY'
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from pathlib import Path
+          import urllib.request,urllib.error,os
+          cfg=RunPodConfig.from_env()
+          assert cfg.datacenter_id=="EU-CZ-1" and cfg.network_volume_id=="cviwpryzao"
+          adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),
+              state_root=Path(os.environ["RUNNER_TEMP"])/"no-create-audit")
+          pods=adapter.list_pods()
+          owned=[p for p in pods
+              if str(p.get("name","")).startswith("hephaestus-ministral-triad-20261124000")]
+          print("ALL_TRIAD_PODS_ABSENT="+str(len(owned)==0),flush=True)
+          print("LIVE_TRIAD_POD_COUNT="+str(len(owned)),flush=True)
+          if owned:raise PermissionError("actual triad Pod exists: retain its independent watchdog")
+          token=os.environ["GITHUB_TOKEN"]
+          for job in (45367888055,45368609603,45369082153):
+              endpoint=f"https://api.github.com/repos/kys928/Hephaestus/actions/runs/{job}/cancel"
+              request=urllib.request.Request(endpoint,
+                  data=b"",method="POST",
+                  headers={"Authorization":"Bearer "+token,
+                           "Accept":"application/vnd.github+json",
+                           "X-GitHub-Api-Version":"2022-11-28"})
+              try:
+                  with urllib.request.urlopen(request,timeout=15) as answer:
+                      print("IDLE_WATCHDOG_CANCEL_REQUEST="+str(job)+":HTTP_"+str(answer.status),flush=True)
+              except urllib.error.HTTPError as error:
+                  if error.code==409:
+                      print("IDLE_WATCHDOG_ALREADY_TERMINAL="+str(job),flush=True)
+                  else:
+                      raise
+          PY
