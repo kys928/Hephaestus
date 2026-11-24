@@ -1,0 +1,41 @@
+name: REAL original Ministral Diagnostician Planner Coder GPU qualification
+on:
+  push:
+    branches: [ops/ministral-triad-paid-launch-20261124]
+    paths: [.github/workflows/ministral-triad-live-once.yml]
+permissions: {contents: read}
+concurrency:
+  group: original-ministral-triad-one-paid-pod-202611240001
+  cancel-in-progress: false
+jobs:
+  actual-model-science:
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b60fdb6591fd1f62e969d97db24acc33f4ce0983
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = b60fdb6591fd1f62e969d97db24acc33f4ce0983
+      - run: python -m pip install -e '.[s3,test,independent-certification]'
+      - name: Build offline independent regression verifier before expensive compute
+        run: |
+          docker build -t hephaestus-triad-review-sandbox:local - <<'DOCKER'
+          FROM python:3.12-slim
+          RUN pip install --no-cache-dir pytest==8.4.2
+          DOCKER
+      - name: Run pinned originals on one approved GPU, off-Pod Docker verdict, hard teardown
+        run: |
+          python -u scripts/launch_approved_ministral_triad_cuda.py \
+            --source-commit b60fdb6591fd1f62e969d97db24acc33f4ce0983 \
+            --run-tag 202611240001
