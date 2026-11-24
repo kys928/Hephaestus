@@ -1,0 +1,57 @@
+name: Hephaestus real EU-CZ-1 GPU alternative inventory
+on:
+  push:
+    branches: [ops/ministral-triad-live-capacity-fallback-20261124]
+    paths: [.github/workflows/ministral-live-gpu-inventory.yml]
+permissions: {contents: read}
+jobs:
+  readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_NETWORK_VOLUME_ID: cviwpryzao
+      RUNPOD_DATACENTER_ID: EU-CZ-1
+      RUNPOD_S3_ENDPOINT_URL: https://s3api-eu-cz-1.runpod.io
+      RUNPOD_API_BASE_URL: https://api.runpod.io/v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: b60fdb6591fd1f62e969d97db24acc33f4ce0983, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e .
+      - name: Exact live provider VRAM, cost and capacity; no Pod creation
+        run: |
+          python - <<'PY'
+          from decimal import Decimal
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          import os,json
+          from pathlib import Path
+          c=RunPodConfig.from_env()
+          a=RunPodExecutionAdapter(c,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"triad-gpu-inventory")
+          s,reply=a._request("GET","catalog/datacenters/EU-CZ-1?include=GPU_AVAILABILITY")
+          assert s==200 and reply["id"]=="EU-CZ-1"
+          provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          account=provider.account()
+          assert not account.autopay_enabled
+          print("SAFE_LIVE_PREPAID_OVER_FIVE="+str(account.credit_balance_usd>=5))
+          for g in reply.get("gpuAvailability",[]):
+              ident=str(g.get("id",""))
+              availability=str(g.get("availability",""))
+              if availability not in ("HIGH","MEDIUM","LOW"):
+                  continue
+              try:
+                  rate=provider.quote_gpu(gpu_id=ident,datacenter_id=c.datacenter_id)
+              except Exception:
+                  continue
+              if rate.gpu_memory_gb>=48 and rate.price_usd_per_hour<=Decimal("3.25"):
+                  print("TRIAD_ADMISSIBLE_GPU="+json.dumps({
+                    "id":ident,"availability":availability,
+                    "VRAM_GB":rate.gpu_memory_gb,
+                    "secure_hourly_usd":str(rate.price_usd_per_hour)},
+                    sort_keys=True),flush=True)
+          print("GPU_INVENTORY_LIVE_COMPLETE=true")
+          PY
