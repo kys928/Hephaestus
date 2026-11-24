@@ -1,0 +1,53 @@
+name: Hephaestus Global Volume recovery read-only preflight
+on:
+  push:
+    branches: [ops/global-volume-recovery-20261112]
+    paths:
+      - .github/workflows/hephaestus-global-recovery-preflight.yml
+      - scripts/hephaestus_global_recovery_preflight.py
+permissions:
+  contents: read
+concurrency:
+  group: hephaestus-global-recovery-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.repository == 'kys928/Hephaestus'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+      RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'boto3>=1.35,<2'
+      - run: python -u scripts/hephaestus_global_recovery_preflight.py
+      - name: Inspect presence of optional HF read secret (no values)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+          HF_READ_TOKEN: ${{ secrets.HF_READ_TOKEN }}
+        run: python -c 'import os; print("HF_READ_SECRET_AVAILABLE=" + str(any(os.getenv(k) for k in ("HF_TOKEN", "HUGGINGFACE_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_READ_TOKEN"))).lower())'
+      - name: Read-only S3 inventory by source prefix
+        run: |
+          python - <<'PY'
+          import boto3,os,json
+          s3=boto3.client('s3',endpoint_url='https://s3api-eu-cz-1.runpod.io/',region_name='EU-CZ-1',aws_access_key_id=os.environ['RUNPOD_S3_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['RUNPOD_S3_SECRET_ACCESS_KEY'])
+          roots=['hephaestus/scientific/','hephaestus/research/','Hephaestus/artifacts/','hephaestus-cache/']
+          result={}
+          for prefix in roots:
+              pages=s3.get_paginator('list_objects_v2').paginate(Bucket='cviwpryzao',Prefix=prefix)
+              count=0;total=0
+              for page in pages:
+                  for obj in page.get('Contents',[]):
+                      count+=1;total+=int(obj['Size'])
+              result[prefix]={'count':count,'bytes':total}
+          print('SOURCE_INVENTORY='+json.dumps(result,sort_keys=True))
+          PY
+
+# Prometheus Unbound 2026-11-14: read-only Global/S3 preflight rerun; no Pod allocation.

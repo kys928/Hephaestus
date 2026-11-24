@@ -1,0 +1,36 @@
+name: Stop looping Hephaestus S3 restore Pod
+on:
+  push:
+    branches: [ops/global-volume-recovery-20261112]
+    paths:
+      - .github/workflows/hephaestus-stop-retry-loop.yml
+permissions:
+  contents: read
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - name: Terminate only the confirmed failed recovery Pod
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request,urllib.error
+          target_id='t8zo4kvk8yogpr'
+          target_name='hephaestus-hf-global-recovery-43248214667'
+          api='https://api.runpod.io/v2'
+          def fetch(method,path):
+              with urllib.request.urlopen(urllib.request.Request(api+path,method=method,headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY']}),timeout=30) as f:
+                  body=f.read();return json.loads(body) if body else {}
+          pods=fetch('GET','/pods')
+          items=pods if isinstance(pods,list) else pods.get('pods',pods.get('data',[]))
+          matches=[x for x in items if isinstance(x,dict) and x.get('id')==target_id and x.get('name')==target_name]
+          if len(matches)==1:
+              try:fetch('DELETE','/pods/'+target_id)
+              except urllib.error.HTTPError as exc:
+                  if exc.code!=404:raise
+              print('FAILED_RECOVERY_POD_TERMINATION_REQUESTED=true')
+          elif not matches:print('FAILED_RECOVERY_POD_ALREADY_ABSENT=true')
+          else:raise RuntimeError('Inconsistent exact Pod match')
+          PY

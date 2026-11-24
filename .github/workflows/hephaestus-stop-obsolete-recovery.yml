@@ -1,0 +1,34 @@
+name: Hephaestus stop obsolete S3 recovery Pod (exact run only)
+on:
+  push:
+    branches: [ops/global-volume-recovery-20261112]
+    paths:
+      - .github/workflows/hephaestus-stop-obsolete-recovery.yml
+permissions:
+  contents: read
+jobs:
+  stop-obsolete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+    steps:
+      - run: |
+          python - <<'PY'
+          import os,json,urllib.request
+          name='hephaestus-hf-global-recovery-43247395790'
+          base='https://api.runpod.io/v2'
+          def request(method,path):
+              with urllib.request.urlopen(urllib.request.Request(base+path,method=method,headers={'Authorization':'Bearer '+os.environ['RUNPOD_API_KEY']}),timeout=30) as response:
+                  data=response.read()
+                  return json.loads(data) if data else {}
+          items=request('GET','/pods')
+          pods=items if isinstance(items,list) else items.get('pods',items.get('data',[]))
+          matches=[p for p in pods if isinstance(p,dict) and p.get('name')==name]
+          if len(matches)>1:raise RuntimeError('Duplicate exact recovery Pod names')
+          if matches:
+              pid=matches[0]['id']
+              request('DELETE','/pods/'+pid)
+              print('OBSOLETE_RECOVERY_POD_TERMINATED='+pid)
+          else:print('OBSOLETE_RECOVERY_POD_ALREADY_ABSENT=true')
+          PY

@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Receipt-only verifier for 8,224 original S3 inventory references on Global.
+
+Read-only on source AND Global artifact files. SHA256 checks original regional
+source against already-copied Global bytes. Writes only a final receipt. No mutable state or protected material.
+"""
+from __future__ import annotations
+from datetime import datetime, timezone
+from pathlib import Path,PurePosixPath
+import hashlib,json,os,stat,sys,time
+import boto3
+from botocore.config import Config
+
+SOURCE_ID="cviwpryzao"
+GLOBAL_ID="cmw51pjsk000007l9a0mv1jga"
+SOURCE=Path("/workspace-source")
+GLOBAL=Path("/workspace-global")
+DEST=GLOBAL/"hephaestus/hf-restores/export-129d690ef9ae24ef141fbb0c"
+EVIDENCE=DEST/"evidence"
+ARCHIVE=GLOBAL/"hephaestus/artifacts/archives/original_cuda_45/cuda-json-45-original-five-20261030-r9.tar"
+INVENTORY_KEY="hephaestus/recovery-audit/source-inventory-43256848721.json"
+INVENTORY_SHA256="046dde9ebe9a712665081794586d502de5722f7f815a61567377414b680f5fb8"
+ROOTS={"hephaestus/scientific/":"scientific","hephaestus/research/":"research","Hephaestus/artifacts/":"legacy/artifacts"}
+BAD=set(".git .hg .svn .cache .local .venv venv __pycache__ node_modules site-packages tmp temp private protected holdout holdouts secrets secret credentials keys status locks worktrees state eval evals evaluation evaluations eval_pack eval_packs protected_evals certification certifications".split())
+BAD_SUFFIX=(".lock",".log",".tmp",".sqlite",".sqlite3",".db",".pem",".key",".p12",".pfx",".zip",".tar",".tar.gz",".tgz",".7z",".pyc",".pyo",".pkl",".pickle")
+BAD_BITS=("secret","credential","access_key","api_key","password","token_secret","worker.log","watchdog","heartbeat","private_key","account.json","holdout","certification","private_eval","protected_eval")
+MODEL_EXT={".safetensors",".gguf",".onnx",".pt",".pth",".ckpt"}
+MODEL_CONF=set("adapter_config.json config.json generation_config.json tokenizer.json tokenizer_config.json special_tokens_map.json vocab.json merges.txt added_tokens.json tokenizer.model adapter_model.bin pytorch_model.bin model.safetensors.index.json".split())
+DATA_EXT={".jsonl",".parquet",".arrow",".csv",".tsv",".npy",".npz",".bin"}
+NON_ART={".py",".sh",".bat",".ps1",".ipynb",".so",".o",".exe",".dll"}
+SECRET_SIGNS=(b"-----BEGIN PRIVATE KEY-----",b"github_pat_",b"ghp_",b"hf_")
+BUF=4*1024*1024
+def reject(p):
+ n=p.name.lower()
+ return (not n or n.startswith(".") or n in {".env","id_rsa","id_ed25519","known_hosts","authorized_keys","config.json.bak"} or n.endswith(BAD_SUFFIX)
+         or any(x in n for x in BAD_BITS) or any(x.lower() in BAD for x in p.parts) or p.suffix.lower() in NON_ART)
+def kind(p):
+ parts=[x.lower() for x in p.parts];n=p.name.lower();s=p.suffix.lower()
+ model=any(x in {"models","model","adapters","adapter","tokenizers","tokenizer","weights"} for x in parts)
+ data=any(x in {"dataset","datasets","training_data","corpus","corpora","preprocessed","trainable"} for x in parts)
+ if any(x in n for x in ("optimizer","scheduler","rng_state","trainer_state","scaler.pt")):return "skip"
+ if n in MODEL_CONF and model:return "models"
+ if s in MODEL_EXT:return "models" if model or s in {".safetensors",".gguf"} else "skip"
+ if (data and s in DATA_EXT) or (n.startswith("trainable") and s in DATA_EXT) or (data and (n.endswith("manifest.json") or n.endswith("contract.json"))):return "datasets"
+ return "evidence"
+def sha(path):
+ h=hashlib.sha256();n=0
+ with path.open("rb") as f:
+  while blob:=f.read(BUF):h.update(blob);n+=len(blob)
+ return h.hexdigest(),n
+def safe_file(base,path,expected_size):
+ if not path.is_relative_to(base) or path==base:raise RuntimeError("Path outside mounted volume")
+ try:
+  resolved=path.resolve(strict=True)
+ except (FileNotFoundError,RuntimeError) as exc:
+  raise RuntimeError("Frozen regional source path is unavailable or broken") from exc
+ if not resolved.is_relative_to(base) or resolved==base:
+  raise RuntimeError("Regional symlink escapes the original Czech volume")
+ # Resolve aliases ONLY to approved evidence paths, not private, mutable, or model data.
+ key=resolved.relative_to(base).as_posix()
+ approved=False
+ for prefix,_ in ROOTS.items():
+  if key.startswith(prefix):
+   tail=PurePosixPath(key[len(prefix):])
+   approved=not reject(tail) and kind(tail)=="evidence"
+   break
+ if not approved:raise RuntimeError("Regional symlink points outside eligible evidence scope")
+ try:st=resolved.lstat()
+ except FileNotFoundError:raise RuntimeError("Frozen regional source file disappeared or is missing")
+ if not stat.S_ISREG(st.st_mode) or st.st_size!=expected_size:
+  raise RuntimeError("Resolved regional source file size/type differs from S3 inventory")
+ return resolved
+def main():
+ if os.environ.get("RUNPOD_NETWORK_VOLUME_ID")!=SOURCE_ID or os.environ.get("RUNPOD_GLOBAL_VOLUME_ID")!=GLOBAL_ID:
+  raise RuntimeError("Wrong advertised volume identity")
+ if not SOURCE.is_mount() or not GLOBAL.is_mount() or not ARCHIVE.is_file() or not (SOURCE/"hephaestus/scientific").is_dir():
+  raise RuntimeError("Expected regional+global mounts not present or Global archive marker missing")
+ run=os.environ.get("RECOVERY_RUN_ID","")
+ if not run.isdecimal():raise RuntimeError("Invalid recovery run ID")
+ s3=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
+  aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],config=Config(retries={"max_attempts":5,"mode":"standard"}))
+ s3.head_bucket(Bucket=SOURCE_ID)
+ def emit(state,checked,total,extra=None):
+  rec={"schema":"hephaestus.regional-direct-recovery.v1","run_id":run,"status":state,"verified":checked,"total":total,"updated_utc":datetime.now(timezone.utc).isoformat()}
+  if extra:rec.update(extra)
+  s3.put_object(Bucket=SOURCE_ID,Key="hephaestus/recovery-status/"+run+".json",Body=json.dumps(rec,sort_keys=True).encode(),ContentType="application/json")
+  print("DIRECT_RECOVERY_PROGRESS="+str(checked)+"/"+str(total)+" state="+state,flush=True)
+ inv=s3.get_object(Bucket=SOURCE_ID,Key=INVENTORY_KEY)
+ with inv["Body"] as f:raw=f.read()
+ if hashlib.sha256(raw).hexdigest()!=INVENTORY_SHA256:raise RuntimeError("Frozen original S3 inventory digest changed")
+ data=json.loads(raw)
+ if data.get("schema")!="hephaestus.original-s3-storage-inventory.v1" or data.get("source_volume_id")!=SOURCE_ID:
+  raise RuntimeError("Incorrect original S3 inventory")
+ rows=[]
+ for obj in data["objects"]:
+  key=obj["key"]
+  if not isinstance(key,str) or key.startswith("/") or "\\" in key or "//" in key or any(x in {"",".",".."} for x in key.split("/")):
+   raise RuntimeError("Unsafe source inventory key")
+  for prefix,name in ROOTS.items():
+   if not key.startswith(prefix) or key.endswith("/"):continue
+   tail=key[len(prefix):];rel=PurePosixPath(tail)
+   if reject(rel) or kind(rel)!="evidence":break
+   rows.append((name+"/"+tail,key,int(obj["bytes"])))
+   break
+ rows.sort()
+ if len(rows)!=8224 or sum(item[2] for item in rows)!=607271450 or len({r[0] for r in rows})!=len(rows):
+  raise RuntimeError("Frozen candidate set/size differs from independently audited 8,224 objects")
+ emit("PREFLIGHT",0,len(rows))
+ def symlink_in_chain(path):
+  cursor=path
+  while cursor!=SOURCE:
+   if cursor.is_symlink():return True
+   cursor=cursor.parent
+  return False
+ # All 8,224 listed references are accounted for. Broken symlinks have no
+ # recoverable source bytes; record them explicitly, never invent checksums.
+ aliases=0;unrestorable=[];readable=[]
+ for i,(rel,key,size) in enumerate(rows,1):
+  source_path=SOURCE/key
+  try:target_path=safe_file(SOURCE,source_path,size)
+  except RuntimeError as ex:
+   if not symlink_in_chain(source_path):raise
+   unrestorable.append({"path":rel,"bytes_listed":size,"reason":"unresolved_or_unsafe_regional_symlink_alias",
+                         "source_key_sha256":hashlib.sha256(key.encode()).hexdigest()})
+   continue
+  if target_path!=source_path:aliases+=1
+  readable.append((rel,key,size))
+ if not readable or len(unrestorable)>200 or len(unrestorable)+len(readable)!=len(rows):
+  raise RuntimeError("Unrecoverable regional source reference count exceeds safety limit")
+ emit("SOURCE_PRESENT",0,len(readable),{"validated_symlink_aliases":aliases,"unrestorable_symlink_aliases":len(unrestorable),
+     "inventory_references":len(rows)})
+ if not EVIDENCE.is_dir() or EVIDENCE.is_symlink():raise RuntimeError("Restored evidence directory is unavailable or unsafe")
+ audit=[];existing=0;copied=0
+ for i,(rel,key,size) in enumerate(readable,1):
+  src=safe_file(SOURCE,SOURCE/key,size)
+  digest,n=sha(src)
+  if n!=size:raise RuntimeError("Source bytes changed during local file read")
+  target=EVIDENCE/rel
+  if not target.is_relative_to(EVIDENCE):raise RuntimeError("Target path escaped")
+  current=target.parent
+  while current!=GLOBAL:
+   if current.is_symlink():raise RuntimeError("Destination path contains a symlink")
+   current=current.parent
+  target.parent.mkdir(parents=True,exist_ok=True)
+  if target.exists() or target.is_symlink():
+   if target.is_symlink() or not target.is_file() or sha(target)!=(digest,size):
+    raise RuntimeError("Existing Global evidence differs from original source")
+   existing+=1
+  else:
+   raise RuntimeError("Global evidence file missing; verifier never performs data writes")
+  audit.append({"path":rel,"bytes":size,"sha256":digest})
+  if i%100==0 or i==len(rows):emit("RUNNING",len(audit),len(readable),{"existing":existing,"verification_only":True})
+ # Each source file AND the corresponding existing Global file were fully
+ # SHA-256 hashed above. A separate Pod performs a later independent rehash.
+ emit("SOURCE_GLOBAL_HASHED",len(audit),len(readable),{"pass":"source_to_global_sha256"})
+ report={"schema":"hephaestus.global-s3-evidence-parity.v1","source_volume":SOURCE_ID,"global_volume":GLOBAL_ID,
+  "source_access":"direct read-only regional filesystem mount; verification-only Global readback","source_inventory_sha256":INVENTORY_SHA256,
+  "source_inventory_candidate_references":len(rows),"source_unrestorable_aliases":len(unrestorable),
+  "excluded_references":unrestorable,
+  "verified_files":len(audit),"verified_bytes":sum(x["bytes"] for x in audit),
+  "preexisting":existing,"copied":copied,"verification_only":True,"files":audit,"hf_export_expected_files":8113,
+  "s3_source_count_differs_from_hf":True,"skipped_sensitive_files":0,
+  "note":"ONLY READABLE original source regional files were SHA256 verified on Global. Broken/unsafe symlink aliases are disclosed, NOT restored or certified; NOT Hugging Face export manifest parity"}
+ encoded=(json.dumps(report,sort_keys=True,separators=(",",":"))+"\n").encode()
+ receipt=DEST/"S3_EVIDENCE_RECEIPT.json"
+ if receipt.exists() or receipt.is_symlink():
+  if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_size>16*1024*1024:
+   raise RuntimeError("Existing receipt is unsafe or oversized")
+  # This is an immutable prior-run receipt. Its historical preexisting/copied
+  # counters and verification_only flag need NOT equal this new run's counters.
+  # Accept it ONLY after recomputing exact source+Global per-file SHA256 values
+  # and comparing immutable identities and the broken-alias exception ledger.
+  encoded=receipt.read_bytes()
+  def unique_pairs(pairs):
+   out={}
+   for k,v in pairs:
+    if k in out:raise RuntimeError("Duplicate JSON receipt field")
+    out[k]=v
+   return out
+  prior=json.loads(encoded,object_pairs_hook=unique_pairs)
+  required={
+   "schema":report["schema"],
+   "source_volume":SOURCE_ID,
+   "global_volume":GLOBAL_ID,
+   "source_inventory_sha256":INVENTORY_SHA256,
+   "source_inventory_candidate_references":len(rows),
+   "source_unrestorable_aliases":len(unrestorable),
+   "verified_files":len(audit),
+   "verified_bytes":sum(x["bytes"] for x in audit),
+  }
+  if not isinstance(prior,dict) or any(prior.get(k)!=v for k,v in required.items()):
+   raise RuntimeError("Existing receipt immutable source/volume/count identities conflict")
+  if (prior.get("files")!=audit or prior.get("excluded_references")!=unrestorable
+      or prior.get("s3_source_count_differs_from_hf") is not True):
+   raise RuntimeError("Existing receipt differs from independently rehashed files or source exclusions")
+  print("EXISTING_RECEIPT_REUSED_AFTER_FULL_SOURCE_AND_GLOBAL_SHA256=true",flush=True)
+ else:
+  with receipt.open("xb") as f:f.write(encoded)
+ if receipt.read_bytes()!=encoded:
+  raise RuntimeError("Global receipt changed during verification")
+ terminal="COMPLETE_WITH_SOURCE_EXCEPTIONS" if unrestorable else "COMPLETE"
+ emit(terminal,len(audit),len(readable),{"receipt":str(receipt),"receipt_sha256":hashlib.sha256(encoded).hexdigest(),
+      "source_inventory_references":len(rows),"unrestorable_source_aliases":len(unrestorable),
+      "scope":"readable regional source bytes only, NOT HF parity"})
+ print("EXISTING_GLOBAL_EVIDENCE_SHA256_VERIFIED=true",flush=True)
+ print("SOURCE_SYMLINK_EXCEPTIONS="+str(len(unrestorable)),flush=True)
+if __name__=="__main__":
+ try:main()
+ except Exception as ex:
+  print("REGIONAL_DIRECT_RECOVERY_FAILED="+type(ex).__name__,flush=True)
+  run=os.environ.get("RECOVERY_RUN_ID","")
+  if run.isdecimal():
+   try:
+    s3=boto3.client("s3",endpoint_url="https://s3api-eu-cz-1.runpod.io/",region_name="EU-CZ-1",
+     aws_access_key_id=os.environ["RUNPOD_S3_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"])
+    raw=json.dumps({"schema":"hephaestus.regional-direct-recovery.v1","run_id":run,"status":"FAILED","error_class":type(ex).__name__,"failure_kind":str(ex)[:110],"updated_utc":datetime.now(timezone.utc).isoformat()},sort_keys=True).encode()
+    s3.put_object(Bucket=SOURCE_ID,Key="hephaestus/recovery-status/"+run+".json",Body=raw,ContentType="application/json")
+   except Exception as report_exc:print("FAILED_STATUS_WRITE_ERROR="+type(report_exc).__name__,flush=True)
+  sys.exit(1)
