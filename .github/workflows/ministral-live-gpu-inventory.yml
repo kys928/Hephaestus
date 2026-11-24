@@ -47,8 +47,8 @@ jobs:
                   rate=provider.quote_gpu(gpu_id=ident,datacenter_id=c.datacenter_id)
               except Exception:
                   continue
-              if rate.gpu_memory_gb>=48 and rate.price_usd_per_hour<=Decimal("3.25"):
-                  print("TRIAD_ADMISSIBLE_GPU="+json.dumps({
+              if rate.gpu_memory_gb>=24 and rate.price_usd_per_hour<=Decimal("4.00"):
+                  print("TRIAD_FALLBACK_GPU="+json.dumps({
                     "id":ident,"availability":availability,
                     "VRAM_GB":rate.gpu_memory_gb,
                     "secure_hourly_usd":str(rate.price_usd_per_hour)},
