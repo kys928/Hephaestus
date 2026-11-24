@@ -282,6 +282,29 @@ def test_cold_admission_rebinds_fixture_receipt_to_exact_context(tmp_path):
         admission.admit_material(origin, ref)
         admission.admit_material(origin, ref)
     admission = replace(admission, trusted_material=frozenset())
+    from hephaestus.control.anvil_dispatch import AnvilDispatch
+    from hephaestus.jobs import SQLiteJobQueue
+    from hephaestus.storage.verified import read_verified_json
+
+    second_evidence = publish(dict(scope, schema="anvil.material.v1", kind="evidence", text="Second round."))
+    plan = publish(dict(scope, schema="anvil.dispatch.v1", registry_ref=registry,
+                        material_refs=[objective, evidence, second_evidence]))
+    queue_path = tmp_path / "jobs.sqlite"
+    dispatch = AnvilDispatch(admission, SQLiteJobQueue(queue_path), plan)
+    job = dispatch.submit(owner_id="operator", origin=origin, slot=1, sequence=0,
+                          material_refs=(objective, evidence))
+    assert dispatch.submit(owner_id="operator", origin=origin, slot=1, sequence=0,
+                           material_refs=(evidence, objective)).job_id == job.job_id
+    with pytest.raises(PermissionError, match="specialist slot"):
+        dispatch.submit(owner_id="operator", origin=origin, slot=0, sequence=0,
+                        material_refs=(objective, evidence))
+    worker = AnvilDispatch(admission, SQLiteJobQueue(queue_path), plan).worker("review")
+    terminal = worker.run_once()
+    assert terminal.job_id == job.job_id
+    prepared = read_verified_json(artifacts, terminal.result_ref)
+    assert prepared["execution_authorized"] is False
+    assert prepared["task"]["role"] == role
+
     task = admission.prepare(origin, 0, (objective, evidence))
     assert task == admission.prepare(origin, 0, (evidence, objective))
     with pytest.raises(PermissionError, match="independent admission"):

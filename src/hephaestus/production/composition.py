@@ -192,6 +192,20 @@ class ProductionRuntime:
             self.state_repository,
         )
 
+    def anvil_dispatch_rehearsal(
+        self, *, plan_ref: str, registry_ref: str, trusted_material: frozenset[str],
+        trusted_receipts: frozenset[str],
+    ):
+        """Prepare bounded specialist tasks without a compute grant or launch."""
+        from hephaestus.control.anvil_dispatch import AnvilDispatch
+        from hephaestus.jobs import SQLiteJobQueue
+
+        admission = self.anvil_admission_rehearsal(
+            registry_ref=registry_ref, trusted_material=trusted_material, trusted_receipts=trusted_receipts,
+        )
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=self.settings.storage_profile)
+        return AnvilDispatch(admission, queue, plan_ref)
+
     def reviewed_source_jobs(
         self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,
     ):
