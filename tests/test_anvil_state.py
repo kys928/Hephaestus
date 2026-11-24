@@ -160,3 +160,88 @@ def test_triads_retained_v1_outputs_preserve_negative_control_semantics():
     triple = (answer.decision, answer.action, answer.primary_variable)
     assert triple == ("repair_evaluation", "request_recheck", "evaluation_protocol")
     assert triple != ("collect_more_evidence", "request_recheck", "diagnostic_measurement")
+
+
+def _append_in_child(path, origin, payload, start, *, exit_boundary=None):
+    import os
+    import time
+
+    from hephaestus.state.single_writer import WriterBusyError
+
+    repository = SQLiteStateRepository(path, initialize=False)
+    board = AnvilState(repository, lambda _: True, lambda *_: False)
+    if exit_boundary == "before_commit":
+        def append_then_exit(collection, row, **options):
+            with repository.transaction() as transaction:
+                transaction.append(collection, row, **options)
+                os._exit(41)
+
+        repository.append = append_then_exit
+    elif exit_boundary == "after_commit":
+        committed = repository.append
+
+        def append_then_exit(*args, **kwargs):
+            committed(*args, **kwargs)
+            os._exit(42)
+
+        repository.append = append_then_exit
+    if not start.wait(10):
+        raise TimeoutError("fixture start was not signalled")
+    for _ in range(200):
+        try:
+            board.append_contribution(origin, payload)
+            return
+        except WriterBusyError:
+            time.sleep(0.01)
+    raise TimeoutError("writer fence never became available")
+
+
+def test_multiple_processes_and_interrupted_commits_preserve_accepted_frontier(tmp_path):
+    import multiprocessing
+
+    path = tmp_path / "anvil.sqlite"
+    board = AnvilState(SQLiteStateRepository(path), lambda _: True, lambda *_: False)
+    empty = board.read_snapshot("study")
+    origin = ContributionOrigin(
+        "study", "run", "lineage", "diagnosis", "sha256:" + "a" * 64,
+        empty.frontier, "first", "org/model", "0" * 40, "sha256:" + "f" * 64,
+    )
+    payload = Contribution.from_model({"kind": "hypothesis", "text": "claim"})
+    context = multiprocessing.get_context("fork")
+    start = context.Event()
+    workers = [
+        context.Process(target=_append_in_child, args=(path, replace(origin, idempotency_key=key), payload, start))
+        for key in ("first", "second", "third", "first")
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        start.set()
+        for worker in workers:
+            worker.join(10)
+            assert worker.exitcode == 0
+        committed = board.read_snapshot("study")
+        assert len(committed.contributions) == 3
+
+        for mode, code in (("before_commit", 41), ("after_commit", 42)):
+            worker = context.Process(
+                target=_append_in_child,
+                args=(path, replace(origin, idempotency_key=mode), payload, start),
+                kwargs={"exit_boundary": mode},
+            )
+            workers.append(worker)
+            worker.start()
+            worker.join(10)
+            assert worker.exitcode == code
+
+        restarted = AnvilState(SQLiteStateRepository(path), lambda _: True, lambda *_: False)
+        assert restarted.reconcile("study", "before_commit") is None
+        receipt = restarted.reconcile("study", "after_commit")
+        assert receipt is not None
+        assert restarted.append_contribution(replace(origin, idempotency_key="after_commit"), payload) == receipt
+        assert restarted.replay("study", expected_frontier=receipt.frontier).contributions[:3] == committed.contributions
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.kill()
+                worker.join()
