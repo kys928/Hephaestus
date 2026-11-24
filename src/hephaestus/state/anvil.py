@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Callable
@@ -34,6 +35,19 @@ class AnvilState:
     verify_origin: Callable[[ContributionOrigin], bool]
     verify_evidence: Callable[[ContributionOrigin, str], bool]
 
+    def _records(self, collection: str) -> list[dict[str, object]]:
+        return self.repository.all(collection)
+
+    @contextmanager
+    def _write(self, collection: str, investigation: str, *, atomic_batch: bool = False):
+        with execution_owner(self.repository, "anvil-contribution", investigation):
+            records = self._records(collection)
+            if atomic_batch:
+                with self.repository.transaction() as transaction:
+                    yield records, transaction
+            else:
+                yield records, self.repository
+
     @staticmethod
     def _validate_references(
         parents: dict[str, tuple[ContributionOrigin, int]], origin: ContributionOrigin,
@@ -52,8 +66,9 @@ class AnvilState:
             raise PermissionError("inference or context receipt failed admission")
         body = {"schema": "anvil.contribution.v2", "origin": asdict(origin), "payload": payload.to_dict()}
         identity = _digest([origin.investigation, origin.idempotency_key])
-        with execution_owner(self.repository, "anvil-contribution", origin.investigation):
-            snapshot = self.replay(origin.investigation)
+        collection = _collection(origin.investigation)
+        with self._write(collection, origin.investigation) as (records, writer):
+            snapshot = self._replay_records(origin.investigation, records)
             prior = next((row for row in snapshot.contributions if row.contribution_id == identity), None)
             if prior is not None:
                 if prior.origin != origin or prior.payload != payload:
@@ -74,7 +89,7 @@ class AnvilState:
             record = {**body, "contribution_id": identity, "previous_frontier": snapshot.frontier,
                       "sequence": len(snapshot.contributions) + 1}
             frontier = _digest(record)
-            self.repository.append(_collection(origin.investigation), {**record, "frontier": frontier},
+            writer.append(collection, {**record, "frontier": frontier},
                                    operation_id=identity)
         return AcceptedContribution(identity, frontier, snapshot.frontier, record["sequence"], origin, payload)
 
@@ -108,11 +123,11 @@ class AnvilState:
         return InvestigationSnapshot(investigation, frontier, tuple(accepted))
 
     def replay(self, investigation: str, *, expected_frontier: str | None = None) -> InvestigationSnapshot:
-        return self._replay_records(investigation, self.repository.all(_collection(investigation)), expected_frontier)
+        return self._replay_records(investigation, self._records(_collection(investigation)), expected_frontier)
 
     def checkpoint(self, investigation: str, artifacts: ArtifactStore) -> str:
         """Seal one consistent history. Retain its frontier independently."""
-        records = self.repository.all(_collection(investigation))
+        records = self._records(_collection(investigation))
         snapshot = self._replay_records(investigation, records)
         raw = canonical_bytes({
             "schema": "anvil.checkpoint.v2",
@@ -137,15 +152,12 @@ class AnvilState:
         records = document["records"]
         result = self._replay_records(investigation, records, expected_frontier)
         collection = _collection(investigation)
-        with execution_owner(self.repository, "anvil-contribution", investigation):
-            existing = self.repository.all(collection)
+        with self._write(collection, investigation, atomic_batch=True) as (existing, writer):
             self._replay_records(investigation, existing)
             if existing != records[:len(existing)]:
                 raise ValueError("checkpoint would roll back or replace accepted contributions")
-            if len(existing) < len(records):
-                with self.repository.transaction() as transaction:
-                    for record in records[len(existing):]:
-                        transaction.append(collection, record, operation_id=record["contribution_id"])
+            for record in records[len(existing):]:
+                writer.append(collection, record, operation_id=record["contribution_id"])
         return result
 
     def read_snapshot(self, investigation: str, *, sequence: int | None = None) -> InvestigationSnapshot:

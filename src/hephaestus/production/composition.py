@@ -161,6 +161,19 @@ class ProductionRuntime:
             raise PermissionError("Anvil requires an explicit bounded rehearsal")
         return AnvilState(self.state_repository, verify_origin, verify_evidence)
 
+    def anvil_postgres_rehearsal(
+        self, *, connect, investigation: str, epoch: int,
+        verify_origin: Callable[[ContributionOrigin], bool],
+        verify_evidence: Callable[[ContributionOrigin, str], bool],
+    ):
+        """Bind an explicitly provisioned research ledger without moving operational state."""
+        from hephaestus.state.anvil_postgres import PostgresAnvilState
+
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("Anvil requires an explicit bounded rehearsal")
+        return PostgresAnvilState(connect, investigation, epoch, verify_origin, verify_evidence)
+
     def anvil_admission_rehearsal(
         self, *, registry_ref: str, trusted_material: frozenset[str],
         trusted_receipts: frozenset[str],
