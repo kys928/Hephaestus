@@ -75,25 +75,28 @@ def publish_bundle(work,attempt_dir,url_key):
             if p.is_file() and not p.is_symlink():z.write(p,p.name)
     if len(data.getvalue())>5_000_000:
         raise RuntimeError("research bundle exceeded hard size limit")
-    req=urllib.request.Request(os.environ[url_key],data=data.getvalue(),method="PUT")
-    with urllib.request.urlopen(req,timeout=90) as response:
-        if response.status not in (200,201,204):raise RuntimeError("receipt upload rejected")
+    # No network credentials in this model process. Trusted bootstrap owns
+    # exact-prefix S3 transfers and only relays opaque evidence bytes.
+    number=url_key.rsplit("_",1)[-1]
+    if number not in ("1","2"):raise PermissionError("unknown attempt")
+    target=work/("attempt-"+number+".zip")
+    tmp=target.with_suffix(".partial")
+    with tmp.open("xb") as stream:stream.write(data.getvalue())
+    os.replace(tmp,target)
 
 
 def read_feedback(run_tag,attempt):
     deadline=time.monotonic()+480
+    path=_ALLOWED_ROOT/run_tag/("feedback-"+str(attempt)+".json")
     while time.monotonic()<deadline:
-        try:
-            with urllib.request.urlopen(os.environ["TRIAD_GET_FEEDBACK_"+str(attempt)],timeout=30) as r:
-                raw=r.read(8001)
+        if path.is_file() and not path.is_symlink():
+            raw=path.read_bytes()
             if len(raw)>8000:raise ValueError("oversize independent feedback")
             doc=json.loads(raw)
             if (doc.get("run_tag")!=run_tag or doc.get("attempt")!=attempt
                     or doc.get("verdict") not in ("accepted","rejected","retry")):
                 raise ValueError("feedback identity/decision mismatch")
             return doc
-        except urllib.error.HTTPError as exc:
-            if exc.code not in (403,404):raise RuntimeError("feedback unavailable") from None
         time.sleep(5)
     raise TimeoutError("independent off-Pod verification deadline")
 
