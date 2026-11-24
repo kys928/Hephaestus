@@ -1,0 +1,44 @@
+name: Hephaestus three-role GPU safety admission CPU proof
+on:
+  push:
+    branches: [ops/ministral-triad-gpu-20261124]
+    paths: [.github/workflows/ministral-triad-safety-admission.yml]
+permissions: {contents: read}
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8dc00fbf7114f114b9f3fd5695281fff77ee4ff8
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: test "$(git rev-parse HEAD)" = 8dc00fbf7114f114b9f3fd5695281fff77ee4ff8
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - name: Compile exact GPU worker and independent watchdog before billing
+        run: |
+          python -m py_compile scripts/run_provisional_ministral_triad_cuda_worker.py scripts/launch_approved_ministral_triad_cuda.py scripts/watchdog_approved_ministral_triad_cuda.py
+          python -m pytest -q tests/test_provisional_ministral_coder_qualification.py tests/test_signed_research_live_runtime.py tests/test_constrained_research_self_repair.py
+      - name: Independent real-Docker original defect admission before paid inference
+        run: |
+          docker build -t hephaestus-triad-review-sandbox:local - <<'DOCKER'
+          FROM python:3.12-slim
+          RUN pip install --no-cache-dir pytest==8.4.2
+          DOCKER
+          PYTHONPATH=scripts python - <<'PY'
+          from pathlib import Path
+          import shutil,tempfile
+          from launch_approved_ministral_triad_cuda import independent_failure_preflight,TEST_NAME
+          with tempfile.TemporaryDirectory(prefix="triad-admit-") as directory:
+              trial,head,image,case=independent_failure_preflight(
+                  Path(directory),docker=shutil.which("docker"),code_root=Path.cwd())
+              assert case["issue_nodeid"].endswith(TEST_NAME)
+              assert case["source_sha256"].startswith("sha256:")
+              assert case["fixed_test_sha256"].startswith("sha256:")
+              assert case["baseline_output_sha256"].startswith("sha256:")
+              assert len(head)==40
+              print("TRIAD_ACTUAL_ORIGINAL_DEFECT_REVIEW=PASS",flush=True)
+              print("TRIAD_INDEPENDENT_FIXTURE_FIXED_BEFORE_GPU=PASS",flush=True)
+          PY
