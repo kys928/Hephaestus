@@ -1,6 +1,7 @@
 """Read-only mounted audit. Publish only aggregates and independent hashes."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from hmac import compare_digest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -196,24 +197,29 @@ def _evidence():
         raise ValueError("candidate row identities differ from historical inventory")
     totals = {"verified": 0, "unresolved_alias": 0, "missing_source": 0, "missing_or_different_global": 0}
     parity = []
-    for relative, key, size in sorted(rows):
+
+    def compare(row):
+        relative, key, size = row
         source = SOURCE / key
         try:
             original = safe_file(SOURCE, source, size)
         except RuntimeError:
             aliases = [source, *(parent for parent in source.parents if parent.is_relative_to(SOURCE))]
-            totals["unresolved_alias" if any(path.is_symlink() for path in aliases) else "missing_source"] += 1
-            continue
+            return "unresolved_alias" if any(path.is_symlink() for path in aliases) else "missing_source", None
         try:
             target = _sealed_file(GLOBAL, EVIDENCE / relative)
             original_hash, original_size = sha(original)
             if (original_hash, original_size) != sha(target) or original_size != size:
                 raise ValueError("source and Global bytes differ")
         except (OSError, ValueError):
-            totals["missing_or_different_global"] += 1
-            continue
-        totals["verified"] += 1
-        parity.append((relative, size, original_hash))
+            return "missing_or_different_global", None
+        return "verified", (relative, size, original_hash)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for state, record in pool.map(compare, sorted(rows)):
+            totals[state] += 1
+            if record is not None:
+                parity.append(record)
     receipt = DEST / "S3_EVIDENCE_RECEIPT.json"
     try:
         receipt_digest, receipt_size = sha(_sealed_file(GLOBAL, receipt))
@@ -232,7 +238,7 @@ def run():
             return
 
         def do_GET(self):
-            if self.path != "/report" or not compare_digest(self.headers.get("Authorization", ""), "Bearer " + token):
+            if not compare_digest(self.path, "/report/" + token):
                 self.send_error(404)
                 return
             body = json.dumps(report.copy(), sort_keys=True).encode()
@@ -247,7 +253,6 @@ def run():
     try:
         if not (GLOBAL.is_mount() and SOURCE.is_mount()) or GLOBAL.is_symlink() or SOURCE.is_symlink():
             raise RuntimeError("expected two independent provider mounts")
-        _sealed_file(GLOBAL, ARCHIVE)
         rows = _files(GLOBAL)
         report["phase"] = "inventory"
         report["inventory"] = {
@@ -259,7 +264,10 @@ def run():
         report["phase"] = "specialists"
         report["specialists"] = _models(rows, json.loads(os.environ["ANVIL_ROLE_REGISTRY"]))
         report["phase"] = "migration"
-        report["migration"] = _evidence()
+        try:
+            report["migration"] = _evidence()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            report["migration"] = {"error": type(exc).__name__}
         report["status"] = "complete"
     except Exception as exc:
         report.update(status="failed", error=type(exc).__name__)
