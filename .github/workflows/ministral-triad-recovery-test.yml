@@ -1,0 +1,19 @@
+name: Global triad lifecycle recovery pre-spend acceptance
+on:
+  push:
+    branches: [ops/ministral-triad-recovery-20261124]
+    paths: [.github/workflows/ministral-triad-recovery-test.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 6cc805b6ed91d991d1ed9dbc2a078c813d721434, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -e '.[test,independent-certification]'
+      - run: |
+          python -m py_compile scripts/ministral_global_cleanup.py scripts/launch_approved_ministral_triad_cuda.py scripts/watchdog_approved_ministral_triad_cuda.py scripts/run_provisional_ministral_triad_cuda_worker.py
+          python -m pytest -q tests/test_global_triad_lifecycle_recovery.py tests/test_provisional_ministral_coder_qualification.py tests/test_signed_research_live_runtime.py tests/test_constrained_research_self_repair.py
