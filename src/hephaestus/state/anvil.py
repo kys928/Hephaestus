@@ -41,7 +41,7 @@ class AnvilState:
     ) -> None:
         for relation, target in contribution.links:
             parent = parents.get(target)
-            if parent is None or parent[0].lineage_id != origin.lineage_id or parent[1] > observed_sequence:
+            if parent is None or (parent[0].run_id, parent[0].lineage_id) != (origin.run_id, origin.lineage_id) or parent[1] > observed_sequence:
                 raise ValueError("contribution link has an absent or out-of-scope target")
             if relation == RelationKind.REVISES and parent[0].role != origin.role:
                 raise ValueError("revision may only amend the contributor's own position")

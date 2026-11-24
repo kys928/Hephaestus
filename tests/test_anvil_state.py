@@ -245,3 +245,99 @@ def test_multiple_processes_and_interrupted_commits_preserve_accepted_frontier(t
             if worker.is_alive():
                 worker.kill()
                 worker.join()
+
+
+def test_cold_admission_rebinds_fixture_receipt_to_exact_context(tmp_path):
+    from hashlib import sha256
+
+    from hephaestus.control.anvil_context import AnvilAdmission
+    from hephaestus.production.original_cuda_identity import registry_digest, verified_original_roles
+    from hephaestus.storage.filesystem import FileSystemArtifactStore
+    from hephaestus.storage.verified import canonical_bytes
+
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+
+    def publish(document):
+        return artifacts.put_bytes(canonical_bytes(document), media_type="application/json").artifact_ref
+
+    registry = registry_digest()
+    stack, contract = verified_original_roles(registry)
+    role = "planner"
+    model = stack.resolve(role)
+    scope = {"investigation": "study", "run_id": "run", "lineage_id": "lineage"}
+    objective = publish(dict(scope, schema="anvil.material.v1", kind="objective", text="Compare two hypotheses."))
+    evidence = publish(dict(scope, schema="anvil.material.v1", kind="evidence", text="Fixture measurement."))
+    materials = frozenset((objective, evidence))
+    board = AnvilState(SQLiteStateRepository(tmp_path / "board.sqlite"), lambda _: True,
+                       lambda _, ref: ref in materials)
+    admission = AnvilAdmission(board, artifacts, registry, materials, frozenset())
+    origin = ContributionOrigin(**scope, role=role, inference_ref=objective,
+                                context_frontier=board.read_snapshot("study").frontier,
+                                idempotency_key="first", model_id=model.model_id, model_revision=model.revision,
+                                adapter_ref="sha256:" + model.adapter.sha256)
+    task = admission.prepare(origin, 0, (objective, evidence))
+    assert task == admission.prepare(origin, 0, (evidence, objective))
+    with pytest.raises(PermissionError, match="independent admission"):
+        admission.prepare(origin, 0, (objective, "sha256:" + "f" * 64))
+    vocabulary = contract.profile(role)["vocabulary"]
+    answer = {key: vocabulary[key][0] for key in ("decision", "action", "primary_variable")}
+    answer.update(confidence=0.6, uncertainties=["One fixture"], evidence_refs=[evidence],
+                  rationale="The evidence favors the first hypothesis.")
+    raw, prompt = canonical_bytes(answer).decode(), contract.prompt(task)
+    receipt = publish(dict(
+        schema="role-inference.v1", status="accepted", role=role, run_id=task.run_id,
+        lineage_id=task.lineage_id, stage_name=task.stage_name, raw_output=raw,
+        output_sha256=sha256(raw.encode()).hexdigest(), prompt=prompt,
+        prompt_sha256=sha256(prompt.encode()).hexdigest(), answer=answer,
+        model_id=model.model_id, base_revision=model.revision, adapter_sha256=model.adapter.sha256,
+        adapter_source=model.adapter.s3_key, tokenizer_id=model.model_id, tokenizer_revision=model.revision,
+        evidence_refs=[item.ref for item in task.evidence],
+    ))
+    origin = replace(origin, inference_ref=receipt)
+    with pytest.raises(PermissionError, match="independent admission"):
+        admission.accept(origin, 0, (objective, evidence))
+    admission = replace(admission, trusted_receipts=frozenset((receipt,)))
+    with pytest.raises(PermissionError, match="exact context"):
+        admission.accept(origin, 0, (objective,))
+    admitted = admission.accept(origin, 0, (objective, evidence))
+    assert admitted.payload.confidence == 0.6
+    assert admitted.payload.uncertainties == ("One fixture",)
+    assert board.replay("study").contributions == (admitted,)
+    assert admission.accept(origin, 0, (evidence, objective)) == admitted
+    with pytest.raises(PermissionError, match="frontier"):
+        admission.accept(origin, 1, (objective, evidence))
+
+
+def test_fixture_specialists_record_competing_positions_and_revision(tmp_path):
+    board = AnvilState(SQLiteStateRepository(tmp_path / "collaboration.sqlite"),
+                       lambda _: True, lambda *_: False)
+    origin = ContributionOrigin("study", "run", "lineage", "diagnosis", "sha256:" + "a" * 64,
+                                board.read_snapshot("study").frontier, "diagnosis-1",
+                                "org/model", "0" * 40, "sha256:" + "f" * 64)
+    first = board.append_contribution(origin, Contribution.from_model({
+        "kind": "hypothesis", "text": "Coverage is incomplete.", "confidence": 0.7,
+    }))
+    second = board.append_contribution(replace(origin, role="planner", idempotency_key="planner-1"),
+                                      Contribution.from_model({
+        "kind": "hypothesis", "text": "The index is stale.", "confidence": 0.6,
+    }))
+    challenged = board.append_contribution(replace(origin, role="evaluator", idempotency_key="eval-1",
+                                                   context_frontier=second.frontier),
+                                           Contribution.from_model({
+        "kind": "challenge", "text": "The coverage hypothesis also predicts the missing entries.",
+        "links": [["challenges", second.contribution_id]],
+    }))
+    revised = board.append_contribution(replace(origin, role="planner", idempotency_key="planner-2",
+                                                context_frontier=challenged.frontier),
+                                        Contribution.from_model({
+        "kind": "revision", "text": "Both hypotheses remain viable pending an independent measurement.",
+        "links": [["revises", second.contribution_id]], "uncertainties": ["Index freshness unmeasured."],
+    }))
+    request = board.append_contribution(replace(origin, role="planner", idempotency_key="planner-3",
+                                                context_frontier=revised.frontier),
+                                        Contribution.from_model({
+        "kind": "capability_request", "capability": "diagnose_coverage", "text": "Measure coverage.",
+    }))
+    assert board.replay("study", expected_frontier=request.frontier).contributions == (
+        first, second, challenged, revised, request,
+    )

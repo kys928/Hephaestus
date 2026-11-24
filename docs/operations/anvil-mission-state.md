@@ -82,3 +82,32 @@ Use a reviewed per-file manifest and a CPU reader with a finite byte, time and c
 - Run the approved explicit queue migration only after stopping old workers and taking a verified backup. Migration preserves existing route-less jobs as `default` and refuses active leased/running rows. Source rollback from a migrated store requires the retained pre-migration snapshot and reconciliation of any subsequently accepted jobs. Avoid schema downgrade in place.
 - Roll back source paths selectively. Preserve the previous five active CPU workflows, historical audit sources, read-only admission for RunPod S3, and independently retained acceptance frontiers.
 - Next executable work: bind trusted model/context receipts into the blackboard rehearsal, exercise multi-process publication and recovery on host-local storage, and close the authorized base-cache/backup checks as scoped access permits. The A–E evaluation uses frozen families, paired outcomes and resource-normalized comparisons once real execution is approved.
+
+## V2 second engineering checkpoint
+
+| Workstream | Evidence and gate |
+|---|---|
+| A — Semantics | The logical blackboard protocol exposes append, historical snapshots, replay, reconciliation, checkpoint and restore. The bounded composition factory prepares deterministically ordered immutable material with one objective and up to eight same-run, same-lineage advisory excerpts. Admission checks the independently supplied artifact digests, certified role and adapter identity, frozen v1 prompt and answer, and the exact retained frontier. Confidence and uncertainty are typed fields. Historical payload fields retain their original serialization. The trust lists are rehearsal inputs. Durable machine-event admission, an independent runtime attestation issuer and cross-runner verification remain open. |
+| B — Persistence | LanceDB remains qualified only as a candidate rebuildable projection. The smallest proposed coordination path is the existing transactional admission log as commit authority, with a single replay consumer applying the verified frontier to LanceDB. That design does not qualify LanceDB as authority. An authoritative single-Lance-writer trial still requires replacement-owner fencing across hosts. The existing SQLite rehearsal guard admits host-local state only and the RunPod S3 endpoint failed the conditional-create prerequisite. No compliant cross-host writer binding was demonstrated at this checkpoint. Preserve the negative control and the preregistered fault matrix in the blackboard contract. |
+| C — Custody | The checked-in Planner candidate manifest freezes four Czech blob names and exact sizes from the retained inventory matched to upstream LFS metadata in the first checkpoint. Its streaming verifier is read-only and checks the expected size and SHA-256 on the same file descriptor. No weight payload was read for this checkpoint. Independent publication, backup coverage outside the verified evidence export, Controller aliases, and acquisition for the other bases remain open. |
+| D — Collaboration | The new CPU fixture covers competing hypotheses from the same observed snapshot, third-party challenge, author revision and advisory capability request with frontier replay. Durable scheduling, actual dispatch, terminal decisions and genuine model collaboration remain open. |
+| E — Backend | The bounded admission factory uses the existing production composition and rehearsal guard. Governed transition, RunPod recovery/lifecycle and constrained Coder acceptance remain open. No paid workflow or training was activated. |
+
+### Planner authorization packet
+
+After scoped authorization of a read-only CPU mount, review the manifest digest from this revision against the pinned upstream revision and recorded LFS metadata. Set an approved external deadline and arrange independent exact-Pod teardown before provision. The expected payload read ceiling is 17,836,123,192 bytes and the verifier writes only its small JSON receipt to standard output.
+
+```bash
+timeout --kill-after=30s "${ANVIL_APPROVED_READ_SECONDS:?}" \
+  python scripts/anvil_verify_planner_shards.py "${ANVIL_PLANNER_BLOBS:?}" \
+  configs/models/anvil_planner_shard_manifest.json \
+  46ca0a4d8270fda4d2d5bba4ede7aec79d3f01571b7523cddbe957ab5d0eb35c
+```
+
+Resolve snapshot aliases on a read-only mount against the pinned shard index, rejecting any canonical path that escapes the model cache. Verify config and tokenizer files independently. Record each unique artifact with its digest, bytes, source, destination, retention owner and restore evidence. Obtain separate approval for the specific missing files, destination, byte budget and compute ceiling before acquisition. Qualify publication on synthetic objects first with independent concurrent publishers, a conflicting writer, interrupted commits and exact readback by separate credentials. Publish provider-managed immutable versions only after those controls pass. Retain both source volumes. Verify offline loading and independent backup restoration as separate gates.
+
+### Provenance and rollback
+
+This revision extends the existing Anvil SQLite rehearsal and frozen role receipt verifier. Callers opt in through the composition factory. Stop calling the new factory to roll back that integration. If typed payloads have been appended, preserve the ledger and its replay reader before reverting the schema-aware commit. Existing receipt and checkpoint formats remain in use. The Planner tool can be reverted independently.
+
+The ext4 CPU suite collected before the final collaboration fixture and receipt retry-key normalization passed with 1,305 passed and 90 skipped. The final focused blackboard suite passed all eight tests.

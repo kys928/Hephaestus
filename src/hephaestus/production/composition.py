@@ -161,6 +161,19 @@ class ProductionRuntime:
             raise PermissionError("Anvil requires an explicit bounded rehearsal")
         return AnvilState(self.state_repository, verify_origin, verify_evidence)
 
+    def anvil_admission_rehearsal(
+        self, *, registry_ref: str, trusted_material: frozenset[str],
+        trusted_receipts: frozenset[str],
+    ):
+        """Bind independently reviewed artifacts to the bounded blackboard."""
+        from hephaestus.control.anvil_context import AnvilAdmission
+
+        board = self.anvil_rehearsal(
+            verify_origin=lambda origin: origin.inference_ref in trusted_receipts,
+            verify_evidence=lambda _origin, ref: ref in trusted_material,
+        )
+        return AnvilAdmission(board, self.artifact_store, registry_ref, trusted_material, trusted_receipts)
+
     def reviewed_source_jobs(
         self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,
     ):

@@ -48,11 +48,13 @@ class Contribution:
     links: tuple[tuple[RelationKind, str], ...] = ()
     evidence_refs: tuple[str, ...] = ()
     capability: str | None = None
+    confidence: float | None = None
+    uncertainties: tuple[str, ...] = ()
 
     @classmethod
     def from_model(cls, payload: dict) -> Contribution:
         if not isinstance(payload, dict) or set(payload) - {
-            "kind", "text", "links", "evidence_refs", "capability",
+            "kind", "text", "links", "evidence_refs", "capability", "confidence", "uncertainties",
         }:
             raise ValueError("contribution contains unsupported or runtime-owned fields")
         kind = ContributionKind(payload.get("kind"))
@@ -94,12 +96,25 @@ class Contribution:
                 raise ValueError("expected a registered capability identifier")
         elif capability is not None:
             raise ValueError("only a capability request can name a capability")
-        return cls(kind, text, tuple(links), tuple(evidence), capability)
+        confidence = payload.get("confidence")
+        if confidence is not None and (type(confidence) not in (int, float) or not 0 <= confidence <= 1):
+            raise ValueError("confidence must be a number between zero and one")
+        uncertainties = payload.get("uncertainties", [])
+        if not isinstance(uncertainties, list) or len(uncertainties) > 30 or any(
+            not isinstance(item, str) or len(item) > 300 for item in uncertainties
+        ):
+            raise ValueError("expected bounded uncertainty statements")
+        return cls(kind, text, tuple(links), tuple(evidence), capability, confidence, tuple(uncertainties))
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind.value, "text": self.text,
-                "links": [[kind.value, target] for kind, target in self.links],
-                "evidence_refs": list(self.evidence_refs), "capability": self.capability}
+        document = {"kind": self.kind.value, "text": self.text,
+                    "links": [[kind.value, target] for kind, target in self.links],
+                    "evidence_refs": list(self.evidence_refs), "capability": self.capability}
+        if self.confidence is not None:
+            document["confidence"] = self.confidence
+        if self.uncertainties:
+            document["uncertainties"] = list(self.uncertainties)
+        return document
 
 
 @dataclass(frozen=True, slots=True)
