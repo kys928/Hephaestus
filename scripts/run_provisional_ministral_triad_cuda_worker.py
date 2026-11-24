@@ -150,15 +150,19 @@ def main():
         if os.environ.get("RUNPOD_GLOBAL_VOLUME_ID")!=GLOBAL_ID or not GLOBAL_ROOT.is_mount():
             raise PermissionError("verified Global Volume not actually mounted")
         result["global_volume_id"]=GLOBAL_ID
-        ref="sha256:"+sha256(canonical_bytes(case)).hexdigest()
+        case_hash="sha256:"+sha256(canonical_bytes(case)).hexdigest()
+        # Short, unambiguous reference label maps to the independently hashed case.
+        ref="triad-case-1"
+        result["case_sha256"]=case_hash
         evidence=EvidenceRecord(
             ref=ref,kind="artifact",
             run_id="triad-"+a.run_tag,lineage_id="research-"+a.run_tag,
-            sha256=ref,observed_sha256=ref,
+            sha256=case_hash,observed_sha256=case_hash,
             facts={"provenance_valid":True,"artifact_hash_match":True,
                    "evidence_complete":True})
         reg=EvidenceRegistry({ref:evidence})
         scene=(
+            "Use only the exact evidence reference triad-case-1 in evidence_refs. "
             "Actual reviewed production defect in analyze_dataset_task_coverage: "
             "a record with text=None is incorrectly counted as containing supervised "
             "text. An independent frozen pytest regression reproduces the incorrect "
@@ -203,8 +207,31 @@ def main():
                 verified_facts={"evidence_complete":True,
                                 "provenance_valid":True,
                                 "artifact_hash_match":True})
-            observation=reasoner.propose(task,reg,context=context,
-                max_new_tokens=384)
+            # Preserve first failure. Only one format-only regeneration is
+            # allowed per original role. Never parse/repair the text ourselves.
+            rejected_ref=None
+            try:
+                observation=reasoner.propose(task,reg,context=context,
+                    max_new_tokens=512)
+            except ValueError as exc:
+                rejected_ref=getattr(exc,"rejected_inference_receipt_ref",None)
+                if not isinstance(rejected_ref,str):
+                    raise
+                result.setdefault("rejected_role_receipts",[]).append({
+                    "role":role,"receipt_ref":rejected_ref,
+                    "reason":str(exc)})
+                from dataclasses import replace
+                task=replace(task,situation=task.situation+
+                    "\nFORMAT CORRECTION ONLY: the first response was rejected. "
+                    "Return only the JSON object, starting with { and ending with }. "
+                    "No role label, Markdown, prefix, or suffix. "
+                    'The evidence_refs array must contain exactly ["triad-case-1"]. '
+                    "Do not append evidence text or hashes to that ID. "
+                    "Use the original decision and action vocabulary; do not "
+                    "invent evidence or alter your scientific conclusion solely "
+                    "to obtain an accepted response.")
+                observation=reasoner.propose(task,reg,context=context,
+                    max_new_tokens=768,seed=271829)
             previous=observation.answer.to_dict()
             result["steps"].append({
                 "role":role,"model_id":observation.model_id,
@@ -212,6 +239,8 @@ def main():
                 "adapter_sha256":observation.adapter_sha256,
                 "inference_receipt_ref":observation.inference_receipt_ref,
                 "model_decision":previous,
+                "format_retry":rejected_ref is not None,
+                "rejected_inference_receipt_ref":rejected_ref,
                 "real_inference":True,
             })
             put_json(work,role+"-observation.json",result["steps"][-1])
