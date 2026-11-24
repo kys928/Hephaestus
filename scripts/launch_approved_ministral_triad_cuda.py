@@ -61,6 +61,27 @@ def read_limited(s3,bucket,key,limit=1_000_000):
     return raw
 
 
+def require_live_watchdog(s3,bucket,prefix,*,wait_seconds=0):
+    key=prefix+"/watchdog-heartbeat.json"
+    deadline=time.monotonic()+wait_seconds
+    while True:
+        try:
+            heartbeat=json.loads(read_limited(s3,bucket,key,2000))
+            if (heartbeat.get("schema")=="external-triad-watchdog-heartbeat.v1"
+                    and heartbeat.get("run_tag")==prefix.split("/")[-1]
+                    and type(heartbeat.get("heartbeat_epoch")) is int
+                    and 0<=time.time()-heartbeat["heartbeat_epoch"]<85
+                    and heartbeat.get("remaining_until_hard_stop",0)>180):
+                return
+        except Exception as exc:
+            code=str(getattr(exc,"response",{}).get("Error",{}).get("Code",""))
+            if code not in {"404","NoSuchKey","NotFound"}:
+                raise
+        if time.monotonic()>=deadline:
+            raise PermissionError("independent external Pod-termination watchdog not live; no paid Pod permitted")
+        time.sleep(8)
+
+
 def upload_once(s3,bucket,key,raw):
     try:
         s3.head_object(Bucket=bucket,Key=key)
@@ -306,6 +327,8 @@ def main():
         print("TRIAD_MAX_TOTAL_SPENDING_ENVELOPE_USD="+str(MAX_TOTAL_USD),flush=True)
         pod=None
         try:
+            require_live_watchdog(s3,cfg.network_volume_id,prefix,wait_seconds=300)
+            print("TRIAD_EXTERNAL_TERMINATION_WATCHDOG_LIVE=true",flush=True)
             cmd,env=command_for(args.source_commit,code_hash,args.run_tag)
             # Exactly one allocation intent. Unknown response NEVER issues another POST.
             pod=adapter.create_bounded_gpu_pod(
@@ -319,6 +342,7 @@ def main():
             deadline=time.monotonic()+allowed_seconds
             while time.monotonic()<deadline:
                 time.sleep(18)
+                require_live_watchdog(s3,cfg.network_volume_id,prefix)
                 try:
                     status=read_limited(s3,cfg.network_volume_id,prefix+"/worker-exit.txt",500).decode()
                 except Exception as exc:
