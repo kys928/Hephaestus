@@ -25,7 +25,7 @@ from hephaestus.storage.filesystem import FileSystemArtifactStore
 from hephaestus.storage.verified import canonical_bytes
 
 BASE="hephaestus/operations/ministral-triad"
-SKU="NVIDIA GeForce RTX 3090"
+SKU="NVIDIA RTX PRO 4500 Blackwell"
 IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 REGRESSION="tests/test_targeted_post_failure_probes.py"
 SOURCE="src/hephaestus/diagnosis/probes.py"
@@ -41,7 +41,7 @@ FROZEN_TEST=(
 MAX_SECONDS=75*60
 MAX_TOTAL_USD=Decimal("2.00")
 RESERVE_USD=Decimal("1.00")
-MAX_QUOTED_GPU_USD_PER_HOUR=Decimal("0.75")
+MAX_QUOTED_GPU_USD_PER_HOUR=Decimal("1.25")
 OTHER_STORAGE_RATE=Decimal("0.08")
 MIN_SECONDS=30*60
 
@@ -282,7 +282,7 @@ def main():
     provider=ReadOnlyRunPodPricing(bearer_token=api_key)
     account=provider.account()
     quoted=provider.quote_gpu(gpu_id=SKU,datacenter_id=cfg.datacenter_id)
-    if account.autopay_enabled or quoted.price_usd_per_hour>MAX_QUOTED_GPU_USD_PER_HOUR or quoted.gpu_memory_gb<24:
+    if account.autopay_enabled or quoted.price_usd_per_hour>MAX_QUOTED_GPU_USD_PER_HOUR or quoted.gpu_memory_gb<32:
         raise PermissionError("prepaid balance or GPU price/VRAM outside user-approved safe experiment")
     combined=quoted.price_usd_per_hour+account.already_spending_usd_per_hour+OTHER_STORAGE_RATE
     remaining=min(MAX_TOTAL_USD,account.credit_balance_usd-RESERVE_USD)
