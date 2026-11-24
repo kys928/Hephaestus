@@ -53,5 +53,9 @@ jobs:
                     "VRAM_GB":rate.gpu_memory_gb,
                     "secure_hourly_usd":str(rate.price_usd_per_hour)},
                     sort_keys=True),flush=True)
+          pods=a.list_pods()
+          own=[x for x in pods if str(x.get("name","")).startswith("hephaestus-ministral-triad-20261124000")]
+          print("TRIAD_EXACT_CAMPAIGN_ORPHAN_POD_COUNT="+str(len(own)),flush=True)
+          print("TOTAL_CURRENT_RUNPOD_PODS="+str(len(pods)),flush=True)
           print("GPU_INVENTORY_LIVE_COMPLETE=true")
           PY
