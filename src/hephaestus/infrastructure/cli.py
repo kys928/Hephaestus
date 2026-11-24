@@ -94,7 +94,9 @@ def _migrate(config: InfrastructureConfig) -> dict[str, object]:
         config.sqlite_path,
         maximum_attempts=config.maximum_attempts,
         maximum_lease_expirations=config.maximum_lease_expirations,
+        initialize=False,
     )
+    queue.initialize(upgrade_v1=True)
     state = SQLiteStateRepository(config.sqlite_path)
     locks = SQLiteLockProvider(config.sqlite_path)
     return {

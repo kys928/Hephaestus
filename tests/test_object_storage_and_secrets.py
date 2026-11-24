@@ -182,3 +182,46 @@ def test_injected_secret_provider_and_events_never_expose_named_secret_values() 
     assert event.attributes["access_token"] == "[redacted]"
     assert len(event.attributes["payload"]) == 512
     assert "must-not-appear" not in json.dumps(event.to_dict())
+
+
+def test_runpod_s3_immutability_failure_disables_publication(tmp_path):
+    from types import SimpleNamespace
+
+    client = FakeS3Client()
+    client.meta = SimpleNamespace(endpoint_url="https://s3api-eu-cz-1.runpod.io/")
+    store = S3ArtifactStore(client, "bucket")
+    source = tmp_path / "payload"
+    source.write_bytes(b"payload")
+    for operation in (lambda: store.put_bytes(b"payload"), lambda: store.put_file(source),
+                      store.cleanup_incomplete_uploads):
+        with pytest.raises(PermissionError, match="conditional creation"):
+            operation()
+    assert client.objects == client.uploads == {}
+
+
+def test_s3_duplicate_receipt_checks_bytes_even_when_metadata_matches():
+    client = FakeS3Client()
+    store = S3ArtifactStore(client, "bucket")
+    receipt = store.put_bytes(b"original")
+    item, = client.objects.values()
+    item["Body"] = b"replaced"
+    assert not store.verify(receipt.artifact_ref)
+    with pytest.raises(ArtifactIntegrityError, match="object bytes"):
+        store.put_bytes(b"original")
+
+
+def test_multipart_source_change_never_commits_to_expected_digest(tmp_path):
+    source = tmp_path / "archive"
+    source.write_bytes(b"canonical")
+
+    class ChangingSource(FakeS3Client):
+        def create_multipart_upload(self, **kwargs):
+            source.write_bytes(b"different")
+            return super().create_multipart_upload(**kwargs)
+
+    client = ChangingSource()
+    store = S3ArtifactStore(client, "bucket", multipart_threshold_bytes=1)
+    with pytest.raises(ArtifactIntegrityError, match="source changed"):
+        store.put_file(source)
+    assert client.objects == client.uploads == {}
+    assert client.aborted

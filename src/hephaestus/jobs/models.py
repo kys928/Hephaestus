@@ -53,6 +53,7 @@ class JobRecord:
     dead_letter_reason: str | None = None
     dead_lettered_at: datetime | None = None
     replay_count: int = 0
+    job_type: str = "default"
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)

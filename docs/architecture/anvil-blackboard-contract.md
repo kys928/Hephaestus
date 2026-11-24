@@ -1,6 +1,6 @@
 # Project Anvil: blackboard semantics and persistence contract
 
-**Status:** Phase 2 design preparation / review only. Not a production activation or certification. Related: #217, #213, #219. Baseline source: `f5201350ddf05c4023ff3ca55b1a72f8714ffc8c`. Phases 0 and 1 remain open.
+**Status:** CPU contract rehearsal and review. Production activation and certification remain gated. Related: #217, #213, #219. Baseline source: `f5201350ddf05c4023ff3ca55b1a72f8714ffc8c`. Phases 0 and 1 remain open.
 
 ## 1. Architectural invariant
 
@@ -77,3 +77,14 @@ Actual evidence (2026-11-24): [basic run](https://github.com/kys928/Hephaestus/a
 ## 8. Review and next gates
 
 Design is storage-independent and may be reviewed while Phase 0/1 gates remain open. No deployment, physical migration, training, paid allocation, blockchain anchoring, or production activation authorized by this document. Do not implement Phase 2 against unqualified production foundations. Preserve Czech/Global volumes and current archives. Review semantic schema and persistence contract first, implement CPU-only contract tests against existing supported storage, then qualify candidate adapters in isolation. Compare against existing deterministic state/evidence paths; report results separately from actual specialist collaboration and scientific certification.
+
+
+## 9. Implemented rehearsal boundary
+
+`schemas/anvil.py` defines advisory contribution kinds, typed links, runtime provenance and immutable acceptance receipts. The model parser rejects runtime fields, objective creation, machine evidence, results and supersession. The trusted caller supplies verifiers for inference/context provenance and scoped evidence. The canonical production runtime exposes `anvil_rehearsal()` only under an explicit bounded-rehearsal storage profile.
+
+`state/anvil.py` reuses the admitted host-local SQLite repository and writer fence. An append logically commits the contribution and its edges together. For identical investigation/idempotency identities, the original sequence and hash survive retries. Replay validates the scoped history hash chain, known frontiers, sequence and references. Link targets must have existed in the submitted context and belong to the same lineage. Advisory contributions can cite older snapshots. Proposals, capability requests and verdicts require the current frontier and still carry no execution authority. Query operates on a typed immutable snapshot. Checkpoint restore requires a separately retained frontier and appends only a verified suffix in one transaction. Missing acceptance remains unknown on reconciliation.
+
+The rehearsal currently verifies restart, conflicting retry, stale proposals, scoped links, lost acknowledgement and stale restore. Trusted machine-event admission, real model receipt binding, independent frontier retention, cross-runner recovery, replacement writer fencing and index reconstruction remain qualification targets. LanceDB may be tested as a rebuildable projection; the original direct-writer configuration remains denied.
+
+The V1 compatibility view preserves the frozen decision, action, variable, confidence and evidence fields. The test replays the complete JSON excerpts recovered in [the independent triad observation](https://github.com/kys928/Hephaestus/actions/runs/45376969755). The Diagnostician still recommends a preprocessing change and the Planner still recommends an evaluation recheck; the historical Coder admission remains unsatisfied.

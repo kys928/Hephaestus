@@ -54,9 +54,11 @@ def test_production_evaluation_only_reopens_immutable_intake_and_verifies_source
     from io import BytesIO
 
     from hephaestus.research.source_evidence import ReadOnlyS3SourceReader
+    from hephaestus.schemas.storage_admission import LocalStorageProfile
 
     runtime = ProductionCompositionRoot(ProductionCompositionSettings(
         state_root=tmp_path / "state", artifact_root=tmp_path / "evidence",
+        storage_profile=LocalStorageProfile(),
     )).build()
     root = "hephaestus/scientific/v1/"
     contents = {
@@ -113,6 +115,21 @@ def test_production_evaluation_only_reopens_immutable_intake_and_verifies_source
     assert len(runtime.state_repository.all("research_source_cases")) == 2
     with pytest.raises(ResearchAdmissionError, match="admitted study identity"):
         runtime.observe_reviewed_research_sources(intake, **{**ids, "lineage_id": "other"}, **args)
+    jobs = runtime.reviewed_source_jobs(
+        source_reader=args["source_reader"], catalog_path=catalog,
+        catalog_ref=catalog_ref, eval_pack_ref=eval_ref,
+    )
+    queued = jobs.submit(intake, owner_id="operator", **ids)
+    assert jobs.queue.path == runtime.state_repository.path
+    assert jobs.submit(intake, owner_id="operator", **ids) == queued
+    assert jobs.queue.lease_next("generic", 30) is None
+    restarted = runtime.reviewed_source_jobs(
+        source_reader=args["source_reader"], catalog_path=catalog,
+        catalog_ref=catalog_ref, eval_pack_ref=eval_ref,
+    )
+    executed = restarted.worker("research-review").run_once()
+    assert executed.job_id == queued.job_id and executed.status.value == "succeeded"
+    assert executed.result_ref == evidence
     contents[root + "candidate.jsonl"] = b"corrupt\n"
     with pytest.raises(ResearchAdmissionError, match="bytes differ"):
         runtime.observe_reviewed_research_sources(intake, **ids, **args)

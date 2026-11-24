@@ -74,6 +74,7 @@ class DurableWorker:
     heartbeat_interval_seconds: float | None = None
     event_sink: EventSink = field(default_factory=NullEventSink)
     shutdown_event: threading.Event = field(default_factory=threading.Event)
+    job_type: str = "default"
 
     def __post_init__(self) -> None:
         if not self.worker_id.strip():
@@ -140,7 +141,7 @@ class DurableWorker:
     def run_once(self) -> JobRecord | None:
         if self.shutdown_event.is_set():
             return None
-        leased = self.queue.lease_next(self.worker_id, self.lease_seconds)
+        leased = self.queue.lease_next(self.worker_id, self.lease_seconds, job_type=self.job_type)
         if leased is None:
             self._emit("worker.idle")
             return None

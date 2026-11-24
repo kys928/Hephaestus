@@ -206,3 +206,45 @@ def test_terminal_and_dead_letter_state_survive_restart(tmp_path) -> None:
     restarted = SQLiteJobQueue(path, initialize=False)
     assert restarted.get("job").status is JobStatus.SUCCEEDED
     assert restarted.lease_next("other", 10, now=NOW + timedelta(seconds=1)) is None
+
+
+def test_sqlite_route_is_persisted_and_default_workers_cannot_claim_it(tmp_path):
+    from hephaestus.jobs.queue import IdempotencyConflict
+
+    queue = SQLiteJobQueue(tmp_path / "jobs.sqlite3")
+    research = queue.submit("research-payload", "owner", idempotency_key="research",
+                            job_type="research_sources", now=NOW)
+    ordinary = queue.submit("ordinary", "owner", now=NOW)
+    with pytest.raises(IdempotencyConflict):
+        queue.submit("research-payload", "owner", idempotency_key="research", now=NOW)
+    restarted = SQLiteJobQueue(queue.path)
+    assert restarted.lease_next("generic", 15, now=NOW).job_id == ordinary.job_id
+    assert restarted.lease_next("generic", 15, now=NOW) is None
+    assert restarted.lease_next("review", 15, now=NOW, job_type="research_sources").job_id == research.job_id
+
+
+def test_sqlite_route_upgrade_requires_explicit_quiescent_migration(tmp_path):
+    from hephaestus.storage.sqlite import StateIntegrityError
+
+    path = tmp_path / "jobs.sqlite3"
+    queue = SQLiteJobQueue(path)
+    job = queue.submit("legacy", "owner", idempotency_key="old", now=NOW)
+    with queue._transaction() as connection:
+        connection.execute("DROP INDEX jobs_type_lease_order")
+        connection.execute("ALTER TABLE jobs DROP COLUMN job_type")
+        connection.execute("UPDATE infrastructure_schema_migrations SET version=1 WHERE component='job_queue'")
+    with pytest.raises(StateIntegrityError):
+        SQLiteJobQueue(path)
+    queue = SQLiteJobQueue(path, initialize=False)
+    assert not queue.ready()
+    with queue._transaction() as connection:
+        connection.execute("UPDATE jobs SET status='leased' WHERE job_id=?", (job.job_id,))
+    with pytest.raises(StateIntegrityError, match="quiesce"):
+        queue.initialize(upgrade_v1=True)
+    assert queue.schema_version() == 1
+    with queue._transaction() as connection:
+        connection.execute("UPDATE jobs SET status='queued' WHERE job_id=?", (job.job_id,))
+    queue.initialize(upgrade_v1=True)
+    assert queue.ready()
+    assert queue.submit("legacy", "owner", idempotency_key="old", now=NOW).job_id == job.job_id
+    assert queue.get(job.job_id).job_type == "default"

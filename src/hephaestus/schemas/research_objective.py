@@ -117,3 +117,21 @@ class SourceCatalog:
             raise ResearchAdmissionError("expected one uniquely matched reviewed source family")
         _, match = eligible[0]
         return match["original"], match["candidate"]
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewedSourceJob:
+    intake_ref: str
+    run_id: str
+    lineage_id: str
+    catalog_ref: str
+    eval_pack_ref: str
+    schema: str = "hephaestus.reviewed-source-job.v1"
+
+    def __post_init__(self) -> None:
+        if (self.schema != "hephaestus.reviewed-source-job.v1"
+                or not all(isinstance(value, str) and _SHA.fullmatch(value)
+                           for value in (self.intake_ref, self.catalog_ref, self.eval_pack_ref))
+                or not all(isinstance(value, str) and value.strip() and len(value) <= 128
+                           for value in (self.run_id, self.lineage_id))):
+            raise ResearchAdmissionError("invalid reviewed source job scope")

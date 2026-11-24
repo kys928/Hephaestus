@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.registry import resolve_backend, resolve_backend_from_system
@@ -52,6 +53,8 @@ from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
 from hephaestus.schemas.storage_admission import LocalStorageProfile
+from hephaestus.schemas.anvil import ContributionOrigin
+from hephaestus.state.anvil import AnvilState
 from hephaestus.policy.storage_admission import admit_storage
 
 from .actions import GovernedActionExecutor
@@ -147,6 +150,31 @@ class ProductionRuntime:
         return self.artifact_store.put_bytes(
             canonical_bytes(envelope), media_type="application/json",
         ).artifact_ref
+
+    def anvil_rehearsal(
+        self, *, verify_origin: Callable[[ContributionOrigin], bool],
+        verify_evidence: Callable[[ContributionOrigin, str], bool],
+    ) -> AnvilState:
+        """Use the existing repository for explicit host-local contract rehearsal."""
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("Anvil requires an explicit bounded rehearsal")
+        return AnvilState(self.state_repository, verify_origin, verify_evidence)
+
+    def reviewed_source_jobs(
+        self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,
+    ):
+        """Bind CPU-only source review to the canonical queue in a rehearsal."""
+        from hephaestus.jobs import SQLiteJobQueue
+        from hephaestus.research.source_jobs import ReviewedSourceJobs
+
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("research source scheduling requires an explicit bounded rehearsal")
+        SourceCatalog.load(catalog_path, independently_pinned_sha256=catalog_ref)
+        read_verified_json(self.artifact_store, eval_pack_ref)
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=profile)
+        return ReviewedSourceJobs(self, queue, source_reader, catalog_path, catalog_ref, eval_pack_ref)
 
     def observe_reviewed_research_sources(
         self, intake_ref: str, *, run_id: str, lineage_id: str, catalog_path: Path,

@@ -188,7 +188,7 @@ def test_job_queue_reads_close_descriptors_without_garbage_collection(tmp_path):
     try:
         for _ in range(200):
             assert queue.get(job.job_id).job_id==job.job_id
-            assert queue.schema_version()==1
+            assert queue.schema_version()==2
         assert len(os.listdir('/proc/self/fd'))<=before+3
     finally:
         if enabled:gc.enable()

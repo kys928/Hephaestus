@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
+from urllib.parse import urlsplit
 
 from hephaestus.infrastructure.capabilities import OptionalCapabilityError
 from hephaestus.infrastructure.observability import (
@@ -75,6 +76,30 @@ class S3ArtifactStore:
             raise ValueError("client_kwargs must be a mapping")
         return cls(boto3.client("s3", **client_kwargs), bucket, **kwargs)
 
+    def _require_publication(self) -> None:
+        endpoint = getattr(getattr(self.client, "meta", None), "endpoint_url", None)
+        host = urlsplit(endpoint).hostname if isinstance(endpoint, str) else None
+        if host and (host == "runpod.io" or host.endswith(".runpod.io")):
+            raise PermissionError(
+                "RunPod S3 is read-only for this store because conditional creation failed qualification"
+            )
+
+    def _assert_bytes(self, digest: str, byte_size: int) -> None:
+        response = self.client.get_object(Bucket=self.bucket, Key=self._key(digest))
+        body = response["Body"]
+        computed = hashlib.sha256()
+        count = 0
+        try:
+            while chunk := body.read(1024 * 1024):
+                count += len(chunk)
+                if count > byte_size:
+                    break
+                computed.update(chunk)
+        finally:
+            body.close()
+        if count != byte_size or computed.hexdigest() != digest:
+            raise ArtifactIntegrityError("S3 object bytes differ from their content identity")
+
     def _key(self, digest: str) -> str:
         suffix = f"objects/sha256/{digest[:2]}/{digest}"
         return f"{self.prefix}/{suffix}" if self.prefix else suffix
@@ -126,11 +151,13 @@ class S3ArtifactStore:
             raise ArtifactIntegrityError(
                 f"immutable S3 key exists without matching sha256 metadata: {self._key(digest)}"
             )
+        byte_size = int(head.get("ContentLength", -1))
+        self._assert_bytes(digest, byte_size)
         return ArtifactRecord(
             artifact_ref=f"sha256:{digest}",
             content_hash=digest,
             hash_algorithm="sha256",
-            byte_size=int(head.get("ContentLength", 0)),
+            byte_size=byte_size,
             storage_path=f"s3://{self.bucket}/{self._key(digest)}",
             created_at=datetime.now(timezone.utc),
             media_type=media_type or head.get("ContentType"),
@@ -166,6 +193,7 @@ class S3ArtifactStore:
         expected_hash: str | None = None,
         media_type: str | None = None,
     ) -> ArtifactRecord:
+        self._require_publication()
         digest = hashlib.sha256(data).hexdigest()
         expected = _normalized_expected_hash(expected_hash)
         if expected is not None and expected != digest:
@@ -190,6 +218,7 @@ class S3ArtifactStore:
             if existing is None:
                 raise
             return existing
+        self._assert_bytes(digest, len(data))
         record = self._record(digest, len(data), media_type)
         self._emit(
             "storage.artifact_uploaded",
@@ -217,6 +246,7 @@ class S3ArtifactStore:
         media_type: str | None = None,
         cancellation_requested: Callable[[], bool] | None = None,
     ) -> ArtifactRecord:
+        self._require_publication()
         digest, byte_size = self._hash_file(source)
         expected = _normalized_expected_hash(expected_hash)
         if expected is not None and expected != digest:
@@ -226,20 +256,24 @@ class S3ArtifactStore:
             return existing
         if byte_size < self.multipart_threshold_bytes:
             started = time.monotonic()
+            with source.open("rb") as source_stream:
+                body = source_stream.read(byte_size + 1)
+            if len(body) != byte_size or hashlib.sha256(body).hexdigest() != digest:
+                raise ArtifactIntegrityError("source changed before S3 publication")
             try:
-                with source.open("rb") as body:
-                    self.client.put_object(
-                        Bucket=self.bucket,
-                        Key=self._key(digest),
-                        Body=body,
-                        IfNoneMatch="*",
-                        **self._metadata(digest, media_type),
-                    )
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=self._key(digest),
+                    Body=body,
+                    IfNoneMatch="*",
+                    **self._metadata(digest, media_type),
+                )
             except Exception:
                 existing = self._existing_record(digest, media_type)
                 if existing is None:
                     raise
                 return existing
+            self._assert_bytes(digest, byte_size)
             record = self._record(digest, byte_size, media_type)
             self._emit(
                 "storage.artifact_uploaded",
@@ -272,6 +306,8 @@ class S3ArtifactStore:
         )
         upload_id = str(created["UploadId"])
         parts: list[dict[str, object]] = []
+        uploaded_digest = hashlib.sha256()
+        uploaded_bytes = 0
         try:
             with source.open("rb") as handle:
                 part_number = 1
@@ -281,6 +317,10 @@ class S3ArtifactStore:
                     chunk = handle.read(self.multipart_part_bytes)
                     if not chunk:
                         break
+                    uploaded_bytes += len(chunk)
+                    if uploaded_bytes > byte_size:
+                        raise ArtifactIntegrityError("source grew during multipart publication")
+                    uploaded_digest.update(chunk)
                     response = self.client.upload_part(
                         Bucket=self.bucket,
                         Key=self._key(digest),
@@ -290,6 +330,8 @@ class S3ArtifactStore:
                     )
                     parts.append({"PartNumber": part_number, "ETag": response["ETag"]})
                     part_number += 1
+            if uploaded_bytes != byte_size or uploaded_digest.hexdigest() != digest:
+                raise ArtifactIntegrityError("source changed during multipart publication")
             self.client.complete_multipart_upload(
                 Bucket=self.bucket,
                 Key=self._key(digest),
@@ -304,11 +346,12 @@ class S3ArtifactStore:
                 UploadId=upload_id,
             )
             self._emit("storage.artifact_upload_failed", digest, upload_id=upload_id)
-            if not isinstance(exc, ArtifactUploadCancelled):
+            if not isinstance(exc, (ArtifactUploadCancelled, ArtifactIntegrityError)):
                 existing = self._existing_record(digest, media_type)
                 if existing is not None:
                     return existing
             raise
+        self._assert_bytes(digest, byte_size)
         record = self._record(digest, byte_size, media_type)
         self._emit(
             "storage.artifact_uploaded",
@@ -327,9 +370,12 @@ class S3ArtifactStore:
         started = time.monotonic()
         response = self.client.get_object(Bucket=self.bucket, Key=self._key(digest))
         body = response["Body"]
-        data = body.read()
-        if hasattr(body, "close"):
+        try:
+            data = body.read()
+        finally:
             body.close()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ArtifactIntegrityError("S3 object bytes differ from their content identity")
         self._emit(
             "storage.artifact_downloaded",
             digest,
@@ -345,20 +391,19 @@ class S3ArtifactStore:
     def verify(self, artifact_ref: str) -> bool:
         digest = self._digest_from_ref(artifact_ref)
         try:
-            with self.open(artifact_ref) as handle:
-                computed = hashlib.sha256(handle.read()).hexdigest()
+            with self.open(artifact_ref):
+                pass
+        except ArtifactIntegrityError:
+            self._emit("storage.artifact_verification_failed", digest, reason="hash_mismatch")
+            return False
         except Exception:
             self._emit("storage.artifact_verification_failed", digest, reason="read_failed")
             return False
-        verified = computed == digest
-        self._emit(
-            "storage.artifact_verified" if verified else "storage.artifact_verification_failed",
-            digest,
-            verified=verified,
-        )
-        return verified
+        self._emit("storage.artifact_verified", digest, verified=True)
+        return True
 
     def cleanup_incomplete_uploads(self) -> int:
+        self._require_publication()
         response = self.client.list_multipart_uploads(
             Bucket=self.bucket,
             Prefix=f"{self.prefix}/objects/" if self.prefix else "objects/",
