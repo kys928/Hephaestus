@@ -24,6 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           from concurrent.futures import ThreadPoolExecutor
+          from contextlib import closing
           from hashlib import sha256
           import json
           import os
@@ -54,13 +55,13 @@ jobs:
               expected = roles[role]["adapter"]
               try:
                   response = client.get_object(Bucket="cviwpryzao", Key=expected["s3_key"])
-                  with response["Body"] as body:
+                  with closing(response["Body"]) as body:
                       declared_size = response.get("ContentLength")
                       if declared_size is not None and declared_size != expected["bytes"]:
                           return role, "provider_size_mismatch"
                       digest = sha256()
                       size = 0
-                      for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+                      while chunk := body.read(1024 * 1024):
                           size += len(chunk)
                           if size > expected["bytes"]:
                               return role, "stream_exceeded_expected_size"
