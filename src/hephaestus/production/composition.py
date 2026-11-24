@@ -40,10 +40,15 @@ from hephaestus.providers.models.selection import DeterministicModelSelectionSer
 from hephaestus.recovery.service import BoundedRecoveryService
 from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.storage.filesystem import FileSystemArtifactStore
-from hephaestus.storage.verified import canonical_bytes
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
+from hephaestus.research.repair_review import propose_reviewed_repair
 from hephaestus.research.reviewed_discovery import ReviewedEvidenceDiscovery
+from hephaestus.research.source_evidence import SourceReader, VerifiedSourceAcquirer
 from hephaestus.state.research_grant_usage import SingleUseComputeGrantLedger
-from hephaestus.schemas.research_objective import ResearchObjective
+from hephaestus.schemas.research_objective import ResearchAdmissionError, ResearchObjective, SourceCatalog
+from hephaestus.schemas.code_edit_proposal import CodeEditProposal
+from hephaestus.schemas.research_repair import PatchModel, RepairScope
+from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
 from hephaestus.schemas.storage_admission import LocalStorageProfile
@@ -51,6 +56,7 @@ from hephaestus.policy.storage_admission import admit_storage
 
 from .actions import GovernedActionExecutor
 from .evidence import ArtifactModelEvidenceBinder
+from .governed_next_experiment import GovernedNextExperiment
 from hephaestus.state.evidence_store import ScientificEvidenceStore
 from .recovery import InfrastructureRecoveryController
 from .state import (
@@ -142,8 +148,62 @@ class ProductionRuntime:
             canonical_bytes(envelope), media_type="application/json",
         ).artifact_ref
 
+    def observe_reviewed_research_sources(
+        self, intake_ref: str, *, run_id: str, lineage_id: str, catalog_path: Path,
+        independently_pinned_catalog_ref: str, eval_pack_ref: str, source_reader: SourceReader,
+    ) -> str:
+        """Measure read-only dataset coverage from the recorded, reviewed study pair."""
+        intake = read_verified_json(self.artifact_store, intake_ref)
+        if (
+            intake.get("schema") != "hephaestus-research-objective-intake.v1"
+            or intake.get("execution_authorized") is not False
+            or intake.get("run_id") != run_id
+            or intake.get("lineage_id") != lineage_id
+            or intake.get("reviewed_catalog_ref") != independently_pinned_catalog_ref
+        ):
+            raise ResearchAdmissionError("research intake differs from the admitted study identity")
+        catalog = SourceCatalog.load(
+            catalog_path, independently_pinned_sha256=independently_pinned_catalog_ref,
+        )
+        objective = ResearchObjective.from_text(intake.get("question"))
+        original, candidate = catalog.select(objective)
+        if (
+            intake.get("study_scope") != original.study_scope
+            or intake.get("source_refs") != [original.sha256_ref, candidate.sha256_ref]
+        ):
+            raise ResearchAdmissionError("reviewed source pair changed after intake")
+        eval_pack = read_verified_json(self.artifact_store, eval_pack_ref)
+        acquirer = VerifiedSourceAcquirer(source_reader, self.artifact_store, self.state_repository)
+        observations = [acquirer.acquire(source, eval_pack) for source in (original, candidate)]
+        report = {
+            "schema": "hephaestus-research-source-review.v1",
+            "intake_ref": intake_ref,
+            "run_id": run_id,
+            "lineage_id": lineage_id,
+            "eval_pack_ref": eval_pack_ref,
+            "observation_refs": [observation["observation_ref"] for observation in observations],
+            "model_inference_performed": False,
+            "training_performed": False,
+        }
+        return self.artifact_store.put_bytes(
+            canonical_bytes(report), media_type="application/json",
+        ).artifact_ref
+
     def research_compute_ledger(self) -> SingleUseComputeGrantLedger:
         return SingleUseComputeGrantLedger(self.state_repository, self.artifact_store)
+
+    def governed_next_experiment(self) -> GovernedNextExperiment:
+        return GovernedNextExperiment()
+
+    def propose_research_repair(
+        self, *, scope: RepairScope, source_ref: str, verified_fault_ref: str,
+        run_id: str, lineage_id: str, proposer: PatchModel,
+    ) -> CodeEditProposal:
+        return propose_reviewed_repair(
+            artifacts=self.artifact_store, proposals=CodeEditProposalStore(self.settings.state_root),
+            scope=scope, source_ref=source_ref, verified_fault_ref=verified_fault_ref,
+            run_id=run_id, lineage_id=lineage_id, proposer=proposer,
+        )
 
     def with_local_data_factory(self, services, *, acquisition_enabled: bool = False):
         """Use real bounded preprocessing only after verified local acquisition."""
