@@ -157,33 +157,61 @@ def independent_failure_preflight(tmp,*,docker,code_root):
     }
 
 
-def command_for(source_commit,code_digest,case_digest,run_tag,urls):
+def command_for(source_commit,code_digest,case_digest,run_tag,storage):
     if not re.fullmatch(r"[a-f0-9]{40}",source_commit):
         raise PermissionError("source commit identity invalid")
-    # The Pod receives only narrowly scoped expiring GET/PUT capabilities.
-    # Never give it provider API keys, full S3 credentials or the regional mount.
+    # Existing authenticated RunPod S3 transport, confined to trusted bootstrap.
+    # The inference subprocess receives no storage/provider keys, no shell tool.
     bootstrap=r"""
-import hashlib,os,pathlib,subprocess,sys,tarfile,urllib.request
+import hashlib,os,pathlib,subprocess,sys,tarfile,time,zipfile
 from io import BytesIO
 tag=os.environ["TRIAD_RUN_TAG"]
 root=pathlib.Path("/tmp/hephaestus-triad-pinned-code")
 work=pathlib.Path("/tmp/hephaestus-triad-local")/tag
 root.mkdir(exist_ok=False)
 work.mkdir(parents=True,exist_ok=False)
-def get(key,expected,limit):
-    with urllib.request.urlopen(os.environ.pop(key),timeout=120) as response:
-        data=response.read(limit+1)
-    if len(data)>limit or "sha256:"+hashlib.sha256(data).hexdigest()!=expected:
+access=os.environ.pop("TRIAD_BRIDGE_ACCESS")
+secret=os.environ.pop("TRIAD_BRIDGE_SECRET")
+endpoint=os.environ.pop("TRIAD_BRIDGE_ENDPOINT")
+region=os.environ.pop("TRIAD_BRIDGE_REGION")
+bucket=os.environ.pop("TRIAD_BRIDGE_BUCKET")
+prefix="hephaestus/operations/ministral-triad/"+tag+"/"
+# Never pass credentials to pip, worker or its descendants.
+child_env={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in ("SECRET","TOKEN","API_KEY","ACCESS_KEY","PASSWORD","CREDENTIAL"))}
+subprocess.run([sys.executable,"-m","pip","install","-q","boto3>=1.35,<2"],env=child_env,check=True)
+import boto3
+from botocore.config import Config
+s3=boto3.client("s3",endpoint_url=endpoint,region_name=region,aws_access_key_id=access,
+    aws_secret_access_key=secret,config=Config(signature_version="s3v4",s3={"addressing_style":"path"},
+    connect_timeout=15,read_timeout=45,retries={"mode":"standard","max_attempts":3}))
+del access,secret
+def get(name,limit,optional=False):
+    try: body=s3.get_object(Bucket=bucket,Key=prefix+name)["Body"]
+    except Exception as exc:
+        if optional and str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in ("404","NoSuchKey","NotFound"):return None
+        raise
+    try: raw=body.read(limit+1)
+    finally: body.close()
+    if len(raw)>limit:raise PermissionError("oversize exact-prefix artifact")
+    return raw
+def verified(name,expected,limit):
+    raw=get(name,limit)
+    if "sha256:"+hashlib.sha256(raw).hexdigest()!=expected:
         raise PermissionError("immutable off-Pod source digest mismatch")
-    return data
-def send_exit(code):
-    req=urllib.request.Request(os.environ["TRIAD_PUT_EXIT"],data=str(code).encode(),method="PUT")
-    with urllib.request.urlopen(req,timeout=60) as r:
-        if r.status not in (200,201,204):raise RuntimeError("exit receipt rejected")
+    return raw
+def put(name,raw):
+    if len(raw)>10_000_000:raise PermissionError("oversize evidence")
+    s3.put_object(Bucket=bucket,Key=prefix+name,Body=raw)
+    if get(name,len(raw))!=raw:raise RuntimeError("evidence readback failed")
+def atomic(path,raw):
+    tmp=path.with_suffix(".partial")
+    with tmp.open("xb") as f:f.write(raw)
+    os.replace(tmp,path)
 code=1
+proc=None
 try:
-    raw=get("TRIAD_GET_CODE",os.environ["TRIAD_CODE_SHA256"],100_000_000)
-    case=get("TRIAD_GET_CASE",os.environ["TRIAD_CASE_SHA256"],100_000)
+    raw=verified("code.tar.gz",os.environ["TRIAD_CODE_SHA256"],100_000_000)
+    case=verified("frozen-case.json",os.environ["TRIAD_CASE_SHA256"],100_000)
     (work/"frozen-case.json").write_bytes(case)
     with tarfile.open(fileobj=BytesIO(raw),mode="r:gz") as archive:
         for item in archive.getmembers():
@@ -191,34 +219,51 @@ try:
                 raise PermissionError("unsafe source archive member")
         archive.extractall(root)
     os.chdir(root)
-    # Preserve the image's CUDA torch; exact Transformers family, PEFT and Mistral backend.
-    subprocess.run([sys.executable,"-m","pip","install","-q","--ignore-installed","cryptography>=44,<47"],check=True)
-    subprocess.run([sys.executable,"-m","pip","install","-q","-e",".[role-inference,independent-certification]"],check=True)
-    code=subprocess.call([sys.executable,"-u","scripts/run_provisional_ministral_triad_cuda_worker.py",
-        "--run-tag",tag,"--source-commit",os.environ["TRIAD_SOURCE_COMMIT"]])
+    put("worker-phase.json",b'{"phase":"source_verified"}')
+    subprocess.run([sys.executable,"-m","pip","install","-q","--ignore-installed","cryptography>=44,<47"],env=child_env,check=True)
+    subprocess.run([sys.executable,"-m","pip","install","-q","-e",".[role-inference,independent-certification]"],env=child_env,check=True)
+    put("worker-phase.json",b'{"phase":"runtime_installed"}')
+    proc=subprocess.Popen([sys.executable,"-u","scripts/run_provisional_ministral_triad_cuda_worker.py",
+        "--run-tag",tag,"--source-commit",os.environ["TRIAD_SOURCE_COMMIT"]],env=child_env)
+    sent=set()
+    while True:
+        for n in (1,2):
+            name="attempt-"+str(n)+".zip"
+            p=work/name
+            if n not in sent and p.is_file() and not p.is_symlink():
+                put(name,p.read_bytes());sent.add(n)
+            feedback=work/("feedback-"+str(n)+".json")
+            if n in sent and not feedback.exists():
+                value=get(feedback.name,8000,optional=True)
+                if value is not None:atomic(feedback,value)
+        status=proc.poll()
+        if status is not None:
+            code=status
+            break
+        time.sleep(5)
 except Exception as exc:
     print("TRIAD_BOOTSTRAP_FAILURE_CLASS="+type(exc).__name__,flush=True)
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
+        try:proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:proc.kill();proc.wait()
 finally:
     try:
-        # Preserve failed/abstained run evidence too, without copying secrets.
-        import zipfile
         out=BytesIO()
         with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED) as z:
             for p in work.rglob("*"):
                 if p.is_file() and not p.is_symlink() and p.name!="frozen-case.json" and p.stat().st_size<=1_000_000:
                     z.write(p,str(p.relative_to(work)))
-        if len(out.getvalue())<=8_000_000:
-            with urllib.request.urlopen(urllib.request.Request(os.environ["TRIAD_PUT_FINAL"],data=out.getvalue(),method="PUT"),timeout=90) as r:
-                if r.status not in (200,201,204):raise RuntimeError("final evidence rejected")
+        put("final-evidence.zip",out.getvalue())
     finally:
-        send_exit(code)
+        put("worker-exit.txt",str(code).encode())
 sys.exit(code)
 """
     env={"HF_HOME":"/tmp/hephaestus-hf","HF_HUB_DISABLE_TELEMETRY":"1",
          "HF_HUB_ENABLE_HF_TRANSFER":"0","PYTHONUNBUFFERED":"1",
          "RUNPOD_GLOBAL_VOLUME_ID":GLOBAL_ID,"TRIAD_RUN_TAG":run_tag,
          "TRIAD_SOURCE_COMMIT":source_commit,"TRIAD_CODE_SHA256":code_digest,
-         "TRIAD_CASE_SHA256":case_digest,**urls}
+         "TRIAD_CASE_SHA256":case_digest,**storage}
     return ["python","-u","-c",bootstrap],env
 
 
@@ -247,37 +292,14 @@ def optional_read(s3,bucket,key,limit):
         raise
 
 
-def scoped_urls(s3,bucket,prefix):
-    def sign(method,key):
-        url=s3.generate_presigned_url(method,Params={"Bucket":bucket,"Key":prefix+"/"+key},ExpiresIn=7200)
-        if not url.startswith("https://"):raise PermissionError("non-TLS scoped transport")
-        return url
-    # Real two-way presigned transport probe before any paid allocation.
-    sample=b"hephaestus-global-triad-transport-v1"
-    p=sign("put_object","transport-probe.bin")
-    try:
-        with urllib.request.urlopen(urllib.request.Request(p,data=sample,method="PUT"),timeout=35) as r:
-            if r.status not in (200,201,204):raise RuntimeError("scoped PUT rejected")
-        with urllib.request.urlopen(sign("get_object","transport-probe.bin"),timeout=35) as r:
-            if r.read(200)!=sample:raise RuntimeError("scoped GET readback mismatch")
-    except urllib.error.HTTPError as exc:
-        import xml.etree.ElementTree as ET
-        try: err=ET.fromstring(exc.read(4096)).findtext("Code")
-        except Exception: err=None
-        print("TRIAD_SCOPED_TRANSPORT_HTTP_STATUS="+str(exc.code),flush=True)
-        print("TRIAD_SCOPED_TRANSPORT_ERROR_CODE="+str(err if err and re.fullmatch(r"[A-Za-z0-9]{1,64}",err) else "unknown"),flush=True)
-        raise RuntimeError("scoped SigV4 transport refused before allocation") from None
-    if read_limited(s3,bucket,prefix+"/transport-probe.bin",200)!=sample:
-        raise RuntimeError("independent signed transport mismatch")
-    print("TRIAD_SCOPED_S3_TRANSPORT=PASS",flush=True)
-    u={"TRIAD_GET_CODE":sign("get_object","code.tar.gz"),
-       "TRIAD_GET_CASE":sign("get_object","frozen-case.json"),
-       "TRIAD_PUT_EXIT":sign("put_object","worker-exit.txt"),
-       "TRIAD_PUT_FINAL":sign("put_object","final-evidence.zip")}
-    for n in (1,2):
-        u["TRIAD_PUT_ATTEMPT_"+str(n)]=sign("put_object","attempt-"+str(n)+".zip")
-        u["TRIAD_GET_FEEDBACK_"+str(n)]=sign("get_object","feedback-"+str(n)+".json")
-    return u
+def trusted_storage_bridge(s3,bucket,prefix,cfg):
+    sample=b"hephaestus-global-triad-sdk-transport-v1"
+    upload_once(s3,bucket,prefix+"/transport-probe.bin",sample)
+    print("TRIAD_AUTHENTICATED_S3_TRANSPORT=PASS",flush=True)
+    return {"TRIAD_BRIDGE_ACCESS":os.environ["RUNPOD_S3_ACCESS_KEY_ID"],
+            "TRIAD_BRIDGE_SECRET":os.environ["RUNPOD_S3_SECRET_ACCESS_KEY"],
+            "TRIAD_BRIDGE_ENDPOINT":cfg.s3_endpoint_url,
+            "TRIAD_BRIDGE_REGION":cfg.datacenter_id,"TRIAD_BRIDGE_BUCKET":bucket}
 
 
 def cold_verify_candidate(s3,bucket,prefix,trial,head,image,case,docker):
@@ -411,8 +433,8 @@ def main():
         subprocess.run(["git","archive","--format=tar.gz","--output",str(archive),"HEAD"],check=True,timeout=60)
         code_hash=upload_once(s3,bucket,prefix+"/code.tar.gz",archive.read_bytes())
         case_hash=upload_once(s3,bucket,prefix+"/frozen-case.json",canonical_bytes(case))
-        urls=scoped_urls(s3,bucket,prefix)
-        cmd,env=command_for(args.source_commit,code_hash,case_hash,args.run_tag,urls)
+        storage=trusted_storage_bridge(s3,bucket,prefix,cfg)
+        cmd,env=command_for(args.source_commit,code_hash,case_hash,args.run_tag,storage)
         require_live_watchdog(s3,bucket,prefix,wait_seconds=300)
         pod=None
         accepted=False
