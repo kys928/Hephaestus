@@ -103,8 +103,10 @@ def independent_failure_preflight(tmp,*,docker,code_root):
     original=(code_root/SOURCE).read_bytes()
     if b'text = str(row.get("text", ""))' not in original:
         raise PermissionError("the claimed real historical defect is already fixed")
+    tmp.chmod(0o755)
     trial=tmp/"reviewed-repair-checkout"
     trial.mkdir()
+    trial.chmod(0o755)
     for directory in ("src","tests","configs"):
         shutil.copytree(code_root/directory,trial/directory,
                         ignore=shutil.ignore_patterns("__pycache__","*.pyc",".git"))
