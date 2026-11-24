@@ -111,3 +111,5 @@ Resolve snapshot aliases on a read-only mount against the pinned shard index, re
 This revision extends the existing Anvil SQLite rehearsal and frozen role receipt verifier. Callers opt in through the composition factory. Stop calling the new factory to roll back that integration. If typed payloads have been appended, preserve the ledger and its replay reader before reverting the schema-aware commit. Existing receipt and checkpoint formats remain in use. The Planner tool can be reverted independently.
 
 The ext4 CPU suite collected before the final collaboration fixture and receipt retry-key normalization passed with 1,305 passed and 90 skipped. The final focused blackboard suite passed all eight tests.
+
+The published checkpoint tree passed the complete ext4 CPU suite with 1,306 passed, 90 skipped and two existing pytest collection warnings. The Planner verifier rejected a mismatched manifest digest, a missing blob, a symlink and a wrong-size blob in fixtures.
