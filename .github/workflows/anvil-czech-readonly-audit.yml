@@ -31,6 +31,7 @@ jobs:
 
           import boto3
           from botocore.config import Config
+          from botocore.exceptions import ClientError
 
           key_id = os.environ.get("RUNPOD_S3_ACCESS_KEY_ID")
           secret = os.environ.get("RUNPOD_S3_SECRET_ACCESS_KEY")
@@ -54,23 +55,28 @@ jobs:
               try:
                   response = client.get_object(Bucket="cviwpryzao", Key=expected["s3_key"])
                   with response["Body"] as body:
-                      if response["ContentLength"] != expected["bytes"]:
-                          return role, False
+                      declared_size = response.get("ContentLength")
+                      if declared_size is not None and declared_size != expected["bytes"]:
+                          return role, "provider_size_mismatch"
                       digest = sha256()
                       size = 0
                       for chunk in body.iter_chunks(chunk_size=1024 * 1024):
                           size += len(chunk)
                           if size > expected["bytes"]:
-                              return role, False
+                              return role, "stream_exceeded_expected_size"
                           digest.update(chunk)
-                  return role, size == expected["bytes"] and digest.hexdigest() == expected["sha256"]
-              except Exception:
-                  return role, False
+                  if size != expected["bytes"]:
+                      return role, "stream_size_mismatch"
+                  return role, "verified" if digest.hexdigest() == expected["sha256"] else "digest_mismatch"
+              except ClientError as exc:
+                  return role, "http_" + str(exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0))
+              except Exception as exc:
+                  return role, type(exc).__name__
 
           with ThreadPoolExecutor(max_workers=3) as pool:
               checks = dict(pool.map(verify, sorted(roles)))
-          for role, passed in checks.items():
-              print(f"Verified role archive {role}: {str(passed).lower()}")
-          if not all(checks.values()):
+          for role, result in checks.items():
+              print(f"Role archive readback {role}: {result}")
+          if any(result != "verified" for result in checks.values()):
               raise SystemExit("One or more scoped archive readbacks could not be verified.")
           PY
