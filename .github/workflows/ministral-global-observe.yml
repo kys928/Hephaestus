@@ -33,7 +33,7 @@ jobs:
           import os,json,time
           cfg=RunPodConfig.from_env()
           a=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),state_root=Path(os.environ["RUNNER_TEMP"])/"global-readonly")
-          tag="45371593784"
+          tag="45371941684"
           own=[p for p in a.list_pods() if str(p.get("name","")).startswith("hephaestus-ministral-triad-"+tag+"-")]
           print("GLOBAL_TRIAD_LIVE_POD_COUNT="+str(len(own)),flush=True)
           for pod in own:
@@ -41,7 +41,7 @@ jobs:
               print("GLOBAL_TRIAD_PROVIDER="+json.dumps({"id":p.get("id"),"status":p.get("status"),"datacenter":p.get("dataCenterId"),"gpu":p.get("gpu"),"rate":p.get("costPerHr",p.get("cost")),"mounts":p.get("mounts")},sort_keys=True),flush=True)
           s3=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
           prefix="hephaestus/operations/ministral-triad/"+tag+"/"
-          for name in ("transport-probe.bin","active-lease.json","attempt-1.zip","attempt-2.zip","worker-exit.txt","final-evidence.zip","controller-finished.json","watchdog-heartbeat.json"):
+          for name in ("transport-probe.bin","active-lease.json","attempt-1.zip","attempt-2.zip","worker-exit.txt","final-evidence.zip","controller-finished.json","watchdog-heartbeat.json","worker-phase.json"):
               try:
                   h=s3.head_object(Bucket=cfg.network_volume_id,Key=prefix+name)
               except Exception as exc:
