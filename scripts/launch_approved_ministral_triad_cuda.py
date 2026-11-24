@@ -11,11 +11,11 @@ from decimal import Decimal,ROUND_FLOOR
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-import argparse,json,os,re,shutil,subprocess,tempfile,time
+import argparse,json,os,re,shutil,subprocess,tempfile,time,urllib.request,urllib.error,zipfile,tarfile
 
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.config import RunPodConfig
-from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+from hephaestus.providers.runpod.execution import RunPodExecutionAdapter,RunPodApiError
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
 from hephaestus.production.original_cuda_identity import verified_original_roles,registry_digest
@@ -26,7 +26,9 @@ from hephaestus.storage.verified import canonical_bytes
 
 BASE="hephaestus/operations/ministral-triad"
 SKU="NVIDIA RTX PRO 4500 Blackwell"
-IMAGE="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+IMAGE="runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404"
+GLOBAL_ID="cmw51pjsk000007l9a0mv1jga"
+GPU_SKUS=("NVIDIA GeForce RTX 5090","NVIDIA RTX PRO 4500 Blackwell","NVIDIA RTX A6000","NVIDIA A40","NVIDIA RTX 6000 Ada Generation","NVIDIA L40","NVIDIA L40S","NVIDIA RTX PRO 6000 Blackwell Server Edition")
 REGRESSION="tests/test_targeted_post_failure_probes.py"
 SOURCE="src/hephaestus/diagnosis/probes.py"
 TEST_NAME="test_null_text_is_not_literal_supervised_text"
@@ -39,9 +41,9 @@ FROZEN_TEST=(
     "    assert measurement['text_rows'] == 0\n"
 )
 MAX_SECONDS=75*60
-MAX_TOTAL_USD=Decimal("2.00")
+MAX_TOTAL_USD=Decimal("4.00")
 RESERVE_USD=Decimal("1.00")
-MAX_QUOTED_GPU_USD_PER_HOUR=Decimal("1.25")
+MAX_QUOTED_GPU_USD_PER_HOUR=Decimal("2.69")
 OTHER_STORAGE_RATE=Decimal("0.08")
 MIN_SECONDS=30*60
 
@@ -155,43 +157,129 @@ def independent_failure_preflight(tmp,*,docker,code_root):
     }
 
 
-def command_for(source_commit,code_digest,run_tag):
+def command_for(source_commit,code_digest,case_digest,run_tag,urls):
     if not re.fullmatch(r"[a-f0-9]{40}",source_commit):
         raise PermissionError("source commit identity invalid")
-    prefix="/workspace/"+BASE+"/"+run_tag
-    code_tar=prefix+"/code.tar.gz"
-    logs=prefix+"/worker-stdout.log"
-    exit_receipt=prefix+"/worker-exit.txt"
-    root="/tmp/hephaestus-triad-pinned-code"
-    # There are intentionally NO API keys or Docker mounts in this worker.
-    shell=(
-        "set -Eeuo pipefail; umask 077; "
-        f"trap 'x=$?; printf \"%s %s\\n\" \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"$x\" > \"{exit_receipt}\"' EXIT; "
-        f"exec >> '{logs}' 2>&1; "
-        f"mkdir -p '{root}'; "
-        f"test \"$(sha256sum '{code_tar}' | cut -d' ' -f1)\" = '{code_digest[7:]}'; "
-        f"tar -xzf '{code_tar}' -C '{root}'; "
-        f"cd '{root}'; "
-        "python -m pip install -q --ignore-installed 'cryptography>=44,<47'; "
-        "python -m pip install -q -e '.[role-inference,independent-certification]'; "
-        "python -u scripts/run_provisional_ministral_triad_cuda_worker.py "
-        f"--run-tag '{run_tag}' --source-commit '{source_commit}'; "
-        "echo ORIGINAL_MINISTRAL_TRIAD_WORKER_COMPLETED"
-    )
-    env={
-        "HF_HOME":"/tmp/hephaestus-hf",
-        "HF_HUB_DISABLE_TELEMETRY":"1",
-        "HF_HUB_ENABLE_HF_TRANSFER":"0",
-        "PYTHONUNBUFFERED":"1",
-    }
-    return ["bash","-lc",shell],env
+    # The Pod receives only narrowly scoped expiring GET/PUT capabilities.
+    # Never give it provider API keys, full S3 credentials or the regional mount.
+    bootstrap=r"""
+import hashlib,os,pathlib,subprocess,sys,tarfile,urllib.request
+from io import BytesIO
+tag=os.environ["TRIAD_RUN_TAG"]
+root=pathlib.Path("/tmp/hephaestus-triad-pinned-code")
+work=pathlib.Path("/tmp/hephaestus-triad-local")/tag
+root.mkdir(exist_ok=False)
+work.mkdir(parents=True,exist_ok=False)
+def get(key,expected,limit):
+    with urllib.request.urlopen(os.environ.pop(key),timeout=120) as response:
+        data=response.read(limit+1)
+    if len(data)>limit or "sha256:"+hashlib.sha256(data).hexdigest()!=expected:
+        raise PermissionError("immutable off-Pod source digest mismatch")
+    return data
+def send_exit(code):
+    req=urllib.request.Request(os.environ["TRIAD_PUT_EXIT"],data=str(code).encode(),method="PUT")
+    with urllib.request.urlopen(req,timeout=60) as r:
+        if r.status not in (200,201,204):raise RuntimeError("exit receipt rejected")
+code=1
+try:
+    raw=get("TRIAD_GET_CODE",os.environ["TRIAD_CODE_SHA256"],100_000_000)
+    case=get("TRIAD_GET_CASE",os.environ["TRIAD_CASE_SHA256"],100_000)
+    (work/"frozen-case.json").write_bytes(case)
+    with tarfile.open(fileobj=BytesIO(raw),mode="r:gz") as archive:
+        for item in archive.getmembers():
+            if item.name.startswith("/") or ".." in pathlib.PurePosixPath(item.name).parts or not (item.isfile() or item.isdir()):
+                raise PermissionError("unsafe source archive member")
+        archive.extractall(root)
+    os.chdir(root)
+    # Preserve the image's CUDA torch; exact Transformers family, PEFT and Mistral backend.
+    subprocess.run([sys.executable,"-m","pip","install","-q","--ignore-installed","cryptography>=44,<47"],check=True)
+    subprocess.run([sys.executable,"-m","pip","install","-q","-e",".[role-inference,independent-certification]"],check=True)
+    code=subprocess.call([sys.executable,"-u","scripts/run_provisional_ministral_triad_cuda_worker.py",
+        "--run-tag",tag,"--source-commit",os.environ["TRIAD_SOURCE_COMMIT"]])
+except Exception as exc:
+    print("TRIAD_BOOTSTRAP_FAILURE_CLASS="+type(exc).__name__,flush=True)
+finally:
+    try:
+        # Preserve failed/abstained run evidence too, without copying secrets.
+        import zipfile
+        out=BytesIO()
+        with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED) as z:
+            for p in work.rglob("*"):
+                if p.is_file() and not p.is_symlink() and p.name!="frozen-case.json" and p.stat().st_size<=1_000_000:
+                    z.write(p,str(p.relative_to(work)))
+        if len(out.getvalue())<=8_000_000:
+            with urllib.request.urlopen(urllib.request.Request(os.environ["TRIAD_PUT_FINAL"],data=out.getvalue(),method="PUT"),timeout=90) as r:
+                if r.status not in (200,201,204):raise RuntimeError("final evidence rejected")
+    finally:
+        send_exit(code)
+sys.exit(code)
+"""
+    env={"HF_HOME":"/tmp/hephaestus-hf","HF_HUB_DISABLE_TELEMETRY":"1",
+         "HF_HUB_ENABLE_HF_TRANSFER":"0","PYTHONUNBUFFERED":"1",
+         "RUNPOD_GLOBAL_VOLUME_ID":GLOBAL_ID,"TRIAD_RUN_TAG":run_tag,
+         "TRIAD_SOURCE_COMMIT":source_commit,"TRIAD_CODE_SHA256":code_digest,
+         "TRIAD_CASE_SHA256":case_digest,**urls}
+    return ["python","-u","-c",bootstrap],env
+
+
+class BundleReader:
+    """Read immutable bounded archive in memory; never extract model-created files."""
+    def __init__(self,raw,prefix):
+        self.z=zipfile.ZipFile(BytesIO(raw))
+        self.prefix=prefix+"/"
+        members=self.z.infolist()
+        names=[m.filename for m in members]
+        if (len(members)>100 or len(set(names))!=len(names)
+                or sum(m.file_size for m in members)>10_000_000
+                or any(m.filename.startswith("/") or ".." in Path(m.filename).parts for m in members)):
+            raise PermissionError("invalid evidence bundle")
+    def get_object(self,*,Bucket,Key):
+        if not Key.startswith(self.prefix):
+            raise PermissionError("bundle key outside scope")
+        return {"Body":BytesIO(self.z.read(Key[len(self.prefix):]))}
+
+
+def optional_read(s3,bucket,key,limit):
+    try:return read_limited(s3,bucket,key,limit)
+    except Exception as exc:
+        if str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in {"404","NoSuchKey","NotFound"}:
+            return None
+        raise
+
+
+def scoped_urls(s3,bucket,prefix):
+    def sign(method,key):
+        url=s3.generate_presigned_url(method,Params={"Bucket":bucket,"Key":prefix+"/"+key},ExpiresIn=7200)
+        if not url.startswith("https://"):raise PermissionError("non-TLS scoped transport")
+        return url
+    # Real two-way presigned transport probe before any paid allocation.
+    sample=b"hephaestus-global-triad-transport-v1"
+    p=sign("put_object","transport-probe.bin")
+    with urllib.request.urlopen(urllib.request.Request(p,data=sample,method="PUT"),timeout=35) as r:
+        if r.status not in (200,201,204):raise RuntimeError("scoped PUT rejected")
+    with urllib.request.urlopen(sign("get_object","transport-probe.bin"),timeout=35) as r:
+        if r.read(200)!=sample:raise RuntimeError("scoped GET readback mismatch")
+    if read_limited(s3,bucket,prefix+"/transport-probe.bin",200)!=sample:
+        raise RuntimeError("independent signed transport mismatch")
+    print("TRIAD_SCOPED_S3_TRANSPORT=PASS",flush=True)
+    u={"TRIAD_GET_CODE":sign("get_object","code.tar.gz"),
+       "TRIAD_GET_CASE":sign("get_object","frozen-case.json"),
+       "TRIAD_PUT_EXIT":sign("put_object","worker-exit.txt"),
+       "TRIAD_PUT_FINAL":sign("put_object","final-evidence.zip")}
+    for n in (1,2):
+        u["TRIAD_PUT_ATTEMPT_"+str(n)]=sign("put_object","attempt-"+str(n)+".zip")
+        u["TRIAD_GET_FEEDBACK_"+str(n)]=sign("get_object","feedback-"+str(n)+".json")
+    return u
 
 
 def cold_verify_candidate(s3,bucket,prefix,trial,head,image,case,docker):
     """Original CUDA output is only a proposal: execute nothing on the Pod."""
     result=json.loads(read_limited(s3,bucket,prefix+"/worker-result.json"))
     if (result.get("schema")!="real-original-ministral-triad-worker-v1"
-            or result.get("status")!="candidate_proposed_pending_offpod_verification"
+            or result.get("status") not in ("candidate_proposed_pending_offpod_verification","invalid_candidate")
+            or result.get("global_volume_id")!=GLOBAL_ID
+            or result.get("run_tag")!=case["run_tag"]
+            or result.get("source_commit")!=case["source_commit"]
             or result.get("source_sha256")!=case["source_sha256"]
             or result.get("code_modified") is not False
             or result.get("original_five_role_registry_sha256")!=registry_digest()):
@@ -232,6 +320,8 @@ def cold_verify_candidate(s3,bucket,prefix,trial,head,image,case,docker):
             or cr.get("certified_coder") is not False):
         raise PermissionError("parent-only genuine Coder receipt invalid")
     print("TRIAD_ORIGINAL_PARENT_CODER_INFERENCE=RECEIPT_VERIFIED",flush=True)
+    if result["status"]=="invalid_candidate":
+        return {"red_to_green_verified":False,"candidate":{"output_excerpt":"The generated proposal failed the exact-span JSON/schema boundary: "+str(coder.get("proposal_error"))},"trial_ref":digest(canonical_bytes({"invalid_candidate":coder,"attempt":result["attempt"]}))}
     patch_dict=json.loads(read_limited(s3,bucket,prefix+"/candidate.json",100_000))
     fault_data=read_limited(s3,bucket,prefix+"/verified-fault.json")
     fault=json.loads(fault_data)
@@ -256,11 +346,10 @@ def cold_verify_candidate(s3,bucket,prefix,trial,head,image,case,docker):
     if not checked["red_to_green_verified"]:
         print("TRIAD_REAL_MODELS_PROPOSED_BUT_PATCH_REJECTED=true",flush=True)
         print("TRIAD_SANDBOX_RESULT_REF="+str(checked["trial_ref"]),flush=True)
-        return False
+        return checked
     print("TRIAD_REAL_MODELS_RED_TO_GREEN_VERIFIED=PASS",flush=True)
     print("TRIAD_REVIEW_ONLY_TRIAL_REF="+str(checked["trial_ref"]),flush=True)
-    print("TRIAD_FIRST_ATTEMPT_CORRECT=true",flush=True)
-    return True
+    return checked
 
 
 def main():
@@ -270,118 +359,145 @@ def main():
     args=p.parse_args()
     if (not re.fullmatch(r"[a-f0-9]{40}",args.source_commit)
             or not re.fullmatch(r"[0-9]{6,20}",args.run_tag)
-            or subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
-               !=args.source_commit):
-        raise PermissionError("GitHub original source must be exact pinned checkout")
+            or subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()!=args.source_commit):
+        raise PermissionError("exact operator-pinned source required")
     cfg=RunPodConfig.from_env()
-    if cfg.network_volume_id!="cviwpryzao" or cfg.datacenter_id!="EU-CZ-1":
-        raise PermissionError("model qualification can't use a different private volume")
-    api_key=os.environ.get("RUNPOD_API_KEY")
-    if not api_key or not os.environ.get("RUNPOD_S3_ACCESS_KEY_ID") or not os.environ.get("RUNPOD_S3_SECRET_ACCESS_KEY"):
-        raise PermissionError("operator GitHub secrets unavailable; no spending")
-    provider=ReadOnlyRunPodPricing(bearer_token=api_key)
-    account=provider.account()
-    quoted=provider.quote_gpu(gpu_id=SKU,datacenter_id=cfg.datacenter_id)
-    if account.autopay_enabled or quoted.price_usd_per_hour>MAX_QUOTED_GPU_USD_PER_HOUR or quoted.gpu_memory_gb<32:
-        raise PermissionError("prepaid balance or GPU price/VRAM outside user-approved safe experiment")
-    combined=quoted.price_usd_per_hour+account.already_spending_usd_per_hour+OTHER_STORAGE_RATE
-    remaining=min(MAX_TOTAL_USD,account.credit_balance_usd-RESERVE_USD)
-    allowed_seconds=min(MAX_SECONDS,int((remaining*Decimal(3600)/combined).to_integral_value(rounding=ROUND_FLOOR)))
-    if allowed_seconds<MIN_SECONDS:
-        raise PermissionError("prepaid budget cannot safely cover an original three-model qualification")
+    if cfg.network_volume_id!="cviwpryzao":
+        raise PermissionError("original independent receipt store required")
+    # cfg's Czech ID applies ONLY to S3 evidence. No datacenter constraint in
+    # the GPU allocation. The pre-existing Global Volume is the sole mount.
+    provider=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
     adapter=RunPodExecutionAdapter(cfg,EnvironmentSecretsProvider(),
-        state_root=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"triad-original-single-allocation")
-    existing=adapter.list_pods()
-    own="hephaestus-ministral-triad-"+args.run_tag+"-"
-    if any(str(x.get("name","")).startswith(own) for x in existing):
-        raise PermissionError("an existing triad Pod must be independently reconciled, not duplicated")
-    if adapter.select_gpu([SKU])!=SKU:
-        raise PermissionError("current secure EU-CZ-1 GPU unavailable")
+        state_root=Path(os.environ.get("RUNNER_TEMP","/tmp"))/"global-triad-operations")
     s3=RunPodNetworkVolumeStorage.from_boto3(cfg,EnvironmentSecretsProvider()).client
-    roles,_=verified_original_roles(registry_digest())
-    for role in ("diagnosis","planner"):
-        spec=roles.resolve(role)
-        h=s3.head_object(Bucket=cfg.network_volume_id,Key=spec.adapter.s3_key)
-        if int(h["ContentLength"])!=spec.adapter.bytes:
-            raise PermissionError("original frozen source adapters no longer match certified sizes")
-    if not Path("/usr/bin/docker").is_file():
-        raise PermissionError("off-Pod independent Docker verifier unavailable")
-    docker="/usr/bin/docker"
+    bucket=cfg.network_volume_id
     prefix=BASE+"/"+args.run_tag
-    with tempfile.TemporaryDirectory(prefix="triad-offpod-independent-") as tmpdir:
+    own="hephaestus-ministral-triad-"+args.run_tag+"-"
+    def owned():return [p for p in adapter.list_pods() if str(p.get("name","")).startswith(own)]
+    if owned():raise PermissionError("prior allocation needs independent reconciliation")
+    account=provider.account()
+    if account.autopay_enabled or account.credit_balance_usd<=RESERVE_USD:
+        raise PermissionError("prepaid spending not approved")
+    quotes=[]
+    for sku in GPU_SKUS:
+        try:q=provider.quote_gpu(gpu_id=sku,datacenter_id="GLOBAL")
+        except RuntimeError:continue
+        if q.gpu_memory_gb>=32 and q.price_usd_per_hour<=MAX_QUOTED_GPU_USD_PER_HOUR:
+            quotes.append(q)
+    quotes.sort(key=lambda q:(q.price_usd_per_hour,-q.gpu_memory_gb))
+    if not quotes:raise RuntimeError("no globally quoted GPU fits the fixed envelope")
+    print("TRIAD_GLOBAL_ELIGIBLE_QUOTES="+str(len(quotes)),flush=True)
+    docker="/usr/bin/docker"
+    with tempfile.TemporaryDirectory(prefix="triad-global-review-") as tmpdir:
         root=Path(tmpdir)
-        checkout,head,image,case=independent_failure_preflight(
-            root,docker=docker,code_root=Path.cwd())
+        checkout,head,image,case=independent_failure_preflight(root,docker=docker,code_root=Path.cwd())
         case.update(run_tag=args.run_tag,source_commit=args.source_commit)
         archive=root/"code.tar.gz"
-        subprocess.run(["git","archive","--format=tar.gz","--output",str(archive),"HEAD"],
-            check=True,timeout=60)
-        code=archive.read_bytes()
-        code_hash=upload_once(s3,cfg.network_volume_id,prefix+"/code.tar.gz",code)
-        upload_once(s3,cfg.network_volume_id,prefix+"/frozen-case.json",canonical_bytes(case))
-        print("TRIAD_GIT_SOURCE_SHA="+args.source_commit,flush=True)
-        print("TRIAD_EXACT_CODE_ARCHIVE_SHA="+code_hash,flush=True)
-        print("TRIAD_PINNED_TEST_SHA="+case["fixed_test_sha256"],flush=True)
-        print("TRIAD_ORIGINAL_ADAPTER_S3_VERIFIED=true",flush=True)
-        print("TRIAD_POD_GPU_SKU="+SKU,flush=True)
-        print("TRIAD_QUOTED_GPU_USD_PER_HOUR="+str(quoted.price_usd_per_hour),flush=True)
-        print("TRIAD_HARD_MAX_SECONDS="+str(allowed_seconds),flush=True)
-        print("TRIAD_MAX_TOTAL_SPENDING_ENVELOPE_USD="+str(MAX_TOTAL_USD),flush=True)
+        subprocess.run(["git","archive","--format=tar.gz","--output",str(archive),"HEAD"],check=True,timeout=60)
+        code_hash=upload_once(s3,bucket,prefix+"/code.tar.gz",archive.read_bytes())
+        case_hash=upload_once(s3,bucket,prefix+"/frozen-case.json",canonical_bytes(case))
+        urls=scoped_urls(s3,bucket,prefix)
+        cmd,env=command_for(args.source_commit,code_hash,case_hash,args.run_tag,urls)
+        require_live_watchdog(s3,bucket,prefix,wait_seconds=300)
         pod=None
+        accepted=False
         try:
-            require_live_watchdog(s3,cfg.network_volume_id,prefix,wait_seconds=300)
-            print("TRIAD_EXTERNAL_TERMINATION_WATCHDOG_LIVE=true",flush=True)
-            cmd,env=command_for(args.source_commit,code_hash,args.run_tag)
-            # Exactly one allocation intent. Unknown response NEVER issues another POST.
-            pod=adapter.create_bounded_gpu_pod(
-                name="hephaestus-ministral-triad-"+args.run_tag,
-                image_name=IMAGE,
-                gpu_type_ids=[SKU],docker_start_cmd=cmd,env=env,
-                container_disk_in_gb=110,
-                operation_id="original-ministral-triad-"+args.run_tag)
-            print("TRIAD_REAL_RUNPOD_POD_CREATED=true",flush=True)
-            print("TRIAD_REAL_RUNPOD_POD_ID="+str(pod["id"]),flush=True)
-            deadline=time.monotonic()+allowed_seconds
-            while time.monotonic()<deadline:
-                time.sleep(18)
-                require_live_watchdog(s3,cfg.network_volume_id,prefix)
+            for index,quoted in enumerate(quotes[:6],1):
+                require_live_watchdog(s3,bucket,prefix)
+                account=provider.account()
+                combined=quoted.price_usd_per_hour+account.already_spending_usd_per_hour+OTHER_STORAGE_RATE
+                remaining=min(MAX_TOTAL_USD,account.credit_balance_usd-RESERVE_USD)
+                allowed_seconds=min(MAX_SECONDS,int((remaining*Decimal(3600)/combined).to_integral_value(rounding=ROUND_FLOOR)))
+                if account.autopay_enabled or allowed_seconds<MIN_SECONDS:
+                    raise PermissionError("safe prepaid GPU interval unavailable")
+                if owned():raise PermissionError("unexpected owned Pod; no duplicate")
+                name=own+"global-"+str(index)
+                lease={"schema":"global-triad-offpod-lease.v1","run_tag":args.run_tag,
+                       "name":name,"source_commit":args.source_commit,
+                       "global_volume":GLOBAL_ID,"sku":quoted.gpu_id,
+                       "quoted_usd_per_hour":str(quoted.price_usd_per_hour),
+                       "maximum_cost_usd":str(MAX_TOTAL_USD),
+                       "deadline_epoch":int(time.time())+allowed_seconds}
+                upload_once(s3,bucket,prefix+"/allocation-intent-"+str(index)+".json",canonical_bytes(lease))
+                # The watchdog reads this bounded active lease, separate from GPU.
+                s3.put_object(Bucket=bucket,Key=prefix+"/active-lease.json",Body=canonical_bytes(lease))
+                body={"name":name,"gpu":{"id":quoted.gpu_id,"count":1},"cloud":"SECURE",
+                      "image":IMAGE,"disk":110,
+                      "mounts":{"global":[{"volumeId":GLOBAL_ID,"path":"/workspace-global"}]},
+                      "entrypoint":[],"cmd":cmd,"env":env}
+                print("TRIAD_GLOBAL_ALLOCATION_TRY="+quoted.gpu_id+" quote="+str(quoted.price_usd_per_hour),flush=True)
                 try:
-                    status=read_limited(s3,cfg.network_volume_id,prefix+"/worker-exit.txt",500).decode()
-                except Exception as exc:
-                    code=getattr(exc,"response",{}).get("Error",{}).get("Code","")
-                    if str(code) not in {"404","NoSuchKey","NotFound"}:
-                        raise
-                else:
-                    fields=status.strip().split()
-                    if len(fields)!=2 or not fields[-1].isdigit():
-                        raise PermissionError("GPU worker exit status malformed")
-                    exit_code=int(fields[-1])
-                    print("TRIAD_GPU_WORKER_EXIT_CODE="+str(exit_code),flush=True)
-                    if exit_code:
-                        raise RuntimeError("actual model worker failed; exact stage receipts retained")
-                    break
-                if time.monotonic()+180>deadline:
-                    print("TRIAD_GPU_WORKER_BUDGET_APPROACHING=true",flush=True)
-                if int((deadline-time.monotonic())//60)%3==0:
-                    latest=provider.account()
-                    if latest.autopay_enabled or latest.credit_balance_usd<=RESERVE_USD:
-                        raise PermissionError("prepaid balance reserve reached")
-            else:
-                raise TimeoutError("paid model qualification exceeded hard bounded wall clock")
+                    status,candidate=adapter._request("POST","pods",body)
+                except RunPodApiError as exc:
+                    # Only explicit rejected capacity may advance to a distinct SKU.
+                    detail=""
+                    try:detail=exc.__cause__.read(4096).decode(errors="replace").lower()
+                    except Exception:pass
+                    if exc.status_code in (400,409,503) and any(x in detail for x in ("capacity","unavailable","no available","not enough","no machines")) and not owned():
+                        print("TRIAD_GLOBAL_SKU_CAPACITY_REFUSED",flush=True)
+                        continue
+                    raise RuntimeError("ambiguous or invalid Global allocation; no retry") from None
+                if status not in (200,201,202) or not isinstance(candidate,dict) or not candidate.get("id"):
+                    raise RuntimeError("unconfirmed allocation; independent watchdog reconciles")
+                pod=candidate
+                print("TRIAD_REAL_RUNPOD_POD_CREATED=true",flush=True)
+                print("TRIAD_REAL_RUNPOD_POD_ID="+str(pod["id"]),flush=True)
+                # Independently confirm exact provider-side mount and price.
+                live=adapter.get_pod(str(pod["id"]))
+                if live.get("name")!=name or live.get("mounts")!={"global":[{"volumeId":GLOBAL_ID,"path":"/workspace-global"}]}:
+                    raise PermissionError("provider mount identity differs from frozen Global request")
+                actual=Decimal(str(live.get("costPerHr",live.get("cost","-1"))))
+                if not actual.is_finite() or actual<=0 or actual>quoted.price_usd_per_hour:
+                    raise PermissionError("actual provider rate exceeded quoted bound")
+                print("TRIAD_ACTUAL_GLOBAL_VOLUME="+GLOBAL_ID,flush=True)
+                print("TRIAD_ACTUAL_DATACENTER="+str(live.get("dataCenterId","unknown")),flush=True)
+                print("TRIAD_ACTUAL_GPU="+quoted.gpu_id,flush=True)
+                print("TRIAD_ACTUAL_HOURLY_USD="+str(actual),flush=True)
+                break
+            if pod is None:raise RuntimeError("global secure capacity exhausted within bounded candidates")
+            deadline=lease["deadline_epoch"]
+            attempt=1
+            while time.time()<deadline:
+                require_live_watchdog(s3,bucket,prefix)
+                latest=provider.account()
+                if latest.autopay_enabled or latest.credit_balance_usd<=RESERVE_USD:
+                    raise PermissionError("prepaid reserve reached")
+                if attempt<=2:
+                    raw=optional_read(s3,bucket,prefix+"/attempt-"+str(attempt)+".zip",5_000_000)
+                    if raw is not None:
+                        reader=BundleReader(raw,prefix)
+                        checked=cold_verify_candidate(reader,bucket,prefix,checkout,head,image,case,docker)
+                        if (checkout/SOURCE).read_bytes()!=(Path.cwd()/SOURCE).read_bytes() or digest((checkout/REGRESSION).read_bytes())!=case["fixed_test_sha256"]:
+                            raise PermissionError("frozen independent source or regression changed")
+                        accepted=checked.get("red_to_green_verified") is True
+                        verdict="accepted" if accepted else "retry" if attempt==1 else "rejected"
+                        feedback={"run_tag":args.run_tag,"attempt":attempt,"verdict":verdict,
+                                  "trial_ref":checked["trial_ref"],
+                                  "failure_excerpt":str(checked.get("candidate",{}).get("output_excerpt",""))[-1200:]}
+                        upload_once(s3,bucket,prefix+"/independent-trial-"+str(attempt)+".json",canonical_bytes(checked))
+                        upload_once(s3,bucket,prefix+"/feedback-"+str(attempt)+".json",canonical_bytes(feedback))
+                        print("TRIAD_INDEPENDENT_ATTEMPT_"+str(attempt)+"="+verdict,flush=True)
+                        attempt=3 if accepted else attempt+1
+                exit_raw=optional_read(s3,bucket,prefix+"/worker-exit.txt",500)
+                if exit_raw is not None:
+                    if exit_raw.strip()!=b"0":raise RuntimeError("GPU worker failed; final scoped evidence retained")
+                    if not accepted:raise RuntimeError("no independent accepted three-model repair")
+                    print("TRIAD_GENUINE_THREE_MODEL_GLOBAL_REPAIR=PASS",flush=True)
+                    return
+                time.sleep(10)
+            raise TimeoutError("independently bounded global experiment deadline")
         finally:
-            if pod is not None:
-                adapter.delete_pod(str(pod["id"]))
+            # Reconcile even on ambiguous POST, never create another Pod.
+            for item in owned():
+                adapter.delete_pod(str(item["id"]))
                 print("TRIAD_REAL_RUNPOD_POD_DELETED=true",flush=True)
-                owned=[x for x in adapter.list_pods()
-                       if str(x.get("name","")).startswith(own)]
-                if owned:
-                    raise PermissionError("exact triad Pod still listed after teardown")
-        print("TRIAD_OFFPOD_COLD_VERIFICATION_STARTED=true",flush=True)
-        passed=cold_verify_candidate(s3,cfg.network_volume_id,prefix,
-            checkout,head,image,case,docker)
-        if not passed:
-            raise RuntimeError("genuine Coder proposed a patch but independent red-to-green gate rejected it")
+            if owned():raise PermissionError("exact campaign Pod remains; watchdog continues")
+            s3.put_object(Bucket=bucket,Key=prefix+"/controller-finished.json",Body=canonical_bytes({"run_tag":args.run_tag,"accepted":accepted}))
 
 
 if __name__=="__main__":
-    main()
+    try:main()
+    except Exception as exc:
+        # Never print signed URLs or provider request payloads.
+        print("TRIAD_CONTROLLER_FAILURE_CLASS="+type(exc).__name__,flush=True)
+        raise SystemExit(1) from None
