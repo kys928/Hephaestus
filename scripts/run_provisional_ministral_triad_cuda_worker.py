@@ -84,7 +84,8 @@ def main():
             or case.get("source_commit")!=a.source_commit
             or case.get("source_file")!=SOURCE
             or case.get("issue_nodeid")!="tests/test_targeted_post_failure_probes.py::test_null_text_is_not_literal_supervised_text"
-            or not re.fullmatch(r"sha256:[a-f0-9]{64}",str(case.get("source_sha256","")))):
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}",str(case.get("source_sha256","")))
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}",str(case.get("fixed_test_sha256","")))):
         raise PermissionError("operator-frozen triad case is incomplete")
     root=Path(__file__).resolve().parents[1]
     source=(root/SOURCE).read_bytes()
@@ -199,6 +200,7 @@ def main():
         }
         # This SHA is operator-admitted evidence, not a model-authored action.
         fault_ref="sha256:"+sha256(canonical_bytes(verified_fault)).hexdigest()
+        put_json(work,"verified-fault.json",verified_fault)
         patch=proposer.propose(
             scope=RepairScope(a.source_commit,SOURCE,
                 "tests/test_targeted_post_failure_probes.py"),
