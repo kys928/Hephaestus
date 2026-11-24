@@ -16,6 +16,7 @@ from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
 from pathlib import Path
+from ministral_global_cleanup import terminate_campaign_pods
 
 MAX_LIVE=75*60
 MAX_FIRST_POD_WAIT=25*60
@@ -49,59 +50,61 @@ def main():
         except Exception as exc:
             if str(getattr(exc,"response",{}).get("Error",{}).get("Code","")) in {"404","NoSuchKey","NotFound"}: return None
             raise
-    while time.monotonic()-started < MAX_FIRST_POD_WAIT+MAX_LIVE+360:
-        remaining=time.monotonic()-started
-        if first_seen is None and remaining>MAX_FIRST_POD_WAIT:
-            print("TRIAD_WATCHDOG_NO_POD_BEFORE_START_CEILING=true",flush=True)
-            return
-        s3.put_object(Bucket=cfg.network_volume_id,Key=marker,
-            Body=json.dumps({
-                "schema":"external-triad-watchdog-heartbeat.v1",
-                "run_tag":a.run_tag,
-                "heartbeat_epoch":int(time.time()),
-                "remaining_until_hard_stop":max(0,int(MAX_FIRST_POD_WAIT+MAX_LIVE+360-remaining)),
-            },sort_keys=True).encode())
-        own=[pod for pod in adapter.list_pods()
-             if isinstance(pod.get("name"),str)
-             and pod["name"].startswith(target)
-             and isinstance(pod.get("id"),str)]
-        if len(own)>1:
-            print("TRIAD_WATCHDOG_DUPLICATE_PODS_FOUND=true",flush=True)
-            for pod in own:
-                adapter.delete_pod(pod["id"])
-            raise RuntimeError("duplicate single-campaign Pod forbidden; both terminated")
-        if not own and read_object("controller-finished.json") is not None:
-            print("TRIAD_WATCHDOG_CONFIRMED_NO_CAMPAIGN_POD=true",flush=True)
-            return
-        if own:
-            if first_seen is None:
-                first_seen=time.monotonic()
-                print("TRIAD_WATCHDOG_REAL_GPU_POD_SEEN=true",flush=True)
-            lease=read_object("active-lease.json")
-            lease_ok=(isinstance(lease,dict) and lease.get("schema")=="global-triad-offpod-lease.v1"
-                and lease.get("run_tag")==a.run_tag and lease.get("name")==own[0].get("name")
-                and lease.get("global_volume")=="cmw51pjsk000007l9a0mv1jga"
-                and type(lease.get("deadline_epoch")) is int
-                and time.time()<lease["deadline_epoch"])
-            account=provider.account()
-            expired=(not lease_ok or
-                      time.monotonic()-first_seen >= MAX_LIVE
-                     or time.monotonic()-started >= MAX_FIRST_POD_WAIT+MAX_LIVE
-                     or account.autopay_enabled
-                     or account.credit_balance_usd <= RESERVE)
-            if expired:
-                adapter.delete_pod(own[0]["id"])
-                print("TRIAD_WATCHDOG_HARD_POD_TERMINATION=true",flush=True)
+    try:
+        while time.monotonic()-started < MAX_FIRST_POD_WAIT+MAX_LIVE+360:
+            remaining=time.monotonic()-started
+            if first_seen is None and remaining>MAX_FIRST_POD_WAIT:
+                print("TRIAD_WATCHDOG_NO_POD_BEFORE_START_CEILING=true",flush=True)
                 return
-        elif first_seen is not None:
-            print("TRIAD_WATCHDOG_CONFIRMED_CONTROLLER_POD_DELETION=true",flush=True)
-            return
-        time.sleep(35)
-    # Absolute last-resort bounded cleanup after primary job disappears.
-    for pod in adapter.list_pods():
-        if str(pod.get("name","")).startswith(target) and pod.get("id"):
-            adapter.delete_pod(str(pod["id"]))
-    print("TRIAD_WATCHDOG_FINAL_HARD_STOP=true",flush=True)
+            s3.put_object(Bucket=cfg.network_volume_id,Key=marker,
+                Body=json.dumps({
+                    "schema":"external-triad-watchdog-heartbeat.v1",
+                    "run_tag":a.run_tag,
+                    "heartbeat_epoch":int(time.time()),
+                    "remaining_until_hard_stop":max(0,int(MAX_FIRST_POD_WAIT+MAX_LIVE+360-remaining)),
+                },sort_keys=True).encode())
+            own=[pod for pod in adapter.list_pods()
+                 if isinstance(pod.get("name"),str)
+                 and pod["name"].startswith(target)
+                 and isinstance(pod.get("id"),str)]
+            if len(own)>1:
+                print("TRIAD_WATCHDOG_DUPLICATE_PODS_FOUND=true",flush=True)
+                terminate_campaign_pods(adapter,a.run_tag)
+                raise RuntimeError("duplicate single-campaign Pod forbidden; both terminated")
+            if not own and read_object("controller-finished.json") is not None:
+                print("TRIAD_WATCHDOG_CONFIRMED_NO_CAMPAIGN_POD=true",flush=True)
+                return
+            if own:
+                if first_seen is None:
+                    first_seen=time.monotonic()
+                    print("TRIAD_WATCHDOG_REAL_GPU_POD_SEEN=true",flush=True)
+                lease=read_object("active-lease.json")
+                lease_ok=(isinstance(lease,dict) and lease.get("schema")=="global-triad-offpod-lease.v1"
+                    and lease.get("run_tag")==a.run_tag and lease.get("name")==own[0].get("name")
+                    and lease.get("global_volume")=="cmw51pjsk000007l9a0mv1jga"
+                    and type(lease.get("deadline_epoch")) is int
+                    and time.time()<lease["deadline_epoch"])
+                account=provider.account()
+                expired=(not lease_ok or
+                          time.monotonic()-first_seen >= MAX_LIVE
+                         or time.monotonic()-started >= MAX_FIRST_POD_WAIT+MAX_LIVE
+                         or account.autopay_enabled
+                         or account.credit_balance_usd <= RESERVE)
+                if expired:
+                    terminate_campaign_pods(adapter,a.run_tag)
+                    print("TRIAD_WATCHDOG_HARD_POD_TERMINATION=true",flush=True)
+                    return
+            elif first_seen is not None:
+                print("TRIAD_WATCHDOG_CONFIRMED_CONTROLLER_POD_DELETION=true",flush=True)
+                return
+            time.sleep(35)
+        # Absolute last-resort bounded cleanup after primary job disappears.
+        terminate_campaign_pods(adapter,a.run_tag)
+        print("TRIAD_WATCHDOG_FINAL_HARD_STOP=true",flush=True)
+    finally:
+        # Even failed S3/account/heartbeat reads cannot bypass provider cleanup.
+        terminate_campaign_pods(adapter,a.run_tag)
+
 
 
 if __name__=="__main__":
