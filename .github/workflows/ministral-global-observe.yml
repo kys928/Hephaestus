@@ -53,3 +53,5 @@ jobs:
                       try: print("GLOBAL_TRIAD_PHASE_RECEIPT="+b.read(300).decode(),flush=True)
                       finally:b.close()
           PY
+
+# Second read-only observation after launch admission.
