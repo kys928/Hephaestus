@@ -229,6 +229,7 @@ def serve(gateway):
                 self.reply(400, {"status": "rejected"})
 
     server = ThreadingHTTPServer(("0.0.0.0", 8787), Handler)
+    print("ANVIL_GATEWAY_EVENT=listener_bound", flush=True)
     server.timeout = 1
     try:
         while datetime.now(timezone.utc) < gateway.deadline:
@@ -238,9 +239,15 @@ def serve(gateway):
 
 
 if __name__ == "__main__":
-    root = Path("/tmp/anvil-private-gateway")
-    deadline = datetime.fromisoformat(os.environ["ANVIL_DEADLINE_UTC"])
-    gateway = Gateway(root, os.environ["ANVIL_LIVE_TOKEN"], deadline,
-                      command_executor(root, deadline, os.environ["ANVIL_SOURCE_SHA256"],
-                                       os.environ["ANVIL_PACKAGE_LOCK_SHA256"]))
-    serve(gateway)
+    print("ANVIL_GATEWAY_EVENT=bootstrap_entered", flush=True)
+    try:
+        root = Path("/tmp/anvil-private-gateway")
+        deadline = datetime.fromisoformat(os.environ["ANVIL_DEADLINE_UTC"])
+        gateway = Gateway(root, os.environ["ANVIL_LIVE_TOKEN"], deadline,
+                          command_executor(root, deadline, os.environ["ANVIL_SOURCE_SHA256"],
+                                           os.environ["ANVIL_PACKAGE_LOCK_SHA256"]))
+        print("ANVIL_GATEWAY_EVENT=env_validated", flush=True)
+        serve(gateway)
+    except Exception as exc:
+        print("ANVIL_GATEWAY_EVENT=bootstrap_failed:" + type(exc).__name__, flush=True)
+        raise SystemExit(1) from None

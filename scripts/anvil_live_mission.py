@@ -4,7 +4,6 @@ Deployment is intentionally inactive until the reviewed workflow templates are
 explicitly activated for this single approved experiment. The GPU gets neither
 the database DSN, provider keys, S3 keys, nor the signing private key.
 """
-from base64 import b64encode
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import gzip
@@ -19,7 +18,6 @@ import subprocess
 import sys
 from time import sleep
 from urllib.error import URLError
-import zlib
 
 import anvil_global_audit_control as audit
 from anvil_neon_bootstrap import connect_runtime, verify_runtime
@@ -38,6 +36,9 @@ from hephaestus.providers.runpod.anvil_live_lease import (
 )
 from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader, AnvilRetainedWriter
 from hephaestus.providers.runpod.anvil_live_transport import AnvilGatewayClient
+from hephaestus.providers.runpod.anvil_live_startup import (
+    gateway_launch, health_probe, provider_state, startup_log_signals, WorkerHealthFailure,
+)
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.providers.runpod.anvil_dynamic_placement import discover
@@ -237,10 +238,10 @@ def allocate(mission,authority,deadline,price_ref,known):
     token=token_hex(32)
     print("::add-mask::"+token,flush=True)
     source=(ROOT/"scripts/anvil_live_pod_gateway.py").read_bytes()
-    code=b64encode(zlib.compress(source,9)).decode()
+    entrypoint,cmd=gateway_launch(source)
     body={"name":BASE_NAME,"gpu":{"id":sku,"count":1},"cloud":"SECURE","dataCenterIds":[region],
           "image":IMAGE,"disk":20,"mounts":GlobalVolumeConfig(GLOBAL).mounts(),"ports":["8787/http"],
-          "entrypoint":[],"cmd":["python","-u","-c",f"import base64,zlib;exec(zlib.decompress(base64.b64decode('{code}')))"],
+          "entrypoint":entrypoint,"cmd":cmd,
           "env":{"ANVIL_LIVE_ACTIVATION":mission.marker,"ANVIL_LIVE_TOKEN":token,
                  "ANVIL_PRICE_REF":price_ref,"ANVIL_GPU_SKU":sku,
                  "ANVIL_DEADLINE_UTC":deadline.isoformat(),"ANVIL_SOURCE_SHA256":mission.source_hash,
@@ -265,15 +266,36 @@ def allocate(mission,authority,deadline,price_ref,known):
     return pod_id,AnvilGatewayClient(pod_id,token,deadline)
 
 
-def await_health(client,deadline):
+def await_health(client,deadline,*,read_provider=None):
+    observations=[]
+    attempts=0
+    state={"status":"unobserved"}
+    next_provider=now()
     while now()<deadline:
-        try:
-            if client.request("/health")=={"status":"ready"}:
-                return
-        except (URLError,TimeoutError,OSError):
-            pass
-        sleep(3)
-    raise TimeoutError("exact worker never became healthy")
+        health=health_probe(client)
+        attempts+=1
+        if health["reason"]!="ready" and read_provider is not None and now()>=next_provider:
+            if (deadline-now()).total_seconds()>35:
+                try:
+                    state=provider_state(read_provider())
+                except PermissionError:
+                    raise
+                except Exception as exc:
+                    state=safe_failure("provider_startup_read",exc)
+                next_provider=now()+timedelta(seconds=15)
+        row={"health":health,"provider":state}
+        if not observations or row!={k:v for k,v in observations[-1].items() if k!="observed_at"}:
+            observed=dict(row,observed_at=now().isoformat())
+            if len(observations)>=32:
+                observations.pop(1)  # keep initial observation and recent transitions
+            observations.append(observed)
+            print("ANVIL_WORKER_HEALTH_OBSERVATION="+json.dumps(observed,sort_keys=True),flush=True)
+        if health["reason"]=="ready":
+            return observations
+        if state.get("status") in {"ERROR","EXITED","TERMINATED","STOPPED"} or state.get("runtimeStatus") in {"ERROR","EXITED","TERMINATED","STOPPED"}:
+            raise WorkerHealthFailure(observations,attempts,"provider_terminal_before_health")
+        sleep(min(3,max(0,(deadline-now()).total_seconds())))
+    raise WorkerHealthFailure(observations,attempts)
 
 
 def controller(mission):
@@ -308,7 +330,12 @@ def controller(mission):
         pod,client=allocate(mission,authority,deadline,price_ref,known)
         known.add(pod)
         stage="worker_health"
-        await_health(client,min(deadline,now()+timedelta(minutes=8)))
+        health_observations=await_health(client,min(deadline,now()+timedelta(minutes=8)),
+            read_provider=lambda:mission.provider_check(pod))
+        health_ref=publish(mission.artifacts,{"schema":"anvil.worker-health-observations.v1",
+            "pod_id":pod,"observations":health_observations})
+        mission.retain(health_ref)
+        print("ANVIL_WORKER_HEALTH_REF="+health_ref,flush=True)
         stage="worker_setup"
         if client.execute("setup",mission.source)!={"source_sha256":mission.source_hash,"lock_sha256":LOCK_HASH}:
             raise PermissionError("worker source setup differs")
@@ -355,7 +382,15 @@ def controller(mission):
             print("ANVIL_LIVE_ACCEPTED_SLOT="+str(slot),flush=True)
     except Exception as error:
         failure=type(error).__name__
-        failure_detail=error.diagnostic if isinstance(error,PlacementFailure) else safe_failure(stage,error)
+        failure_detail=error.diagnostic if isinstance(error,(PlacementFailure,WorkerHealthFailure)) else safe_failure(stage,error)
+        if isinstance(error,WorkerHealthFailure):
+            # Preserve startup evidence before destroying the exact owned worker.
+            try:
+                mission.provider_check(pod)
+                failure_detail["startup_logs"]=startup_log_signals(pod,os.environ["RUNPOD_API_KEY"],
+                    min(deadline,now()+timedelta(seconds=25)))
+            except Exception as log_error:
+                failure_detail["startup_log_failure"]=safe_failure("provider_startup_logs",log_error)
         print("ANVIL_LIVE_FAILURE_DETAIL="+json.dumps(failure_detail,sort_keys=True),flush=True)
         print("ANVIL_LIVE_EXECUTION_STOPPED="+failure,flush=True)
     finally:
