@@ -1,0 +1,56 @@
+{
+  "schema": "anvil.live-inputs.v1",
+  "source_preregistration_commit": "239a0e10547ae10752d3d2dc76bb16358d0e9cc8",
+  "materials": [
+    {
+      "ref": "sha256:bd1640cabf64342745f5f282e5c3e8646559baa1e9d0d70d3737e482ae28ae70",
+      "document": {
+        "investigation": "diagnosis-planner-v1",
+        "run_id": "anvil-diagnosis-planner-first-live-v1",
+        "lineage_id": "anvil-diagnosis-planner-v1",
+        "schema": "anvil.material.v1",
+        "kind": "objective",
+        "text": "Select one evaluation-only measurement to distinguish incomplete source coverage from inconsistent replay or indexing of the migrated evidence."
+      }
+    },
+    {
+      "ref": "sha256:0e0698d510fef61b2afb6c3968d3d461aa19023d39cbd970d279737b2b0ea466",
+      "document": {
+        "investigation": "diagnosis-planner-v1",
+        "run_id": "anvil-diagnosis-planner-first-live-v1",
+        "lineage_id": "anvil-diagnosis-planner-v1",
+        "schema": "anvil.material.v1",
+        "kind": "evidence",
+        "text": "The frozen inventory contains 8,224 candidate source references. The audit could not resolve or safely follow 111 of them."
+      }
+    },
+    {
+      "ref": "sha256:7b0907726ca5053f15d6db1ff83595eb80c19850c7f30230759cd3916af7f3d6",
+      "document": {
+        "investigation": "diagnosis-planner-v1",
+        "run_id": "anvil-diagnosis-planner-first-live-v1",
+        "lineage_id": "anvil-diagnosis-planner-v1",
+        "schema": "anvil.material.v1",
+        "kind": "evidence",
+        "text": "The independently mounted Czech and Global inventories matched size and SHA-256 for all 8,113 readable candidates. The comparison does not measure which files are actually returned by runtime retrieval."
+      }
+    }
+  ],
+  "plan": {
+    "ref": "sha256:a7d8d0e9bf44fec0981b5639fc3bce1d735865ed9fa0ab44256df6c6b63e1950",
+    "document": {
+      "investigation": "diagnosis-planner-v1",
+      "run_id": "anvil-diagnosis-planner-first-live-v1",
+      "lineage_id": "anvil-diagnosis-planner-v1",
+      "schema": "anvil.dispatch.v1",
+      "registry_ref": "sha256:b48e3bb7cdc7f397cbdfb99384786c0d4b9c81e5ef0d404df6575f5a34a01b7d",
+      "material_refs": [
+        "sha256:bd1640cabf64342745f5f282e5c3e8646559baa1e9d0d70d3737e482ae28ae70",
+        "sha256:0e0698d510fef61b2afb6c3968d3d461aa19023d39cbd970d279737b2b0ea466",
+        "sha256:7b0907726ca5053f15d6db1ff83595eb80c19850c7f30230759cd3916af7f3d6"
+      ]
+    }
+  },
+  "expected_initial_frontier": "sha256:c7ff9cfb3775b6023479884cbd79aa562c5c64075c55951c5f44433cd57dedbd",
+  "execution_authorized": false
+}
