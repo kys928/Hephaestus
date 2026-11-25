@@ -35,9 +35,9 @@ def safe_failure(stage, error):
     return {"stage":stage,"reason":reason,"exception":type(error).__name__,"http_status":code}
 
 
-def inspect_placement(pricing, provider, *, region, report):
+def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
     """Observe and retain exact quote, stock, mount and budget gates separately."""
-    common={"schema":"anvil.placement-diagnostic.v1","region":region,"gpu":GPU,
+    common={"schema":"anvil.placement-diagnostic.v1","region":region,"gpu":gpu,
             "cloud":"SECURE","global_volume":GLOBAL,"allocation_attempted":False}
     def emit(stage, status, **extra):
         doc=dict(common,stage=stage,status=status,observed_at=datetime.now(timezone.utc).isoformat(),**extra)
@@ -53,7 +53,7 @@ def inspect_placement(pricing, provider, *, region, report):
             detail=safe_failure(stage,error)
             detail.pop("stage")
             fail(stage,**detail)
-    q=observe("gpu_quote",lambda:pricing.quote_gpu(gpu_id=GPU,datacenter_id=region))
+    q=observe("gpu_quote",lambda:pricing.quote_gpu(gpu_id=gpu,datacenter_id=region))
     total=q.price_usd_per_hour+DISK_ALLOWANCE
     emit("gpu_quote","observed",gpu_hour_usd=str(q.price_usd_per_hour),
          vram_gb=q.gpu_memory_gb,all_in_ceiling_usd=str(total))
@@ -64,7 +64,7 @@ def inspect_placement(pricing, provider, *, region, report):
     status,catalog=observe("regional_catalog",lambda:provider._request("GET","catalog/datacenters/"+region+"?include=GPU_AVAILABILITY"))
     if status!=200 or not isinstance(catalog,dict) or catalog.get("id")!=region or not isinstance(catalog.get("gpuAvailability"),list):
         fail("regional_catalog","catalog_identity_or_schema",http_status=status if type(status) is int else None)
-    rows=[r for r in catalog["gpuAvailability"] if isinstance(r,dict) and r.get("id")==GPU]
+    rows=[r for r in catalog["gpuAvailability"] if isinstance(r,dict) and r.get("id")==gpu]
     stock=[r.get("availability") if r.get("availability") in STOCK|{"NONE","UNAVAILABLE"} else "UNKNOWN" for r in rows]
     emit("regional_catalog","observed",exact_sku_rows=len(rows),stock=stock)
     if len(rows)>1:
@@ -83,8 +83,8 @@ def inspect_placement(pricing, provider, *, region, report):
     if account.credit_balance_usd<=total+account.already_spending_usd_per_hour:
         fail("prepaid_budget","insufficient_prepaid_funding")
     emit("prepaid_budget","verified",fundable=True)
-    selected=observe("final_stock_recheck",lambda:provider.select_gpu([GPU]))
-    if selected!=GPU:
+    selected=observe("final_stock_recheck",lambda:provider.select_gpu([gpu]))
+    if selected!=gpu:
         fail("final_stock_recheck","selected_gpu_mismatch")
     emit("final_stock_recheck","verified",exact_gpu_selected=True)
     return {"schema":"anvil.first-live-price.v1","gpu":GPU,"region":region,
