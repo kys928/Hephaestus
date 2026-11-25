@@ -312,3 +312,83 @@ def test_invalid_frozen_controller_primary_variable_writes_a_verifiable_rejected
     assert doc["evidence_refs"]==["verified://datum"]
     assert doc["generator"]=="InvalidPrimaryVariable"
     assert len(generated.calls)==1
+
+
+@pytest.mark.parametrize("layout", ["regional", "global-migration", "global-receipt"])
+def test_certified_adapter_uses_same_materializer_for_mounted_layouts(
+    tmp_path, monkeypatch, layout,
+):
+    from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig, global_role_archive_source
+    from hephaestus.storage.mounted_read import MountedReadOnlyObjectSource
+
+    archive = _archive()
+    stack = _roles(archive)
+    spec = stack.resolve("judge")
+    digest = spec.adapter.sha256
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    monkeypatch.setattr("os.path.ismount", lambda path: path == mount)
+    if layout == "regional":
+        source = MountedReadOnlyObjectSource(mount, "volume123")
+        object_path = mount / spec.adapter.s3_key
+    elif layout == "global-migration":
+        source = global_role_archive_source(GlobalVolumeConfig("volume123", mount), stack)
+        object_path = mount / f"hephaestus/runtime-models/role-mastery-v1/judge/selected-adapter-{digest[:24]}.tar.gz"
+    else:
+        document = {
+            "schema": "hephaestus.global-artifact.v1",
+            "volume_id": "volume123",
+            "artifact_ref": f"sha256:{digest}",
+            "admission_ref": f"sha256:{'b' * 64}",
+            "kind": "adapter",
+            "byte_size": len(archive),
+            "backup_target": "independent-backup",
+            "backup_verified": True,
+        }
+        encoded = json.dumps(document).encode()
+        receipt = sha256(encoded).hexdigest()
+        receipt_path = mount / f"hephaestus/receipts/sha256/{receipt[:2]}/{receipt}.json"
+        receipt_path.parent.mkdir(parents=True)
+        receipt_path.write_bytes(encoded)
+        source = global_role_archive_source(
+            GlobalVolumeConfig("volume123", mount), stack,
+            receipts={role: f"sha256:{receipt}" for role in REQUIRED_ROLES},
+        )
+        with pytest.raises(ValueError, match="differs from certified source"):
+            changed = replace(spec.adapter, bytes=len(archive) + 1)
+            altered = replace(stack, roles={**stack.roles, "judge": replace(spec, adapter=changed)})
+            altered_source = global_role_archive_source(
+                GlobalVolumeConfig("volume123", mount), altered,
+                receipts={role: f"sha256:{receipt}" for role in REQUIRED_ROLES},
+            )
+            altered_source.get_object(Bucket="volume123", Key=spec.adapter.s3_key)
+        object_path = mount / f"hephaestus/objects/sha256/{digest[:2]}/{digest}"
+    object_path.parent.mkdir(parents=True)
+    object_path.write_bytes(bytes([archive[0] ^ 1]) + archive[1:])
+    resolver = VerifiedRoleAdapters(source, "volume123", tmp_path / "cache")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        resolver.materialize(spec)
+    object_path.write_bytes(archive)
+    assert (resolver.materialize(spec) / "adapter_model.safetensors").read_bytes() == b"safetensors-placeholder-bytes"
+
+
+def test_global_mount_requires_registered_keys_real_mount_and_confined_ancestors(
+    tmp_path, monkeypatch,
+):
+    from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig, global_role_archive_source
+
+    stack = _roles(_archive())
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    source = global_role_archive_source(GlobalVolumeConfig("volume123", mount), stack)
+    key = stack.resolve("judge").adapter.s3_key
+    with pytest.raises(PermissionError):
+        source.get_object(Bucket="wrong-volume", Key=key)
+    with pytest.raises(PermissionError):
+        source.get_object(Bucket="volume123", Key="unregistered")
+    with pytest.raises(RuntimeError, match="mount is absent"):
+        source.get_object(Bucket="volume123", Key=key)
+    monkeypatch.setattr("os.path.ismount", lambda path: path == mount)
+    (mount / "hephaestus").symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(PermissionError):
+        source.get_object(Bucket="volume123", Key=key)

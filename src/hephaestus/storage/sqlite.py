@@ -199,7 +199,7 @@ class _SQLiteDatabase:
             fcntl.flock(descriptor,fcntl.LOCK_UN)
             os.close(descriptor)
 
-    def validate_existing_component(self,component,version):
+    def validate_existing_component(self,component,version, *, upgrade_from=()):
         if not self.path.exists():return
         with self.connection() as connection:
             if [str(r[0]) for r in connection.execute('PRAGMA integrity_check')]!=['ok']:
@@ -207,7 +207,7 @@ class _SQLiteDatabase:
             table=connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='infrastructure_schema_migrations'").fetchone()
             if table is not None:
                 row=connection.execute('SELECT version FROM infrastructure_schema_migrations WHERE component=?',(component,)).fetchone()
-                if row is not None and row[0]!=version:
+                if row is not None and row[0] not in (version, *upgrade_from):
                     raise StateIntegrityError("SQLite schema version is unsupported; no implicit upgrade or downgrade")
 
     def connect(self, *, read_only: bool | None = None) -> sqlite3.Connection:

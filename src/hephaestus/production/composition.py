@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from hephaestus.backends.base import ExecutionBackend
 from hephaestus.backends.registry import resolve_backend, resolve_backend_from_system
@@ -40,13 +41,25 @@ from hephaestus.providers.models.selection import DeterministicModelSelectionSer
 from hephaestus.recovery.service import BoundedRecoveryService
 from hephaestus.roles.runtime_monitor import RuntimeMonitorRole
 from hephaestus.storage.filesystem import FileSystemArtifactStore
+from hephaestus.storage.verified import canonical_bytes, read_verified_json
+from hephaestus.research.repair_review import propose_reviewed_repair
+from hephaestus.research.reviewed_discovery import ReviewedEvidenceDiscovery
+from hephaestus.research.source_evidence import SourceReader, VerifiedSourceAcquirer
+from hephaestus.state.research_grant_usage import SingleUseComputeGrantLedger
+from hephaestus.schemas.research_objective import ResearchAdmissionError, ResearchObjective, SourceCatalog
+from hephaestus.schemas.code_edit_proposal import CodeEditProposal
+from hephaestus.schemas.research_repair import PatchModel, RepairScope
+from hephaestus.state.code_edit_proposal_store import CodeEditProposalStore
 from hephaestus.storage.sqlite import SQLiteStateRepository
 from hephaestus.training.hf_lifecycle import TransformersTrainingLifecycleService
 from hephaestus.schemas.storage_admission import LocalStorageProfile
+from hephaestus.schemas.anvil import ContributionOrigin
+from hephaestus.state.anvil import AnvilState
 from hephaestus.policy.storage_admission import admit_storage
 
 from .actions import GovernedActionExecutor
 from .evidence import ArtifactModelEvidenceBinder
+from .governed_next_experiment import GovernedNextExperiment
 from hephaestus.state.evidence_store import ScientificEvidenceStore
 from .recovery import InfrastructureRecoveryController
 from .state import (
@@ -109,6 +122,184 @@ class ProductionRuntime:
     action_executor: GovernedActionExecutor
     loop_state: ProductionLoopStateStore
     coordinator: ProductionAutonomyCoordinator
+
+    def intake_research_objective(
+        self, question: str, *, run_id: str, lineage_id: str,
+        reviewed_catalogs: tuple[tuple[Path, str], ...], required_scope: str | None = None,
+    ) -> str:
+        """Anchor a reviewed evaluation-only objective in the production evidence store."""
+        if not run_id.strip() or not lineage_id.strip():
+            raise ValueError("research objective requires a run and lineage identity")
+        objective = ResearchObjective.from_text(question)
+        selection = ReviewedEvidenceDiscovery.open(reviewed_catalogs).search(
+            objective.question, required_scope=required_scope,
+        )
+        envelope = {
+            "schema": "hephaestus-research-objective-intake.v1",
+            "run_id": run_id,
+            "lineage_id": lineage_id,
+            "question": objective.question,
+            "capability": objective.capability,
+            "seeds": objective.seeds,
+            "reviewed_catalog_ref": selection.catalog.catalog_sha256,
+            "study_scope": selection.original.study_scope,
+            "source_refs": [selection.original.sha256_ref, selection.candidate.sha256_ref],
+            "selection_kind": selection.selection_kind,
+            "execution_authorized": False,
+        }
+        return self.artifact_store.put_bytes(
+            canonical_bytes(envelope), media_type="application/json",
+        ).artifact_ref
+
+    def anvil_rehearsal(
+        self, *, verify_origin: Callable[[ContributionOrigin], bool],
+        verify_evidence: Callable[[ContributionOrigin, str], bool],
+    ) -> AnvilState:
+        """Use the existing repository for explicit host-local contract rehearsal."""
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("Anvil requires an explicit bounded rehearsal")
+        return AnvilState(self.state_repository, verify_origin, verify_evidence)
+
+    def anvil_postgres_rehearsal(
+        self, *, connect, investigation: str, epoch: int,
+        verify_origin: Callable[[ContributionOrigin], bool],
+        verify_evidence: Callable[[ContributionOrigin, str], bool],
+    ):
+        """Bind an explicitly provisioned research ledger without moving operational state."""
+        from hephaestus.state.anvil_postgres import PostgresAnvilState
+
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("Anvil requires an explicit bounded rehearsal")
+        return PostgresAnvilState(connect, investigation, epoch, verify_origin, verify_evidence)
+
+    def anvil_admission_rehearsal(
+        self, *, registry_ref: str, trusted_material: frozenset[str],
+        trusted_receipts: frozenset[str],
+    ):
+        """Bind independently reviewed artifacts to the bounded blackboard."""
+        from hephaestus.control.anvil_context import AnvilAdmission, material_collection
+
+        board = self.anvil_rehearsal(
+            verify_origin=lambda origin: origin.inference_ref in trusted_receipts,
+            verify_evidence=lambda origin, ref: any(
+                row.get("ref") == ref for row in self.state_repository.all(material_collection(origin))
+            ),
+        )
+        return AnvilAdmission(
+            board, self.artifact_store, registry_ref, trusted_material, trusted_receipts,
+            self.state_repository,
+        )
+
+    def anvil_dispatch_rehearsal(
+        self, *, plan_ref: str, registry_ref: str, trusted_material: frozenset[str],
+        trusted_receipts: frozenset[str],
+    ):
+        """Prepare bounded specialist tasks without a compute grant or launch."""
+        from hephaestus.control.anvil_dispatch import AnvilDispatch
+        from hephaestus.jobs import SQLiteJobQueue
+
+        admission = self.anvil_admission_rehearsal(
+            registry_ref=registry_ref, trusted_material=trusted_material, trusted_receipts=trusted_receipts,
+        )
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=self.settings.storage_profile)
+        return AnvilDispatch(admission, queue, plan_ref)
+
+    def anvil_postgres_dispatch_rehearsal(
+        self, *, connect, investigation: str, epoch: int, plan_ref: str, registry_ref: str,
+        trusted_material: frozenset[str], trusted_receipts: frozenset[str],
+    ):
+        """Compose PostgreSQL claims with the existing durable task and material stores."""
+        from hephaestus.control.anvil_context import AnvilAdmission, material_collection
+        from hephaestus.control.anvil_dispatch import AnvilDispatch
+        from hephaestus.jobs import SQLiteJobQueue
+
+        board = self.anvil_postgres_rehearsal(
+            connect=connect, investigation=investigation, epoch=epoch,
+            verify_origin=lambda origin: origin.inference_ref in trusted_receipts,
+            verify_evidence=lambda origin, ref: any(
+                row.get("ref") == ref for row in self.state_repository.all(material_collection(origin))
+            ),
+        )
+        admission = AnvilAdmission(
+            board, self.artifact_store, registry_ref, trusted_material, trusted_receipts,
+            self.state_repository,
+        )
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=self.settings.storage_profile)
+        return AnvilDispatch(admission, queue, plan_ref)
+
+    def reviewed_source_jobs(
+        self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,
+    ):
+        """Bind CPU-only source review to the canonical queue in a rehearsal."""
+        from hephaestus.jobs import SQLiteJobQueue
+        from hephaestus.research.source_jobs import ReviewedSourceJobs
+
+        profile = self.settings.storage_profile
+        if profile is None or profile.purpose != "bounded_rehearsal":
+            raise PermissionError("research source scheduling requires an explicit bounded rehearsal")
+        SourceCatalog.load(catalog_path, independently_pinned_sha256=catalog_ref)
+        read_verified_json(self.artifact_store, eval_pack_ref)
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=profile)
+        return ReviewedSourceJobs(self, queue, source_reader, catalog_path, catalog_ref, eval_pack_ref)
+
+    def observe_reviewed_research_sources(
+        self, intake_ref: str, *, run_id: str, lineage_id: str, catalog_path: Path,
+        independently_pinned_catalog_ref: str, eval_pack_ref: str, source_reader: SourceReader,
+    ) -> str:
+        """Measure read-only dataset coverage from the recorded, reviewed study pair."""
+        intake = read_verified_json(self.artifact_store, intake_ref)
+        if (
+            intake.get("schema") != "hephaestus-research-objective-intake.v1"
+            or intake.get("execution_authorized") is not False
+            or intake.get("run_id") != run_id
+            or intake.get("lineage_id") != lineage_id
+            or intake.get("reviewed_catalog_ref") != independently_pinned_catalog_ref
+        ):
+            raise ResearchAdmissionError("research intake differs from the admitted study identity")
+        catalog = SourceCatalog.load(
+            catalog_path, independently_pinned_sha256=independently_pinned_catalog_ref,
+        )
+        objective = ResearchObjective.from_text(intake.get("question"))
+        original, candidate = catalog.select(objective)
+        if (
+            intake.get("study_scope") != original.study_scope
+            or intake.get("source_refs") != [original.sha256_ref, candidate.sha256_ref]
+        ):
+            raise ResearchAdmissionError("reviewed source pair changed after intake")
+        eval_pack = read_verified_json(self.artifact_store, eval_pack_ref)
+        acquirer = VerifiedSourceAcquirer(source_reader, self.artifact_store, self.state_repository)
+        observations = [acquirer.acquire(source, eval_pack) for source in (original, candidate)]
+        report = {
+            "schema": "hephaestus-research-source-review.v1",
+            "intake_ref": intake_ref,
+            "run_id": run_id,
+            "lineage_id": lineage_id,
+            "eval_pack_ref": eval_pack_ref,
+            "observation_refs": [observation["observation_ref"] for observation in observations],
+            "model_inference_performed": False,
+            "training_performed": False,
+        }
+        return self.artifact_store.put_bytes(
+            canonical_bytes(report), media_type="application/json",
+        ).artifact_ref
+
+    def research_compute_ledger(self) -> SingleUseComputeGrantLedger:
+        return SingleUseComputeGrantLedger(self.state_repository, self.artifact_store)
+
+    def governed_next_experiment(self) -> GovernedNextExperiment:
+        return GovernedNextExperiment()
+
+    def propose_research_repair(
+        self, *, scope: RepairScope, source_ref: str, verified_fault_ref: str,
+        run_id: str, lineage_id: str, proposer: PatchModel,
+    ) -> CodeEditProposal:
+        return propose_reviewed_repair(
+            artifacts=self.artifact_store, proposals=CodeEditProposalStore(self.settings.state_root),
+            scope=scope, source_ref=source_ref, verified_fault_ref=verified_fault_ref,
+            run_id=run_id, lineage_id=lineage_id, proposer=proposer,
+        )
 
     def with_local_data_factory(self, services, *, acquisition_enabled: bool = False):
         """Use real bounded preprocessing only after verified local acquisition."""

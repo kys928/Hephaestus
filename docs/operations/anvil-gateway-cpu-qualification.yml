@@ -1,0 +1,38 @@
+# INACTIVE CPU-only qualification template.
+name: Anvil exact image gateway qualification
+on:
+  push:
+    branches: [feature/anvil-integration]
+    paths: [.github/workflows/anvil-gateway-cpu-qualification.yml]
+permissions:
+  contents: read
+jobs:
+  focused:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[test,postgres,s3,independent-certification]'
+      - run: python -m pytest -q tests/test_anvil_live_startup.py tests/test_anvil_live_gateway.py tests/test_anvil_live_mission.py tests/test_anvil_live_lease.py tests/test_anvil_live_retention.py tests/test_anvil_dynamic_placement.py tests/test_anvil_placement_diagnostics.py
+  image:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Exact image and actual authenticated gateway (CPU only)
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 runpod/pytorch@sha256:4d1721e62b56d345c83b4fd6090664be6daf9312caab5b2e76f23d8231941851
+          python scripts/anvil_gateway_cpu_qualification.py

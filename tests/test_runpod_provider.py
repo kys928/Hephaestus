@@ -124,3 +124,47 @@ def test_execution_adapter_creates_pinned_cpu_pod_and_deletes_it(tmp_path) -> No
     execution.delete_pod("pod-test")
     assert transport.calls[1]["method"] == "DELETE"
     assert transport.calls[1]["url"] == "https://api.runpod.io/v2/pods/pod-test"
+
+
+def test_global_plan_admits_exact_lease_without_using_provider_transport() -> None:
+    from decimal import Decimal
+
+    import pytest
+    from hephaestus.providers.runpod.global_placement import ApprovedGpuLease, verify_global_pod_mount
+    from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
+
+    transport = FakeTransport()
+    adapter = RunPodExecutionAdapter(config=_config(), secrets=_secrets(), transport=transport)
+    volume = GlobalVolumeConfig("global-volume")
+    lease = ApprovedGpuLease("sha256:" + "a" * 64, "EU-CZ-1", "reviewed-gpu", 24, Decimal("1.00"), 600)
+    observations = {
+        "observed_datacenter_id": "EU-CZ-1",
+        "observed_gpu_id": "reviewed-gpu",
+        "observed_vram_gb": 24,
+        "observed_hourly_usd": Decimal("0.75"),
+        "authenticated_balance_usd": Decimal("3"),
+        "currently_spending_usd_hour": Decimal("1"),
+        "worker_image": "reviewed-image",
+        "command": ("python", "worker.py"),
+        "receipt_ref": "sha256:" + "b" * 64,
+        "approval_verified": True,
+        "independent_watchdog_ready": True,
+        "name": "frozen-study",
+    }
+    planned = adapter.plan_global_gpu_pod(volume, lease, **observations)
+    assert planned["mounts"] == volume.mounts()
+    actual = dict(planned, status="RUNNING", dataCenterId="EU-CZ-1")
+    assert verify_global_pod_mount(actual, planned)
+    assert not verify_global_pod_mount(dict(actual, mounts={"network": []}), planned)
+    for key, rejected in (
+        ("observed_datacenter_id", "EU-RO-1"),
+        ("observed_gpu_id", "fallback-gpu"),
+        ("observed_vram_gb", 16),
+        ("observed_hourly_usd", Decimal("1.01")),
+        ("authenticated_balance_usd", Decimal("0.01")),
+        ("approval_verified", False),
+        ("independent_watchdog_ready", False),
+    ):
+        with pytest.raises((ValueError, PermissionError)):
+            adapter.plan_global_gpu_pod(volume, lease, **{**observations, key: rejected})
+    assert transport.calls == []

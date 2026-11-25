@@ -12,6 +12,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 ALLOWED = frozenset(
     {
         "autonomous-loop-integration.yml",
+        "anvil-postgres-qualification.yml",
         "certified-role-model-stack.yml",
         "integration-151-foundation-no-gpu.yml",
         "integration-151-r10-runtime-cpu.yml",

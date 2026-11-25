@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -29,7 +30,7 @@ from .queue import (
 )
 
 
-SQLITE_QUEUE_SCHEMA_VERSION = 1
+SQLITE_QUEUE_SCHEMA_VERSION = 2
 _ACTIVE = {JobStatus.LEASED, JobStatus.RUNNING}
 
 
@@ -99,12 +100,14 @@ class SQLiteJobQueue:
             exc.operation_ids=tuple(pending)
             raise
 
-    def initialize(self) -> None:
+    def initialize(self, *, upgrade_v1: bool = False) -> None:
         with self._db.initialization_owner():
-            self._initialize_owned()
+            self._initialize_owned(upgrade_v1=upgrade_v1)
 
-    def _initialize_owned(self):
-        self._db.validate_existing_component('job_queue',SQLITE_QUEUE_SCHEMA_VERSION)
+    def _initialize_owned(self, *, upgrade_v1: bool):
+        self._db.validate_existing_component(
+            "job_queue", SQLITE_QUEUE_SCHEMA_VERSION, upgrade_from=(1,) if upgrade_v1 else (),
+        )
         with self._transaction() as connection:
             _schema_statements(connection,
                 """
@@ -117,6 +120,7 @@ class SQLiteJobQueue:
                     job_id TEXT PRIMARY KEY,
                     payload_ref TEXT NOT NULL,
                     owner_id TEXT NOT NULL,
+                    job_type TEXT NOT NULL DEFAULT 'default',
                     run_id TEXT,
                     experiment_id TEXT,
                     idempotency_key TEXT UNIQUE,
@@ -155,6 +159,23 @@ class SQLiteJobQueue:
                 );
                 """
             )
+            previous = connection.execute(
+                "SELECT version FROM infrastructure_schema_migrations WHERE component='job_queue'"
+            ).fetchone()
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(jobs)")}
+            if previous is not None and previous[0] == 1:
+                if not upgrade_v1 or "job_type" in columns:
+                    raise StateIntegrityError("v1 routing migration requires the original queue schema")
+                if connection.execute(
+                    "SELECT 1 FROM jobs WHERE status IN ('leased', 'running') LIMIT 1"
+                ).fetchone():
+                    raise StateIntegrityError("quiesce queue workers and settle active leases before migrating")
+                connection.execute("ALTER TABLE jobs ADD COLUMN job_type TEXT NOT NULL DEFAULT 'default'")
+            elif "job_type" not in columns:
+                raise StateIntegrityError("queue routing column is missing from the recorded schema")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS jobs_type_lease_order ON jobs(job_type, status, created_at, job_id)"
+            )
             SQLiteStateRepository._initialize_identity(connection)
             now = _iso(datetime.now(timezone.utc))
             connection.execute(
@@ -180,7 +201,7 @@ class SQLiteJobQueue:
             with self._db.connection() as connection:
                 if [str(row[0]) for row in connection.execute('PRAGMA integrity_check')]!=['ok']:
                     return False
-                connection.execute("SELECT 1 FROM jobs LIMIT 1").fetchone()
+                connection.execute("SELECT job_type FROM jobs LIMIT 1").fetchone()
             return self.schema_version() == SQLITE_QUEUE_SCHEMA_VERSION
         except (sqlite3.Error,StateIntegrityError):
             return False
@@ -212,6 +233,7 @@ class SQLiteJobQueue:
             dead_letter_reason=row["dead_letter_reason"],
             dead_lettered_at=_datetime(row["dead_lettered_at"]),
             replay_count=int(row["replay_count"]),
+            job_type=str(row["job_type"]),
         )
 
     @classmethod
@@ -284,7 +306,10 @@ class SQLiteJobQueue:
         job_id: str | None = None,
         maximum_attempts: int | None = None,
         now: datetime | None = None,
+        job_type: str = "default",
     ) -> JobRecord:
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", job_type):
+            raise ValueError("invalid job type")
         timestamp = _timestamp(now)
         max_attempts = maximum_attempts or self.maximum_attempts
         if max_attempts <= 0:
@@ -302,7 +327,8 @@ class SQLiteJobQueue:
                         existing.owner_id,
                         existing.run_id,
                         existing.experiment_id,
-                    ) != (payload_ref, owner_id, run_id, experiment_id):
+                        existing.job_type,
+                    ) != (payload_ref, owner_id, run_id, experiment_id, job_type):
                         raise IdempotencyConflict(
                             f"idempotency key {idempotency_key!r} was already used for another job"
                         )
@@ -313,8 +339,8 @@ class SQLiteJobQueue:
                     INSERT INTO jobs(
                         job_id, payload_ref, owner_id, run_id, experiment_id,
                         idempotency_key, status, attempt_count, created_at,
-                        updated_at, maximum_attempts
-                    ) VALUES(?, ?, ?, ?, ?, ?, 'queued', 0, ?, ?, ?)
+                        updated_at, maximum_attempts, job_type
+                    ) VALUES(?, ?, ?, ?, ?, ?, 'queued', 0, ?, ?, ?, ?)
                     """,
                     (
                         resolved_job_id,
@@ -326,6 +352,7 @@ class SQLiteJobQueue:
                         _iso(timestamp),
                         _iso(timestamp),
                         max_attempts,
+                        job_type,
                     ),
                 )
             except sqlite3.IntegrityError as exc:
@@ -459,8 +486,11 @@ class SQLiteJobQueue:
         return recovered
 
     def lease_next(
-        self, worker_id: str, lease_seconds: int, *, now: datetime | None = None
+        self, worker_id: str, lease_seconds: int, *, now: datetime | None = None,
+        job_type: str = "default",
     ) -> JobRecord | None:
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", job_type):
+            raise ValueError("invalid job type")
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
         if not worker_id.strip():
@@ -475,9 +505,10 @@ class SQLiteJobQueue:
                 row = connection.execute(
                     """
                     SELECT * FROM jobs
-                    WHERE status='queued' AND cancellation_requested=0
+                    WHERE status='queued' AND cancellation_requested=0 AND job_type=?
                     ORDER BY created_at, job_id LIMIT 1
-                    """
+                    """,
+                    (job_type,),
                 ).fetchone()
                 if row is None:
                     break

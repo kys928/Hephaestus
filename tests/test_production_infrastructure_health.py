@@ -39,7 +39,7 @@ def test_migration_smoke_then_component_readiness(monkeypatch, tmp_path, capsys)
     assert main(["migrate", "--json"]) == 0
     migration = json.loads(capsys.readouterr().out)
     assert migration["migrated"] is True
-    assert migration["versions"] == {"locks": 1, "queue": 1, "state": 1}
+    assert migration["versions"] == {"locks": 1, "queue": 2, "state": 1}
 
     assert main(["health", "--json"]) == 0
     after = json.loads(capsys.readouterr().out)

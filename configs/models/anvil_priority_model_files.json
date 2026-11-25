@@ -1,0 +1,120 @@
+{
+  "diagnosis": {
+    "files": {
+      "chat_template.jinja": {
+        "bytes": 12207,
+        "sha256": "6b5044075f09f4daa57beebe2d989d9fbe67dea351f220e1a84e19ddc893f2c2"
+      },
+      "config.json": {
+        "bytes": 1579,
+        "sha256": "c89d1a0b4f237d2892ce911d1fe03e9e5a4834579f7149ebc715a4c3fa564214"
+      },
+      "generation_config.json": {
+        "bytes": 131,
+        "sha256": "e0923390059f84a9180b00e5501778acc45ea9856cd7f2fd68208b360927c677"
+      },
+      "model-00001-of-00002.safetensors": {
+        "bytes": 4967581832,
+        "sha256": "2fe8ca14c36eb7f76f70d9f4a3196532e622683f6c2ea74a33e122f771e362e7"
+      },
+      "model-00002-of-00002.safetensors": {
+        "bytes": 2730659224,
+        "sha256": "68c1cb14d59a8013f7b6ba511dfddffcec7a9c971a8bb31af3889c1e4d5a3124"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 45577,
+        "sha256": "7829dcf0040e34f1172b401563fcbb27cc3c5a0244ef01e6af18b7a64d63a81e"
+      },
+      "params.json": {
+        "bytes": 1096,
+        "sha256": "d15587c57574d2a92c66ff2552c6db5173d4c440ad47f7454dc51bad0ecaeb59"
+      },
+      "processor_config.json": {
+        "bytes": 976,
+        "sha256": "ece2373c2ae391bce18785a1810543bc6173a1f28b6767cffab2c35dbea5f002"
+      },
+      "special_tokens_map.json": {
+        "bytes": 147085,
+        "sha256": "486a0ad6c426d698f63d5332a78923f0529789f6f0a32fbc86433cd7dcc14693"
+      },
+      "tekken.json": {
+        "bytes": 16753777,
+        "sha256": "e29d19ea32eb7e26e6c0572d57cb7f9eca0f4420e0e0fe6ae1cf3be94da1c0d6"
+      },
+      "tokenizer.json": {
+        "bytes": 17078110,
+        "sha256": "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1"
+      },
+      "tokenizer_config.json": {
+        "bytes": 198076,
+        "sha256": "f3a437d1214f6b61c8eae19d1256b0ebbf567793f6dcc1f63f4a30b829f85235"
+      }
+    },
+    "model_id": "mistralai/Ministral-3-3B-Reasoning-2512",
+    "payload_bytes": 7732479670,
+    "revision": "4a36357c811bf511a7b625d132e12f22408aac91"
+  },
+  "planner": {
+    "files": {
+      "chat_template.jinja": {
+        "bytes": 12207,
+        "sha256": "6b5044075f09f4daa57beebe2d989d9fbe67dea351f220e1a84e19ddc893f2c2"
+      },
+      "config.json": {
+        "bytes": 1547,
+        "sha256": "5aae04beb9f2a9949eb1df870cf47ba292012a066bdcdcb115a9ac43425f8086"
+      },
+      "generation_config.json": {
+        "bytes": 131,
+        "sha256": "e0923390059f84a9180b00e5501778acc45ea9856cd7f2fd68208b360927c677"
+      },
+      "model-00001-of-00004.safetensors": {
+        "bytes": 4984292952,
+        "sha256": "c6ad362f18a10e9e8dc8f1f3951ed0854aeaf427c1531a5b87a2daddf31fb2b2"
+      },
+      "model-00002-of-00004.safetensors": {
+        "bytes": 4999804256,
+        "sha256": "970b5e0a46bc5f4021082b7e1087f61473d9d13cb2a483d0feb8388e2b64d251"
+      },
+      "model-00003-of-00004.safetensors": {
+        "bytes": 4915917680,
+        "sha256": "0b7b28ed7e8435c1867c155639fa9212a87d881752d0c4051e7c84726ebd4748"
+      },
+      "model-00004-of-00004.safetensors": {
+        "bytes": 2936108304,
+        "sha256": "9d3f5740cd785771e26e914b1af5fb7098bceb931b89078563fb8688472c9248"
+      },
+      "model.safetensors.index.json": {
+        "bytes": 52675,
+        "sha256": "639a9c27a864b0be21e9e0fd1313f120d24c45563723797ebf611c6fce75b822"
+      },
+      "params.json": {
+        "bytes": 1098,
+        "sha256": "f1436e0548c9d66a1bd3db0e3b7c82734bd8c1b64788fa4a6c366a5e12901931"
+      },
+      "processor_config.json": {
+        "bytes": 976,
+        "sha256": "ece2373c2ae391bce18785a1810543bc6173a1f28b6767cffab2c35dbea5f002"
+      },
+      "special_tokens_map.json": {
+        "bytes": 147085,
+        "sha256": "486a0ad6c426d698f63d5332a78923f0529789f6f0a32fbc86433cd7dcc14693"
+      },
+      "tekken.json": {
+        "bytes": 16753777,
+        "sha256": "e29d19ea32eb7e26e6c0572d57cb7f9eca0f4420e0e0fe6ae1cf3be94da1c0d6"
+      },
+      "tokenizer.json": {
+        "bytes": 17078110,
+        "sha256": "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1"
+      },
+      "tokenizer_config.json": {
+        "bytes": 198076,
+        "sha256": "f3a437d1214f6b61c8eae19d1256b0ebbf567793f6dcc1f63f4a30b829f85235"
+      }
+    },
+    "model_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+    "payload_bytes": 17870368874,
+    "revision": "81eaece1948f3875421d9a45bc55487d10e2d894"
+  }
+}

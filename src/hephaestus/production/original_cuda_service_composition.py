@@ -9,9 +9,6 @@ import re
 from hephaestus.control.spine import SPINE_ORDER
 from hephaestus.control.staged_state import PHASE_SUBSTEPS
 from hephaestus.generation.backends import TransformersCausalLMGenerationBackend
-from hephaestus.llm.certified_runtime import (
-    CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
-)
 from hephaestus.policy.dataset_review import IndependentDatasetReviewPolicy
 from hephaestus.production.composition import ProductionRuntime
 from hephaestus.production.model_roles import ModelBackedStage
@@ -19,7 +16,7 @@ from hephaestus.production.staged_composition import (
     compose_verified_staged_dependencies, staged_binding_inventory,
 )
 from hephaestus.storage.verified import read_verified_json
-from .original_cuda_identity import verified_original_roles
+from .original_cuda_identity import build_original_role_reasoner, verified_original_roles
 
 
 def _is_digest(value):
@@ -120,12 +117,11 @@ def compose_original_cuda_science(runtime, *, scope, readiness_ref, approvals,
     if (runtime.data_preprocessor.tokenizer_checker is None or
             runtime.data_preprocessor.record_mapper is None):
         raise PermissionError("source-verified tokenizer and record mapping are mandatory")
-    stack,contract=verified_original_roles(scope.trusted_role_registry_sha256)
-    reasoner=CertifiedRoleReasoner(
-        stack=stack,contract=contract,
-        adapters=VerifiedRoleAdapters(s3_read_client,bucket,adapter_cache),
-        generator=PinnedTransformersRoleGenerator(model_cache,device="cuda:0"),
-        artifact_store=runtime.artifact_store)
+    reasoner = build_original_role_reasoner(
+        expected_registry_digest=scope.trusted_role_registry_sha256,
+        archive_source=s3_read_client, bucket=bucket, model_cache=model_cache,
+        adapter_cache=adapter_cache, artifact_store=runtime.artifact_store,
+    )
     deps=compose_verified_staged_dependencies(
         runtime,approval_service=approvals,reasoner=reasoner,
         generation_backend=TransformersCausalLMGenerationBackend(

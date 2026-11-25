@@ -1,0 +1,131 @@
+"""Build or independently verify a fresh, canonical offline cache for the original pair."""
+import argparse
+from contextlib import contextmanager
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+from urllib.request import urlopen
+
+from anvil_planner_auxiliary import GIT_BLOBS, ROOT
+
+MANIFEST_REF = "d5193ac0f3c77d2098b093237034c0af1acef898bb01364d331966626b1d0f9a"
+TOTAL_BYTES = 25_602_848_544
+
+
+@contextmanager
+def open_regular(path: Path, expected_bytes: int):
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size != expected_bytes:
+            raise ValueError("model source type or size differs from the manifest")
+        yield stream
+        after = os.fstat(stream.fileno())
+        if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns,
+        ):
+            raise ValueError("model source changed while reading")
+
+
+def check_stream(stream, item, target=None):
+    remaining = item["bytes"]
+    digest = hashlib.sha256()
+    while remaining:
+        data = stream.read(min(remaining, 8 << 20))
+        if not data or len(data) > remaining:
+            raise ValueError("model payload length differs from manifest")
+        remaining -= len(data)
+        digest.update(data)
+        if target is not None:
+            target.write(data)
+    if digest.hexdigest() != item["sha256"]:
+        raise ValueError("model payload differs from manifest")
+
+
+def validate_offline_index(snapshot: Path, files: dict) -> None:
+    index = json.loads((snapshot / "model.safetensors.index.json").read_bytes())
+    weights = {name for name in files if name.endswith(".safetensors")}
+    if set(index["weight_map"].values()) != weights:
+        raise ValueError("canonical weight index does not match staged shards")
+    observed = {}
+    for name in sorted(weights):
+        with open_regular(snapshot / name, files[name]["bytes"]) as stream:
+            header_size = int.from_bytes(stream.read(8), "little")
+            if not 0 < header_size <= 100_000_000 or 8 + header_size >= files[name]["bytes"]:
+                raise ValueError("invalid offline SafeTensors header")
+            raw = stream.read(header_size)
+        if len(raw) != header_size:
+            raise ValueError("incomplete offline SafeTensors header")
+        header = json.loads(raw)
+        for tensor, entry in header.items():
+            if tensor == "__metadata__":
+                continue
+            first, last = entry["data_offsets"]
+            if tensor in observed or not 0 <= first <= last <= files[name]["bytes"] - 8 - header_size:
+                raise ValueError("invalid offline SafeTensors tensor layout")
+            observed[tensor] = name
+    if observed != index["weight_map"]:
+        raise ValueError("offline tensor mapping differs from the pinned index")
+
+
+def run(destination: Path, *, planner_blobs: Path | None):
+    raw = (ROOT / "configs/models/anvil_priority_model_files.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != MANIFEST_REF:
+        raise ValueError("priority manifest changed")
+    manifest = json.loads(raw)
+    if sum(item["bytes"] for role in manifest.values() for item in role["files"].values()) != TOTAL_BYTES:
+        raise ValueError("unexpected priority payload ceiling")
+    staging = planner_blobs is not None
+    if staging:
+        planner_blobs = planner_blobs.resolve(strict=True)
+        if destination.is_relative_to(planner_blobs) or planner_blobs.is_relative_to(destination):
+            raise ValueError("source and destination must be separate")
+        destination.mkdir(exist_ok=False)
+    for role, info in manifest.items():
+        snapshot = destination / ("models--" + info["model_id"].replace("/", "--")) / "snapshots" / info["revision"]
+        if staging:
+            snapshot.mkdir(parents=True, exist_ok=False)
+        elif snapshot.resolve(strict=True) != snapshot:
+            raise ValueError("snapshot path traverses a link")
+        for name, item in info["files"].items():
+            path = snapshot / name
+            if not staging:
+                with open_regular(path, item["bytes"]) as stream:
+                    check_stream(stream, item)
+            else:
+                if role == "planner":
+                    source = open_regular(planner_blobs / GIT_BLOBS.get(name, item["sha256"]), item["bytes"])
+                else:
+                    source = urlopen(f"https://huggingface.co/{info['model_id']}/resolve/{info['revision']}/{name}",
+                                     timeout=30)
+                with source as stream:
+                    if role == "diagnosis" and (
+                        stream.status != 200 or stream.headers.get("Content-Length") != str(item["bytes"])
+                    ):
+                        raise ValueError("upstream response does not match the transfer ceiling")
+                    with path.open("xb") as target:
+                        check_stream(stream, item, target)
+            print(json.dumps({"role": role, "file": name, **item,
+                              "observation": "staged_input_verified" if staging else "destination_readback_verified"}),
+                  flush=True)
+        if not staging:
+            validate_offline_index(snapshot, info["files"])
+            print(json.dumps({"role": role, "observation": "offline_safetensors_index_verified"}),
+                  flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("destination", type=Path)
+    parser.add_argument("--planner-blobs", type=Path, help="enable staging and read the original mounted Czech blobs")
+    args = parser.parse_args()
+    # Reject path aliases before both staging and independent readback.
+    destination = args.destination.absolute()
+    if destination.resolve() != destination:
+        parser.error("destination must be a canonical mount path")
+    run(destination, planner_blobs=args.planner_blobs)
+
+
+if __name__ == "__main__":
+    main()

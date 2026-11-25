@@ -142,25 +142,22 @@ def prepare_tier_a_original_cuda_role_data_bridge(
     Native Stage owners may consume the returned *reasoner* only after a
     separately scoped GPU execution decision.
     """
-    from hephaestus.llm.certified_runtime import (
-        CertifiedRoleReasoner, PinnedTransformersRoleGenerator, VerifiedRoleAdapters,
-    )
+    from .original_cuda_identity import build_original_role_reasoner
     if not callable(getattr(s3_read_client, "get_object", None)):
         raise PermissionError("original adapter objects require a real read-only S3 client")
     if not isinstance(s3_bucket, str) or not s3_bucket.strip():
         raise PermissionError("original immutable adapter bucket must be explicitly selected")
     handoff = authenticate_original_tier_a_training(
         context, trusted_registry_sha256=trusted_registry_sha256)
-    stack, contract = verified_original_roles(trusted_registry_sha256)
-    reasoner = CertifiedRoleReasoner(
-        stack=stack, contract=contract,
-        adapters=VerifiedRoleAdapters(s3_read_client, s3_bucket, Path(adapter_cache_dir)),
-        generator=PinnedTransformersRoleGenerator(
-            Path(model_cache_dir),device="cuda:0",
-            allow_remote_pinned_download=(
-                __import__("os").environ.get("HEPHAESTUS_ENABLE_PINNED_MODEL_DOWNLOAD")=="1"),
+    reasoner = build_original_role_reasoner(
+        expected_registry_digest=trusted_registry_sha256,
+        archive_source=s3_read_client, bucket=s3_bucket,
+        model_cache=model_cache_dir, adapter_cache=adapter_cache_dir,
+        allow_remote_pinned_download=(
+            __import__("os").environ.get("HEPHAESTUS_ENABLE_PINNED_MODEL_DOWNLOAD") == "1"
         ),
-        artifact_store=context.artifacts)
+        artifact_store=context.artifacts,
+    )
     if (context.profile.model_id != "HuggingFaceTB/SmolLM2-135M-Instruct"
             or context.profile.model_revision != "12fd25f77366fa6b3b4b768ec3050bf629380bac"):
         raise PermissionError("corrected target model identity differs from original research")
