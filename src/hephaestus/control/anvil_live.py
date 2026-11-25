@@ -243,7 +243,7 @@ class AnvilLiveController:
                 "plan_ref": self.dispatch.plan_ref, "slot": slot, "receipt_ref": receipt_ref,
                 "attestation_ref": attestation_ref, "retention_ref": retention_ref,
                 "contribution_id": accepted.contribution_id, "frontier": accepted.frontier,
-            }, operation_id=key)
+            }, operation_id=digest([self.dispatch.plan_ref, "external-admission", slot]))
             return accepted
 
 
