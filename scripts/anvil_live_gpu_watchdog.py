@@ -11,7 +11,7 @@ from hephaestus.providers.runpod.anvil_live_lease import AnvilPodIdentity, REGIO
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
-from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedWriter
+from hephaestus.providers.runpod.anvil_renewed_allocation import APPROVAL, RenewedAnvilAllocation
 from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
 
 
@@ -29,9 +29,10 @@ def main():
     s3config=RunPodConfig("EU-CZ-1",REGIONAL,config.s3_endpoint_url,config.api_base_url)
     storage=RunPodNetworkVolumeStorage.from_boto3(s3config,EnvironmentSecretsProvider())
     storage.head_volume()
-    mailbox=AnvilRetainedWriter(storage.client,REGIONAL,identity.marker)
+    mailbox=RenewedAnvilAllocation(storage.client,REGIONAL,identity.marker,os.environ.get("ANVIL_FIRST_LIVE_ACTIVATION"))
     plan=json.loads((Path(__file__).resolve().parents[1]/"configs/research/anvil_diagnosis_planner_first_live_v1.json").read_bytes())["plan"]["ref"]
     if mode == "prime":
+        mailbox.verify_previous(provider)
         if mailbox.allocation_intent(plan) is not None:
             raise PermissionError("one-use allocation approval already consumed")
         if identity.discover(provider):

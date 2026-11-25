@@ -35,6 +35,7 @@ from hephaestus.providers.runpod.anvil_live_lease import (
     MAX_RATE, DISK_ALLOWANCE, CLEANUP_RESERVE_SECONDS,
 )
 from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader, AnvilRetainedWriter
+from hephaestus.providers.runpod.anvil_renewed_allocation import APPROVAL, RenewedAnvilAllocation
 from hephaestus.providers.runpod.anvil_live_transport import AnvilGatewayClient
 from hephaestus.providers.runpod.anvil_live_startup import (
     gateway_launch, health_probe, provider_state, startup_log_signals, WorkerHealthFailure,
@@ -121,7 +122,7 @@ class Mission:
         if (os.environ.get("GITHUB_REPOSITORY")!="kys928/Hephaestus"
                 or os.environ.get("GITHUB_REF")!="refs/heads/feature/anvil-integration"
                 or os.environ.get("GITHUB_RUN_ATTEMPT")!="1"
-                or os.environ.get("ANVIL_FIRST_LIVE_ACTIVATION")!="approved-dynamic-one-gpu-0.65-usd-3600s"):
+                or os.environ.get("ANVIL_FIRST_LIVE_ACTIVATION")!=APPROVAL):
             raise PermissionError("fresh exact approved one-shot activation required")
         self.identity=AnvilPodIdentity(self.marker)
         self.selected=None
@@ -148,7 +149,7 @@ class Mission:
         s3config=RunPodConfig("EU-CZ-1",REGIONAL,self.config.s3_endpoint_url,self.config.api_base_url)
         storage=RunPodNetworkVolumeStorage.from_boto3(s3config,secrets)
         storage.head_volume()
-        self.mailbox=AnvilRetainedWriter(storage.client,REGIONAL,self.marker)
+        self.mailbox=RenewedAnvilAllocation(storage.client,REGIONAL,self.marker,APPROVAL)
         # Distinct remote reads; separate reviewer process receives its own client.
         self.reader=AnvilRetainedReader(storage.client,REGIONAL,self.marker)
         verify_runtime(self.plan["investigation"])
@@ -247,6 +248,7 @@ def allocate(mission,authority,deadline,price_ref,known):
                  "ANVIL_DEADLINE_UTC":deadline.isoformat(),"ANVIL_SOURCE_SHA256":mission.source_hash,
                  "ANVIL_PACKAGE_LOCK_SHA256":LOCK_HASH,"ANVIL_AUTHORITY_PUBLIC_HEX":authority.public_key_hex,
                  "ANVIL_AUTHORITY_REF":authority.public_key_ref}}
+    mission.mailbox.verify_previous(mission.provider)
     mission.mailbox.consume_allocation(mission.plan_ref,{
         "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
         "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,

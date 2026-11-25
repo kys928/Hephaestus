@@ -91,11 +91,14 @@ class AnvilRetainedWriter(AnvilRetainedReader):
             raise ValueError("noncanonical mailbox message")
         return document
 
+    def _allocation_key(self, plan_ref):
+        return "hephaestus/anvil/first-live/plan-consumption/" + plan_ref[7:] + ".json"
+
     def allocation_intent(self, plan_ref):
         import json
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", plan_ref):
             raise ValueError("exact plan digest required")
-        key = "hephaestus/anvil/first-live/plan-consumption/" + plan_ref[7:] + ".json"
+        key = self._allocation_key(plan_ref)
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=key)
         except Exception as exc:
@@ -126,7 +129,7 @@ class AnvilRetainedWriter(AnvilRetainedReader):
         raw = canonical_bytes(document)
         if len(raw)>8192:
             raise ValueError("allocation intent exceeds ceiling")
-        key = "hephaestus/anvil/first-live/plan-consumption/" + plan_ref[7:] + ".json"
+        key = self._allocation_key(plan_ref)
         self.client.put_object(Bucket=self.bucket, Key=key, Body=raw, ContentType="application/json")
         if self.allocation_intent(plan_ref)!=document:
             raise PermissionError("durable allocation intent acknowledgement differs")

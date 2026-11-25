@@ -53,3 +53,34 @@ def test_approval_consumed_across_activation_commits():
     assert b.allocation_intent(plan)==doc
     with pytest.raises(PermissionError,match="already consumed"):
         b.consume_allocation(plan,dict(doc,activation="b"*40))
+
+def test_renewal_is_separate_fixed_one_use_record(monkeypatch):
+    import hephaestus.providers.runpod.anvil_renewed_allocation as renewal
+    from hephaestus.storage.verified import canonical_bytes
+    from hashlib import sha256
+    client=S3()
+    old=AnvilRetainedWriter(client,"cviwpryzao",renewal.PREVIOUS_ACTIVATION)
+    doc={"schema":"anvil.first-live-allocation-intent.v1","plan_ref":renewal.PLAN,
+         "activation":renewal.PREVIOUS_ACTIVATION}
+    old.consume_allocation(renewal.PLAN,doc)
+    monkeypatch.setattr(renewal,"PREVIOUS_INTENT_SHA",sha256(canonical_bytes(doc)).hexdigest())
+    a=renewal.RenewedAnvilAllocation(client,"cviwpryzao","a"*40,renewal.APPROVAL)
+    b=renewal.RenewedAnvilAllocation(client,"cviwpryzao","b"*40,renewal.APPROVAL)
+    assert a.allocation_intent(renewal.PLAN) is None
+    with pytest.raises(PermissionError):
+        a.allocation_intent("sha256:"+"f"*64)
+    with pytest.raises(PermissionError):
+        renewal.RenewedAnvilAllocation(client,"cviwpryzao","a"*40,"unapproved")
+    new=dict(doc,activation="a"*40,maximum_usd="0.65",maximum_pods=1)
+    a.consume_allocation(renewal.PLAN,new)
+    assert b.allocation_intent(renewal.PLAN)["approval"]==renewal.APPROVAL
+    with pytest.raises(PermissionError,match="already consumed"):
+        b.consume_allocation(renewal.PLAN,dict(new,activation="b"*40))
+    assert old.allocation_intent(renewal.PLAN)==doc
+
+
+def test_renewal_requires_exact_original_terminal_evidence():
+    import hephaestus.providers.runpod.anvil_renewed_allocation as renewal
+    a=renewal.RenewedAnvilAllocation(S3(),"cviwpryzao","a"*40,renewal.APPROVAL)
+    with pytest.raises(PermissionError,match="original consumed"):
+        a.verify_previous(None)
