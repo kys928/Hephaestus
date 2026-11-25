@@ -55,7 +55,7 @@ class AnvilRetainedWriter(AnvilRetainedReader):
 
     def publish_message(self, name, document):
         """One writer per fixed message name, never overwrite a different message."""
-        if not re.fullmatch(r"(ready|runtime|terminal|slot-[0-3]-(grant-request|grant|receipt-request|attestation))",name):
+        if not re.fullmatch(r"(ready|runtime|terminal-request|terminal-review|slot-[0-3]-(grant-request|grant|receipt-request|attestation))",name):
             raise ValueError("unexpected mailbox message")
         raw = canonical_bytes(document)
         if len(raw)>LIMIT:
@@ -73,7 +73,7 @@ class AnvilRetainedWriter(AnvilRetainedReader):
 
     def read_message(self,name):
         import json
-        if not re.fullmatch(r"(ready|runtime|terminal|slot-[0-3]-(grant-request|grant|receipt-request|attestation))",name):
+        if not re.fullmatch(r"(ready|runtime|terminal-request|terminal-review|slot-[0-3]-(grant-request|grant|receipt-request|attestation))",name):
             raise ValueError("unexpected mailbox message")
         try:
             response = self.client.get_object(Bucket=self.bucket,Key=self.prefix+"/messages/"+name+".json")
