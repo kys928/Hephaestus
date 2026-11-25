@@ -1,0 +1,39 @@
+name: Anvil A40 immutable image identity
+on:
+  pull_request:
+    paths: [.github/workflows/anvil-a40-image-identity.yml]
+permissions:
+  contents: read
+jobs:
+  identity:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/anvil-integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Resolve pinned CUDA image through the official registry
+        run: |
+          python - <<'PY'
+          import hashlib,json,re
+          from urllib.request import Request,urlopen
+          repo="runpod/pytorch"
+          tag="1.0.2-cu1281-torch280-ubuntu2404"
+          with urlopen(f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull",timeout=15) as r:
+              token = json.load(r)["token"]
+          request = Request(f"https://registry-1.docker.io/v2/{repo}/manifests/{tag}", headers={
+              "Authorization": "Bearer " + token,
+              "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
+          })
+          with urlopen(request, timeout=15) as r:
+              raw = r.read(1_048_577)
+              address = r.headers.get("Docker-Content-Digest")
+          if len(raw)>1_048_576 or address != "sha256:" + hashlib.sha256(raw).hexdigest():
+              raise ValueError("registry manifest identity differs")
+          manifest=json.loads(raw)
+          if "manifests" in manifest:
+              amd64 = [x["digest"] for x in manifest["manifests"] if
+                       x.get("platform",{}).get("os") == "linux" and x.get("platform",{}).get("architecture") == "amd64"]
+              if len(amd64) != 1 or not re.fullmatch(r"sha256:[a-f0-9]{64}",amd64[0]):
+                  raise ValueError("exact linux/amd64 OCI identity is absent")
+              address=amd64[0]
+          print("ANVIL_A40_IMMUTABLE_IMAGE=" + repo + "@" + address)
+          PY
