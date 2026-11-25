@@ -10,6 +10,9 @@ from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
 from hephaestus.providers.runpod.anvil_live_lease import AnvilPodIdentity, REGION, REGIONAL, MAX_SECONDS
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
+from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedWriter
+from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
 
 
 def main():
@@ -40,7 +43,21 @@ def main():
         deadline = started + timedelta(seconds=MAX_SECONDS)
         if not timedelta(0) <= datetime.now(timezone.utc) - started <= timedelta(minutes=5):
             raise PermissionError("watchdog start is stale or unbound")
-        result = identity.monitor(provider, deadline=deadline)
+        s3config=RunPodConfig("EU-CZ-1",REGIONAL,config.s3_endpoint_url,config.api_base_url)
+        storage=RunPodNetworkVolumeStorage.from_boto3(s3config,EnvironmentSecretsProvider())
+        mailbox=AnvilRetainedWriter(storage.client,REGIONAL,identity.marker)
+        plan=json.loads((Path(__file__).resolve().parents[1]/"configs/research/anvil_diagnosis_planner_first_live_v1.json").read_bytes())["plan"]["ref"]
+        # Independently inspect the one-use intent before accepting a dynamic Pod.
+        def placement():
+            intent=mailbox.allocation_intent(plan)
+            if (not intent or intent.get("activation")!=identity.marker or intent.get("operation_id")!=identity.operation_id
+                    or intent.get("gpu") not in GPU_NAMES or not valid_region(intent.get("region"))
+                    or intent.get("maximum_usd")!="0.65" or intent.get("maximum_pods")!=1):
+                raise PermissionError("watchdog cannot corroborate selected allocation intent")
+            return {"region":intent["region"],"sku":intent["gpu"]}
+        # A mailbox failure during active supervision fails closed through
+        # monitor's finally-cleanup path, not an unguarded worker.
+        result = identity.monitor(provider, deadline=deadline,placement=placement)
         print("ANVIL_GPU_WATCHDOG_TERMINAL=" + result, flush=True)
     else:
         raise ValueError("expected prime or watch")

@@ -15,6 +15,7 @@ from hephaestus.providers.runpod.cost_intelligence import usd
 from hephaestus.providers.runpod.execution import RunPodApiError
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
 from hephaestus.storage.verified import canonical_bytes
+from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
 
 GLOBAL = "cmw51pjsk000007l9a0mv1jga"
 REGIONAL = "cviwpryzao"  # operation journal namespace, not mounted
@@ -57,11 +58,11 @@ class AnvilPodIdentity:
             raise PermissionError("refuse cleanup of unowned provider resource")
         return pod["id"]
 
-    def qualified(self, pod):
+    def qualified(self, pod, *, region=REGION, sku=GPU):
         self.owned(pod)
         gpu = pod.get("gpu") or {}
-        return (pod.get("cloud") == "SECURE" and pod.get("dataCenterId") == REGION
-                and gpu.get("id") == GPU and gpu.get("count") == 1
+        return (pod.get("cloud") == "SECURE" and valid_region(region) and pod.get("dataCenterId") == region
+                and sku in GPU_NAMES and gpu.get("id") == sku and gpu.get("count") == 1
                 and pod.get("image") == IMAGE and pod.get("mounts") == GlobalVolumeConfig(GLOBAL).mounts()
                 and type(pod.get("disk")) is int and 10 <= pod["disk"] <= MAX_DISK_GB
                 and 0 < usd(pod.get("costPerHr", pod.get("cost"))) <= MAX_RATE - DISK_ALLOWANCE)
@@ -120,7 +121,7 @@ class AnvilPodIdentity:
             raise RuntimeError("exact GPU Pod remains after bounded cleanup")
         return True
 
-    def monitor(self, provider, *, deadline, now=lambda: datetime.now(timezone.utc), pause=sleep):
+    def monitor(self, provider, *, deadline, placement=None, now=lambda: datetime.now(timezone.utc), pause=sleep):
         if deadline.tzinfo is None or not 0 < (deadline - now()).total_seconds() <= MAX_SECONDS:
             raise ValueError("watchdog requires an absolute approved deadline")
         known = set()
@@ -137,7 +138,7 @@ class AnvilPodIdentity:
                     pause(5)
                     continue
                 if rows:
-                    if len(rows) != 1 or not all(self.qualified(row) for row in rows):
+                    if len(rows) != 1 or not all(self.qualified(row, **(placement() if placement else {})) for row in rows):
                         raise PermissionError("unexpected own GPU allocation; terminate it")
                 elif known:
                     return "confirmed_absent"
