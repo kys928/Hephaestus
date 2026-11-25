@@ -1,4 +1,4 @@
-name: Anvil Neon hosted qualification with verified TLS and sanitized diagnostics
+name: Anvil Neon hosted qualification with verified runner CA trust
 on:
   push:
     branches: [feature/anvil-integration]

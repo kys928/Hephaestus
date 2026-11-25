@@ -34,7 +34,7 @@ def connect_runtime():
             or info.get("hostaddr") or info.get("dbname") != "neondb"):
         raise PermissionError("secret does not reference the direct Anvil Neon endpoint")
     try:
-        return psycopg.connect(dsn, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
+        return psycopg.connect(dsn, connect_timeout=10, sslmode="verify-full", sslrootcert="/etc/ssl/certs/ca-certificates.crt")
     except psycopg.OperationalError as error:
         diagnostic = str(error).lower()
         for fragment, reason in (
