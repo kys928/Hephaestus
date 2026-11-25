@@ -206,6 +206,29 @@ class ProductionRuntime:
         queue = SQLiteJobQueue(self.state_repository.path, storage_profile=self.settings.storage_profile)
         return AnvilDispatch(admission, queue, plan_ref)
 
+    def anvil_postgres_dispatch_rehearsal(
+        self, *, connect, investigation: str, epoch: int, plan_ref: str, registry_ref: str,
+        trusted_material: frozenset[str], trusted_receipts: frozenset[str],
+    ):
+        """Compose PostgreSQL claims with the existing durable task and material stores."""
+        from hephaestus.control.anvil_context import AnvilAdmission, material_collection
+        from hephaestus.control.anvil_dispatch import AnvilDispatch
+        from hephaestus.jobs import SQLiteJobQueue
+
+        board = self.anvil_postgres_rehearsal(
+            connect=connect, investigation=investigation, epoch=epoch,
+            verify_origin=lambda origin: origin.inference_ref in trusted_receipts,
+            verify_evidence=lambda origin, ref: any(
+                row.get("ref") == ref for row in self.state_repository.all(material_collection(origin))
+            ),
+        )
+        admission = AnvilAdmission(
+            board, self.artifact_store, registry_ref, trusted_material, trusted_receipts,
+            self.state_repository,
+        )
+        queue = SQLiteJobQueue(self.state_repository.path, storage_profile=self.settings.storage_profile)
+        return AnvilDispatch(admission, queue, plan_ref)
+
     def reviewed_source_jobs(
         self, *, source_reader: SourceReader, catalog_path: Path, catalog_ref: str, eval_pack_ref: str,
     ):
