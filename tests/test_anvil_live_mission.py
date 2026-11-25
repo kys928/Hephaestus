@@ -190,3 +190,57 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
     assert len(snap.contributions)==4
     review=primary.repository.all("anvil.live-execution-review")
     assert len(review)==1 and review[0]["scientific_review_pending"] is True
+
+
+def test_pre_intent_rediscovery_never_retries_create(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.syspath_prepend(str(ROOT/"scripts"))
+    spec=spec_from_file_location("anvil_rediscovery_fixture",ROOT/"scripts/anvil_live_mission.py")
+    mod=module_from_spec(spec); spec.loader.exec_module(mod)
+    deadline=mod.now()+timedelta(minutes=30)
+    hard=deadline+timedelta(minutes=6)
+    monkeypatch.setattr(mod,"independent_deadline",lambda _:hard)
+    monkeypatch.setattr(mod,"check_reviewer_active",lambda _:None)
+    state={"intent":None,"quote":0,"allocate":0}
+    mission=SimpleNamespace(marker="a"*40,plan_ref="plan",mailbox=SimpleNamespace(
+        allocation_intent=lambda _:state["intent"]))
+    def quote(_):
+        state["quote"]+=1
+        return "ref"+str(state["quote"])
+    def allocate(*args):
+        state["allocate"]+=1
+        if state["allocate"]==1:
+            raise mod.PreIntentStockLost("lost before intent")
+        state["intent"]={"consumed":True}
+        return "pod","client"
+    monkeypatch.setattr(mod,"quote",quote)
+    monkeypatch.setattr(mod,"allocate",allocate)
+    pauses=[]
+    assert mod.select_and_allocate(mission,None,deadline,hard,set(),pause=pauses.append)==("pod","client")
+    assert state["quote"]==state["allocate"]==2 and pauses==[5]
+    state.update(intent=None,quote=0,allocate=0)
+    def ambiguous(*args):
+        state["allocate"]+=1
+        state["intent"]={"consumed":True}
+        raise RuntimeError("provider create outcome unknown")
+    monkeypatch.setattr(mod,"allocate",ambiguous)
+    with pytest.raises(RuntimeError,match="provider create"):
+        mod.select_and_allocate(mission,None,deadline,hard,set(),pause=pauses.append)
+    assert state["quote"]==state["allocate"]==1 and pauses==[5]
+
+
+def test_pre_intent_rediscovery_has_fixed_limit(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.syspath_prepend(str(ROOT/"scripts"))
+    spec=spec_from_file_location("anvil_rediscovery_limit",ROOT/"scripts/anvil_live_mission.py")
+    mod=module_from_spec(spec); spec.loader.exec_module(mod)
+    deadline=mod.now()+timedelta(minutes=30)
+    mission=SimpleNamespace(marker="a"*40,plan_ref="plan",mailbox=SimpleNamespace(allocation_intent=lambda _:None))
+    calls=[]; pauses=[]
+    def quote(_):
+        calls.append(1)
+        raise mod.PreIntentStockLost("none")
+    monkeypatch.setattr(mod,"quote",quote)
+    with pytest.raises(mod.PreIntentStockLost):
+        mod.select_and_allocate(mission,None,deadline,deadline,set(),pause=pauses.append)
+    assert len(calls)==3 and pauses==[5,10]

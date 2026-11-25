@@ -328,3 +328,7 @@ Run 45703406087 failed before intent: no eligible SKU, zero regions scanned; ind
 Qualification 45704139767 succeeded: 47 tests, exact prior Pod absent, approval unused, authenticated 2400-second A40 lease fundable. Reactivate original grant without altering rate or scientific plan. No inference or allocation retry; actual allocation pending fresh quote and stock gates.
 
 Activated `8c3989d41a6efcb071867501453dad1422f40b4c`; mission 45704240299 and watchdog 45704240378 both in progress. Retire activation triggers. Actual Pod creation, worker qualification and specialist results not yet verified.
+
+### Pre-intent stock race (third reactivation)
+
+Run 45704240299 passed all price, stock, mount, funding and independent runner gates, but all three final pre-intent observations rejected A40 stock. No provider create or consumption reached according to log; independent reviewer completed. Original approved hourly ceiling excludes other currently quoted SKUs. Add three total global placement rounds (single discovery scan per round), 5/10-second round delays and a dedicated pre-intent stock-only exception. Every round rechecks the same immutable approval and independent runners, aborts on policy/authentication failures and never catches any create failure for retry. Retain existing 40-minute funding-aware lease. Validate exact new logic before deciding to reactivate; no change to budget or scientific scope.

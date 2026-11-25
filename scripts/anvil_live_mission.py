@@ -45,7 +45,7 @@ from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.providers.runpod.anvil_dynamic_placement import discover
 from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
 from hephaestus.providers.runpod.anvil_placement_diagnostics import (
-    PlacementFailure, inspect_with_rechecks, recheck_exact_stock, safe_failure,
+    PlacementFailure, inspect_with_rechecks, recheck_exact_stock, safe_failure, retryable_placement,
 )
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
@@ -208,18 +208,28 @@ class Mission:
                     raise RuntimeError("local control backup integrity failure")
 
 
+class PreIntentStockLost(RuntimeError):
+    """Only raised before the durable intent or any provider create operation."""
+
+
 def quote(mission):
+    mission.selected=None
+    eligibility=[]
     pricing=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
     def report(doc):
+        if doc.get("schema")=="anvil.gpu-eligibility.v1":
+            eligibility.extend(doc["eligible_skus"])
         ref=publish(mission.artifacts,doc)
         mission.retain(ref)
         print("ANVIL_PLACEMENT_DIAGNOSTIC="+json.dumps(dict(doc,diagnostic_ref=ref),sort_keys=True),flush=True)
-    for candidate in discover(pricing,report):
+    for candidate in discover(pricing,report,attempts=1):
         config=RunPodConfig(candidate["region"],REGIONAL,mission.config.s3_endpoint_url,mission.config.api_base_url)
         provider=RunPodExecutionAdapter(config,EnvironmentSecretsProvider(),state_root=mission.root/"provider")
         try:
             doc=inspect_with_rechecks(pricing,provider,region=candidate["region"],gpu=candidate["gpu"],report=report)
-        except PlacementFailure:
+        except PlacementFailure as error:
+            if not retryable_placement(error):
+                raise
             continue  # read-only fallback before one-use allocation intent
         mission.selected=doc
         mission.provider=provider
@@ -227,6 +237,8 @@ def quote(mission):
         mission.retain(ref)
         print("ANVIL_DYNAMIC_SELECTED="+json.dumps(doc,sort_keys=True),flush=True)
         return ref
+    if eligibility:
+        raise PreIntentStockLost("no currently verified stock for funded GPUs")
     raise PermissionError("no eligible funded Global GPU placement")
 
 
@@ -260,7 +272,13 @@ def allocate(mission,authority,deadline,price_ref,known):
     if (q.gpu_memory_gb<48 or total>Decimal(mission.selected["all_in_hour_ceiling_usd"])
             or not fundable(account,total)):
         raise PermissionError("fresh pre-intent price or bounded funding differs")
-    recheck_exact_stock(mission.provider,sku,report=report_stock)
+    try:
+        recheck_exact_stock(mission.provider,sku,report=report_stock)
+    except Exception as error:
+        d=safe_failure("final_stock_recheck",error)
+        if retryable_placement(PlacementFailure(d)):
+            raise PreIntentStockLost("selected GPU stock lost before intent") from error
+        raise
     if now()+timedelta(minutes=15)>=deadline:
         raise PermissionError("insufficient bounded lease after stock rechecks")
     mission.mailbox.consume_allocation(mission.plan_ref,{
@@ -280,6 +298,35 @@ def allocate(mission,authority,deadline,price_ref,known):
     print("ANVIL_LIVE_EXACT_POD="+pod_id,flush=True)
     mission.provider_check(pod_id)
     return pod_id,AnvilGatewayClient(pod_id,token,deadline)
+
+
+def select_and_allocate(mission,authority,deadline,hard_deadline,known,*,pause=sleep):
+    """At most three placement rounds; never catch provider-create failures.
+
+    A dedicated exception is produced only by the read-only stock gates.
+    The fixed grant must still be unused before every rediscovery.
+    """
+    for round_no in range(1,4):
+        if now()+timedelta(minutes=15)>=deadline:
+            raise PermissionError("insufficient lease for another placement round")
+        if mission.mailbox.allocation_intent(mission.plan_ref) is not None:
+            raise PermissionError("allocation intent already consumed; never rediscover")
+        try:
+            price_ref=quote(mission)
+            if independent_deadline(mission.marker)!=hard_deadline:
+                raise PermissionError("watchdog lease changed")
+            check_reviewer_active(mission.marker)
+            return allocate(mission,authority,deadline,price_ref,known)
+        except PreIntentStockLost:
+            if known or mission.mailbox.allocation_intent(mission.plan_ref) is not None:
+                raise PermissionError("unexpected consumed intent; reconcile without allocation")
+            print("ANVIL_PRE_INTENT_REDISCOVERY="+json.dumps({
+                "round":round_no,"maximum_rounds":3,"allocation_attempted":False,
+                "reason":"stock_unavailable"}),flush=True)
+            if round_no==3:
+                raise
+            pause(5*round_no)
+    raise AssertionError("unreachable placement loop")
 
 
 def await_health(client,deadline,*,read_provider=None):
@@ -335,15 +382,8 @@ def controller(mission):
     failure_detail=None
     stage="placement_quote"
     try:
-        price_ref=quote(mission)
-        stage="independent_watchdog_recheck"
-        # Re-observe both independent runners immediately before paid allocation.
-        if independent_deadline(mission.marker)!=hard_deadline:
-            raise PermissionError("watchdog lease changed")
-        stage="independent_reviewer_recheck"
-        check_reviewer_active(mission.marker)
-        stage="allocation"
-        pod,client=allocate(mission,authority,deadline,price_ref,known)
+        stage="placement_and_single_allocation"
+        pod,client=select_and_allocate(mission,authority,deadline,hard_deadline,known)
         known.add(pod)
         stage="worker_health"
         health_observations=await_health(client,min(deadline,now()+timedelta(minutes=8)),
