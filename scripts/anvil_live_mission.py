@@ -44,7 +44,9 @@ from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
 from hephaestus.providers.runpod.anvil_dynamic_placement import discover
 from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
-from hephaestus.providers.runpod.anvil_placement_diagnostics import PlacementFailure, inspect_placement, safe_failure
+from hephaestus.providers.runpod.anvil_placement_diagnostics import (
+    PlacementFailure, inspect_with_rechecks, recheck_exact_stock, safe_failure,
+)
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
@@ -216,7 +218,7 @@ def quote(mission):
         config=RunPodConfig(candidate["region"],REGIONAL,mission.config.s3_endpoint_url,mission.config.api_base_url)
         provider=RunPodExecutionAdapter(config,EnvironmentSecretsProvider(),state_root=mission.root/"provider")
         try:
-            doc=inspect_placement(pricing,provider,region=candidate["region"],gpu=candidate["gpu"],report=report)
+            doc=inspect_with_rechecks(pricing,provider,region=candidate["region"],gpu=candidate["gpu"],report=report)
         except PlacementFailure:
             continue  # read-only fallback before one-use allocation intent
         mission.selected=doc
@@ -234,8 +236,6 @@ def allocate(mission,authority,deadline,price_ref,known):
     if not mission.selected:
         raise PermissionError("no selected qualified placement")
     region,sku=mission.selected["region"],mission.selected["gpu"]
-    if mission.provider.select_gpu([sku])!=sku:
-        raise PermissionError("selected stock disappeared before intent")
     token=token_hex(32)
     print("::add-mask::"+token,flush=True)
     source=(ROOT/"scripts/anvil_live_pod_gateway.py").read_bytes()
@@ -249,6 +249,13 @@ def allocate(mission,authority,deadline,price_ref,known):
                  "ANVIL_PACKAGE_LOCK_SHA256":LOCK_HASH,"ANVIL_AUTHORITY_PUBLIC_HEX":authority.public_key_hex,
                  "ANVIL_AUTHORITY_REF":authority.public_key_ref}}
     mission.mailbox.verify_previous(mission.provider)
+    def report_stock(doc):
+        ref=publish(mission.artifacts,doc)
+        mission.retain(ref)
+        print("ANVIL_PRE_INTENT_STOCK="+json.dumps(dict(doc,diagnostic_ref=ref),sort_keys=True),flush=True)
+    recheck_exact_stock(mission.provider,sku,report=report_stock)
+    if now()+timedelta(minutes=15)>=deadline:
+        raise PermissionError("insufficient bounded lease after stock rechecks")
     mission.mailbox.consume_allocation(mission.plan_ref,{
         "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
         "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,

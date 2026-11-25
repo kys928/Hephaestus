@@ -20,3 +20,29 @@ def test_dynamic_selection_filters_and_ranks():
     assert len(rows)==4
     assert rows[0]["gpu"]=="NVIDIA RTX A6000" and rows[0]["region"]=="CA-MTL-1"
     assert all(Decimal(x["all_in_hour_ceiling_usd"])<=Decimal(".65") for x in rows)
+
+def test_discovery_rechecks_missing_then_available():
+    class Flaky(Pricing):
+        calls=0
+        def _request(self,url,*args):
+            if "GPU_AVAILABILITY" in url:
+                self.calls+=1
+                if self.calls<=2:
+                    return {"id":url.split("/")[-1].split("?")[0]}
+            return super()._request(url,*args)
+    docs=[]; pauses=[]
+    rows=discover(Flaky(),docs.append,pause=pauses.append)
+    assert rows and pauses==[2]
+    assert [d["scan_attempt"] for d in docs]==[1,2]
+    assert docs[0]["unverified"][0]["reason"]=="availability_missing_or_invalid"
+
+
+def test_discovery_stops_after_three_empty_scans():
+    class Empty(Pricing):
+        def _request(self,url,*args):
+            if "GPU_AVAILABILITY" in url:
+                return {"id":url.split("/")[-1].split("?")[0]}
+            return super()._request(url,*args)
+    docs=[]; pauses=[]
+    assert discover(Empty(),docs.append,pause=pauses.append)==[]
+    assert len(docs)==3 and pauses==[2,4]

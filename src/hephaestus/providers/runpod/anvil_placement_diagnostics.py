@@ -1,5 +1,6 @@
 """Read-only placement diagnostics; never expose provider bodies or credentials."""
 from datetime import datetime, timezone
+from time import sleep
 from urllib.error import URLError
 from hephaestus.providers.runpod.execution import RunPodApiError, AmbiguousRunPodOperation
 from hephaestus.providers.runpod.anvil_live_lease import GPU, GLOBAL, MAX_RATE, DISK_ALLOWANCE
@@ -24,6 +25,8 @@ def safe_failure(stage, error):
         reason = "rate_limit"
     elif code is not None and code >= 500:
         reason = "provider_server_error"
+    elif isinstance(error, PermissionError):
+        reason = "permission_or_policy_gate"
     elif isinstance(error, (TimeoutError, URLError, OSError)):
         reason = "transport_error"
     elif isinstance(error, RunPodApiError) and str(error) == "No allowed GPU available in the pinned datacenter; no allocation attempted":
@@ -96,3 +99,48 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
             "all_in_hour_ceiling_usd":str(total),"maximum_wall_seconds":3600,
             "existing_volume":GLOBAL,"disk_price_source":"https://docs.runpod.io/pods/pricing",
             "observed_at":datetime.now(timezone.utc).isoformat(),"allocation_attempted":False}
+
+# Rechecks are strictly read-only. A missing availability field never counts as
+# stock, and an explicit wrong datacenter identity never authorizes a retry.
+def retryable_placement(error):
+    d=error.diagnostic
+    if d["stage"] not in {"regional_catalog","final_stock_recheck"}:
+        return False
+    if d["reason"]=="catalog_identity_or_schema":
+        return d.get("identity_matches") is True or d["stage"]=="final_stock_recheck"
+    return d["reason"] in {"no_allowed_stock","unknown_stock_status","rate_limit",
+                            "provider_server_error","transport_error"}
+
+
+def inspect_with_rechecks(pricing,provider,*,region,gpu,report,pause=sleep,attempts=3):
+    if type(attempts) is not int or not 1<=attempts<=3:
+        raise ValueError("placement recheck count outside fixed bound")
+    for n in range(1,attempts+1):
+        try:
+            return inspect_placement(pricing,provider,region=region,gpu=gpu,
+                                     report=lambda d:report(dict(d,recheck_attempt=n)))
+        except PlacementFailure as e:
+            if n==attempts or not retryable_placement(e):
+                raise
+            pause(2*n)
+
+
+def recheck_exact_stock(provider,gpu,*,report,pause=sleep,attempts=3):
+    """Immediately before durable intent; no create or mutation on this path."""
+    if type(attempts) is not int or not 1<=attempts<=3:
+        raise ValueError("final stock recheck count outside fixed bound")
+    for n in range(1,attempts+1):
+        try:
+            selected=provider.select_gpu([gpu])
+            if selected!=gpu:
+                raise PermissionError("selected GPU identity differs")
+            report({"schema":"anvil.pre-intent-stock.v1","attempt":n,"gpu":gpu,
+                    "status":"verified","allocation_attempted":False})
+            return selected
+        except Exception as e:
+            d=safe_failure("final_stock_recheck",e)
+            report(dict(d,schema="anvil.pre-intent-stock.v1",attempt=n,gpu=gpu,
+                        status="blocked",allocation_attempted=False))
+            if n==attempts or not retryable_placement(PlacementFailure(d)):
+                raise
+            pause(2*n)
