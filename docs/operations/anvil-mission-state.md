@@ -171,3 +171,16 @@ Final Anvil CPU regression passed with 1,306 passed, 91 skipped and two existing
 The priority CPU suite passed with 1,307 passed and 91 skipped before the final focused transport and closure tests. The focused fixtures also passed interrupted-transfer accounting without a retry, signed scope and deadline checks, and durable unresolved review after restart. No fixture output is counted as genuine model collaboration.
 
 The retained Czech inventory was compared against the new exact file manifest. Diagnosis had no qualifying content-addressed key or pinned snapshot entry for any of its 12 files. Planner had entries for all 14 names and five qualifying content-addressed objects by size, the four weights and `tekken.json`. This inventory comparison establishes reusable candidates only. The auxiliary objects require byte-level verification. The two original adapter archives total 88,238,656 bytes, with verified copies on Czech and Global and no established off-provider archive backup. The live catalog preflight also checked [available Czech Secure Cloud alternatives](https://github.com/kys928/Hephaestus/actions/runs/45582068791) for the same mounted-volume route. Its one-shot workflow was then removed from active CI.
+
+### Verified Planner result
+
+The [authorized chunked read](https://github.com/kys928/Hephaestus/actions/runs/45580722417) succeeded. Its retained [receipt artifact](https://github.com/kys928/Hephaestus/actions/runs/45580722417/artifacts/15007440728) has archive SHA-256 `5fd8d90db005d8870745714ad0a9b517539acc78223fce3c610c721bccf378df`. Independent reconciliation of the structured job log found exactly 268 attempted and completed ranges, no overlaps, and exactly **17,836,123,192 application-observed bytes**. All four independently reported shard completion records matched the pinned manifest.
+
+| Canonical shard | Bytes read | Ranges | SHA-256 |
+| --- | ---: | ---: | --- |
+| `model-00001-of-00004.safetensors` | 4,984,292,952 | 75 | `c6ad362f18a10e9e8dc8f1f3951ed0854aeaf427c1531a5b87a2daddf31fb2b2` |
+| `model-00002-of-00004.safetensors` | 4,999,804,256 | 75 | `970b5e0a46bc5f4021082b7e1087f61473d9d13cb2a483d0feb8388e2b64d251` |
+| `model-00003-of-00004.safetensors` | 4,915,917,680 | 74 | `0b7b28ed7e8435c1867c155639fa9212a87d881752d0c4051e7c84726ebd4748` |
+| `model-00004-of-00004.safetensors` | 2,936,108,304 | 44 | `9d3f5740cd785771e26e914b1af5fb7098bceb931b89078563fb8688472c9248` |
+
+This closes present byte custody of the original Czech Planner weight shards only. It does not verify snapshot aliases, auxiliary assets or offline loading. No RunPod compute or storage mutation occurred. The authenticated Czech alternatives query returned zero reported Secure Cloud candidates with at least 48 GB VRAM at observation time. A cross-region alternative may require qualifying volume placement or a separately approved transfer. No relevant GPU has yet been approved or allocated.
