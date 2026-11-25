@@ -1,8 +1,8 @@
-name: Anvil resume read-only observations
+name: Anvil Planner bounded auxiliary repair
 on:
   pull_request:
     paths:
-      - .github/workflows/anvil-resume-readonly.yml
+      - .github/workflows/anvil-resume-aux-repair.yml
 permissions:
   contents: read
 jobs:
@@ -34,17 +34,8 @@ jobs:
           assert model.model_type == "mistral3" and tokenizer.encode("Anvil")
           print("PLANNER_OFFLINE_CONFIG_TOKENIZER=true")
           PY
-      - name: Inspect eligible Global Volume GPU locations
-        if: always()
-        env:
-          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          PYTHONPATH: src
-        run: python scripts/anvil_global_gpu_inventory.py | tee global-gpu-evidence.jsonl
-        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: anvil-resume-readonly
-          path: |
-            planner-aux-evidence.jsonl
-            global-gpu-evidence.jsonl
+          path: planner-aux-evidence.jsonl
