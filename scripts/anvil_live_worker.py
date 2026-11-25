@@ -23,7 +23,7 @@ def main():
     import torch
 
     if any(key in os.environ for key in ("ANVIL_POSTGRES_DSN", "RUNPOD_API_KEY",
-                                         "RUNPOD_S3_SECRET_ACCESS_KEY", "HF_TOKEN", "GITHUB_TOKEN")):
+                                         "RUNPOD_S3_SECRET_ACCESS_KEY", "RUNPOD_S3_ACCESS_KEY_ID", "HF_TOKEN", "GITHUB_TOKEN")):
         raise PermissionError("model worker must not receive control-plane credentials")
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     pod = os.environ.get("RUNPOD_POD_ID", "")

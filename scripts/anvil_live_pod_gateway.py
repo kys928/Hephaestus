@@ -118,7 +118,7 @@ class Gateway:
 def command_executor(root, deadline, source_hash, lock_hash):
     source = root / "source"
 
-    def run(args, raw=None):
+    def run(args, raw=None, runtime_ref=None):
         remaining = (deadline - datetime.now(timezone.utc)).total_seconds()
         if remaining <= 0:
             raise TimeoutError("execution deadline reached")
@@ -127,6 +127,8 @@ def command_executor(root, deadline, source_hash, lock_hash):
             "RUNPOD_S3_ACCESS_KEY_ID", "RUNPOD_S3_SECRET_ACCESS_KEY", "HF_TOKEN", "GITHUB_TOKEN",
         }}
         env.update(PYTHONPATH=str(source / "src"), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
+        if runtime_ref is not None:
+            env["ANVIL_RUNTIME_REF"] = runtime_ref
         result = subprocess.run(args, cwd=source, env=env, input=raw, capture_output=True,
                                 timeout=min(remaining, 600), check=False)
         if result.returncode or len(result.stdout) > MAX_CAPSULE:
@@ -153,8 +155,18 @@ def command_executor(root, deadline, source_hash, lock_hash):
                         rows.append(doc)
             if [r["role"] for r in rows] != ["diagnosis", "planner"]:
                 raise RuntimeError("missing exact two-role load evidence")
-            return {"loads": rows}
-        out = run([sys.executable, "-u", "scripts/anvil_live_worker.py"], raw)
+            runtime = {"schema": "anvil.qualified-runtime.v1", "pod_id": os.environ["RUNPOD_POD_ID"],
+                       "source_sha256": source_hash, "lock_sha256": lock_hash, "loads": rows}
+            ref = "sha256:" + sha256(json.dumps(runtime, sort_keys=True, separators=(",", ":"),
+                            ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+            return {"runtime": runtime, "runtime_ref": ref}
+        qualified = json.loads((root / "qualify.result.json").read_bytes())
+        if qualified.get("status") != "complete":
+            raise PermissionError("runtime qualification absent")
+        runtime_ref = qualified["result"]["runtime_ref"]
+        if json.loads(raw).get("runtime_ref") != runtime_ref:
+            raise PermissionError("slot differs from actual worker load evidence")
+        out = run([sys.executable, "-u", "scripts/anvil_live_worker.py"], raw, runtime_ref=runtime_ref)
         rows = [json.loads(line.removeprefix("ANVIL_LIVE_RECEIPT=")) for line in out.splitlines()
                 if line.startswith("ANVIL_LIVE_RECEIPT=")]
         if len(rows) != 1:

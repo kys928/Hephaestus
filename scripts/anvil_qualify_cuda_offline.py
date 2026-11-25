@@ -1,5 +1,8 @@
 """Load both original Anvil roles offline on an already-approved exact A40 Pod."""
 import json
+import hashlib
+import importlib.metadata as metadata
+import sys
 import os
 from pathlib import Path
 import re
@@ -17,6 +20,11 @@ REGISTRY_REF = "sha256:b48e3bb7cdc7f397cbdfb99384786c0d4b9c81e5ef0d404df6575f5a3
 def main():
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     import torch
+    from hephaestus.storage.verified import canonical_bytes
+    packages = {re.sub(r"[-_.]+", "-", d.metadata["Name"]).lower(): d.version
+                for d in metadata.distributions()}
+    environment = {"python": sys.version.split()[0], "torch": torch.__version__,
+                   "cuda": torch.version.cuda, "packages_sha256": hashlib.sha256(canonical_bytes(packages)).hexdigest()}
 
     pod_id = os.environ.get("RUNPOD_POD_ID", "")
     if not re.fullmatch(r"[A-Za-z0-9]{4,40}", pod_id):
@@ -51,7 +59,7 @@ def main():
                     "adapter_sha256": spec.adapter.sha256,
                     "manifest_sha256": MANIFEST_REF, "cuda": torch.version.cuda,
                     "peak_allocated_bytes": torch.cuda.max_memory_allocated(0),
-                    "generation_count": 0,
+                    "generation_count": 0, "environment": environment,
                 }
                 print(json.dumps(receipt, sort_keys=True), flush=True)
                 runtime.generator.close()
