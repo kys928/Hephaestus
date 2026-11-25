@@ -33,8 +33,8 @@ def test_discovery_rechecks_missing_then_available():
     docs=[]; pauses=[]
     rows=discover(Flaky(),docs.append,pause=pauses.append)
     assert rows and pauses==[2]
-    assert [d["scan_attempt"] for d in docs]==[1,2]
-    assert docs[0]["unverified"][0]["reason"]=="availability_missing_or_invalid"
+    assert [d["scan_attempt"] for d in docs if "scan_attempt" in d]==[1,2]
+    assert next(d for d in docs if "unverified" in d)["unverified"][0]["reason"]=="availability_missing_or_invalid"
 
 
 def test_discovery_stops_after_three_empty_scans():
@@ -45,4 +45,14 @@ def test_discovery_stops_after_three_empty_scans():
             return super()._request(url,*args)
     docs=[]; pauses=[]
     assert discover(Empty(),docs.append,pause=pauses.append)==[]
-    assert len(docs)==3 and pauses==[2,4]
+    assert len([d for d in docs if "scan_attempt" in d])==3 and pauses==[2,4]
+
+
+def test_shorter_lease_qualifies_realistic_balance_without_weakening_ceiling():
+    from hephaestus.providers.runpod.anvil_live_lease import fundable,account_draw
+    a=SimpleNamespace(autopay_enabled=False,credit_balance_usd=Decimal("1.21"),already_spending_usd_per_hour=Decimal(".797"))
+    assert fundable(a,Decimal(".60"))
+    assert not fundable(a,Decimal(".60"),3600)
+    assert not fundable(a,Decimal(".70"))
+    a.credit_balance_usd=Decimal(".90")
+    assert not fundable(a,Decimal(".60"))

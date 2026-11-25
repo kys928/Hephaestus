@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from time import sleep
 from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
-from hephaestus.providers.runpod.anvil_live_lease import GLOBAL, MAX_RATE, DISK_ALLOWANCE
+from hephaestus.providers.runpod.anvil_live_lease import GLOBAL, MAX_RATE, DISK_ALLOWANCE, LIVE_LEASE_SECONDS, fundable, account_draw
 from hephaestus.providers.runpod.cost_intelligence import REST_URL, usd
 from hephaestus.providers.runpod.anvil_placement_diagnostics import safe_failure
 
@@ -21,14 +21,25 @@ def discover(pricing,report=lambda d:None,*,attempts=3,pause=sleep):
         raise PermissionError("autopay must remain disabled")
     catalog=pricing._request(REST_URL,"GET",None)["gpus"]
     eligible={}
+    rejected=[]
     for row in catalog:
         sku=row.get("id")
-        if sku not in GPU_NAMES or row.get("secure") is not True or type(row.get("memory")) is not int or row["memory"]<48:
+        if sku not in GPU_NAMES:
             continue
+        reason=None
         try: rate=usd(row["price"]["secure"])
-        except (KeyError,TypeError,ValueError): continue
-        if 0<rate and rate+DISK_ALLOWANCE<=MAX_RATE and account.credit_balance_usd>rate+DISK_ALLOWANCE+account.already_spending_usd_per_hour:
+        except (KeyError,TypeError,ValueError): rate=None
+        if row.get("secure") is not True: reason="secure_unavailable"
+        elif type(row.get("memory")) is not int or row["memory"]<48: reason="insufficient_vram"
+        elif rate is None or rate<=0: reason="unknown_price"
+        elif rate+DISK_ALLOWANCE>MAX_RATE: reason="hourly_ceiling"
+        elif not fundable(account,rate+DISK_ALLOWANCE): reason="prepaid_funding"
+        if reason:
+            rejected.append({"gpu":sku,"reason":reason,"hourly_usd":str(rate) if rate is not None else None})
+        else:
             eligible[sku]=(rate,row["memory"])
+    report({"schema":"anvil.gpu-eligibility.v1","lease_seconds":LIVE_LEASE_SECONDS,
+            "eligible_skus":sorted(eligible),"rejected":rejected,"allocation_attempted":False})
     raw=pricing._request(API+"/catalog/datacenters","GET",None)
     rows=raw.get("dataCenters",raw.get("datacenters",[])) if isinstance(raw,dict) else raw
     regions=sorted({r["id"] for r in rows if isinstance(r,dict) and valid_region(r.get("id"))})

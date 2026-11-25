@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from time import sleep
 from urllib.error import URLError
 from hephaestus.providers.runpod.execution import RunPodApiError, AmbiguousRunPodOperation
-from hephaestus.providers.runpod.anvil_live_lease import GPU, GLOBAL, MAX_RATE, DISK_ALLOWANCE
+from hephaestus.providers.runpod.anvil_live_lease import GPU, GLOBAL, MAX_RATE, DISK_ALLOWANCE, LIVE_LEASE_SECONDS, fundable
 
 STOCK = {"LOW", "MEDIUM", "HIGH"}
 
@@ -87,7 +87,7 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
     account=observe("prepaid_budget",pricing.account)
     if account.autopay_enabled:
         fail("prepaid_budget","autopay_enabled")
-    if account.credit_balance_usd<=total+account.already_spending_usd_per_hour:
+    if not fundable(account,total):
         fail("prepaid_budget","insufficient_prepaid_funding")
     emit("prepaid_budget","verified",fundable=True)
     selected=observe("final_stock_recheck",lambda:provider.select_gpu([gpu]))
@@ -96,7 +96,7 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
     emit("final_stock_recheck","verified",exact_gpu_selected=True)
     return {"schema":"anvil.first-live-price.v1","gpu":gpu,"region":region,
             "gpu_hour_usd":str(q.price_usd_per_hour),"disk_hour_allowance_usd":str(DISK_ALLOWANCE),
-            "all_in_hour_ceiling_usd":str(total),"maximum_wall_seconds":3600,
+            "all_in_hour_ceiling_usd":str(total),"maximum_wall_seconds":LIVE_LEASE_SECONDS,
             "existing_volume":GLOBAL,"disk_price_source":"https://docs.runpod.io/pods/pricing",
             "observed_at":datetime.now(timezone.utc).isoformat(),"allocation_attempted":False}
 

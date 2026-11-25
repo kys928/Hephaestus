@@ -28,6 +28,19 @@ MAX_RATE = Decimal("0.65")
 DISK_ALLOWANCE = Decimal("0.01")
 MAX_DISK_GB = 20
 MAX_SECONDS = 3600
+LIVE_LEASE_SECONDS = 2400  # Shorter than the approved maximum; includes cleanup.
+FUNDING_RESERVE_USD = Decimal('0.05')
+
+
+def account_draw(account, hourly_total, seconds=LIVE_LEASE_SECONDS):
+    if type(seconds) is not int or not 0 < seconds <= MAX_SECONDS:
+        raise ValueError('funding duration outside approved lease')
+    return (hourly_total + account.already_spending_usd_per_hour) * Decimal(seconds) / Decimal(3600)
+
+
+def fundable(account, hourly_total, seconds=LIVE_LEASE_SECONDS):
+    return (not account.autopay_enabled and 0 < hourly_total <= MAX_RATE
+            and account.credit_balance_usd >= account_draw(account,hourly_total,seconds)+FUNDING_RESERVE_USD)
 CLEANUP_RESERVE_SECONDS = 300
 BASE_NAME = "hephaestus-anvil-first-live"
 

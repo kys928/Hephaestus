@@ -32,7 +32,7 @@ from hephaestus.jobs import SQLiteJobQueue
 from hephaestus.production.original_cuda_identity import verified_original_roles
 from hephaestus.providers.runpod.anvil_live_lease import (
     AnvilPodIdentity, BASE_NAME, REGION, REGIONAL, GLOBAL, GPU, IMAGE,
-    MAX_RATE, DISK_ALLOWANCE, CLEANUP_RESERVE_SECONDS,
+    MAX_RATE, DISK_ALLOWANCE, CLEANUP_RESERVE_SECONDS, LIVE_LEASE_SECONDS, fundable,
 )
 from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader, AnvilRetainedWriter
 from hephaestus.providers.runpod.anvil_renewed_allocation import APPROVAL, RenewedAnvilAllocation
@@ -83,7 +83,7 @@ def source_archive(marker):
 def independent_deadline(marker):
     # Reuse the independently hosted, previously exercised Actions handshake.
     audit.WATCHDOG_FILE="anvil-live-gpu-watchdog.yml"
-    audit.LEASE_MINUTES=60
+    audit.LEASE_MINUTES=LIVE_LEASE_SECONDS//60
     return audit.active_watchdog(marker)
 
 
@@ -253,6 +253,13 @@ def allocate(mission,authority,deadline,price_ref,known):
         ref=publish(mission.artifacts,doc)
         mission.retain(ref)
         print("ANVIL_PRE_INTENT_STOCK="+json.dumps(dict(doc,diagnostic_ref=ref),sort_keys=True),flush=True)
+    pricing=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+    account=pricing.account()
+    q=pricing.quote_gpu(gpu_id=sku,datacenter_id=region)
+    total=q.price_usd_per_hour+DISK_ALLOWANCE
+    if (q.gpu_memory_gb<48 or total>Decimal(mission.selected["all_in_hour_ceiling_usd"])
+            or not fundable(account,total)):
+        raise PermissionError("fresh pre-intent price or bounded funding differs")
     recheck_exact_stock(mission.provider,sku,report=report_stock)
     if now()+timedelta(minutes=15)>=deadline:
         raise PermissionError("insufficient bounded lease after stock rechecks")

@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
-from hephaestus.providers.runpod.anvil_live_lease import AnvilPodIdentity, REGION, REGIONAL, MAX_SECONDS
+from hephaestus.providers.runpod.anvil_live_lease import AnvilPodIdentity, REGION, REGIONAL, LIVE_LEASE_SECONDS
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
@@ -48,7 +48,7 @@ def main():
         if len(jobs) != 1:
             raise PermissionError("watchdog job identity is not unique and active")
         started = datetime.fromisoformat(jobs[0]["started_at"].replace("Z", "+00:00"))
-        deadline = started + timedelta(seconds=MAX_SECONDS)
+        deadline = started + timedelta(seconds=LIVE_LEASE_SECONDS)
         if not timedelta(0) <= datetime.now(timezone.utc) - started <= timedelta(minutes=5):
             raise PermissionError("watchdog start is stale or unbound")
         # Independently inspect the one-use intent before accepting a dynamic Pod.
