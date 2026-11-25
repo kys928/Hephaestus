@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 
 
 CZECH_VOLUME = "cviwpryzao"
@@ -32,12 +33,14 @@ def verify_stream(stream, size: int, digest: str) -> None:
         raise ValueError(f"incorrect stream SHA-256 for {digest}")
 
 
-def update_from_stream(stream, size: int, digest: str, hasher) -> None:
+def update_from_stream(stream, size: int, digest: str, hasher, on_bytes=lambda _: None) -> None:
     remaining = size
+    read = getattr(stream, "read1", stream.read)
     while remaining:
-        chunk = stream.read(min(8 * 1024 * 1024, remaining))
+        chunk = read(min(8 * 1024 * 1024, remaining))
         if not chunk or len(chunk) > remaining:
             raise ValueError(f"incorrect stream length for {digest}")
+        on_bytes(len(chunk))
         hasher.update(chunk)
         remaining -= len(chunk)
 
@@ -64,10 +67,11 @@ def verify(root: Path, manifest: dict) -> list[dict]:
     return shards
 
 
-def verify_s3_ranges(client, address: dict, size: int, digest: str, range_bytes: int) -> None:
+def verify_s3_ranges(client, address: dict, size: int, digest: str, range_bytes: int, *, progress=lambda **_: None) -> None:
     hasher = hashlib.sha256()
     for first in range(0, size, range_bytes):
         last = min(first + range_bytes, size) - 1
+        progress(event="range_attempt", sha256=digest, first=first, last=last)
         response = client.get_object(**address, Range=f"bytes={first}-{last}")
         length = last - first + 1
         with closing(response["Body"]) as stream:
@@ -75,13 +79,24 @@ def verify_s3_ranges(client, address: dict, size: int, digest: str, range_bytes:
                     or response.get("ContentRange") != f"bytes {first}-{last}/{size}"
                     or response.get("ContentLength") != length):
                 raise ValueError(f"incorrect bounded range for {digest}")
-            update_from_stream(stream, length, digest, hasher)
+            received = 0
+
+            def count_bytes(count):
+                nonlocal received
+                received += count
+
+            try:
+                update_from_stream(stream, length, digest, hasher, count_bytes)
+            finally:
+                progress(event="range_read", sha256=digest, first=first, last=last, bytes=received)
     if hasher.hexdigest() != digest:
         raise ValueError(f"incorrect stream SHA-256 for {digest}")
 
 
-def verify_s3(client, manifest: dict, *, metadata_only: bool, chunked: bool = False) -> list[dict]:
+def verify_s3(client, manifest: dict, *, metadata_only: bool, chunked: bool = False, progress=lambda **_: None) -> list[dict]:
     shards = validated_shards(manifest)
+    if chunked and sum((row["bytes"] + (64 << 20) - 1) // (64 << 20) for row in shards) > 268:
+        raise ValueError("exceeds the authorized range-request ceiling")
     for row in shards:
         digest, size = row["sha256"], row["bytes"]
         address = {"Bucket": CZECH_VOLUME, "Key": PLANNER_PREFIX + digest}
@@ -90,7 +105,8 @@ def verify_s3(client, manifest: dict, *, metadata_only: bool, chunked: bool = Fa
             raise ValueError(f"unexpected object length for {digest}")
         if metadata_only:
             continue
-        verify_s3_ranges(client, address, size, digest, 64 * 1024 * 1024 if chunked else size)
+        verify_s3_ranges(client, address, size, digest, 64 * 1024 * 1024 if chunked else size, progress=progress)
+        progress(event="shard_verified", sha256=digest, bytes=size)
     return shards
 
 
@@ -112,6 +128,7 @@ def main():
     parser.add_argument("blobs", help="local directory, czech-s3-head, czech-s3-stream, or czech-s3-chunked")
     parser.add_argument("manifest", type=Path)
     parser.add_argument("manifest_sha256")
+    parser.add_argument("--progress", type=Path)
     args = parser.parse_args()
     with args.manifest.open("rb") as stream:
         raw = stream.read(65537)
@@ -121,7 +138,18 @@ def main():
     metadata_only = args.blobs == "czech-s3-head"
     chunked = args.blobs == "czech-s3-chunked"
     if metadata_only or chunked or args.blobs == "czech-s3-stream":
-        checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only, chunked=chunked)
+        if args.progress:
+            with args.progress.open("x", encoding="utf-8", buffering=1) as journal:
+                def progress(**event):
+                    event["manifest_sha256"] = args.manifest_sha256
+                    line = json.dumps(event, sort_keys=True)
+                    print(line, file=journal, flush=True)
+                    print(line, file=sys.stderr, flush=True)
+
+                checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only,
+                                    chunked=chunked, progress=progress)
+        else:
+            checked = verify_s3(czech_s3_client(), manifest, metadata_only=metadata_only, chunked=chunked)
     else:
         checked = verify(Path(args.blobs), manifest)
     field = "metadata_checked" if metadata_only else "verified"

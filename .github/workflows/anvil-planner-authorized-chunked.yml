@@ -1,0 +1,35 @@
+name: Anvil one-shot Planner chunked read
+on:
+  pull_request:
+    paths:
+      - .github/workflows/anvil-planner-authorized-chunked.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/anvil-integration' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'boto3>=1.35,<2'
+      - name: Read exact pinned ranges with no retries
+        env:
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+        run: |
+          timeout --kill-after=30s 50m python scripts/anvil_verify_planner_shards.py czech-s3-chunked \
+            configs/models/anvil_planner_shard_manifest.json \
+            46ca0a4d8270fda4d2d5bba4ede7aec79d3f01571b7523cddbe957ab5d0eb35c \
+            --progress planner-progress.jsonl > planner-custody.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planner-chunked-read
+          path: |
+            planner-progress.jsonl
+            planner-custody.json
+          if-no-files-found: error
