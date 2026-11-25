@@ -109,7 +109,14 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
             assert pod_id=="fixture123"
     primary=FixtureMission("primary")
     reviewer=FixtureMission("reviewer")
-    monkeypatch.setattr(mod,"quote",lambda mission:"sha256:"+"d"*64)
+    def quote(mission):
+        doc={"schema":"anvil.first-live-price.v1","gpu":"NVIDIA RTX A6000","region":"CA-MTL-1",
+             "existing_volume":mod.GLOBAL,"all_in_hour_ceiling_usd":"0.60"}
+        mission.selected=doc
+        ref=publish(mission.artifacts,doc)
+        mission.retain(ref)
+        return ref
+    monkeypatch.setattr(mod,"quote",quote)
     def restore(mission,ref,frontier):
         board=AnvilState(SQLiteStateRepository(mission.root/"restored.sqlite"),lambda _:False,lambda *_:False)
         return board.restore(plan["investigation"],mission.artifacts,ref,expected_frontier=frontier)
@@ -131,7 +138,7 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
                     loads.append({"schema":"anvil.cuda-offline-load.v1","pod_id":"fixture123","role":role,
                         "model_id":model.model_id,"revision":model.revision,"adapter_sha256":model.adapter.sha256,
                         "manifest_sha256":MANIFEST,"cuda":"12.8","environment":env,
-                        "generation_count":0,"peak_allocated_bytes":100})
+                        "generation_count":0,"peak_allocated_bytes":100,"gpu_sku":"NVIDIA RTX A6000","gpu_name":"NVIDIA RTX A6000","vram_bytes":48*1024**3,"compute_capability":[8,6]})
                 runtime={"schema":"anvil.qualified-runtime.v1","pod_id":"fixture123",
                     "source_sha256":primary.source_hash,"lock_sha256":mod.LOCK_HASH,"loads":loads}
                 return {"runtime":runtime,"runtime_ref":digest(runtime)}
@@ -154,13 +161,13 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
                 base_revision=model.revision,adapter_sha256=model.adapter.sha256,adapter_source=model.adapter.s3_key,
                 tokenizer_id=model.model_id,tokenizer_revision=model.revision,evidence_refs=[e.ref for e in task.evidence],
                 generator="PinnedTransformersRoleGenerator",seed=271828,max_new_tokens=512,
-                execution={"device":"cuda:0","gpu_name":"NVIDIA A40","cuda_version":"12.8","generated_token_ids":[1,2]})
+                execution={"device":"cuda:0","gpu_name":"NVIDIA RTX A6000","cuda_version":"12.8","generated_token_ids":[1,2]})
             return {"receipt_ref":digest(receipt),"document":receipt}
     def allocate(mission,authority,deadline,price_ref,known):
         mission.mailbox.consume_allocation(mission.plan_ref,{
             "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
             "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,
-            "operation_id":mission.identity.operation_id,"deadline":deadline.isoformat()})
+            "operation_id":mission.identity.operation_id,"deadline":deadline.isoformat(),"gpu":"NVIDIA RTX A6000","region":"CA-MTL-1","maximum_usd":"0.65","maximum_pods":1})
         known.add("fixture123")
         return "fixture123",Worker()
     monkeypatch.setattr(mod,"allocate",allocate)

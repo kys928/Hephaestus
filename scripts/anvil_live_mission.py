@@ -40,6 +40,8 @@ from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader
 from hephaestus.providers.runpod.anvil_live_transport import AnvilGatewayClient
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+from hephaestus.providers.runpod.anvil_dynamic_placement import discover
+from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, valid_region
 from hephaestus.providers.runpod.anvil_placement_diagnostics import PlacementFailure, inspect_placement, safe_failure
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
@@ -118,9 +120,10 @@ class Mission:
         if (os.environ.get("GITHUB_REPOSITORY")!="kys928/Hephaestus"
                 or os.environ.get("GITHUB_REF")!="refs/heads/feature/anvil-integration"
                 or os.environ.get("GITHUB_RUN_ATTEMPT")!="1"
-                or os.environ.get("ANVIL_FIRST_LIVE_ACTIVATION")!="approved-one-a40-0.65-usd-3600s"):
+                or os.environ.get("ANVIL_FIRST_LIVE_ACTIVATION")!="approved-dynamic-one-gpu-0.65-usd-3600s"):
             raise PermissionError("fresh exact approved one-shot activation required")
         self.identity=AnvilPodIdentity(self.marker)
+        self.selected=None
         self.root=Path("/tmp")/("anvil-live-"+os.environ["GITHUB_RUN_ID"]+"-"+mode)
         self.root.mkdir(mode=0o700,exist_ok=False)
         self.artifacts=FileSystemArtifactStore(self.root/"artifacts")
@@ -176,11 +179,12 @@ class Mission:
 
     def runtime_args(self,pod_id):
         return dict(pod_id=pod_id,source_sha256=self.source_hash,
-                    lock_sha256=LOCK_HASH,image_qualification=self.image_qualification)
+                    lock_sha256=LOCK_HASH,image_qualification=self.image_qualification,
+                    gpu_sku=self.selected["gpu"])
 
     def provider_check(self,pod_id):
         pod=self.provider.get_pod(pod_id)
-        if not self.identity.qualified(pod):
+        if not self.selected or not self.identity.qualified(pod,region=self.selected["region"],sku=self.selected["gpu"]):
             raise PermissionError("provider worker differs from approved scope")
         return pod
 
@@ -206,24 +210,39 @@ def quote(mission):
         ref=publish(mission.artifacts,doc)
         mission.retain(ref)
         print("ANVIL_PLACEMENT_DIAGNOSTIC="+json.dumps(dict(doc,diagnostic_ref=ref),sort_keys=True),flush=True)
-    doc=inspect_placement(pricing,mission.provider,region=REGION,report=report)
-    ref=publish(mission.artifacts,doc)
-    mission.retain(ref)
-    return ref
+    for candidate in discover(pricing,report):
+        config=RunPodConfig(candidate["region"],REGIONAL,mission.config.s3_endpoint_url,mission.config.api_base_url)
+        provider=RunPodExecutionAdapter(config,EnvironmentSecretsProvider(),state_root=mission.root/"provider")
+        try:
+            doc=inspect_placement(pricing,provider,region=candidate["region"],gpu=candidate["gpu"],report=report)
+        except PlacementFailure:
+            continue  # read-only fallback before one-use allocation intent
+        mission.selected=doc
+        mission.provider=provider
+        ref=publish(mission.artifacts,doc)
+        mission.retain(ref)
+        print("ANVIL_DYNAMIC_SELECTED="+json.dumps(doc,sort_keys=True),flush=True)
+        return ref
+    raise PermissionError("no eligible funded Global GPU placement")
 
 
 def allocate(mission,authority,deadline,price_ref,known):
     if mission.identity.discover(mission.provider) or now()+timedelta(minutes=15)>=deadline:
         raise PermissionError("existing Pod or insufficient remaining bounded lease")
+    if not mission.selected:
+        raise PermissionError("no selected qualified placement")
+    region,sku=mission.selected["region"],mission.selected["gpu"]
+    if mission.provider.select_gpu([sku])!=sku:
+        raise PermissionError("selected stock disappeared before intent")
     token=token_hex(32)
     print("::add-mask::"+token,flush=True)
     source=(ROOT/"scripts/anvil_live_pod_gateway.py").read_bytes()
     code=b64encode(zlib.compress(source,9)).decode()
-    body={"name":BASE_NAME,"gpu":{"id":GPU,"count":1},"cloud":"SECURE","dataCenterIds":[REGION],
+    body={"name":BASE_NAME,"gpu":{"id":sku,"count":1},"cloud":"SECURE","dataCenterIds":[region],
           "image":IMAGE,"disk":20,"mounts":GlobalVolumeConfig(GLOBAL).mounts(),"ports":["8787/http"],
           "entrypoint":[],"cmd":["python","-u","-c",f"import base64,zlib;exec(zlib.decompress(base64.b64decode('{code}')))"],
           "env":{"ANVIL_LIVE_ACTIVATION":mission.marker,"ANVIL_LIVE_TOKEN":token,
-                 "ANVIL_PRICE_REF":price_ref,
+                 "ANVIL_PRICE_REF":price_ref,"ANVIL_GPU_SKU":sku,
                  "ANVIL_DEADLINE_UTC":deadline.isoformat(),"ANVIL_SOURCE_SHA256":mission.source_hash,
                  "ANVIL_PACKAGE_LOCK_SHA256":LOCK_HASH,"ANVIL_AUTHORITY_PUBLIC_HEX":authority.public_key_hex,
                  "ANVIL_AUTHORITY_REF":authority.public_key_ref}}
@@ -231,10 +250,10 @@ def allocate(mission,authority,deadline,price_ref,known):
         "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
         "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,
         "operation_id":mission.identity.operation_id,"deadline":deadline.isoformat(),
-        "gpu":GPU,"region":REGION,"maximum_usd":"0.65","maximum_pods":1})
+        "gpu":sku,"region":region,"maximum_usd":"0.65","maximum_pods":1})
     # One durable provider intent. A lost acknowledgement is reconciled by the
     # independent marker watcher; never invoke this allocator twice.
-    pod=mission.provider._create_pod(body,operation_id=mission.marker,gpu_type_ids=[GPU])
+    pod=mission.provider._create_pod(body,operation_id=mission.marker,gpu_type_ids=[sku])
     # The create response need not contain the full provider representation.
     # Record the exact ID before checking authenticated full readback.
     pod_id=pod["id"]
@@ -328,7 +347,8 @@ def controller(mission):
                 raise RuntimeError("independently rejected role receipt; no retry")
             mission.import_refs(review["attestation_ref"])
             accepted=ctl.admit_slot(slot=slot,receipt_ref=receipt_ref,attestation_ref=review["attestation_ref"],
-                retention_ref=review["retention_ref"],retained_artifacts=mission.reader)
+                retention_ref=review["retention_ref"],retained_artifacts=mission.reader,
+                gpu_name=runtime["runtime"]["loads"][0]["gpu_name"])
             slots[-1].update(status="accepted",frontier=accepted.frontier,
                             attestation_ref=review["attestation_ref"],retention_ref=review["retention_ref"])
             mission.checkpoint()
@@ -405,6 +425,14 @@ def reviewer(mission):
         if (not intent or intent.get("activation")!=mission.marker or intent.get("deadline")!=deadline.isoformat()
                 or intent.get("source_sha256")!=mission.source_hash or intent.get("operation_id")!=mission.identity.operation_id):
             raise PermissionError("reviewer cannot confirm exact consumed allocation intent")
+        price,=mission.import_refs(intent["price_ref"])
+        if (price.get("gpu")!=intent.get("gpu") or price.get("region")!=intent.get("region")
+                or price.get("gpu") not in GPU_NAMES or not valid_region(price.get("region"))
+                or price.get("schema")!="anvil.first-live-price.v1" or price.get("existing_volume")!=GLOBAL
+                or not 0<Decimal(price["all_in_hour_ceiling_usd"])<=MAX_RATE
+                or intent.get("maximum_usd")!="0.65" or intent.get("maximum_pods")!=1):
+            raise PermissionError("independent placement identity or price differs")
+        mission.selected=price
         runtime_ref=runtime["runtime_ref"]
         doc,=mission.import_refs(runtime_ref)
         runtime_result={"runtime":doc,"runtime_ref":runtime_ref}
