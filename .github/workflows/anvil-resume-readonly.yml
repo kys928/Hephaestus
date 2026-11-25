@@ -1,0 +1,50 @@
+name: Anvil resume read-only observations
+on:
+  pull_request:
+    paths:
+      - .github/workflows/anvil-resume-readonly.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/anvil-integration' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'boto3>=1.35,<2' 'transformers>=5.6.1,<5.7' 'mistral-common>=1.8.6,<2'
+      - name: Verify only Czech Planner aliases and auxiliaries
+        env:
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+        run: python scripts/anvil_planner_auxiliary.py planner-aux | tee planner-aux-evidence.jsonl
+        shell: bash
+      - name: Load verified metadata and tokenizer strictly offline
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: |
+          python - <<'PY'
+          from transformers import AutoConfig, AutoTokenizer
+          model = AutoConfig.from_pretrained("planner-aux", local_files_only=True)
+          tokenizer = AutoTokenizer.from_pretrained("planner-aux", local_files_only=True)
+          assert model.model_type == "mistral3" and tokenizer.encode("Anvil")
+          print("PLANNER_OFFLINE_CONFIG_TOKENIZER=true")
+          PY
+      - name: Inspect eligible Global Volume GPU locations
+        if: always()
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: python scripts/anvil_global_gpu_inventory.py | tee global-gpu-evidence.jsonl
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: anvil-resume-readonly
+          path: |
+            planner-aux-evidence.jsonl
+            global-gpu-evidence.jsonl
