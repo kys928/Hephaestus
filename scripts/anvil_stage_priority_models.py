@@ -15,11 +15,17 @@ TOTAL_BYTES = 25_602_848_544
 
 
 @contextmanager
-def open_regular(path: Path):
+def open_regular(path: Path, expected_bytes: int):
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-            raise ValueError("model source must be a regular file")
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size != expected_bytes:
+            raise ValueError("model source type or size differs from the manifest")
         yield stream
+        after = os.fstat(stream.fileno())
+        if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+            after.st_size, after.st_mtime_ns, after.st_ctime_ns,
+        ):
+            raise ValueError("model source changed while reading")
 
 
 def check_stream(stream, item, target=None):
@@ -33,7 +39,7 @@ def check_stream(stream, item, target=None):
         digest.update(data)
         if target is not None:
             target.write(data)
-    if stream.read(1) or digest.hexdigest() != item["sha256"]:
+    if digest.hexdigest() != item["sha256"]:
         raise ValueError("model payload differs from manifest")
 
 
@@ -59,16 +65,21 @@ def run(destination: Path, *, planner_blobs: Path | None):
         for name, item in info["files"].items():
             path = snapshot / name
             if not staging:
-                with open_regular(path) as stream:
+                with open_regular(path, item["bytes"]) as stream:
                     check_stream(stream, item)
             else:
                 if role == "planner":
-                    source = open_regular(planner_blobs / GIT_BLOBS.get(name, item["sha256"]))
+                    source = open_regular(planner_blobs / GIT_BLOBS.get(name, item["sha256"]), item["bytes"])
                 else:
                     source = urlopen(f"https://huggingface.co/{info['model_id']}/resolve/{info['revision']}/{name}",
                                      timeout=30)
-                with source as stream, path.open("xb") as target:
-                    check_stream(stream, item, target)
+                with source as stream:
+                    if role == "diagnosis" and (
+                        stream.status != 200 or stream.headers.get("Content-Length") != str(item["bytes"])
+                    ):
+                        raise ValueError("upstream response does not match the transfer ceiling")
+                    with path.open("xb") as target:
+                        check_stream(stream, item, target)
             print(json.dumps({"role": role, "file": name, **item,
                               "observation": "staged_input_verified" if staging else "destination_readback_verified"}),
                   flush=True)
