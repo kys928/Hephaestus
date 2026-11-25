@@ -19,7 +19,8 @@ def test_dynamic_selection_filters_and_ranks():
     rows=discover(Pricing())
     assert len(rows)==4
     assert rows[0]["gpu"]=="NVIDIA RTX A6000" and rows[0]["region"]=="CA-MTL-1"
-    assert all(Decimal(x["all_in_hour_ceiling_usd"])<=Decimal(".65") for x in rows)
+    from hephaestus.providers.runpod.anvil_live_lease import mission_cost
+    assert all(mission_cost(Decimal(x["all_in_hour_ceiling_usd"]))<=Decimal(".65") for x in rows)
 
 def test_discovery_rechecks_missing_then_available():
     class Flaky(Pricing):
@@ -53,6 +54,21 @@ def test_shorter_lease_qualifies_realistic_balance_without_weakening_ceiling():
     a=SimpleNamespace(autopay_enabled=False,credit_balance_usd=Decimal("1.21"),already_spending_usd_per_hour=Decimal(".797"))
     assert fundable(a,Decimal(".60"))
     assert not fundable(a,Decimal(".60"),3600)
-    assert not fundable(a,Decimal(".70"))
+    assert fundable(a,Decimal(".70"))
+    assert not fundable(a,Decimal("1.00"))
     a.credit_balance_usd=Decimal(".90")
     assert not fundable(a,Decimal(".60"))
+
+
+def test_global_selection_uses_total_lease_cost_not_arbitrary_hourly_cap():
+    class RealRates(Pricing):
+        def _request(self,url,*args):
+            if url==REST_URL:
+                return {"gpus":[{"id":gpu,"secure":True,"memory":48,"price":{"secure":price}}
+                        for gpu,price in [("NVIDIA A40",".59"),("NVIDIA RTX A6000",".69"),("NVIDIA L40",".82"),("NVIDIA L40S","1.09")]]}
+            if "GPU_AVAILABILITY" in url:
+                return {"id":url.split("/")[-1].split("?")[0],"gpuAvailability":[{"id":sku,"availability":"LOW"}
+                        for sku in ("NVIDIA A40","NVIDIA RTX A6000","NVIDIA L40","NVIDIA L40S")]}
+            return super()._request(url,*args)
+    rows=discover(RealRates())
+    assert {x["gpu"] for x in rows}=={"NVIDIA A40","NVIDIA RTX A6000","NVIDIA L40"}

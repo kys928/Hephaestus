@@ -336,3 +336,7 @@ Run 45704240299 passed all price, stock, mount, funding and independent runner g
 Qualification 45704660712 passed 49 focused tests, prior worker absent, original renewed approval unused and 2400-second A40 lease still fundable. Reactivate the same single-use grant with bounded pre-intent rediscovery. No ceiling or scientific changes; no paid retry.
 
 Activated `3473737ca5571b6a9ef18b19a409327eb1ae41bc`; mission 45704766570 and watchdog 45704766240 both in progress. Retired triggers; actual allocation and genuine specialist inference not yet verified.
+
+### Operator pause and removal of unintended hourly restriction
+
+Operator directed waiting for balance recovery and removing assistant-introduced virtual locks. No new paid activation or automatic launch on funding recovery. The historic $0.65 grant is a total mission cost ceiling, not a separate hourly cap. Future inactive source now derives maximum hourly cost from total authorized cost and the actual hard lease, and verifies projected cost independently of combined-account funding. Existing launched commits remain immutable. With a 2400s lease, $0.65 implies $0.975/hour all-in, making the previously quoted RTX A6000 and L40 eligible on cost, if fresh funding and stock permit. Preserve consumed intent history and same-operation idempotency; design future grants around operator-authorized launches, not repeated manual confirmations or fixed investigation identities. No new allocation authorized by this change.

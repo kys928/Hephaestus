@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from time import sleep
 from urllib.error import URLError
 from hephaestus.providers.runpod.execution import RunPodApiError, AmbiguousRunPodOperation
-from hephaestus.providers.runpod.anvil_live_lease import GPU, GLOBAL, MAX_RATE, DISK_ALLOWANCE, LIVE_LEASE_SECONDS, fundable
+from hephaestus.providers.runpod.anvil_live_lease import GPU, GLOBAL, MAX_RATE, DISK_ALLOWANCE, LIVE_LEASE_SECONDS, fundable, mission_cost, MAX_POD_COST_USD
 
 STOCK = {"LOW", "MEDIUM", "HIGH"}
 
@@ -62,8 +62,9 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
          vram_gb=q.gpu_memory_gb,all_in_ceiling_usd=str(total))
     if q.gpu_memory_gb<48:
         fail("gpu_quote","insufficient_vram")
-    if total>MAX_RATE:
-        fail("gpu_quote","price_ceiling_exceeded",all_in_ceiling_usd=str(total))
+    if mission_cost(total)>MAX_POD_COST_USD:
+        fail("gpu_quote","mission_cost_ceiling_exceeded",all_in_ceiling_usd=str(total),
+             projected_pod_cost_usd=str(mission_cost(total)))
     status,catalog=observe("regional_catalog",lambda:provider._request("GET","catalog/datacenters/"+region+"?include=GPU_AVAILABILITY"))
     if status!=200 or not isinstance(catalog,dict) or catalog.get("id")!=region or not isinstance(catalog.get("gpuAvailability"),list):
         fail("regional_catalog","catalog_identity_or_schema",http_status=status if type(status) is int else None,
@@ -97,6 +98,7 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
     return {"schema":"anvil.first-live-price.v1","gpu":gpu,"region":region,
             "gpu_hour_usd":str(q.price_usd_per_hour),"disk_hour_allowance_usd":str(DISK_ALLOWANCE),
             "all_in_hour_ceiling_usd":str(total),"maximum_wall_seconds":LIVE_LEASE_SECONDS,
+            "maximum_pod_cost_usd":str(MAX_POD_COST_USD),"projected_pod_cost_usd":str(mission_cost(total)),
             "existing_volume":GLOBAL,"disk_price_source":"https://docs.runpod.io/pods/pricing",
             "observed_at":datetime.now(timezone.utc).isoformat(),"allocation_attempted":False}
 

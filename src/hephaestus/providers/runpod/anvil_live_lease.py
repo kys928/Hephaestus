@@ -22,14 +22,21 @@ REGIONAL = "cviwpryzao"  # operation journal namespace, not mounted
 REGION = "EU-SE-1"
 GPU = "NVIDIA A40"
 IMAGE = "runpod/pytorch@sha256:4d1721e62b56d345c83b4fd6090664be6daf9312caab5b2e76f23d8231941851"
-MAX_RATE = Decimal("0.65")
+MAX_POD_COST_USD = Decimal("0.65")  # Historical grant: total mission cost, not hourly price.
 # RunPod publishes USD 0.10/GB/month for running container disks.
 # USD 0.01/hour conservatively covers 20 GB even for a 28-day month.
 DISK_ALLOWANCE = Decimal("0.01")
 MAX_DISK_GB = 20
 MAX_SECONDS = 3600
 LIVE_LEASE_SECONDS = 2400  # Shorter than the approved maximum; includes cleanup.
+MAX_RATE = MAX_POD_COST_USD * Decimal(3600) / Decimal(LIVE_LEASE_SECONDS)
 FUNDING_RESERVE_USD = Decimal('0.05')
+
+
+def mission_cost(hourly_total, seconds=LIVE_LEASE_SECONDS):
+    if type(seconds) is not int or not 0 < seconds <= MAX_SECONDS:
+        raise ValueError('cost duration outside approved lease')
+    return hourly_total * Decimal(seconds) / Decimal(3600)
 
 
 def account_draw(account, hourly_total, seconds=LIVE_LEASE_SECONDS):
@@ -39,7 +46,8 @@ def account_draw(account, hourly_total, seconds=LIVE_LEASE_SECONDS):
 
 
 def fundable(account, hourly_total, seconds=LIVE_LEASE_SECONDS):
-    return (not account.autopay_enabled and 0 < hourly_total <= MAX_RATE
+    return (not account.autopay_enabled and 0 < hourly_total
+            and mission_cost(hourly_total,seconds)<=MAX_POD_COST_USD
             and account.credit_balance_usd >= account_draw(account,hourly_total,seconds)+FUNDING_RESERVE_USD)
 CLEANUP_RESERVE_SECONDS = 300
 BASE_NAME = "hephaestus-anvil-first-live"

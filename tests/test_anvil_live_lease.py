@@ -50,7 +50,7 @@ def test_gpu_watchdog_deadline_and_unrelated_resources():
 
 def test_gpu_watchdog_terminates_own_wrong_sku_or_price():
     identity = AnvilPodIdentity("b" * 40)
-    for pod in [row(identity, costPerHr="0.66"),
+    for pod in [row(identity, costPerHr="0.97"),
                 row(identity, gpu={"id": "different", "count": 1})]:
         provider = Provider([pod])
         start = datetime.now(timezone.utc)
