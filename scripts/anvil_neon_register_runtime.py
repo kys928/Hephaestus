@@ -1,4 +1,5 @@
 """Operator-only handoff. Prompt for the Neon owner DSN and register the runtime DSN."""
+import argparse
 from getpass import getpass
 import json
 import re
@@ -19,7 +20,7 @@ def checked_command(args, *, stdin=None):
     return result.stdout
 
 
-def register():
+def register(*, replace_existing=False):
     import psycopg
     from psycopg import sql
     from psycopg.conninfo import conninfo_to_dict, make_conninfo
@@ -29,7 +30,7 @@ def register():
         raise RuntimeError("use a private interactive terminal with the GitHub CLI installed")
     checked_command([gh, "auth", "status", "--hostname", "github.com"])
     existing = checked_command([gh, "secret", "list", "--repo", REPOSITORY, "--json", "name"])
-    if any(row.get("name") == SECRET_NAME for row in json.loads(existing)):
+    if not replace_existing and any(row.get("name") == SECRET_NAME for row in json.loads(existing)):
         raise FileExistsError("runtime secret already exists; verify it instead of replacing it")
     owner = conninfo_to_dict(getpass("Paste the direct Neon owner DSN for hephaestus-anvil: "))
     host = owner.get("host", "")
@@ -66,7 +67,10 @@ def register():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--replace-existing", action="store_true")
+    args = parser.parse_args()
     try:
-        register()
+        register(replace_existing=args.replace_existing)
     except Exception as error:
         sys.exit(f"Runtime registration stopped ({type(error).__name__}). No credentials were printed.")
