@@ -40,6 +40,7 @@ from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader
 from hephaestus.providers.runpod.anvil_live_transport import AnvilGatewayClient
 from hephaestus.providers.runpod.config import RunPodConfig
 from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
+from hephaestus.providers.runpod.anvil_placement_diagnostics import PlacementFailure, inspect_placement, safe_failure
 from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig
 from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
@@ -201,19 +202,11 @@ class Mission:
 
 def quote(mission):
     pricing=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
-    gpu=pricing.quote_gpu(gpu_id=GPU,datacenter_id=REGION)
-    if mission.provider.select_gpu([GPU])!=GPU or gpu.gpu_memory_gb<48:
-        raise PermissionError("exact approved A40 not available")
-    status, volume=mission.provider._request("GET","global-volumes/"+GLOBAL)
-    account=pricing.account()
-    total=gpu.price_usd_per_hour+DISK_ALLOWANCE
-    if (status!=200 or volume.get("id")!=GLOBAL or total>MAX_RATE or account.autopay_enabled
-            or account.credit_balance_usd<=total+account.already_spending_usd_per_hour):
-        raise PermissionError("placement or all-in conservative prepaid rate gate failed")
-    doc={"schema":"anvil.first-live-price.v1","gpu":GPU,"region":REGION,"gpu_hour_usd":str(gpu.price_usd_per_hour),
-        "disk_hour_allowance_usd":str(DISK_ALLOWANCE),"all_in_hour_ceiling_usd":str(total),
-        "maximum_wall_seconds":3600,"existing_volume":GLOBAL,
-        "disk_price_source":"https://docs.runpod.io/pods/pricing"}
+    def report(doc):
+        ref=publish(mission.artifacts,doc)
+        mission.retain(ref)
+        print("ANVIL_PLACEMENT_DIAGNOSTIC="+json.dumps(dict(doc,diagnostic_ref=ref),sort_keys=True),flush=True)
+    doc=inspect_placement(pricing,mission.provider,region=REGION,report=report)
     ref=publish(mission.artifacts,doc)
     mission.retain(ref)
     return ref
@@ -282,23 +275,32 @@ def controller(mission):
     known=set()
     failure=None
     cleanup_confirmed=False
+    failure_detail=None
+    stage="placement_quote"
     try:
         price_ref=quote(mission)
+        stage="independent_watchdog_recheck"
         # Re-observe both independent runners immediately before paid allocation.
         if independent_deadline(mission.marker)!=hard_deadline:
             raise PermissionError("watchdog lease changed")
+        stage="independent_reviewer_recheck"
         check_reviewer_active(mission.marker)
+        stage="allocation"
         pod,client=allocate(mission,authority,deadline,price_ref,known)
         known.add(pod)
+        stage="worker_health"
         await_health(client,min(deadline,now()+timedelta(minutes=8)))
+        stage="worker_setup"
         if client.execute("setup",mission.source)!={"source_sha256":mission.source_hash,"lock_sha256":LOCK_HASH}:
             raise PermissionError("worker source setup differs")
+        stage="cuda_qualification"
         runtime=client.execute("qualify",b"{}")
         runtime_ref=verify_loaded_runtime(runtime,**mission.runtime_args(pod))
         publish(mission.artifacts,runtime["runtime"],runtime_ref)
         mission.retain(runtime_ref)
         mission.mailbox.publish_message("runtime",{"pod_id":pod,"runtime_ref":runtime_ref})
         for slot in range(4):
+            stage=f"slot_{slot}"
             check_reviewer_active(mission.marker)
             mission.provider_check(pod)
             task=ctl.prepare_slot(slot)
@@ -333,6 +335,8 @@ def controller(mission):
             print("ANVIL_LIVE_ACCEPTED_SLOT="+str(slot),flush=True)
     except Exception as error:
         failure=type(error).__name__
+        failure_detail=error.diagnostic if isinstance(error,PlacementFailure) else safe_failure(stage,error)
+        print("ANVIL_LIVE_FAILURE_DETAIL="+json.dumps(failure_detail,sort_keys=True),flush=True)
         print("ANVIL_LIVE_EXECUTION_STOPPED="+failure,flush=True)
     finally:
         # Provider cleanup precedes scientific closure, even on model failure.
@@ -341,7 +345,7 @@ def controller(mission):
         finally:
             checkpoint=mission.checkpoint()
             packet=build_review_packet(mission.dispatch,slot_records=slots,checkpoint_ref=checkpoint)
-            packet.update(execution_failure=failure,primary_cleanup_confirmed=cleanup_confirmed)
+            packet.update(execution_failure=failure,execution_failure_detail=failure_detail,primary_cleanup_confirmed=cleanup_confirmed)
             packet_ref=publish(mission.artifacts,packet)
             mission.retain(packet_ref)
             mission.backup_local()
