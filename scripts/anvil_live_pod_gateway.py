@@ -118,7 +118,7 @@ class Gateway:
 def command_executor(root, deadline, source_hash, lock_hash):
     source = root / "source"
 
-    def run(args, raw=None, runtime_ref=None):
+    def run(args, raw=None, runtime_ref=None, maximum_seconds=600):
         remaining = (deadline - datetime.now(timezone.utc)).total_seconds()
         if remaining <= 0:
             raise TimeoutError("execution deadline reached")
@@ -130,7 +130,7 @@ def command_executor(root, deadline, source_hash, lock_hash):
         if runtime_ref is not None:
             env["ANVIL_RUNTIME_REF"] = runtime_ref
         result = subprocess.run(args, cwd=source, env=env, input=raw, capture_output=True,
-                                timeout=min(remaining, 600), check=False)
+                                timeout=min(remaining, maximum_seconds), check=False)
         if result.returncode or len(result.stdout) > MAX_CAPSULE:
             raise RuntimeError("bounded worker command failed")
         return result.stdout.decode("utf-8")
@@ -146,7 +146,7 @@ def command_executor(root, deadline, source_hash, lock_hash):
             run([sys.executable, "-m", "pip", "check"])
             return {"source_sha256": source_hash, "lock_sha256": lock_hash}
         if name == "qualify":
-            out = run([sys.executable, "-u", "scripts/anvil_qualify_cuda_offline.py"])
+            out = run([sys.executable, "-u", "scripts/anvil_qualify_cuda_offline.py"], maximum_seconds=900)
             rows = []
             for line in out.splitlines():
                 if line.startswith("{"):

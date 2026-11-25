@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 
-from anvil_stage_priority_models import MANIFEST_REF
+from anvil_stage_priority_models import MANIFEST_REF, run as verify_snapshot_files
 from hephaestus.production.original_cuda_identity import build_original_role_reasoner, verified_original_roles
 from hephaestus.providers.runpod.global_volume import GlobalVolumeConfig, global_role_archive_source
 from hephaestus.storage.filesystem import FileSystemArtifactStore
@@ -37,6 +37,8 @@ def main():
     cache = volume.mount_path / ("anvil-priority-models-v1-" + MANIFEST_REF[:16])
     if cache.resolve(strict=True) != cache:
         raise PermissionError("model cache traverses a link")
+    # Recheck exact canonical base bytes on the actual mounted worker.
+    verify_snapshot_files(cache, planner_blobs=None)
     stack, _ = verified_original_roles(REGISTRY_REF)
     archives = global_role_archive_source(volume, stack)
     with TemporaryDirectory(prefix="anvil-offline-preflight-") as root:

@@ -467,7 +467,26 @@ def reviewer(mission):
     print("ANVIL_LIVE_INDEPENDENT_REVIEW="+review_ref,flush=True)
 
 
+def preserve_interrupted_review(mission, error_type):
+    """Independent best-effort cold evidence when the primary handoff disappears."""
+    checkpoint=mission.checkpoint()
+    snapshot=mission.dispatch.admission._board.replay(mission.plan["investigation"])
+    rows=[]
+    for accepted in snapshot.contributions:
+        ref=accepted.origin.inference_ref
+        mission.import_refs(ref)
+        rows.append({"contribution_id":accepted.contribution_id,"receipt_ref":ref,"frontier":accepted.frontier})
+    ref=publish(mission.artifacts,{"schema":"anvil.interrupted-review.v1","plan_ref":mission.plan_ref,
+        "checkpoint_ref":checkpoint,"frontier":snapshot.frontier,"accepted":rows,
+        "failure_type":error_type,"semantic_review_pending":True,"execution_authorized":False})
+    mission.retain(ref)
+    mission.backup_local()
+    print("ANVIL_INTERRUPTED_REVIEW_EVIDENCE="+ref,flush=True)
+
+
 if __name__=="__main__":
+    mission=None
+    mode=None
     try:
         mode=sys.argv[1]
         if mode not in {"controller","reviewer"}:
@@ -475,4 +494,9 @@ if __name__=="__main__":
         mission=Mission(mode)
         (controller if mode=="controller" else reviewer)(mission)
     except Exception as error:
+        if mode=="reviewer" and mission is not None:
+            try:
+                preserve_interrupted_review(mission,type(error).__name__)
+            except Exception as recovery_error:
+                print("ANVIL_INTERRUPTED_REVIEW_RETENTION_FAILED="+type(recovery_error).__name__,flush=True)
         sys.exit("Anvil bounded live mission stopped ("+type(error).__name__+"); no automatic retry")
