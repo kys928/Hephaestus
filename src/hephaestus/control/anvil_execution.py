@@ -16,6 +16,11 @@ from hephaestus.state.execution_ownership import execution_owner
 from hephaestus.storage.verified import canonical_bytes, read_verified_json
 
 
+def _require_open(repository, plan_ref: str) -> None:
+    if any(row["plan_ref"] == plan_ref for row in repository.all("anvil.terminal")):
+        raise PermissionError("Anvil investigation already has a terminal review")
+
+
 def execute_prepared(
     dispatch: AnvilDispatch, *, prepared_ref: str, grant_ref: str, runtime_ref: str,
     authority: AnvilAuthority, reasoner: CertifiedRoleReasoner, reservations,
@@ -43,7 +48,8 @@ def execute_prepared(
     reservation = {"slot": payload["slot"], "plan_ref": dispatch.plan_ref,
                    "prepared_ref": prepared_ref, "grant_ref": grant_ref}
     key = "sha256:" + sha256(canonical_bytes([dispatch.plan_ref, payload["slot"]])).hexdigest()
-    with execution_owner(reservations, "anvil-execution-slot", dispatch.plan_ref):
+    with execution_owner(reservations, "anvil-investigation", dispatch.plan_ref):
+        _require_open(reservations, dispatch.plan_ref)
         if any(row["key"] == key for row in reservations.all("anvil.execution-slots")):
             raise PermissionError("Anvil execution slot already consumed")
         reservations.append("anvil.execution-slots", dict(reservation, key=key), operation_id=key)
@@ -57,7 +63,7 @@ def execute_prepared(
 
 def admit_attested(
     dispatch: AnvilDispatch, *, prepared_ref: str, receipt_ref: str,
-    runtime_ref: str, attestation_ref: str, authority: AnvilAuthority,
+    runtime_ref: str, attestation_ref: str, authority: AnvilAuthority, repository,
 ):
     """Bind independently reviewed runtime evidence to the exact prepared claim."""
     require_digest(runtime_ref)
@@ -73,7 +79,9 @@ def admit_attested(
     payload = read_verified_json(artifacts, prepared["dispatch_payload_ref"], limit=8192)
     dispatch._prepare(payload)
     origin = replace(ContributionOrigin(**payload["origin"]), inference_ref=receipt_ref)
-    return dispatch.admission.accept(origin, payload["sequence"], tuple(payload["material_refs"]))
+    with execution_owner(repository, "anvil-investigation", dispatch.plan_ref):
+        _require_open(repository, dispatch.plan_ref)
+        return dispatch.admission.accept(origin, payload["sequence"], tuple(payload["material_refs"]))
 
 
 def retain_terminal(
@@ -93,11 +101,12 @@ def retain_terminal(
     review_ref = decision.get("review_ref")
     require_digest(review_ref)
     read_verified_json(artifacts, review_ref, limit=32768)
-    snapshot = dispatch.admission._board.replay(plan["investigation"], expected_frontier=frontier)
-    if any([row.origin.run_id, row.origin.lineage_id] != scope[1:] for row in snapshot.contributions):
-        raise ValueError("terminal frontier mixes investigation scopes")
     identity = "sha256:" + sha256(canonical_bytes(["anvil.terminal.v1", scope])).hexdigest()
-    return repository.append("anvil.terminal", {
-        "terminal_ref": terminal_ref, "frontier": frontier,
-        "outcome": decision["outcome"], "review_ref": review_ref,
-    }, operation_id=identity)
+    with execution_owner(repository, "anvil-investigation", dispatch.plan_ref):
+        snapshot = dispatch.admission._board.replay(plan["investigation"], expected_frontier=frontier)
+        if any([row.origin.run_id, row.origin.lineage_id] != scope[1:] for row in snapshot.contributions):
+            raise ValueError("terminal frontier mixes investigation scopes")
+        return repository.append("anvil.terminal", {
+            "plan_ref": dispatch.plan_ref, "terminal_ref": terminal_ref, "frontier": frontier,
+            "outcome": decision["outcome"], "review_ref": review_ref,
+        }, operation_id=identity)
