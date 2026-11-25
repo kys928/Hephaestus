@@ -26,7 +26,14 @@ def main():
     root = Path("/tmp") / ("anvil-live-watchdog-" + os.environ["GITHUB_RUN_ID"])
     provider = RunPodExecutionAdapter(config, EnvironmentSecretsProvider(), state_root=root)
     mode = sys.argv[1]
+    s3config=RunPodConfig("EU-CZ-1",REGIONAL,config.s3_endpoint_url,config.api_base_url)
+    storage=RunPodNetworkVolumeStorage.from_boto3(s3config,EnvironmentSecretsProvider())
+    storage.head_volume()
+    mailbox=AnvilRetainedWriter(storage.client,REGIONAL,identity.marker)
+    plan=json.loads((Path(__file__).resolve().parents[1]/"configs/research/anvil_diagnosis_planner_first_live_v1.json").read_bytes())["plan"]["ref"]
     if mode == "prime":
+        if mailbox.allocation_intent(plan) is not None:
+            raise PermissionError("one-use allocation approval already consumed")
         if identity.discover(provider):
             raise PermissionError("existing mission Pod; do not arm another allocation")
         print("ANVIL_GPU_WATCHDOG_READY=true", flush=True)
@@ -43,10 +50,6 @@ def main():
         deadline = started + timedelta(seconds=MAX_SECONDS)
         if not timedelta(0) <= datetime.now(timezone.utc) - started <= timedelta(minutes=5):
             raise PermissionError("watchdog start is stale or unbound")
-        s3config=RunPodConfig("EU-CZ-1",REGIONAL,config.s3_endpoint_url,config.api_base_url)
-        storage=RunPodNetworkVolumeStorage.from_boto3(s3config,EnvironmentSecretsProvider())
-        mailbox=AnvilRetainedWriter(storage.client,REGIONAL,identity.marker)
-        plan=json.loads((Path(__file__).resolve().parents[1]/"configs/research/anvil_diagnosis_planner_first_live_v1.json").read_bytes())["plan"]["ref"]
         # Independently inspect the one-use intent before accepting a dynamic Pod.
         def placement():
             intent=mailbox.allocation_intent(plan)
