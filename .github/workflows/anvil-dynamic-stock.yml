@@ -1,0 +1,55 @@
+name: Anvil compatible GPU inventory
+on:
+  push:
+    branches: [ops/anvil-dynamic-stock-20261125]
+    paths: [.github/workflows/anvil-dynamic-stock.yml]
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read authenticated catalog
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          from decimal import Decimal
+          import json, os, re
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing,REST_URL,usd
+          from hephaestus.providers.runpod.anvil_live_lease import GLOBAL,DISK_ALLOWANCE,MAX_RATE
+          p=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          api="https://api.runpod.io/v2"
+          v=p._request(api+"/global-volumes/"+GLOBAL,"GET",None)
+          if v.get("id")!=GLOBAL: raise PermissionError("volume mismatch")
+          a=p.account()
+          g=p._request(REST_URL,"GET",None)["gpus"]
+          eligible={}
+          for x in g:
+              if x.get("secure") is True and type(x.get("memory")) is int and x["memory"]>=48:
+                  try: cost=usd(x["price"]["secure"])+DISK_ALLOWANCE
+                  except (KeyError,TypeError,ValueError): continue
+                  if 0<cost<=MAX_RATE: eligible[x["id"]]={"gpu":x["id"],"vram_gb":x["memory"],"ceiling":str(cost)}
+          raw=p._request(api+"/catalog/datacenters","GET",None)
+          rows=raw.get("dataCenters",raw.get("datacenters",[])) if isinstance(raw,dict) else raw
+          ids=sorted({r["id"] for r in rows if isinstance(r,dict) and re.fullmatch(r"[A-Z]{2}-[A-Z0-9]+-[0-9]+",str(r.get("id","")))})
+          def observe(region):
+              try:
+                  c=p._request(api+"/catalog/datacenters/"+region+"?include=GPU_AVAILABILITY","GET",None)
+                  if c.get("id")!=region or not isinstance(c.get("gpuAvailability"),list): return []
+                  return [dict(eligible[x["id"]],region=region,stock=x["availability"]) for x in c["gpuAvailability"] if x.get("id") in eligible and x.get("availability") in {"LOW","MEDIUM","HIGH"}]
+              except Exception: return []
+          with ThreadPoolExecutor(max_workers=4) as pool:
+              candidates=[x for group in pool.map(observe,ids) for x in group]
+          print("ANVIL_DYNAMIC_STOCK="+json.dumps({"global_confirmed":True,"regions_checked":len(ids),"price_eligible_skus":list(eligible.values()),"candidates":sorted(candidates,key=lambda x:(Decimal(x["ceiling"]),x["region"],x["gpu"])),"fundable":not a.autopay_enabled and a.credit_balance_usd>MAX_RATE+a.already_spending_usd_per_hour,"allocation_attempted":False},sort_keys=True),flush=True)
+          PY
