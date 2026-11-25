@@ -33,7 +33,24 @@ def connect_runtime():
     if (not re.fullmatch(r"ep-small-sound-bgci9tjx(?:\.[a-z0-9-]+)+\.neon\.tech", info.get("host", ""))
             or info.get("hostaddr") or info.get("dbname") != "neondb"):
         raise PermissionError("secret does not reference the direct Anvil Neon endpoint")
-    return psycopg.connect(dsn, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
+    try:
+        return psycopg.connect(dsn, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
+    except psycopg.OperationalError as error:
+        diagnostic = str(error).lower()
+        for fragment, reason in (
+            ("password authentication failed", "password authentication rejected"),
+            ("role is not permitted to log in", "runtime login disabled"),
+            ("not permitted to log in", "runtime login disabled"),
+            ("certificate verify", "TLS certificate verification failed"),
+            ("root certificate", "TLS root certificate unavailable"),
+            ("hostname", "endpoint hostname resolution or validation failed"),
+            ("timeout", "endpoint connection timed out"),
+            ("channel binding", "TLS channel-binding enforcement failed"),
+            ("endpoint is disabled", "Neon endpoint disabled"),
+        ):
+            if fragment in diagnostic:
+                raise PermissionError(reason) from None
+        raise PermissionError("verified TLS connection could not be established") from None
 
 
 def verify_runtime(investigation: str) -> None:
