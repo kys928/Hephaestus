@@ -12,6 +12,18 @@ jobs:
     if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 65
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: anvil_fixture
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +40,7 @@ jobs:
           RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
           ANVIL_POSTGRES_DSN: ${{ secrets.ANVIL_POSTGRES_DSN }}
           ANVIL_FIRST_LIVE_ACTIVATION: approved-one-a40-0.65-usd-3600s
+          ANVIL_RESTORE_DSN: postgresql://postgres:fixture@127.0.0.1:5432/anvil_fixture
           PYTHONPATH: src
         run: python scripts/anvil_live_mission.py reviewer
       - uses: actions/upload-artifact@v4
@@ -37,7 +50,6 @@ jobs:
           path: |
             /tmp/anvil-live-${{ github.run_id }}-reviewer/artifacts/
             /tmp/anvil-live-${{ github.run_id }}-reviewer/backup/
-            /tmp/anvil-live-${{ github.run_id }}-reviewer/restored.sqlite
           if-no-files-found: warn
   controller:
     if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1

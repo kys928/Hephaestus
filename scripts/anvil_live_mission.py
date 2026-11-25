@@ -215,7 +215,7 @@ def quote(mission):
     return ref
 
 
-def allocate(mission,authority,deadline,price_ref):
+def allocate(mission,authority,deadline,price_ref,known):
     if mission.identity.discover(mission.provider) or now()+timedelta(minutes=15)>=deadline:
         raise PermissionError("existing Pod or insufficient remaining bounded lease")
     token=token_hex(32)
@@ -226,6 +226,7 @@ def allocate(mission,authority,deadline,price_ref):
           "image":IMAGE,"disk":20,"mounts":GlobalVolumeConfig(GLOBAL).mounts(),"ports":["8787/http"],
           "entrypoint":[],"cmd":["python","-u","-c",f"import base64,zlib;exec(zlib.decompress(base64.b64decode('{code}')))"],
           "env":{"ANVIL_LIVE_ACTIVATION":mission.marker,"ANVIL_LIVE_TOKEN":token,
+                 "ANVIL_PRICE_REF":price_ref,
                  "ANVIL_DEADLINE_UTC":deadline.isoformat(),"ANVIL_SOURCE_SHA256":mission.source_hash,
                  "ANVIL_PACKAGE_LOCK_SHA256":LOCK_HASH,"ANVIL_AUTHORITY_PUBLIC_HEX":authority.public_key_hex,
                  "ANVIL_AUTHORITY_REF":authority.public_key_ref}}
@@ -233,6 +234,7 @@ def allocate(mission,authority,deadline,price_ref):
     # independent marker watcher; never invoke this allocator twice.
     pod=mission.provider._create_pod(body,operation_id=mission.marker,gpu_type_ids=[GPU])
     pod_id=mission.identity.owned(pod)
+    known.add(pod_id)
     print("ANVIL_LIVE_EXACT_POD="+pod_id,flush=True)
     mission.provider_check(pod_id)
     return pod_id,AnvilGatewayClient(pod_id,token,deadline)
@@ -273,7 +275,7 @@ def controller(mission):
         if independent_deadline(mission.marker)!=hard_deadline:
             raise PermissionError("watchdog lease changed")
         check_reviewer_active(mission.marker)
-        pod,client=allocate(mission,authority,deadline,price_ref)
+        pod,client=allocate(mission,authority,deadline,price_ref,known)
         known.add(pod)
         await_health(client,min(deadline,now()+timedelta(minutes=8)))
         if client.execute("setup",mission.source)!={"source_sha256":mission.source_hash,"lock_sha256":LOCK_HASH}:
@@ -300,8 +302,8 @@ def controller(mission):
             slots.append({"slot":slot,"status":"reserved","capsule_ref":capsule_ref})
             result=client.execute(f"slot-{slot}",canonical_bytes(capsule))
             receipt_ref=publish(mission.artifacts,result["document"],result["receipt_ref"])
-            mission.retain(receipt_ref)
             slots[-1].update(status="received",receipt_ref=receipt_ref)
+            mission.retain(receipt_ref)
             mission.mailbox.publish_message(f"slot-{slot}-receipt-request",{
                 "capsule_ref":capsule_ref,"receipt_ref":receipt_ref})
             review,_=wait_message(mission.mailbox,f"slot-{slot}-attestation",deadline)
@@ -331,14 +333,42 @@ def controller(mission):
             mission.retain(packet_ref)
             mission.backup_local()
             mission.mailbox.publish_message("terminal-request",{"packet_ref":packet_ref,"checkpoint_ref":checkpoint,
-                "slot_records":slots,"primary_cleanup_confirmed":cleanup_confirmed})
+                "slot_records":slots,"primary_cleanup_confirmed":cleanup_confirmed,"known_pod_ids":sorted(known)})
             print("ANVIL_LIVE_REVIEW_PACKET="+packet_ref,flush=True)
     # Reviewer has an independent copy even if this acknowledgement is lost.
     review,_=wait_message(mission.mailbox,"terminal-review",hard_deadline)
     mission.import_refs(review["review_ref"])
+    authority.verify(mission.artifacts,review["review_ref"],schema="anvil.execution-review.v1",expected={
+        "plan_ref":mission.plan_ref,"packet_ref":packet_ref,"frontier":packet["frontier"],
+        "accepted_count":packet["accepted_count"],"independent_restore":True,
+        "independent_cleanup_confirmed":True,"semantic_review_pending":True,"outcome":"unresolved",
+        "execution_authorized":False})
+    mission.repository.append("anvil.live-execution-review",{
+        "plan_ref":mission.plan_ref,"review_ref":review["review_ref"],"packet_ref":packet_ref,
+        "frontier":packet["frontier"],"scientific_review_pending":True},
+        operation_id=review["review_ref"])
+    mission.backup_local()
     print("ANVIL_LIVE_EXECUTION_COMPLETE="+str(failure is None and cleanup_confirmed).lower(),flush=True)
     if failure or not cleanup_confirmed:
         raise RuntimeError("bounded first live mission ended unresolved")
+
+
+def restore_checkpoint(mission,checkpoint_ref,frontier):
+    """Restore on a disposable PostgreSQL service, never the hosted Anvil database."""
+    import psycopg
+    from psycopg.conninfo import conninfo_to_dict
+    from hephaestus.state.anvil_postgres import SCHEMA, advance_epoch
+    dsn=os.environ["ANVIL_RESTORE_DSN"]
+    settings=conninfo_to_dict(dsn)
+    if settings.get("host")!="127.0.0.1" or settings.get("dbname")!="anvil_fixture":
+        raise PermissionError("independent restore must use the local disposable service")
+    def connect():
+        return psycopg.connect(dsn)
+    with connect() as connection:
+        connection.execute(SCHEMA)
+        advance_epoch(connection,mission.plan["investigation"],expected_epoch=0)
+    restore=PostgresAnvilState(connect,mission.plan["investigation"],1,lambda _:False,lambda *_:False)
+    return restore.restore(mission.plan["investigation"],mission.artifacts,checkpoint_ref,expected_frontier=frontier)
 
 
 def reviewer(mission):
@@ -350,6 +380,7 @@ def reviewer(mission):
         "plan_ref":mission.plan_ref,"deadline":deadline.isoformat(),
         "public_key_hex":authority.verifier.public_key_hex,"public_key_ref":authority.verifier.public_key_ref})
     terminal=None
+    pod=None
     runtime,terminal=wait_message(mission.mailbox,"runtime",hard_deadline,terminal=True)
     if terminal is None:
         pod=runtime["pod_id"]
@@ -396,9 +427,12 @@ def reviewer(mission):
         for key in ("receipt_ref","capsule_ref","attestation_ref","retention_ref"):
             if row.get(key):
                 mission.import_refs(row[key])
-    restore=AnvilState(SQLiteStateRepository(mission.root/"restored.sqlite"),lambda _:False,lambda *_:False)
-    snapshot=restore.restore(mission.plan["investigation"],mission.artifacts,terminal["checkpoint_ref"],
-                            expected_frontier=packet["frontier"])
+    known=set(terminal["known_pod_ids"])
+    if pod:
+        known.add(pod)
+    if not terminal.get("primary_cleanup_confirmed") or mission.identity._known_live(mission.provider,known):
+        raise PermissionError("independent reviewer cannot confirm exact Pod absence")
+    snapshot=restore_checkpoint(mission,terminal["checkpoint_ref"],packet["frontier"])
     live=mission.dispatch.admission._board.replay(mission.plan["investigation"])
     if snapshot!=live or packet["accepted_count"]!=len(live.contributions):
         raise PermissionError("independent restoration or accepted frontier differs")
@@ -411,7 +445,7 @@ def reviewer(mission):
     review_ref=authority.sign(mission.artifacts,{"schema":"anvil.execution-review.v1",
         "plan_ref":mission.plan_ref,"packet_ref":terminal["packet_ref"],"frontier":snapshot.frontier,
         "accepted_count":len(snapshot.contributions),"independent_restore":True,
-        "semantic_review_pending":True,"outcome":"unresolved","execution_authorized":False})
+        "independent_cleanup_confirmed":True,"semantic_review_pending":True,"outcome":"unresolved","execution_authorized":False})
     mission.retain(review_ref)
     mission.backup_local()
     mission.mailbox.publish_message("terminal-review",{"review_ref":review_ref})
