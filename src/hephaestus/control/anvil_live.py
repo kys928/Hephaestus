@@ -4,7 +4,7 @@ The controller owns preparation and admission. A named worker receives only a
 hash-checked round snapshot and a signed slot grant. Independent retention and
 review must succeed before a real output becomes shared knowledge.
 """
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Callable
@@ -187,7 +187,15 @@ class AnvilLiveController:
         """A separately reviewed, independently retained receipt is the only admission path."""
         with execution_owner(self.repository, "anvil-live-controller", self.dispatch.plan_ref):
             _require_open(self.repository, self.dispatch.plan_ref)
-            plan, _, _ = self._round(slot)
+            plan = self.dispatch._plan()
+            current = self.dispatch.admission._board.replay(plan["investigation"])
+            # Reconcile an acknowledged database commit after local journal loss.
+            if len(current.contributions) == slot:
+                self._round(slot)
+            elif (len(current.contributions) != slot + 1
+                  or current.contributions[slot].origin.inference_ref != receipt_ref
+                  or current.contributions[slot].origin.role != ROLES[slot]):
+                raise PermissionError("live frontier does not permit this admission")
             key = digest([self.dispatch.plan_ref, "external-slot", slot])
             rows = [r for r in self.repository.all("anvil.live-reservations") if r["key"] == key]
             if len(rows) != 1:
@@ -206,13 +214,17 @@ class AnvilLiveController:
             retention = read_verified_json(self.artifacts, retention_ref)
             if (retained != receipt or retention.get("schema") != "anvil.receipt-retention.v1"
                     or retention.get("receipt_ref") != receipt_ref
+                    or retention.get("capsule_ref") != row["capsule_ref"]
+                    or read_verified_json(retained_artifacts, row["capsule_ref"]) !=
+                       read_verified_json(self.artifacts, row["capsule_ref"])
                     or retention.get("independent_readback") is not True):
                 raise PermissionError("independent retained receipt differs")
             _, contract = verified_original_roles(plan["registry_ref"])
             verify_inference_receipt(self.artifacts, receipt_ref, contract)
             execution = receipt.get("execution", {})
             tokens = execution.get("generated_token_ids")
-            if (receipt.get("status") != "accepted" or receipt.get("role") != ROLES[slot]
+            if (receipt.get("status") != "accepted" or receipt.get("fixture") is not None
+                    or receipt.get("role") != ROLES[slot]
                     or receipt.get("generator") != "PinnedTransformersRoleGenerator"
                     or receipt.get("seed") != 271828 or receipt.get("max_new_tokens") != 512
                     or execution.get("device") != "cuda:0" or execution.get("gpu_name") != "NVIDIA A40"
@@ -267,7 +279,7 @@ def reconstruct_worker_capsule(capsule, root: Path, authority, *, pod_id, runtim
     admission = AnvilAdmission(board, artifacts, plan["registry_ref"],
                                frozenset(payload["material_refs"]), frozenset())
     dispatch = AnvilDispatch(admission, SQLiteJobQueue(root / "worker-jobs.sqlite"), capsule["plan_ref"])
-    if canonical_bytes(prepared["task"]) != canonical_bytes(__import__("dataclasses").asdict(dispatch._prepare(payload))):
+    if canonical_bytes(prepared["task"]) != canonical_bytes(asdict(dispatch._prepare(payload))):
         raise PermissionError("worker task reconstruction differs")
     return dispatch, repository
 

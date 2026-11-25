@@ -103,10 +103,10 @@ def test_first_live_bundle_and_rounds(tmp_path):
             tokenizer_id=spec.model_id, tokenizer_revision=spec.revision, evidence_refs=[e.ref for e in task.evidence],
             generator="PinnedTransformersRoleGenerator", seed=271828, max_new_tokens=512,
             execution={"device": "cuda:0", "gpu_name": "NVIDIA A40", "cuda_version": "fixture",
-                       "generated_token_ids": [1, 2]}, fixture=True)
+                       "generated_token_ids": [1, 2]})
         receipt_ref = publish(artifacts, receipt)
         retention_ref = publish(artifacts, {"schema": "anvil.receipt-retention.v1",
-            "receipt_ref": receipt_ref, "independent_readback": True, "fixture": True})
+            "receipt_ref": receipt_ref, "capsule_ref": capsule_ref, "independent_readback": True, "fixture": True})
         attestation = sign({"schema": "anvil.inference-attestation.v1", "status": "verified",
             "prepared_ref": prepared.prepared_ref, "receipt_ref": receipt_ref, "runtime_ref": runtime_ref,
             "plan_ref": plan_ref, "pod_id": pod, "retention_ref": retention_ref})
@@ -115,9 +115,12 @@ def test_first_live_bundle_and_rounds(tmp_path):
                 controller.admit_slot(slot=slot, receipt_ref=receipt_ref, attestation_ref=attestation,
                                       retention_ref=retention_ref, retained_artifacts=artifacts)
         publish(retained, receipt, receipt_ref)
+        publish(retained, capsule, capsule_ref)
         result = controller.admit_slot(slot=slot, receipt_ref=receipt_ref, attestation_ref=attestation,
                                       retention_ref=retention_ref, retained_artifacts=retained)
         assert result.sequence == slot + 1
+        assert controller.admit_slot(slot=slot, receipt_ref=receipt_ref, attestation_ref=attestation,
+            retention_ref=retention_ref, retained_artifacts=retained) == result
     assert histories[0] == histories[1]
     assert histories[2] == histories[3]
     assert checkpoints[0] == checkpoints[1] and checkpoints[2] == checkpoints[3]
