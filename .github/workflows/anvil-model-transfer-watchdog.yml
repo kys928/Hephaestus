@@ -1,0 +1,27 @@
+name: Anvil independent model transfer watchdog
+on:
+  push:
+    branches: [feature/anvil-integration]
+    paths: [.github/workflows/anvil-model-transfer.yml]
+permissions:
+  contents: read
+concurrency:
+  group: anvil-approved-model-transfer-watchdog
+  cancel-in-progress: false
+jobs:
+  watchdog:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prime exact audit watchdog
+        run: python -u scripts/anvil_model_transfer_control.py prime stage
+      - name: Watch for exact audit Pod
+        run: python -u scripts/anvil_model_transfer_control.py watchdog stage
