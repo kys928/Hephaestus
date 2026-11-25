@@ -1,7 +1,6 @@
 """Load both original Anvil roles offline on an already-approved exact A40 Pod."""
 import json
 import hashlib
-import importlib.metadata as metadata
 import sys
 import os
 from pathlib import Path
@@ -21,10 +20,10 @@ def main():
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     import torch
     from hephaestus.storage.verified import canonical_bytes
-    packages = {re.sub(r"[-_.]+", "-", d.metadata["Name"]).lower(): d.version
-                for d in metadata.distributions()}
-    environment = {"python": sys.version.split()[0], "torch": torch.__version__,
-                   "cuda": torch.version.cuda, "packages_sha256": hashlib.sha256(canonical_bytes(packages)).hexdigest()}
+    from anvil_effective_environment import environment as inspect_environment
+    qualified = inspect_environment(Path(__file__).resolve().parents[1] / "requirements-anvil-live.lock")
+    environment = {k: qualified[k] for k in ("python", "torch", "cuda")}
+    environment["packages_sha256"] = hashlib.sha256(canonical_bytes(qualified["packages"])).hexdigest()
 
     pod_id = os.environ.get("RUNPOD_POD_ID", "")
     if not re.fullmatch(r"[A-Za-z0-9]{4,40}", pod_id):
