@@ -1,6 +1,8 @@
 """Independent GitHub-runner watchdog for one exact Anvil A40 activation."""
 from datetime import datetime, timedelta, timezone
 import os
+import json
+from urllib.request import Request, urlopen
 from pathlib import Path
 import sys
 
@@ -26,7 +28,15 @@ def main():
             raise PermissionError("existing mission Pod; do not arm another allocation")
         print("ANVIL_GPU_WATCHDOG_READY=true", flush=True)
     elif mode == "watch":
-        started = datetime.fromisoformat(os.environ["ANVIL_WATCHDOG_STARTED_AT"].replace("Z", "+00:00"))
+        url = ("https://api.github.com/repos/kys928/Hephaestus/actions/runs/"
+               + os.environ["GITHUB_RUN_ID"] + "/jobs")
+        request = Request(url, headers={"Authorization":"Bearer "+os.environ["GITHUB_TOKEN"]})
+        with urlopen(request, timeout=15) as response:
+            payload = json.load(response)
+        jobs = [row for row in payload["jobs"] if row["name"] == "watchdog" and row["status"] == "in_progress"]
+        if len(jobs) != 1:
+            raise PermissionError("watchdog job identity is not unique and active")
+        started = datetime.fromisoformat(jobs[0]["started_at"].replace("Z", "+00:00"))
         deadline = started + timedelta(seconds=MAX_SECONDS)
         if not timedelta(0) <= datetime.now(timezone.utc) - started <= timedelta(minutes=5):
             raise PermissionError("watchdog start is stale or unbound")

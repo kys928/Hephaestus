@@ -66,3 +66,26 @@ def test_gpu_watchdog_refuses_name_only_ownership():
     with pytest.raises(PermissionError, match="unowned"):
         identity.cleanup(provider, pause=lambda _: None)
     assert provider.deleted == []
+
+
+def test_known_id_cannot_disappear_only_from_listing():
+    identity = AnvilPodIdentity("d" * 40)
+    provider = Provider([row(identity)])
+    provider.list_pods = lambda: []
+    assert identity.cleanup(provider, known_ids={"owned1234"}, pause=lambda _: None)
+    assert provider.deleted == ["owned1234"]
+
+
+def test_cleanup_retries_transient_read_errors():
+    identity = AnvilPodIdentity("e" * 40)
+    provider = Provider([row(identity)])
+    get = provider.get_pod
+    attempts = [0]
+    def transient(pod_id):
+        attempts[0] += 1
+        if attempts[0] == 1:
+            raise RunPodApiError("transient",status_code=503)
+        return get(pod_id)
+    provider.get_pod = transient
+    assert identity.cleanup(provider, known_ids={"owned1234"}, pause=lambda _: None)
+    assert provider.deleted == ["owned1234"]

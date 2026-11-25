@@ -9,6 +9,7 @@ from decimal import Decimal
 from hashlib import sha256
 import re
 from time import sleep
+from urllib.error import URLError
 
 from hephaestus.providers.runpod.cost_intelligence import usd
 from hephaestus.providers.runpod.execution import RunPodApiError
@@ -21,6 +22,9 @@ REGION = "EU-SE-1"
 GPU = "NVIDIA A40"
 IMAGE = "runpod/pytorch@sha256:4d1721e62b56d345c83b4fd6090664be6daf9312caab5b2e76f23d8231941851"
 MAX_RATE = Decimal("0.65")
+# RunPod publishes USD 0.10/GB/month for running container disks.
+# USD 0.01/hour conservatively covers 20 GB even for a 28-day month.
+DISK_ALLOWANCE = Decimal("0.01")
 MAX_DISK_GB = 20
 MAX_SECONDS = 3600
 CLEANUP_RESERVE_SECONDS = 300
@@ -60,7 +64,7 @@ class AnvilPodIdentity:
                 and gpu.get("id") == GPU and gpu.get("count") == 1
                 and pod.get("image") == IMAGE and pod.get("mounts") == GlobalVolumeConfig(GLOBAL).mounts()
                 and type(pod.get("disk")) is int and 10 <= pod["disk"] <= MAX_DISK_GB
-                and 0 < usd(pod.get("costPerHr", pod.get("cost"))) <= MAX_RATE)
+                and 0 < usd(pod.get("costPerHr", pod.get("cost"))) <= MAX_RATE - DISK_ALLOWANCE)
 
     def discover(self, provider):
         rows = [row for row in provider.list_pods() if row.get("name") == self.name]
@@ -76,39 +80,68 @@ class AnvilPodIdentity:
             result.append(live)
         return result
 
-    def cleanup(self, provider, *, pause=sleep):
-        for attempt in range(4):
-            rows = self.discover(provider)
-            if not rows:
-                return True
-            for row in rows:
-                identifier = self.owned(row)
-                provider.delete_pod(identifier)
-                try:
-                    provider.get_pod(identifier)
-                except RunPodApiError as exc:
-                    if exc.status_code != 404:
-                        raise
-            if attempt < 3:
+    def _known_live(self, provider, known):
+        # Never use a list omission as proof that a known resource is gone.
+        for row in self.discover(provider):
+            known.add(self.owned(row))
+        live = []
+        for pod_id in sorted(known):
+            try:
+                pod = provider.get_pod(pod_id)
+            except RunPodApiError as exc:
+                if exc.status_code == 404:
+                    continue
+                raise
+            if self.owned(pod) != pod_id:
+                raise PermissionError("known resource identity differs")
+            live.append(pod)
+        return live
+
+    def cleanup(self, provider, *, known_ids=(), pause=sleep):
+        known = set(known_ids)
+        for attempt in range(8):
+            try:
+                rows = self._known_live(provider, known)
+                if not rows:
+                    # Two authenticated observations protect against a lost
+                    # allocation acknowledgement and transient list omissions.
+                    pause(3)
+                    if not self._known_live(provider, known):
+                        return True
+                    continue
+                for row in rows:
+                    provider.delete_pod(self.owned(row))
+            except (RunPodApiError, URLError, TimeoutError, OSError):
+                # Unknown provider state is not successful deletion.
+                pass
+            if attempt < 7:
                 pause(3)
-        if self.discover(provider):
+        if self._known_live(provider, known):
             raise RuntimeError("exact GPU Pod remains after bounded cleanup")
         return True
 
     def monitor(self, provider, *, deadline, now=lambda: datetime.now(timezone.utc), pause=sleep):
         if deadline.tzinfo is None or not 0 < (deadline - now()).total_seconds() <= MAX_SECONDS:
             raise ValueError("watchdog requires an absolute approved deadline")
-        seen = False
+        known = set()
+        errors = 0
         try:
             while (deadline - now()).total_seconds() > CLEANUP_RESERVE_SECONDS:
-                rows = self.discover(provider)
+                try:
+                    rows = self._known_live(provider, known)
+                    errors = 0
+                except (RunPodApiError, URLError, TimeoutError, OSError):
+                    errors += 1
+                    if errors >= 3:
+                        raise RuntimeError("provider visibility lost; attempt exact cleanup")
+                    pause(5)
+                    continue
                 if rows:
-                    seen = True
                     if len(rows) != 1 or not all(self.qualified(row) for row in rows):
                         raise PermissionError("unexpected own GPU allocation; terminate it")
-                elif seen:
+                elif known:
                     return "confirmed_absent"
                 pause(10)
             return "deadline"
         finally:
-            self.cleanup(provider, pause=pause)
+            self.cleanup(provider, known_ids=known, pause=pause)
