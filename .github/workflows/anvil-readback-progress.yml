@@ -1,0 +1,44 @@
+name: Anvil read-only destination readback progress
+on:
+  pull_request:
+    paths: [.github/workflows/anvil-readback-progress.yml]
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/anvil-integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+      PYTHONPATH: src:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Observe the exact existing Pod
+        run: |
+          timeout 45s python -u - <<'PY'
+          import json
+          from hashlib import sha256
+          import anvil_global_audit_control as audit
+          from anvil_model_transfer_control import read_logs, REPORT
+          from hephaestus.storage.verified import canonical_bytes
+          marker = "d2a9fb966deb4502afe77e5336a29a48b2116631"
+          p = audit.adapter()
+          identity = sha256(canonical_bytes([p.config.api_base_url,audit.REGIONAL,marker])).hexdigest()
+          name = "hephaestus-anvil-model-readback-" + identity[:32]
+          rows = audit.matches(p,name)
+          print("MATCHES=" + str(len(rows)))
+          if len(rows) == 1:
+              pod = p.get_pod(rows[0]["id"])
+              audit.assert_pod_identity(pod,name,marker)
+              print("EXACT_READBACK_POD=" + pod["id"] + " STATUS=" + str(pod.get("status")))
+              try:
+                  for line in read_logs(pod["id"]):
+                      if line.startswith("{") or line.startswith(REPORT):
+                          print(line)
+              except (TimeoutError, OSError):
+                  print("LOG_WINDOW_ELAPSED")
+          PY
