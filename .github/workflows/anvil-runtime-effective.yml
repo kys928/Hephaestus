@@ -1,0 +1,34 @@
+name: Anvil effective image qualification
+on:
+  push:
+    branches: [ops/anvil-runtime-effective-20261125]
+    paths: [.github/workflows/anvil-runtime-effective.yml]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: CPU-only immutable image qualification
+        run: |
+          set -euo pipefail
+          image=runpod/pytorch@sha256:4d1721e62b56d345c83b4fd6090664be6daf9312caab5b2e76f23d8231941851
+          echo '01dd1ff5af4241ac9b6f97f02009dcf21f30836fb3fa1687576eeece96d93c92  requirements-anvil-live.lock' | sha256sum --check -
+          docker pull --platform linux/amd64 "$image"
+          mkdir -p "$RUNNER_TEMP/anvil-effective"
+          docker run --rm --entrypoint bash -e PYTHONPATH=/source/src -v "$PWD:/source:ro" -v "$RUNNER_TEMP/anvil-effective:/qualification" "$image" -euc '
+            python -m pip install --require-hashes --no-deps --only-binary=:all: -r /source/requirements-anvil-live.lock
+            python -m pip check
+            python /source/scripts/anvil_effective_environment.py /source/requirements-anvil-live.lock /qualification/image-qualification.json
+          '
+          sha256sum "$RUNNER_TEMP/anvil-effective/image-qualification.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: effective-anvil-image-qualification
+          path: ${{ runner.temp }}/anvil-effective/image-qualification.json
+          if-no-files-found: error
