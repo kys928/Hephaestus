@@ -1,0 +1,84 @@
+name: Anvil pinned image dependency qualification
+on:
+  push:
+    branches: [ops/anvil-runtime-lock-20261125]
+    paths: [.github/workflows/anvil-runtime-lock.yml]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Qualify immutable worker image (CPU only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=runpod/pytorch@sha256:4d1721e62b56d345c83b4fd6090664be6daf9312caab5b2e76f23d8231941851
+          df -h /
+          docker pull --platform linux/amd64 "$image"
+          mkdir -p "$RUNNER_TEMP/anvil-lock"
+          cat > "$RUNNER_TEMP/anvil-lock/qualify.py" <<'PY'
+          import hashlib, json, subprocess, sys, importlib.metadata as md, re
+          from pathlib import Path
+          import torch
+          root = Path("/qualification")
+          def inventory():
+              return {re.sub(r"[-_.]+", "-", d.metadata["Name"]).lower(): d.version for d in md.distributions()}
+          before = inventory()
+          original = (torch.__version__, torch.version.cuda)
+          if not original[1] or torch.cuda.is_available():
+              raise RuntimeError("expected CUDA-enabled Torch in CPU-only image test")
+          protected = {k:v for k,v in before.items() if k.startswith(("torch","nvidia-","triton"))}
+          constraints = root / "protected.txt"
+          constraints.write_text("".join(f"{k}=={v}\n" for k,v in sorted(protected.items())))
+          specs = ["transformers>=5.6.1,<5.7", "peft>=0.20,<1", "huggingface-hub>=0.30,<2",
+                   "accelerate>=1.3,<2", "safetensors>=0.5,<1", "mistral-common>=1.8.6,<2",
+                   "cryptography>=44,<47"]
+          def pip(*args):
+              subprocess.run([sys.executable, "-m", "pip", *args], check=True)
+          pip("install", "--dry-run", "--report", str(root/"resolution.json"), "--only-binary=:all:",
+              "-c", str(constraints), *specs)
+          report = json.loads((root/"resolution.json").read_bytes())
+          lines = []
+          for item in report["install"]:
+              name = re.sub(r"[-_.]+","-",item["metadata"]["name"]).lower()
+              info = item["download_info"]
+              digest = info["archive_info"]["hashes"]["sha256"]
+              if name in protected or not info["url"].split("?")[0].endswith(".whl") or not re.fullmatch("[a-f0-9]{64}", digest):
+                  raise RuntimeError("resolver attempted protected or unpinned package change")
+              lines.append(f"{name}=={item['metadata']['version']} --hash=sha256:{digest}")
+          lock = root/"requirements-anvil-live.lock"
+          lock.write_text("\n".join(sorted(lines))+"\n")
+          pip("install","--require-hashes","--no-deps","--only-binary=:all:","-r",str(lock))
+          pip("check")
+          after = inventory()
+          if any(after.get(k)!=v for k,v in protected.items()):
+              raise RuntimeError("protected CUDA stack changed")
+          import transformers, peft, accelerate, mistral_common, cryptography, safetensors, huggingface_hub
+          from transformers import AutoConfig, AutoTokenizer, Mistral3ForConditionalGeneration
+          from hephaestus.llm.certified_runtime import PinnedTransformersRoleGenerator
+          from hephaestus.control.anvil_live import reconstruct_worker_capsule
+          receipt = {"schema":"anvil.image-dependency-qualification.v1", "python":sys.version.split()[0],
+                     "torch":original[0],"cuda":original[1],"protected":protected,
+                     "packages":after,"lock_sha256":hashlib.sha256(lock.read_bytes()).hexdigest(),
+                     "cuda_execution":False}
+          (root/"image-qualification.json").write_text(json.dumps(receipt,sort_keys=True,indent=2)+"\n")
+          print("ANVIL_LOCK_BEGIN",flush=True)
+          print(lock.read_text(),end="",flush=True)
+          print("ANVIL_LOCK_END",flush=True)
+          print("ANVIL_IMAGE_QUALIFIED="+json.dumps({k:v for k,v in receipt.items() if k!="packages"},sort_keys=True),flush=True)
+          PY
+          docker run --rm --entrypoint python -e PYTHONPATH=/source/src -v "$PWD:/source:ro" -v "$RUNNER_TEMP/anvil-lock:/qualification" "$image" /qualification/qualify.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: qualified-anvil-runtime-lock
+          path: |
+            ${{ runner.temp }}/anvil-lock/requirements-anvil-live.lock
+            ${{ runner.temp }}/anvil-lock/image-qualification.json
+          if-no-files-found: error
