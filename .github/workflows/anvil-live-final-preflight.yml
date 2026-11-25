@@ -1,0 +1,53 @@
+name: Anvil final authenticated preflight (no allocation)
+on:
+  push:
+    branches: [ops/anvil-final-preflight-20261125]
+    paths: [.github/workflows/anvil-live-final-preflight.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reviewer:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[postgres,s3,independent-certification]'
+      - name: Independently review live evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          ANVIL_POSTGRES_DSN: ${{ secrets.ANVIL_POSTGRES_DSN }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_preflight.py reviewer
+  controller:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[test,postgres,s3,independent-certification]'
+      - name: Exact final CPU fixture checks
+        run: python -m pytest -q tests/test_anvil_live.py tests/test_anvil_live_lease.py tests/test_anvil_live_gateway.py tests/test_anvil_attestation.py tests/test_anvil_live_runtime.py tests/test_anvil_live_retention.py tests/test_anvil_live_mission.py
+      - name: Authenticated independent handoff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          ANVIL_POSTGRES_DSN: ${{ secrets.ANVIL_POSTGRES_DSN }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_preflight.py controller

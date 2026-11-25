@@ -1,0 +1,29 @@
+name: Anvil preflight watchdog (no allocation)
+on:
+  push:
+    branches: [ops/anvil-final-preflight-20261125]
+    paths: [.github/workflows/anvil-live-preflight-watchdog.yml]
+permissions:
+  contents: read
+jobs:
+  watchdog:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prime exact audit watchdog
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_preflight.py watch-prime
+      - name: Watch for exact audit Pod
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_preflight.py watch
