@@ -1,0 +1,64 @@
+name: Anvil read-only funding and GPU price probe
+on:
+  push:
+    branches: [feature/anvil-integration]
+    paths: [.github/workflows/anvil-funding-probe.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read authenticated pricing and funding
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          RUNPOD_S3_ACCESS_KEY_ID: ${{ secrets.RUNPOD_S3_ACCESS_KEY_ID }}
+          RUNPOD_S3_SECRET_ACCESS_KEY: ${{ secrets.RUNPOD_S3_SECRET_ACCESS_KEY }}
+          PYTHONPATH: src
+        run: |
+          python -m pip install '.[s3]'
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
+          from hephaestus.providers.runpod.config import RunPodConfig
+          from hephaestus.providers.runpod.storage import RunPodNetworkVolumeStorage
+          from hephaestus.providers.runpod.execution import RunPodExecutionAdapter
+          from hephaestus.providers.runpod.anvil_live_lease import AnvilPodIdentity,MAX_RATE,DISK_ALLOWANCE
+          from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES
+          from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing,REST_URL,usd
+          from hephaestus.providers.runpod.anvil_renewed_allocation import RenewedAnvilAllocation,APPROVAL,PLAN
+          p=ReadOnlyRunPodPricing(bearer_token=os.environ["RUNPOD_API_KEY"])
+          for i in range(3):
+              a=p.account()
+              print("ANVIL_FUNDING="+json.dumps({"sample":i,"credit_usd":str(a.credit_balance_usd),"other_hourly_spend_usd":str(a.already_spending_usd_per_hour),"autopay":a.autopay_enabled,"ceiling":str(MAX_RATE)},sort_keys=True),flush=True)
+              catalog=p._request(REST_URL,"GET",None)
+              print("ANVIL_CATALOG_COUNT="+str(len(catalog["gpus"])),flush=True)
+              for row in catalog["gpus"]:
+                  if row.get("id") not in GPU_NAMES: continue
+                  reasons=[]
+                  try: rate=usd(row["price"]["secure"])
+                  except (KeyError,TypeError,ValueError): rate=None
+                  if row.get("secure") is not True: reasons.append("secure_unavailable")
+                  if type(row.get("memory")) is not int or row["memory"]<48: reasons.append("vram")
+                  if rate is None or rate<=0: reasons.append("unknown_price")
+                  elif rate+DISK_ALLOWANCE>MAX_RATE: reasons.append("hourly_ceiling")
+                  elif a.credit_balance_usd<=rate+DISK_ALLOWANCE+a.already_spending_usd_per_hour: reasons.append("prepaid_funding")
+                  print("ANVIL_GPU_FILTER="+json.dumps({"sample":i,"gpu":row["id"],"vram":row.get("memory"),"secure":row.get("secure"),"rate":str(rate) if rate is not None else None,"reasons":reasons},sort_keys=True),flush=True)
+          c=RunPodConfig("EU-CZ-1","cviwpryzao","https://s3api-eu-cz-1.runpod.io","https://api.runpod.io/v2")
+          sec=EnvironmentSecretsProvider()
+          s=RunPodNetworkVolumeStorage.from_boto3(c,sec)
+          s.head_volume()
+          provider=RunPodExecutionAdapter(c,sec,state_root=Path("/tmp/anvil-funding-probe"))
+          mailbox=RenewedAnvilAllocation(s.client,"cviwpryzao",os.environ["GITHUB_SHA"],APPROVAL)
+          mailbox.verify_previous(provider)
+          print("ANVIL_APPROVAL_UNUSED="+str(mailbox.allocation_intent(PLAN) is None).lower())
+          print("ANVIL_LAST_MARKER_ABSENT="+str(not AnvilPodIdentity("0f67823623a967a90c56714534fa3b19d069da91").discover(provider)).lower())
+          PY
