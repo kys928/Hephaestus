@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 import os
 
-from anvil_neon_bootstrap import verify_runtime
+from anvil_neon_bootstrap import connect_runtime, verify_runtime
 from hephaestus.schemas.anvil import Contribution, ContributionKind, ContributionOrigin
 from hephaestus.state.anvil_postgres import PostgresAnvilState, SCHEMA, advance_epoch
 from hephaestus.storage.filesystem import FileSystemArtifactStore
@@ -23,8 +23,7 @@ def hosted(artifact_directory: Path) -> None:
     import psycopg
 
     verify_runtime(LIVE)
-    dsn = os.environ["ANVIL_POSTGRES_DSN"]
-    connect = lambda: psycopg.connect(dsn, connect_timeout=10)
+    connect = connect_runtime
     active = board(connect, 2)
     origin = ContributionOrigin(
         QUALIFICATION, "qualification", "qualification", "diagnosis", RECEIPT,
@@ -90,6 +89,8 @@ def main():
     args = parser.parse_args()
     try:
         (hosted if args.mode == "hosted" else restore)(args.artifact_directory)
+    except PermissionError as error:
+        parser.exit(1, f"Anvil qualification rejected: {error}.\n")
     except Exception as error:
         parser.exit(1, f"Anvil qualification failed ({type(error).__name__}).\n")
 

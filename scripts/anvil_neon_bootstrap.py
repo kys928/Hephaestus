@@ -21,15 +21,23 @@ def bootstrap(investigation: str) -> str:
     )
 
 
-def verify_runtime(investigation: str) -> None:
+def connect_runtime():
     import psycopg
     from psycopg.conninfo import conninfo_to_dict
 
     dsn = os.environ["ANVIL_POSTGRES_DSN"]
     info = conninfo_to_dict(dsn)
-    if info.get("sslmode") != "verify-full" or info.get("user") != "anvil_runtime":
-        raise PermissionError("expected verified TLS and the dedicated runtime login")
-    with psycopg.connect(dsn, connect_timeout=10) as connection:
+    if info.get("user") != "anvil_runtime":
+        raise PermissionError("secret role is not anvil_runtime")
+    import re
+    if (not re.fullmatch(r"ep-small-sound-bgci9tjx(?:\.[a-z0-9-]+)+\.neon\.tech", info.get("host", ""))
+            or info.get("hostaddr") or info.get("dbname") != "neondb"):
+        raise PermissionError("secret does not reference the direct Anvil Neon endpoint")
+    return psycopg.connect(dsn, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
+
+
+def verify_runtime(investigation: str) -> None:
+    with connect_runtime() as connection:
         capabilities = connection.execute("""
             SELECT current_user = 'anvil_runtime',
                    has_schema_privilege(current_user, 'anvil', 'CREATE'),
