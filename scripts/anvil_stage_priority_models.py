@@ -43,6 +43,32 @@ def check_stream(stream, item, target=None):
         raise ValueError("model payload differs from manifest")
 
 
+def validate_offline_index(snapshot: Path, files: dict) -> None:
+    index = json.loads((snapshot / "model.safetensors.index.json").read_bytes())
+    weights = {name for name in files if name.endswith(".safetensors")}
+    if set(index["weight_map"].values()) != weights:
+        raise ValueError("canonical weight index does not match staged shards")
+    observed = {}
+    for name in sorted(weights):
+        with open_regular(snapshot / name, files[name]["bytes"]) as stream:
+            header_size = int.from_bytes(stream.read(8), "little")
+            if not 0 < header_size <= 100_000_000 or 8 + header_size >= files[name]["bytes"]:
+                raise ValueError("invalid offline SafeTensors header")
+            raw = stream.read(header_size)
+        if len(raw) != header_size:
+            raise ValueError("incomplete offline SafeTensors header")
+        header = json.loads(raw)
+        for tensor, entry in header.items():
+            if tensor == "__metadata__":
+                continue
+            first, last = entry["data_offsets"]
+            if tensor in observed or not 0 <= first <= last <= files[name]["bytes"] - 8 - header_size:
+                raise ValueError("invalid offline SafeTensors tensor layout")
+            observed[tensor] = name
+    if observed != index["weight_map"]:
+        raise ValueError("offline tensor mapping differs from the pinned index")
+
+
 def run(destination: Path, *, planner_blobs: Path | None):
     raw = (ROOT / "configs/models/anvil_priority_model_files.json").read_bytes()
     if hashlib.sha256(raw).hexdigest() != MANIFEST_REF:
@@ -82,6 +108,10 @@ def run(destination: Path, *, planner_blobs: Path | None):
                         check_stream(stream, item, target)
             print(json.dumps({"role": role, "file": name, **item,
                               "observation": "staged_input_verified" if staging else "destination_readback_verified"}),
+                  flush=True)
+        if not staging:
+            validate_offline_index(snapshot, info["files"])
+            print(json.dumps({"role": role, "observation": "offline_safetensors_index_verified"}),
                   flush=True)
 
 
