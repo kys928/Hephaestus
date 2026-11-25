@@ -56,3 +56,30 @@ def test_safe_provider_error(code,reason):
 
 def test_ambiguous_post_is_not_stock_failure():
     assert safe_failure("allocation",AmbiguousRunPodOperation("secret"))["reason"]=="allocation_outcome_unknown_reconcile_no_retry"
+
+
+def test_placement_retains_actual_nondefault_gpu_identity():
+    gpu="NVIDIA RTX A6000"
+    class NonDefault(Provider):
+        def _request(self,method,path):
+            if path.startswith("catalog/"):
+                return 200,{"id":REGION,"gpuAvailability":[{"id":gpu,"availability":"LOW"}]}
+            return 200,{"id":GLOBAL}
+        def select_gpu(self,allowed):
+            assert allowed==[gpu]
+            return gpu
+    assert inspect_placement(Pricing(),NonDefault(),region=REGION,gpu=gpu,report=lambda _:None)["gpu"]==gpu
+
+@pytest.mark.parametrize("payload,identity,present,kind",[
+    ({"id":REGION},True,False,"NoneType"),
+    ({"id":REGION,"gpuAvailability":None},True,True,"NoneType"),
+    ({"id":"other","gpuAvailability":[]},False,True,"list"),
+])
+def test_catalog_schema_failure_reports_safe_shape(payload,identity,present,kind):
+    class Invalid(Provider):
+        def _request(self,method,path):
+            return 200,payload
+    with pytest.raises(PlacementFailure) as err:
+        inspect_placement(Pricing(),Invalid(),region=REGION,report=lambda _:None)
+    d=err.value.diagnostic
+    assert (d["identity_matches"],d["availability_present"],d["availability_type"])==(identity,present,kind)

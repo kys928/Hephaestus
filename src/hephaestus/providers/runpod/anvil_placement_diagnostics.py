@@ -63,7 +63,11 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
         fail("gpu_quote","price_ceiling_exceeded",all_in_ceiling_usd=str(total))
     status,catalog=observe("regional_catalog",lambda:provider._request("GET","catalog/datacenters/"+region+"?include=GPU_AVAILABILITY"))
     if status!=200 or not isinstance(catalog,dict) or catalog.get("id")!=region or not isinstance(catalog.get("gpuAvailability"),list):
-        fail("regional_catalog","catalog_identity_or_schema",http_status=status if type(status) is int else None)
+        fail("regional_catalog","catalog_identity_or_schema",http_status=status if type(status) is int else None,
+             response_type=type(catalog).__name__,
+             identity_matches=isinstance(catalog,dict) and catalog.get("id")==region,
+             availability_present=isinstance(catalog,dict) and "gpuAvailability" in catalog,
+             availability_type=type(catalog.get("gpuAvailability")).__name__ if isinstance(catalog,dict) else "unavailable")
     rows=[r for r in catalog["gpuAvailability"] if isinstance(r,dict) and r.get("id")==gpu]
     stock=[r.get("availability") if r.get("availability") in STOCK|{"NONE","UNAVAILABLE"} else "UNKNOWN" for r in rows]
     emit("regional_catalog","observed",exact_sku_rows=len(rows),stock=stock)
@@ -87,7 +91,7 @@ def inspect_placement(pricing, provider, *, region, report, gpu=GPU):
     if selected!=gpu:
         fail("final_stock_recheck","selected_gpu_mismatch")
     emit("final_stock_recheck","verified",exact_gpu_selected=True)
-    return {"schema":"anvil.first-live-price.v1","gpu":GPU,"region":region,
+    return {"schema":"anvil.first-live-price.v1","gpu":gpu,"region":region,
             "gpu_hour_usd":str(q.price_usd_per_hour),"disk_hour_allowance_usd":str(DISK_ALLOWANCE),
             "all_in_hour_ceiling_usd":str(total),"maximum_wall_seconds":3600,
             "existing_volume":GLOBAL,"disk_price_source":"https://docs.runpod.io/pods/pricing",
