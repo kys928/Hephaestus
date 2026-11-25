@@ -50,6 +50,22 @@ try:
     put.write_bytes({manifest!r})
     sys.argv[1:] = {args!r}
     main()
+    if {phase!r} == "readback":
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "-q", "install",
+                        "transformers>=5.6.1,<5.7", "mistral-common>=1.8.6,<2"],
+                       timeout=240, check=True)
+        os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
+        from huggingface_hub import snapshot_download
+        from transformers import AutoConfig, AutoTokenizer
+        for role, item in json.loads(put.read_bytes()).items():
+            snapshot = snapshot_download(item["model_id"], revision=item["revision"],
+                                         cache_dir={STAGING!r}, local_files_only=True)
+            config = AutoConfig.from_pretrained(snapshot, local_files_only=True)
+            tokenizer = AutoTokenizer.from_pretrained(snapshot, local_files_only=True)
+            if config.model_type != "mistral3" or not tokenizer.encode("Anvil"):
+                raise ValueError("unexpected offline model configuration")
+            print(json.dumps({{"role": role, "observation": "offline_config_tokenizer_loaded"}}), flush=True)
     print({REPORT!r} + json.dumps({{"status": "complete", "phase": {phase!r}, "manifest": MANIFEST_REF}}), flush=True)
 except Exception as e:
     print({REPORT!r} + json.dumps({{"status": "failed", "phase": {phase!r}, "type": type(e).__name__, "detail": str(e)[:180]}}), flush=True)

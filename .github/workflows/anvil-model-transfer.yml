@@ -23,4 +23,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -u scripts/anvil_model_transfer_control.py control stage
+      - run: python -u scripts/anvil_model_transfer_control.py control readback

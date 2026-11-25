@@ -22,6 +22,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Prime exact audit watchdog
-        run: python -u scripts/anvil_model_transfer_control.py prime stage
+        run: python -u scripts/anvil_model_transfer_control.py prime readback
       - name: Watch for exact audit Pod
-        run: python -u scripts/anvil_model_transfer_control.py watchdog stage
+        run: python -u scripts/anvil_model_transfer_control.py watchdog readback
