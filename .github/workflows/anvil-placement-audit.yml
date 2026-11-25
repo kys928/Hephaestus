@@ -32,7 +32,7 @@ jobs:
           import json, os, re
           from hephaestus.infrastructure.secrets import EnvironmentSecretsProvider
           from hephaestus.providers.runpod.anvil_live_lease import *
-          from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedReader
+          from hephaestus.providers.runpod.anvil_live_retention import AnvilRetainedWriter
           from hephaestus.providers.runpod.anvil_placement_diagnostics import safe_failure, inspect_placement, PlacementFailure
           from hephaestus.providers.runpod.config import RunPodConfig
           from hephaestus.providers.runpod.cost_intelligence import ReadOnlyRunPodPricing
@@ -44,7 +44,7 @@ jobs:
           config=RunPodConfig(REGION,REGIONAL,"https://s3api-eu-cz-1.runpod.io","https://api.runpod.io/v2")
           p=RunPodExecutionAdapter(config,secrets,state_root=Path("/tmp/anvil-read-only-placement"))
           store=RunPodNetworkVolumeStorage.from_boto3(RunPodConfig("EU-CZ-1",REGIONAL,config.s3_endpoint_url,config.api_base_url),secrets)
-          reader=AnvilRetainedReader(store.client,REGIONAL,marker)
+          reader=AnvilRetainedWriter(store.client,REGIONAL,marker)
           intent=reader.allocation_intent(plan)
           active=AnvilPodIdentity(marker).discover(p)
           print("ANVIL_PREVIOUS_ATTEMPT="+json.dumps({"approval_consumed":intent is not None,"matching_pods":len(active),"allocation_attempted_by_audit":False}),flush=True)
