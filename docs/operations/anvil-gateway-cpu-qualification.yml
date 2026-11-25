@@ -1,3 +1,4 @@
+# INACTIVE CPU-only qualification template.
 name: Anvil exact image gateway qualification
 on:
   push:
