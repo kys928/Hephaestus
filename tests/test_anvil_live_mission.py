@@ -34,7 +34,7 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
     spec.loader.exec_module(mod)
     monkeypatch.setenv("GITHUB_RUN_ID","fixture")
     marker="a"*40
-    hard=mod.now()+timedelta(minutes=12)
+    hard=mod.now()+timedelta(minutes=30)
     monkeypatch.setattr(mod,"independent_deadline",lambda _:hard)
     monkeypatch.setattr(mod,"check_reviewer_active",lambda _:None)
     monkeypatch.setattr(mod,"sleep",lambda _:sleep(.01))
