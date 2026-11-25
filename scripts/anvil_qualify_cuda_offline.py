@@ -1,8 +1,9 @@
-"""Load both original Anvil roles offline on an already-approved exact A40 Pod."""
+"""Load both original Anvil roles offline on an already-approved selected GPU Pod."""
 import json
 import hashlib
 import sys
 import os
+from hephaestus.providers.runpod.anvil_hardware import check_cuda
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
@@ -28,9 +29,7 @@ def main():
     pod_id = os.environ.get("RUNPOD_POD_ID", "")
     if not re.fullmatch(r"[A-Za-z0-9]{4,40}", pod_id):
         raise PermissionError("expected exact RunPod runtime identity")
-    if (not torch.cuda.is_available() or torch.cuda.device_count() != 1
-            or torch.cuda.get_device_name(0) != "NVIDIA A40" or not torch.cuda.is_bf16_supported()):
-        raise PermissionError("approved A40 CUDA environment differs")
+    hardware=check_cuda(torch,os.environ["ANVIL_GPU_SKU"])
     volume = GlobalVolumeConfig(GLOBAL)
     if not os.path.ismount(volume.mount_path):
         raise PermissionError("approved Global Volume mount absent")
@@ -60,7 +59,7 @@ def main():
                     "adapter_sha256": spec.adapter.sha256,
                     "manifest_sha256": MANIFEST_REF, "cuda": torch.version.cuda,
                     "peak_allocated_bytes": torch.cuda.max_memory_allocated(0),
-                    "generation_count": 0, "environment": environment,
+                    "generation_count": 0, "environment": environment, **hardware,
                 }
                 print(json.dumps(receipt, sort_keys=True), flush=True)
                 runtime.generator.close()

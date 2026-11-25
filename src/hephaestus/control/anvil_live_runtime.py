@@ -1,6 +1,7 @@
 """Off-Pod verification of actual qualification receipts before slot signing."""
 from hashlib import sha256
 import re
+from hephaestus.providers.runpod.anvil_hardware import GPU_NAMES, MIN_BYTES
 
 from hephaestus.control.anvil_live import digest
 from hephaestus.production.original_cuda_identity import verified_original_roles
@@ -10,7 +11,7 @@ REGISTRY = "sha256:b48e3bb7cdc7f397cbdfb99384786c0d4b9c81e5ef0d404df6575f5a34a01
 MANIFEST = "d5193ac0f3c77d2098b093237034c0af1acef898bb01364d331966626b1d0f9a"
 
 
-def verify_loaded_runtime(result, *, pod_id, source_sha256, lock_sha256, image_qualification):
+def verify_loaded_runtime(result, *, pod_id, source_sha256, lock_sha256, image_qualification, gpu_sku=None):
     """Require exact CUDA, model, adapter, package and source identities.
 
     This verifies the returned operational evidence, not hardware-level remote
@@ -45,7 +46,15 @@ def verify_loaded_runtime(result, *, pod_id, source_sha256, lock_sha256, image_q
             "environment": expected_environment, "generation_count": 0,
         }
         peak = row.get("peak_allocated_bytes")
+        ceiling=48*1024**3
+        if gpu_sku is not None:
+            ceiling=row.get("vram_bytes")
+            if (gpu_sku not in GPU_NAMES or row.get("gpu_sku")!=gpu_sku or row.get("gpu_name") not in GPU_NAMES[gpu_sku]
+                    or type(ceiling) is not int or ceiling<MIN_BYTES or row.get("compute_capability") not in ([8,0],[8,6],[8,9])):
+                raise PermissionError("selected hardware qualification differs")
+            if any(row.get(k)!=runtime["loads"][0].get(k) for k in ("gpu_sku","gpu_name","vram_bytes","compute_capability")):
+                raise PermissionError("load receipts disagree about selected hardware")
         if (any(row.get(k) != v for k,v in expected.items())
-                or type(peak) is not int or not 0 < peak <= 48 * 1024**3):
+                or type(peak) is not int or not 0 < peak <= ceiling):
             raise PermissionError("exact model load or qualified environment differs")
     return result["runtime_ref"]

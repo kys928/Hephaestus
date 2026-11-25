@@ -5,6 +5,7 @@ This entry point does not allocate, self-attest, access Neon, or grant retries.
 """
 import json
 import os
+from hephaestus.providers.runpod.anvil_hardware import check_cuda
 from pathlib import Path
 import re
 import sys
@@ -27,10 +28,9 @@ def main():
         raise PermissionError("model worker must not receive control-plane credentials")
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     pod = os.environ.get("RUNPOD_POD_ID", "")
-    if (not re.fullmatch(r"[A-Za-z0-9]{4,40}", pod) or not torch.cuda.is_available()
-            or torch.cuda.device_count() != 1 or torch.cuda.get_device_name(0) != "NVIDIA A40"
-            or not torch.cuda.is_bf16_supported()):
-        raise PermissionError("expected exact A40 CUDA worker")
+    if not re.fullmatch(r"[A-Za-z0-9]{4,40}",pod):
+        raise PermissionError("invalid Pod identity")
+    check_cuda(torch,os.environ["ANVIL_GPU_SKU"])
     volume = GlobalVolumeConfig(GLOBAL)
     if not os.path.ismount(volume.mount_path):
         raise PermissionError("verified Global mount absent")

@@ -183,7 +183,7 @@ class AnvilLiveController:
             }, operation_id=key)
             return capsule_ref
 
-    def admit_slot(self, *, slot, receipt_ref, attestation_ref, retention_ref, retained_artifacts):
+    def admit_slot(self, *, slot, receipt_ref, attestation_ref, retention_ref, retained_artifacts, gpu_name="NVIDIA A40"):
         """A separately reviewed, independently retained receipt is the only admission path."""
         with execution_owner(self.repository, "anvil-live-controller", self.dispatch.plan_ref):
             _require_open(self.repository, self.dispatch.plan_ref)
@@ -227,7 +227,7 @@ class AnvilLiveController:
                     or receipt.get("role") != ROLES[slot]
                     or receipt.get("generator") != "PinnedTransformersRoleGenerator"
                     or receipt.get("seed") != 271828 or receipt.get("max_new_tokens") != 512
-                    or execution.get("device") != "cuda:0" or execution.get("gpu_name") != "NVIDIA A40"
+                    or execution.get("device") != "cuda:0" or execution.get("gpu_name") != gpu_name
                     or not execution.get("cuda_version") or not isinstance(tokens, list)
                     or not 1 <= len(tokens) <= 512 or any(type(t) is not int or t < 0 for t in tokens)):
                 raise PermissionError("receipt is not an accepted bounded CUDA observation")

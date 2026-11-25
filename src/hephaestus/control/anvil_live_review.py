@@ -92,7 +92,7 @@ def attest_retained_slot(authority, dispatch, *, slot, capsule_ref, receipt_ref,
     execution = receipt.get("execution", {})
     ids = execution.get("generated_token_ids")
     runtime = read_verified_json(artifacts, runtime_ref)
-    if (execution.get("device") != "cuda:0" or execution.get("gpu_name") != "NVIDIA A40"
+    if (execution.get("device") != "cuda:0" or execution.get("gpu_name") != runtime["loads"][0].get("gpu_name","NVIDIA A40")
             or execution.get("cuda_version") != runtime["loads"][0]["cuda"]
             or not isinstance(ids,list) or not 1 <= len(ids) <= 512
             or any(type(x) is not int or x < 0 for x in ids)):
