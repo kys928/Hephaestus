@@ -1,0 +1,32 @@
+# One-shot activation under the existing 1 A40 / USD 0.65 / 3600 s approval.
+name: Anvil live GPU watchdog
+on:
+  push:
+    branches: [feature/anvil-integration]
+    paths: [.github/workflows/anvil-live-gpu-watchdog.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  watchdog:
+    if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prime exact audit watchdog
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_gpu_watchdog.py prime
+      - name: Watch for exact audit Pod
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          PYTHONPATH: src
+        run: python scripts/anvil_live_gpu_watchdog.py watch

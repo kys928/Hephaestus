@@ -242,7 +242,11 @@ def allocate(mission,authority,deadline,price_ref,known):
     # One durable provider intent. A lost acknowledgement is reconciled by the
     # independent marker watcher; never invoke this allocator twice.
     pod=mission.provider._create_pod(body,operation_id=mission.marker,gpu_type_ids=[GPU])
-    pod_id=mission.identity.owned(pod)
+    # The create response need not contain the full provider representation.
+    # Record the exact ID before checking authenticated full readback.
+    pod_id=pod["id"]
+    if not re.fullmatch(r"[A-Za-z0-9]{4,40}",pod_id):
+        raise PermissionError("invalid created provider Pod identity")
     known.add(pod_id)
     print("ANVIL_LIVE_EXACT_POD="+pod_id,flush=True)
     mission.provider_check(pod_id)
