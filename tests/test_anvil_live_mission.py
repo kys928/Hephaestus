@@ -68,6 +68,7 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
     s3=S3()
     closed=[]
     class Identity:
+        operation_id = "b"*64
         def cleanup(self,provider,*,known_ids):
             closed.extend(known_ids)
             return True
@@ -156,6 +157,10 @@ def test_complete_independent_handoff_without_real_compute(tmp_path,monkeypatch)
                 execution={"device":"cuda:0","gpu_name":"NVIDIA A40","cuda_version":"12.8","generated_token_ids":[1,2]})
             return {"receipt_ref":digest(receipt),"document":receipt}
     def allocate(mission,authority,deadline,price_ref,known):
+        mission.mailbox.consume_allocation(mission.plan_ref,{
+            "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
+            "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,
+            "operation_id":mission.identity.operation_id,"deadline":deadline.isoformat()})
         known.add("fixture123")
         return "fixture123",Worker()
     monkeypatch.setattr(mod,"allocate",allocate)

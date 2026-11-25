@@ -40,3 +40,16 @@ def test_scoped_handoff_and_corruption(tmp_path):
     client.objects[writer.bucket,writer._key(ref)]=b"{}"
     with pytest.raises(ValueError):
         read_verified_json(reader,ref)
+
+
+def test_approval_consumed_across_activation_commits():
+    client=S3()
+    plan="sha256:"+"f"*64
+    a=AnvilRetainedWriter(client,"cviwpryzao","a"*40)
+    b=AnvilRetainedWriter(client,"cviwpryzao","b"*40)
+    doc={"schema":"anvil.first-live-allocation-intent.v1","plan_ref":plan,"activation":"a"*40}
+    assert a.allocation_intent(plan) is None
+    a.consume_allocation(plan,doc)
+    assert b.allocation_intent(plan)==doc
+    with pytest.raises(PermissionError,match="already consumed"):
+        b.consume_allocation(plan,dict(doc,activation="b"*40))

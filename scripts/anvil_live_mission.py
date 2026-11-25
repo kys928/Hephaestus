@@ -55,6 +55,7 @@ LOCK = ROOT / "requirements-anvil-live.lock"
 IMAGE_QUALIFICATION = ROOT / "configs/research/anvil_runtime_image_qualification.json"
 BUNDLE = ROOT / "configs/research/anvil_diagnosis_planner_first_live_v1.json"
 LOCK_HASH = "01dd1ff5af4241ac9b6f97f02009dcf21f30836fb3fa1687576eeece96d93c92"
+IMAGE_QUALIFICATION_HASH = "58250b8f506bc80f1e53c03a0cb88f3674155a59e4f9418f09a2abf73d6c5ffd"
 
 
 def now():
@@ -130,7 +131,10 @@ class Mission:
         self.material=frozenset(self.plan["material_refs"])
         self.source=source_archive(self.marker)
         self.source_hash=sha256(self.source).hexdigest()
-        self.image_qualification=json.loads(IMAGE_QUALIFICATION.read_bytes())
+        image_raw=IMAGE_QUALIFICATION.read_bytes()
+        if sha256(image_raw).hexdigest()!=IMAGE_QUALIFICATION_HASH:
+            raise PermissionError("independently qualified environment receipt changed")
+        self.image_qualification=json.loads(image_raw)
         if sha256(LOCK.read_bytes()).hexdigest()!=LOCK_HASH or self.image_qualification.get("lock_sha256")!=LOCK_HASH:
             raise PermissionError("exact effective image qualification missing")
         self.config=RunPodConfig(REGION,REGIONAL,"https://s3api-eu-cz-1.runpod.io","https://api.runpod.io/v2")
@@ -230,6 +234,11 @@ def allocate(mission,authority,deadline,price_ref,known):
                  "ANVIL_DEADLINE_UTC":deadline.isoformat(),"ANVIL_SOURCE_SHA256":mission.source_hash,
                  "ANVIL_PACKAGE_LOCK_SHA256":LOCK_HASH,"ANVIL_AUTHORITY_PUBLIC_HEX":authority.public_key_hex,
                  "ANVIL_AUTHORITY_REF":authority.public_key_ref}}
+    mission.mailbox.consume_allocation(mission.plan_ref,{
+        "schema":"anvil.first-live-allocation-intent.v1","plan_ref":mission.plan_ref,
+        "activation":mission.marker,"source_sha256":mission.source_hash,"price_ref":price_ref,
+        "operation_id":mission.identity.operation_id,"deadline":deadline.isoformat(),
+        "gpu":GPU,"region":REGION,"maximum_usd":"0.65","maximum_pods":1})
     # One durable provider intent. A lost acknowledgement is reconciled by the
     # independent marker watcher; never invoke this allocator twice.
     pod=mission.provider._create_pod(body,operation_id=mission.marker,gpu_type_ids=[GPU])
@@ -384,6 +393,10 @@ def reviewer(mission):
     runtime,terminal=wait_message(mission.mailbox,"runtime",hard_deadline,terminal=True)
     if terminal is None:
         pod=runtime["pod_id"]
+        intent=mission.mailbox.allocation_intent(mission.plan_ref)
+        if (not intent or intent.get("activation")!=mission.marker or intent.get("deadline")!=deadline.isoformat()
+                or intent.get("source_sha256")!=mission.source_hash or intent.get("operation_id")!=mission.identity.operation_id):
+            raise PermissionError("reviewer cannot confirm exact consumed allocation intent")
         runtime_ref=runtime["runtime_ref"]
         doc,=mission.import_refs(runtime_ref)
         runtime_result={"runtime":doc,"runtime_ref":runtime_ref}
@@ -412,6 +425,7 @@ def reviewer(mission):
                 raise PermissionError("returned capsule differs from issued grant")
             for item in capsule["objects"]:
                 mission.import_refs(item["ref"])
+            mission.provider_check(pod)
             reviewed=attest_retained_slot(authority,mission.dispatch,slot=slot,capsule_ref=result["capsule_ref"],
                 receipt_ref=result["receipt_ref"],runtime_ref=runtime_ref,pod_id=pod,retained_artifacts=mission.reader)
             mission.retain(reviewed["retention_ref"])

@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: anvil-first-live-diagnosis-planner-v1
+  cancel-in-progress: false
 jobs:
   reviewer:
     if: github.repository == 'kys928/Hephaestus' && github.run_attempt == 1

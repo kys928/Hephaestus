@@ -90,3 +90,43 @@ class AnvilRetainedWriter(AnvilRetainedReader):
         if canonical_bytes(document)!=raw or not isinstance(document,dict):
             raise ValueError("noncanonical mailbox message")
         return document
+
+    def allocation_intent(self, plan_ref):
+        import json
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", plan_ref):
+            raise ValueError("exact plan digest required")
+        key = "hephaestus/anvil/first-live/plan-consumption/" + plan_ref[7:] + ".json"
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+        except Exception as exc:
+            code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return None
+            raise
+        with response["Body"] as stream:
+            raw = stream.read(8193)
+        doc = json.loads(raw)
+        if (len(raw)>8192 or canonical_bytes(doc)!=raw or doc.get("plan_ref")!=plan_ref
+                or doc.get("schema")!="anvil.first-live-allocation-intent.v1"):
+            raise PermissionError("existing one-shot allocation record is invalid; refuse another Pod")
+        return doc
+
+    def consume_allocation(self, plan_ref, document):
+        """Consume the one approved Pod across all activation commits.
+
+        Requires the workflow's fixed concurrency group and one trusted primary
+        writer. RunPod S3 is not a conditional-create consensus service.
+        """
+        if (document.get("plan_ref")!=plan_ref
+                or document.get("schema")!="anvil.first-live-allocation-intent.v1"
+                or self.prefix.rsplit("/",1)[1]!=document.get("activation")):
+            raise ValueError("allocation intent scope differs")
+        if self.allocation_intent(plan_ref) is not None:
+            raise PermissionError("approved one-shot Pod already consumed; reconcile without allocation")
+        raw = canonical_bytes(document)
+        if len(raw)>8192:
+            raise ValueError("allocation intent exceeds ceiling")
+        key = "hephaestus/anvil/first-live/plan-consumption/" + plan_ref[7:] + ".json"
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=raw, ContentType="application/json")
+        if self.allocation_intent(plan_ref)!=document:
+            raise PermissionError("durable allocation intent acknowledgement differs")
