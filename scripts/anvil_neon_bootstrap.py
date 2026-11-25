@@ -47,6 +47,16 @@ def connect_runtime():
             ("timeout", "endpoint connection timed out"),
             ("channel binding", "TLS channel-binding enforcement failed"),
             ("endpoint is disabled", "Neon endpoint disabled"),
+            ("no password supplied", "no runtime password supplied"),
+            ("password", "server rejected password or credential format"),
+            ("does not exist", "server did not recognize the runtime role or database"),
+            ("server closed", "endpoint closed the PostgreSQL connection"),
+            ("ssl", "SSL negotiation failed"),
+            ("certificate", "TLS certificate or trust-chain negotiation failed"),
+            ("connection refused", "endpoint refused the connection"),
+            ("invalid", "provider connection parameters were invalid"),
+            ("fatal", "PostgreSQL returned a fatal startup response"),
+            ("server", "PostgreSQL server startup failed"),
         ):
             if fragment in diagnostic:
                 raise PermissionError(reason) from None

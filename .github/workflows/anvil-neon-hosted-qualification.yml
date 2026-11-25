@@ -1,4 +1,4 @@
-name: Anvil Neon hosted qualification with verified runner CA trust
+name: Anvil Neon hosted qualification with verified CA and startup classification
 on:
   push:
     branches: [feature/anvil-integration]
