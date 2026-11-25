@@ -1,11 +1,16 @@
 """The authorized read must retain partial progress and issue no retries."""
 
 import hashlib
+import importlib.util
 import io
+from pathlib import Path
 
 import pytest
 
-from scripts.anvil_verify_planner_shards import verify_s3_ranges
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts/anvil_verify_planner_shards.py"
+_spec = importlib.util.spec_from_file_location("anvil_verify_planner_shards", _SCRIPT)
+_transport = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_transport)
 
 
 def test_planner_partial_transport_counts_delivered_bytes_without_retry():
@@ -30,6 +35,6 @@ def test_planner_partial_transport_counts_delivered_bytes_without_retry():
     digest = hashlib.sha256(payload).hexdigest()
     ranges, events = [], []
     with pytest.raises(ConnectionError, match="interrupted"):
-        verify_s3_ranges(S3(), {}, len(payload), digest, 4, progress=lambda **row: events.append(row))
+        _transport.verify_s3_ranges(S3(), {}, len(payload), digest, 4, progress=lambda **row: events.append(row))
     assert ranges == ["bytes=0-3", "bytes=4-7"]
     assert [row["bytes"] for row in events if row["event"] == "range_read"] == [4, 1]
